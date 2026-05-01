@@ -108,9 +108,9 @@ export default function Navbar() {
       <div className="flex items-center shrink-0">
         <div className="bg-white p-2 sm:p-2.5 rounded-2xl flex items-center justify-center shadow-md border border-gray-100/50">
           <img 
-            src="/logo-outline.png" 
+            src="/logo.png" 
             alt="Eficiencia Logo Icon" 
-            className="h-8 sm:h-9 w-auto object-contain"
+            className="h-8 sm:h-9 w-auto object-contain "
           />
         </div>
       </div>
