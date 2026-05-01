@@ -2,6 +2,7 @@ import { NavLink, useNavigate, useLocation } from 'react-router-dom'
 import { motion, AnimatePresence } from 'framer-motion'
 import { Settings, LogOut, Users, CreditCard, Calendar, LayoutDashboard, MoreHorizontal } from 'lucide-react'
 import { useAuthStore } from '../../store/authStore'
+import { useUiStore } from '../../store/uiStore'
 import { ROUTES } from '../../constants/routes'
 import { useState, useRef, useLayoutEffect, useEffect } from 'react'
 
@@ -14,6 +15,7 @@ const NAV_TABS = [
 
 export default function Navbar() {
   const { user, logout } = useAuthStore()
+  const { openSettings } = useUiStore()
   const navigate = useNavigate()
   const location = useLocation()
   const isAdmin = user?.role === 'admin'
@@ -233,6 +235,7 @@ export default function Navbar() {
       <div className="flex items-center gap-2 sm:gap-3 shrink-0">
         {isAdmin && (
           <button
+            onClick={openSettings}
             className="flex items-center justify-center h-10 w-10 sm:h-11 sm:w-11 bg-white/60 backdrop-blur-lg rounded-xl shadow-md text-gray-600 hover:text-gray-900 hover:bg-white/80 transition-all border border-white/80"
             title="Configuración"
           >

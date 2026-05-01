@@ -1,5 +1,6 @@
 import { Outlet } from 'react-router-dom'
 import Navbar from './Navbar'
+import SettingsDrawer from './SettingsDrawer'
 import ToastContainer from '../ui/Toast'
 
 export default function Layout() {
@@ -11,6 +12,7 @@ export default function Layout() {
           <Outlet />
         </main>
       </div>
+      <SettingsDrawer />
       <ToastContainer />
     </div>
   )
