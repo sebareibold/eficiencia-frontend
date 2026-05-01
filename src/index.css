@@ -1,3 +1,76 @@
 @tailwind base;
 @tailwind components;
 @tailwind utilities;
+
+/* ─── CSS Custom Properties ─────────────────────────────────────────────────
+   Primary colors as space-separated RGB so Tailwind opacity modifiers work:
+   `rgb(var(--color-primary) / <alpha-value>)` → bg-primary/50, etc.
+   useThemeApplier updates --color-primary and --color-primary-dark at runtime.
+────────────────────────────────────────────────────────────────────────────── */
+:root {
+  --color-primary: 245 166 35;
+  --color-primary-dark: 212 136 10;
+
+  /* Density spacing tokens */
+  --sp-card: 1.5rem;
+  --sp-gap: 1.5rem;
+  --sp-item: 1rem;
+}
+
+[data-density='compact'] {
+  --sp-card: 1rem;
+  --sp-gap: 1rem;
+  --sp-item: 0.5rem;
+}
+
+/* ─── Dark Mode ──────────────────────────────────────────────────────────────
+   Tailwind `darkMode: 'class'` activates dark: variants when .dark is on <html>.
+   The overrides below cover components using hardcoded Tailwind gray classes.
+────────────────────────────────────────────────────────────────────────────── */
+
+.dark body {
+  background-color: #0f0f0f;
+  color: #ffffff;
+}
+
+/* Backgrounds */
+.dark .bg-white { background-color: #1a1a1a !important; }
+.dark .bg-gray-50 { background-color: #222222 !important; }
+.dark .bg-gray-100 { background-color: #2a2a2a !important; }
+.dark .bg-gray-200 { background-color: #333333 !important; }
+.dark .bg-surface { background-color: #1a1a1a !important; }
+
+/* Translucent whites */
+.dark .bg-white\/50 { background-color: rgb(30 30 30 / 0.9) !important; }
+.dark .bg-white\/60 { background-color: rgb(30 30 30 / 0.92) !important; }
+.dark .bg-white\/80 { background-color: rgb(30 30 30 / 0.96) !important; }
+
+/* Text */
+.dark .text-gray-900 { color: #f9fafb !important; }
+.dark .text-gray-800 { color: #f3f4f6 !important; }
+.dark .text-gray-700 { color: #e5e7eb !important; }
+.dark .text-gray-600 { color: #9ca3af !important; }
+.dark .text-gray-500 { color: #6b7280 !important; }
+.dark .text-gray-400 { color: #4b5563 !important; }
+
+/* Borders */
+.dark .border-gray-50  { border-color: #2a2a2a !important; }
+.dark .border-gray-100 { border-color: #2a2a2a !important; }
+.dark .border-gray-200 { border-color: #333333 !important; }
+.dark .border-white\/80 { border-color: rgb(255 255 255 / 0.07) !important; }
+.dark .border-custom-border { border-color: #2a2a2a !important; }
+
+/* Shadows */
+.dark .shadow-sm  { box-shadow: 0 1px 4px  rgb(0 0 0 / 0.35) !important; }
+.dark .shadow-md  { box-shadow: 0 4px 12px rgb(0 0 0 / 0.45) !important; }
+.dark .shadow-xl  { box-shadow: 0 8px 24px rgb(0 0 0 / 0.55) !important; }
+.dark .shadow-2xl { box-shadow: 0 16px 48px rgb(0 0 0 / 0.65) !important; }
+
+/* Skeleton */
+.dark .bg-white\/10 { background-color: rgb(255 255 255 / 0.07) !important; }
+
+/* ─── Density utility classes ────────────────────────────────────────────────
+   Components opt-in by using .density-card or .density-gap.
+────────────────────────────────────────────────────────────────────────────── */
+.density-card { padding: var(--sp-card); }
+.density-gap  { gap:     var(--sp-gap);  }
