@@ -145,14 +145,6 @@ const ACCENT_COLORS = [
 function AppearanceSection() {
   const { appearance, updateAppearance } = useSettingsStore()
 
-  useEffect(() => {
-    if (appearance.theme === 'dark') {
-      document.documentElement.classList.add('dark')
-    } else {
-      document.documentElement.classList.remove('dark')
-    }
-  }, [appearance.theme])
-
   return (
     <div>
       <SectionHeader title="Tema" />

@@ -1,5 +1,6 @@
 import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom'
 import { ROUTES } from './constants/routes'
+import { useThemeApplier } from './hooks/useThemeApplier'
 import PrivateRoute from './guards/PrivateRoute'
 import RoleGuard from './guards/RoleGuard'
 import Layout from './components/layout/Layout'
@@ -14,6 +15,8 @@ import ExpensesPage from './pages/ExpensesPage'
 import DashboardPage from './pages/DashboardPage'
 
 export default function App() {
+  useThemeApplier()
+
   return (
     <BrowserRouter>
       <Routes>
