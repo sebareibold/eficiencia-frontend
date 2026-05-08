@@ -17,6 +17,7 @@ interface TableProps<T> {
   sortKey?: string
   sortDir?: 'asc' | 'desc'
   onSort?: (key: string) => void
+  onRowClick?: (row: T) => void
   emptyMessage?: string
 }
 
@@ -28,17 +29,18 @@ export default function Table<T>({
   sortKey,
   sortDir,
   onSort,
+  onRowClick,
   emptyMessage = 'Sin resultados',
 }: TableProps<T>) {
   return (
-    <div className="overflow-x-auto rounded-xl border border-custom-border">
+    <div className="overflow-x-auto rounded-3xl border border-white/50 dark:border-white/10 bg-white/30 dark:bg-black/30 backdrop-blur-3xl shadow-[0_8px_32px_rgba(0,0,0,0.04)] dark:shadow-[0_8px_32px_rgba(0,0,0,0.3)]">
       <table className="w-full text-sm">
-        <thead className="border-b border-custom-border bg-[#111111]">
+        <thead className="border-b border-white/20 dark:border-white/10 bg-gray-50/30 dark:bg-black/10">
           <tr>
             {columns.map((col) => (
               <th
                 key={col.key}
-                className={`px-4 py-3 text-left text-xs font-semibold uppercase tracking-wider text-[#9CA3AF] ${col.sortable ? 'cursor-pointer select-none hover:text-white' : ''}`}
+                className={`px-4 py-3 text-left text-xs font-semibold uppercase tracking-wider text-saas-muted ${col.sortable ? 'cursor-pointer select-none hover:text-gray-900' : ''}`}
                 onClick={() => col.sortable && onSort?.(col.key)}
               >
                 <span className="inline-flex items-center gap-1">
@@ -51,7 +53,7 @@ export default function Table<T>({
             ))}
           </tr>
         </thead>
-        <tbody className="divide-y divide-custom-border">
+        <tbody className="divide-y divide-white/20 dark:divide-white/10">
           {isLoading
             ? Array.from({ length: 5 }).map((_, i) => (
                 <tr key={i}>
@@ -65,15 +67,19 @@ export default function Table<T>({
             : data.length === 0
             ? (
               <tr>
-                <td colSpan={columns.length} className="px-4 py-10 text-center text-[#9CA3AF]">
+                <td colSpan={columns.length} className="px-4 py-10 text-center text-saas-muted">
                   {emptyMessage}
                 </td>
               </tr>
             )
             : data.map((row) => (
-              <tr key={keyExtractor(row)} className="hover:bg-white/5 transition-colors">
+              <tr
+                key={keyExtractor(row)}
+                onClick={() => onRowClick?.(row)}
+                className={`group transition-all duration-150 hover:bg-gray-50/80 dark:hover:bg-white/[0.04] ${onRowClick ? 'cursor-pointer' : ''}`}
+              >
                 {columns.map((col) => (
-                  <td key={col.key} className="px-4 py-3 text-white">
+                  <td key={col.key} className="px-4 py-3 text-gray-900">
                     {col.render
                       ? col.render(row)
                       : String((row as Record<string, unknown>)[col.key] ?? '')}

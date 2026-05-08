@@ -4,7 +4,7 @@ import { persist } from 'zustand/middleware'
 const DEFAULT_SETTINGS = {
   appearance: {
     theme: 'light' as 'light' | 'dark',
-    accentColor: '#F5A623',
+    accentColor: '#FBC608',
     density: 'comfortable' as 'compact' | 'comfortable',
   },
   dashboard: {

@@ -9,6 +9,10 @@ export interface Client {
   dni: string
   status: ClientStatus
   membershipExpiresAt: string | null
+  membershipStartDate?: string | null
+  planName?: string | null
+  planPrice?: number | null
+  planFrequency?: number | null
   createdAt: string
   updatedAt: string
 }

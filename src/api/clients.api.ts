@@ -1,11 +1,61 @@
 import api from './axiosInstance'
 import type { Client, CreateClientDto, UpdateClientDto } from '../types/client.types'
+import type { ClientStatus } from '../constants/clientStatus'
+
+function mapEstado(estado: string): ClientStatus {
+  if (estado === 'ACTIVO') return 'active'
+  if (estado === 'EN_DEUDA') return 'debt'
+  return 'expiring' // VENCIDO
+}
+
+function mapCliente(c: any): Client {
+  const membership = c.membresias?.[0]
+  const plan = membership?.plan
+  return {
+    id: c.id,
+    name: c.nombre,
+    lastName: c.apellido,
+    email: c.email ?? '',
+    phone: c.telefono ?? '',
+    dni: c.dni ?? '',
+    status: mapEstado(c.estado),
+    membershipExpiresAt: membership?.fechaVencimiento ?? null,
+    membershipStartDate: membership?.fechaInicio ?? null,
+    planName: plan?.nombre ?? null,
+    planPrice: plan?.precioBase != null ? Number(plan.precioBase) : null,
+    planFrequency: plan?.frecuenciaSemanal ?? null,
+    createdAt: c.createdAt,
+    updatedAt: c.updatedAt ?? c.createdAt,
+  }
+}
 
 export const clientsApi = {
-  getAll: () => api.get<Client[]>('/clients').then((r) => r.data),
-  getById: (id: number) => api.get<Client>(`/clients/${id}`).then((r) => r.data),
-  create: (dto: CreateClientDto) => api.post<Client>('/clients', dto).then((r) => r.data),
-  update: (id: number, dto: UpdateClientDto) =>
-    api.patch<Client>(`/clients/${id}`, dto).then((r) => r.data),
-  remove: (id: number) => api.delete(`/clients/${id}`),
+  getAll: (): Promise<Client[]> =>
+    api.get('/clientes').then((r) => {
+      // Después del unwrap global, r.data puede ser el objeto de paginación { data: [...], total }
+      const items: any[] = Array.isArray(r.data) ? r.data : (r.data?.data ?? [])
+      return items.map(mapCliente)
+    }),
+
+  getById: (id: string | number): Promise<Client> =>
+    api.get(`/clientes/${id}`).then((r) => mapCliente(r.data)),
+
+  create: (dto: CreateClientDto): Promise<Client> =>
+    api.post('/clientes', {
+      nombre: dto.name,
+      apellido: dto.lastName,
+      email: dto.email || undefined,
+      telefono: dto.phone || undefined,
+      fechaInicio: new Date().toISOString(),
+    }).then((r) => mapCliente(r.data)),
+
+  update: (id: string | number, dto: UpdateClientDto): Promise<Client> =>
+    api.patch(`/clientes/${id}`, {
+      ...(dto.name !== undefined && { nombre: dto.name }),
+      ...(dto.lastName !== undefined && { apellido: dto.lastName }),
+      ...(dto.email !== undefined && { email: dto.email }),
+      ...(dto.phone !== undefined && { telefono: dto.phone }),
+    }).then((r) => mapCliente(r.data)),
+
+  remove: (id: string | number) => api.delete(`/clientes/${id}`),
 }

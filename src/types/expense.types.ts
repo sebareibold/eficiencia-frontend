@@ -1,7 +1,7 @@
-export type ExpenseCategory = 'rent' | 'utilities' | 'equipment' | 'salaries' | 'maintenance' | 'other'
+export type ExpenseCategory = 'SUELDO' | 'FIJO' | 'VARIABLE'
 
 export interface Expense {
-  id: number
+  id: number | string
   description: string
   amount: number
   category: ExpenseCategory

@@ -8,8 +8,8 @@
    useThemeApplier updates --color-primary and --color-primary-dark at runtime.
 ────────────────────────────────────────────────────────────────────────────── */
 :root {
-  --color-primary: 245 166 35;
-  --color-primary-dark: 212 136 10;
+  --color-primary: 251 198 8;
+  --color-primary-dark: 212 168 0;
 
   /* Density spacing tokens */
   --sp-card: 1.5rem;
@@ -23,54 +23,277 @@
   --sp-item: 0.5rem;
 }
 
+/* ─── Light Mode SaaS Identity ────────────────────────────────────────────────
+   Soft, warm off-white background with a subtle dot grid texture
+────────────────────────────────────────────────────────────────────────────── */
+html:not(.dark) body {
+  background-color: #F8F7F5;
+  color: #111827;
+  font-feature-settings: "tnum";
+}
+
+/* ── Light Mode SaaS Glassmorphism Classes ──────────────────────────────────
+   Apply glassmorphism to standard white surfaces for consistent aesthetic
+────────────────────────────────────────────────────────────────────────────── */
+html:not(.dark) .bg-white {
+  background: linear-gradient(135deg, rgba(255, 255, 255, 0.9) 0%, rgba(255, 255, 255, 0.6) 100%) !important;
+  backdrop-filter: blur(24px) !important;
+  -webkit-backdrop-filter: blur(24px) !important;
+  border: 1px solid rgba(255, 255, 255, 1) !important;
+  box-shadow: 0 10px 40px -10px rgba(0,0,0,0.08) !important;
+}
+
 /* ─── Dark Mode ──────────────────────────────────────────────────────────────
    Tailwind `darkMode: 'class'` activates dark: variants when .dark is on <html>.
    The overrides below cover components using hardcoded Tailwind gray classes.
+   Palette: Black (#0f0f0f) primary, Dark Orange (#D4880A) accent.
 ────────────────────────────────────────────────────────────────────────────── */
 
 .dark body {
   background-color: #0f0f0f;
-  color: #ffffff;
+  color: #e5e7eb;
 }
 
-/* Backgrounds */
-.dark .bg-white { background-color: #1a1a1a !important; }
-.dark .bg-gray-50 { background-color: #222222 !important; }
-.dark .bg-gray-100 { background-color: #2a2a2a !important; }
-.dark .bg-gray-200 { background-color: #333333 !important; }
-.dark .bg-surface { background-color: #1a1a1a !important; }
+/* ── Solid Backgrounds ──────────────────────────────────────────────────── */
+.dark .bg-white       { background-color: #1a1a1a !important; }
+.dark .bg-gray-50     { background-color: #1e1e1e !important; }
+.dark .bg-gray-100    { background-color: #252525 !important; }
+.dark .bg-gray-200    { background-color: #2e2e2e !important; }
+.dark .bg-surface     { background-color: #1a1a1a !important; }
 
-/* Translucent whites */
-.dark .bg-white\/50 { background-color: rgb(30 30 30 / 0.9) !important; }
-.dark .bg-white\/60 { background-color: rgb(30 30 30 / 0.92) !important; }
-.dark .bg-white\/80 { background-color: rgb(30 30 30 / 0.96) !important; }
+/* ── Hardcoded hex backgrounds used in the app ─────────────────────────── */
+.dark .bg-\[\#F7F7F8\]  { background-color: #141414 !important; }
+.dark .bg-\[\#F3F4F6\]  { background-color: #0f0f0f !important; }
+.dark .bg-\[\#E5E7EB\]  { background-color: #0f0f0f !important; }
 
-/* Text */
-.dark .text-gray-900 { color: #f9fafb !important; }
-.dark .text-gray-800 { color: #f3f4f6 !important; }
-.dark .text-gray-700 { color: #e5e7eb !important; }
-.dark .text-gray-600 { color: #9ca3af !important; }
-.dark .text-gray-500 { color: #6b7280 !important; }
-.dark .text-gray-400 { color: #4b5563 !important; }
+/* ── Translucent whites → translucent darks ────────────────────────────── */
+.dark .bg-white\/50   { background-color: rgb(26 26 26 / 0.9)  !important; }
+.dark .bg-white\/60   { background-color: rgb(26 26 26 / 0.92) !important; }
+.dark .bg-white\/80   { background-color: rgb(26 26 26 / 0.96) !important; }
+.dark .bg-white\/10   { background-color: rgb(255 255 255 / 0.05) !important; }
 
-/* Borders */
-.dark .border-gray-50  { border-color: #2a2a2a !important; }
-.dark .border-gray-100 { border-color: #2a2a2a !important; }
-.dark .border-gray-200 { border-color: #333333 !important; }
-.dark .border-white\/80 { border-color: rgb(255 255 255 / 0.07) !important; }
-.dark .border-custom-border { border-color: #2a2a2a !important; }
+/* ── Status badge backgrounds (keep semantic but darken) ───────────────── */
+.dark .bg-green-50    { background-color: rgb(22 163 74 / 0.12) !important; }
+.dark .bg-red-50      { background-color: rgb(239 68 68 / 0.12) !important; }
+.dark .bg-amber-50    { background-color: rgb(245 158 11 / 0.12) !important; }
+.dark .bg-blue-50     { background-color: rgb(245 166 35 / 0.12) !important; }
 
-/* Shadows */
-.dark .shadow-sm  { box-shadow: 0 1px 4px  rgb(0 0 0 / 0.35) !important; }
-.dark .shadow-md  { box-shadow: 0 4px 12px rgb(0 0 0 / 0.45) !important; }
-.dark .shadow-xl  { box-shadow: 0 8px 24px rgb(0 0 0 / 0.55) !important; }
-.dark .shadow-2xl { box-shadow: 0 16px 48px rgb(0 0 0 / 0.65) !important; }
+/* ── Text ──────────────────────────────────────────────────────────────── */
+.dark .text-gray-900  { color: #f5f5f5 !important; }
+.dark .text-gray-800  { color: #e5e7eb !important; }
+.dark .text-gray-700  { color: #d1d5db !important; }
+.dark .text-gray-600  { color: #9ca3af !important; }
+.dark .text-gray-500  { color: #6b7280 !important; }
+.dark .text-gray-400  { color: #525252 !important; }
 
-/* Skeleton */
-.dark .bg-white\/10 { background-color: rgb(255 255 255 / 0.07) !important; }
+/* Status text: keep semantic colors readable on dark */
+.dark .text-green-600 { color: #4ade80 !important; }
+.dark .text-red-500   { color: #f87171 !important; }
+.dark .text-red-600   { color: #ef4444 !important; }
+.dark .text-amber-600 { color: #fbbf24 !important; }
+.dark .text-amber-500 { color: #f59e0b !important; }
+.dark .text-amber-700 { color: #fbbf24 !important; }
 
-/* ─── Density utility classes ────────────────────────────────────────────────
+/* Replace blue with orange accent in dark mode */
+.dark .text-blue-600  { color: rgb(var(--color-primary)) !important; }
+.dark .text-blue-400  { color: rgb(var(--color-primary) / 0.7) !important; }
+
+/* ── Borders ───────────────────────────────────────────────────────────── */
+.dark .border-gray-50     { border-color: #222222 !important; }
+.dark .border-gray-100    { border-color: #252525 !important; }
+.dark .border-gray-200    { border-color: #303030 !important; }
+.dark .border-gray-700    { border-color: #404040 !important; }
+.dark .border-white\/80   { border-color: rgb(255 255 255 / 0.06) !important; }
+.dark .border-white\/40   { border-color: rgb(255 255 255 / 0.06) !important; }
+.dark .border-white\/20   { border-color: rgb(255 255 255 / 0.08) !important; }
+.dark .border-custom-border { border-color: #252525 !important; }
+.dark .border-amber-200   { border-color: rgb(245 158 11 / 0.25) !important; }
+.dark .border-red-100     { border-color: rgb(239 68 68 / 0.2) !important; }
+
+/* ── Ring overrides ────────────────────────────────────────────────────── */
+.dark .ring-black\/5      { --tw-ring-color: rgb(255 255 255 / 0.05) !important; }
+
+/* ── Shadows ───────────────────────────────────────────────────────────── */
+.dark .shadow-sm   { box-shadow: 0 1px 4px  rgb(0 0 0 / 0.4)  !important; }
+.dark .shadow-md   { box-shadow: 0 4px 12px rgb(0 0 0 / 0.5)  !important; }
+.dark .shadow-lg   { box-shadow: 0 8px 20px rgb(0 0 0 / 0.5)  !important; }
+.dark .shadow-xl   { box-shadow: 0 8px 24px rgb(0 0 0 / 0.6)  !important; }
+.dark .shadow-2xl  { box-shadow: 0 16px 48px rgb(0 0 0 / 0.7) !important; }
+
+/* ── Hover states ──────────────────────────────────────────────────────── */
+.dark .hover\:bg-gray-50:hover  { background-color: #222222 !important; }
+.dark .hover\:bg-gray-100:hover { background-color: #2a2a2a !important; }
+.dark .hover\:bg-white\/60:hover { background-color: rgb(30 30 30 / 0.95) !important; }
+.dark .hover\:bg-white\/80:hover { background-color: rgb(30 30 30 / 0.98) !important; }
+
+/* ── Recharts / SVG overrides ──────────────────────────────────────────── */
+.dark .recharts-cartesian-grid line { stroke: #2a2a2a !important; }
+
+/* ── Backdrop blur dark mode ───────────────────────────────────────────── */
+.dark .backdrop-blur-xl  { backdrop-filter: blur(24px) !important; }
+.dark .backdrop-blur-lg  { backdrop-filter: blur(16px) !important; }
+
+/* ── Density utility classes ─────────────────────────────────────────────
    Components opt-in by using .density-card or .density-gap.
 ────────────────────────────────────────────────────────────────────────────── */
 .density-card { padding: var(--sp-card); }
 .density-gap  { gap:     var(--sp-gap);  }
+
+/* ─── Card top-edge highlight + dark mode accent glow ───────────────────────
+   Light mode: inset highlight simulates top light source.
+   Dark mode: subtle accent-colored ambient glow improves card separation.
+────────────────────────────────────────────────────────────────────────────── */
+html:not(.dark) .rounded-\[2rem\],
+html:not(.dark) .rounded-\[2\.5rem\] {
+  box-shadow:
+    0 8px 32px rgba(0,0,0,0.04),
+    inset 0 1px 0 rgba(255,255,255,0.85);
+}
+.dark .rounded-\[2rem\],
+.dark .rounded-\[2\.5rem\] {
+  box-shadow:
+    0 8px 32px rgba(0,0,0,0.35),
+    0 0 60px rgb(var(--color-primary) / 0.05);
+}
+
+/* ─── Dynamic accent button shadow ─────────────────────────────────────────
+   Reemplaza sombras hardcodeadas con rgba(251,198,8,...) para que reaccionen
+   al accent color seleccionado por el usuario.
+────────────────────────────────────────────────────────────────────────────── */
+.btn-action {
+  background-color: rgb(var(--color-primary));
+  color: #111827;
+  font-weight: 700;
+  box-shadow: 0 4px 16px rgb(var(--color-primary) / 0.35);
+  transition: background-color 200ms ease, box-shadow 200ms ease, transform 150ms ease;
+}
+.btn-action:hover {
+  background-color: rgb(var(--color-primary-dark));
+  box-shadow: 0 6px 24px rgb(var(--color-primary) / 0.5);
+}
+.btn-action:active {
+  transform: scale(0.97);
+}
+.btn-action:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+  transform: none;
+}
+
+/* ─── Dark mode glass card accent glow (backdrop-blur-3xl containers) ───────
+   Applies a subtle primary-tinted shadow to all glassmorphism cards.
+   Selector targets any element containing backdrop-blur-3xl in its class.
+────────────────────────────────────────────────────────────────────────────── */
+.dark .glass-glow {
+  box-shadow:
+    0 8px 32px rgba(0,0,0,0.35),
+    0 0 60px rgb(var(--color-primary) / 0.06);
+}
+
+/* ─── Hide scrollbar utility ───────────────────────────────────────────────
+   Used by horizontally-scrollable nav strips that need clean visuals.
+────────────────────────────────────────────────────────────────────────────── */
+.no-scrollbar { scrollbar-width: none; -ms-overflow-style: none; }
+.no-scrollbar::-webkit-scrollbar { display: none; }
+
+/* ─── Scrollbar personalizado ───────────────────────────────────────────────
+   Thin scrollbar con thumb amarillo marca. Solo visible en overflow-y-auto.
+────────────────────────────────────────────────────────────────────────────── */
+::-webkit-scrollbar {
+  width: 5px;
+  height: 5px;
+}
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+::-webkit-scrollbar-thumb {
+  background: rgb(var(--color-primary) / 0.35);
+  border-radius: 9999px;
+  transition: background 0.2s;
+}
+::-webkit-scrollbar-thumb:hover {
+  background: rgb(var(--color-primary) / 0.65);
+}
+.dark ::-webkit-scrollbar-thumb {
+  background: rgb(var(--color-primary) / 0.2);
+}
+.dark ::-webkit-scrollbar-thumb:hover {
+  background: rgb(var(--color-primary) / 0.4);
+}
+
+/* ─── Focus ring global ─────────────────────────────────────────────────────
+   Un único ring amarillo marca en todos los inputs, selects y textareas
+────────────────────────────────────────────────────────────────────────────── */
+input:focus-visible,
+select:focus-visible,
+textarea:focus-visible {
+  outline: none;
+  box-shadow: 0 0 0 3px rgb(var(--color-primary) / 0.3);
+}
+
+/* ─── Select — flecha custom ────────────────────────────────────────────────
+   Reemplaza la flecha nativa del SO con un chevron SVG en el color del texto
+────────────────────────────────────────────────────────────────────────────── */
+select {
+  appearance: none;
+  -webkit-appearance: none;
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 24 24' fill='none' stroke='%236b7280' stroke-width='2.5' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpolyline points='6 9 12 15 18 9'/%3E%3C/svg%3E");
+  background-repeat: no-repeat;
+  background-position: right 14px center;
+  padding-right: 36px !important;
+}
+.dark select {
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 24 24' fill='none' stroke='%239ca3af' stroke-width='2.5' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpolyline points='6 9 12 15 18 9'/%3E%3C/svg%3E");
+}
+
+/* ─── Dark mode — texto ligeramente cálido ──────────────────────────────────
+   #f0ede8 en vez de gris frío armoniza con los orbs amarillos del fondo
+────────────────────────────────────────────────────────────────────────────── */
+.dark body {
+  color: #f0ede8;
+}
+.dark .text-gray-900  { color: #f0ede8 !important; }
+.dark .text-gray-800  { color: #e8e4de !important; }
+
+/* ─── Motion System ─────────────────────────────────────────────────────────
+   Shimmer skeleton animation used by the <Skeleton> component.
+   All CSS animations + transitions are suppressed for users who prefer
+   reduced motion — Framer Motion reads the same media query automatically.
+────────────────────────────────────────────────────────────────────────────── */
+@keyframes shimmer {
+  0%   { background-position: -200% 0; }
+  100% { background-position:  200% 0; }
+}
+
+.skeleton-shimmer {
+  background: linear-gradient(
+    90deg,
+    rgba(255,255,255,0.06) 25%,
+    rgba(255,255,255,0.14) 50%,
+    rgba(255,255,255,0.06) 75%
+  );
+  background-size: 200% 100%;
+  animation: shimmer 1.6s ease-in-out infinite;
+}
+
+html:not(.dark) .skeleton-shimmer {
+  background: linear-gradient(
+    90deg,
+    rgba(0,0,0,0.04) 25%,
+    rgba(0,0,0,0.08) 50%,
+    rgba(0,0,0,0.04) 75%
+  );
+  background-size: 200% 100%;
+}
+
+/* Global reduced-motion: disable CSS animations & transitions */
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1  !important;
+    transition-duration:  0.01ms !important;
+    scroll-behavior: auto  !important;
+  }
+}

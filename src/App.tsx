@@ -12,7 +12,10 @@ import ShiftsPage from './pages/ShiftsPage'
 import AttendancePage from './pages/AttendancePage'
 import CalendarPage from './pages/CalendarPage'
 import ExpensesPage from './pages/ExpensesPage'
+import MembershipsPage from './pages/MembershipsPage'
 import DashboardPage from './pages/DashboardPage'
+import UsersPage from './pages/UsersPage'
+import SettingsPage from './pages/SettingsPage'
 
 export default function App() {
   useThemeApplier()
@@ -35,7 +38,10 @@ export default function App() {
             {/* Solo admin */}
             <Route element={<RoleGuard />}>
               <Route path={ROUTES.EXPENSES} element={<ExpensesPage />} />
+              <Route path={ROUTES.MEMBERSHIPS} element={<MembershipsPage />} />
               <Route path={ROUTES.DASHBOARD} element={<DashboardPage />} />
+              <Route path={ROUTES.USERS} element={<UsersPage />} />
+              <Route path={ROUTES.SETTINGS} element={<SettingsPage />} />
             </Route>
           </Route>
         </Route>

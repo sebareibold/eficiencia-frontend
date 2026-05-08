@@ -1,36 +1,59 @@
+import { AnimatePresence, motion } from 'framer-motion'
 import { X, CheckCircle, AlertCircle, Info } from 'lucide-react'
 import { useUiStore, type Toast as ToastType } from '../../store/uiStore'
+import { toastVariants } from '../../lib/motion'
 
-const icons = {
-  success: <CheckCircle size={16} className="text-green-400 shrink-0" />,
-  error: <AlertCircle size={16} className="text-red-400 shrink-0" />,
-  info: <Info size={16} className="text-blue-400 shrink-0" />,
+const config: Record<ToastType['type'], { icon: React.ReactNode; border: string; bg: string }> = {
+  success: {
+    icon: <CheckCircle size={16} className="text-emerald-400 shrink-0" />,
+    border: 'border-emerald-500/20',
+    bg: 'bg-emerald-500/10',
+  },
+  error: {
+    icon: <AlertCircle size={16} className="text-red-400 shrink-0" />,
+    border: 'border-red-500/20',
+    bg: 'bg-red-500/10',
+  },
+  info: {
+    icon: <Info size={16} className="text-blue-400 shrink-0" />,
+    border: 'border-blue-500/20',
+    bg: 'bg-blue-500/10',
+  },
 }
 
 function ToastItem({ toast }: { toast: ToastType }) {
   const removeToast = useUiStore((s) => s.removeToast)
+  const { icon, border, bg } = config[toast.type]
+
   return (
-    <div className="flex items-start gap-3 rounded-xl border border-custom-border bg-surface px-4 py-3 shadow-xl">
-      {icons[toast.type]}
-      <span className="text-sm text-white">{toast.message}</span>
+    <motion.div
+      layout
+      {...toastVariants}
+      className={`flex items-start gap-3 rounded-2xl border ${border} ${bg} backdrop-blur-2xl px-4 py-3 shadow-2xl`}
+    >
+      {icon}
+      <span className="text-sm font-semibold text-gray-900 dark:text-white flex-1">{toast.message}</span>
       <button
         onClick={() => removeToast(toast.id)}
-        className="ml-auto text-[#9CA3AF] hover:text-white transition-colors"
+        className="text-gray-400 hover:text-gray-900 dark:hover:text-white transition-colors duration-150 active:scale-95 ml-1"
       >
         <X size={14} />
       </button>
-    </div>
+    </motion.div>
   )
 }
 
 export default function ToastContainer() {
   const toasts = useUiStore((s) => s.toasts)
-  if (!toasts.length) return null
   return (
-    <div className="fixed bottom-6 right-6 z-50 flex flex-col gap-2 w-80">
-      {toasts.map((t) => (
-        <ToastItem key={t.id} toast={t} />
-      ))}
+    <div className="fixed bottom-6 right-6 z-50 flex flex-col gap-2 w-80 pointer-events-none">
+      <AnimatePresence mode="popLayout">
+        {toasts.map((t) => (
+          <div key={t.id} className="pointer-events-auto">
+            <ToastItem toast={t} />
+          </div>
+        ))}
+      </AnimatePresence>
     </div>
   )
 }

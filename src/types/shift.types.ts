@@ -19,6 +19,8 @@ export interface CreateShiftDto {
   startTime: string
   endTime: string
   capacity: number
+  profesorId?: string
+  clientIds?: number[]
 }
 
 export interface UpdateShiftDto extends Partial<CreateShiftDto> {}

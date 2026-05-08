@@ -5,9 +5,6 @@ import {
   X,
   Palette,
   LayoutDashboard,
-  Bell,
-  User,
-  Shield,
   Globe,
   Sun,
   Moon,
@@ -42,7 +39,7 @@ function Toggle({
       type="button"
       onClick={() => !disabled && onChange(!checked)}
       className={`relative inline-flex h-5 w-9 shrink-0 items-center rounded-full transition-colors duration-200 focus:outline-none ${
-        checked ? 'bg-primary' : 'bg-gray-200'
+        checked ? 'bg-primary' : 'bg-gray-200 dark:bg-gray-200'
       } ${disabled ? 'cursor-not-allowed opacity-50' : 'cursor-pointer'}`}
       aria-checked={checked}
       role="switch"
@@ -88,7 +85,7 @@ function SegmentedControl<T extends string>({
 
 function SectionCard({ children }: { children: React.ReactNode }) {
   return (
-    <div className="bg-white rounded-2xl border border-gray-100 shadow-sm overflow-hidden">
+    <div className="bg-white dark:bg-[#1e1e1e] rounded-2xl border border-gray-100 dark:border-[#2a2a2a] shadow-sm overflow-hidden">
       {children}
     </div>
   )
@@ -107,14 +104,14 @@ function SectionRow({
 }) {
   return (
     <div
-      className={`flex items-center justify-between gap-4 px-5 py-4 ${
+      className={`flex items-center justify-between gap-4 px-5 py-5 ${
         !last ? 'border-b border-gray-50' : ''
       }`}
     >
       <div className="min-w-0">
-        <p className="text-sm font-medium text-gray-800 leading-tight">{label}</p>
+        <p className="text-base font-semibold text-gray-800 leading-tight">{label}</p>
         {description && (
-          <p className="text-xs text-gray-400 mt-0.5 leading-tight">{description}</p>
+          <p className="text-sm text-gray-400 mt-1 leading-tight">{description}</p>
         )}
       </div>
       <div className="shrink-0">{children}</div>
@@ -124,7 +121,7 @@ function SectionRow({
 
 function SectionHeader({ title }: { title: string }) {
   return (
-    <p className="text-[10px] font-bold uppercase tracking-wider text-gray-400 px-1 mb-2 mt-5 first:mt-0">
+    <p className="text-xs font-bold uppercase tracking-wider text-gray-500 px-1 mb-3 mt-6 first:mt-0">
       {title}
     </p>
   )
@@ -133,8 +130,9 @@ function SectionHeader({ title }: { title: string }) {
 // ─── Accent color picker ──────────────────────────────────────────────────────
 
 const ACCENT_COLORS = [
+  { value: '#FBC608', label: 'Amarillo Eficiencia' },
   { value: '#F5A623', label: 'Naranja' },
-  { value: '#3B82F6', label: 'Azul' },
+  { value: '#D4880A', label: 'Ámbar Oscuro' },
   { value: '#10B981', label: 'Verde' },
   { value: '#8B5CF6', label: 'Violeta' },
   { value: '#EF4444', label: 'Rojo' },
@@ -211,48 +209,42 @@ function DashboardSection() {
   const { dashboard, updateDashboard } = useSettingsStore()
 
   return (
-    <div>
-      <SectionHeader title="Widgets visibles" />
-      <SectionCard>
-        <SectionRow label="Ingresos del mes" description="Tarjeta de resumen de pagos">
-          <Toggle
-            checked={dashboard.showRevenue}
-            onChange={(v) => updateDashboard({ showRevenue: v })}
-          />
-        </SectionRow>
-        <SectionRow label="Clientes activos" description="Contador de clientes al día">
-          <Toggle
-            checked={dashboard.showClients}
-            onChange={(v) => updateDashboard({ showClients: v })}
-          />
-        </SectionRow>
-        <SectionRow label="Gastos del mes" description="Tarjeta de egresos registrados">
-          <Toggle
-            checked={dashboard.showExpenses}
-            onChange={(v) => updateDashboard({ showExpenses: v })}
-          />
-        </SectionRow>
-        <SectionRow label="Ganancia neta" description="Ingresos menos gastos" last>
-          <Toggle
-            checked={dashboard.showProfit}
-            onChange={(v) => updateDashboard({ showProfit: v })}
-          />
-        </SectionRow>
-      </SectionCard>
+    <div className="space-y-6">
+      <div>
+        <SectionHeader title="Widgets para Administradores" />
+        <SectionCard>
+          <SectionRow label="Resumen Financiero" description="Ingresos, gastos y ganancia neta">
+            <Toggle checked={true} onChange={() => {}} disabled />
+          </SectionRow>
+          <SectionRow label="Métricas de Clientes" description="Altas y bajas del mes" last>
+            <Toggle checked={true} onChange={() => {}} disabled />
+          </SectionRow>
+        </SectionCard>
+      </div>
 
-      <SectionHeader title="Presentación" />
-      <SectionCard>
-        <SectionRow label="Layout de widgets" last>
-          <SegmentedControl
-            options={[
-              { value: 'grid', label: 'Grid' },
-              { value: 'compact', label: 'Compacto' },
-            ]}
-            value={dashboard.layout}
-            onChange={(v) => updateDashboard({ layout: v })}
-          />
-        </SectionRow>
-      </SectionCard>
+      <div>
+        <SectionHeader title="Widgets para Profesores" />
+        <SectionCard>
+          <SectionRow label="Agenda de Turnos" description="Visualización de clases del día">
+            <Toggle checked={true} onChange={() => {}} />
+          </SectionRow>
+          <SectionRow label="Asistencia" description="Listado de alumnos por clase" last>
+            <Toggle checked={true} onChange={() => {}} />
+          </SectionRow>
+        </SectionCard>
+      </div>
+
+      <div>
+        <SectionHeader title="Widgets para Staff" />
+        <SectionCard>
+          <SectionRow label="Pagos Pendientes" description="Avisos de deudas">
+            <Toggle checked={true} onChange={() => {}} />
+          </SectionRow>
+          <SectionRow label="Control de Acceso" description="Últimos ingresos al gimnasio" last>
+            <Toggle checked={true} onChange={() => {}} />
+          </SectionRow>
+        </SectionCard>
+      </div>
     </div>
   )
 }
@@ -522,24 +514,6 @@ const CATEGORIES: {
     keywords: ['dashboard', 'widgets', 'ingresos', 'clientes', 'gastos', 'ganancia', 'layout'],
   },
   {
-    id: 'notifications',
-    label: 'Notificaciones',
-    icon: Bell,
-    keywords: ['notificaciones', 'alertas', 'email', 'frecuencia', 'canal', 'avisos'],
-  },
-  {
-    id: 'account',
-    label: 'Cuenta',
-    icon: User,
-    keywords: ['cuenta', 'perfil', 'nombre', 'email', 'contraseña', 'usuario'],
-  },
-  {
-    id: 'security',
-    label: 'Seguridad',
-    icon: Shield,
-    keywords: ['seguridad', '2fa', 'autenticación', 'dispositivos', 'sesiones', 'contraseña'],
-  },
-  {
     id: 'system',
     label: 'Sistema',
     icon: Globe,
@@ -592,12 +566,9 @@ export default function SettingsDrawer() {
     useUiStore.getState().addToast('Configuración restablecida', 'info')
   }
 
-  const sectionContent: Record<CategoryId, React.ReactNode> = {
+  const sectionContent: Partial<Record<CategoryId, React.ReactNode>> = {
     appearance: <AppearanceSection />,
     dashboard: <DashboardSection />,
-    notifications: <NotificationsSection />,
-    account: <AccountSection />,
-    security: <SecuritySection />,
     system: <SystemSection />,
   }
 
@@ -626,10 +597,10 @@ export default function SettingsDrawer() {
             animate={{ x: 0, opacity: 1 }}
             exit={{ x: '100%', opacity: 0 }}
             transition={{ type: 'spring', stiffness: 320, damping: 35 }}
-            className="fixed right-0 top-0 bottom-0 z-50 w-full max-w-[560px] flex flex-col bg-[#F7F7F8] shadow-2xl"
+            className="fixed right-0 top-0 bottom-0 z-50 w-[92vw] max-w-[490px] flex flex-col bg-[#F7F7F8] dark:bg-[#111111] shadow-2xl"
           >
             {/* Header */}
-            <div className="flex items-center gap-3 px-5 py-4 bg-white border-b border-gray-100 shrink-0">
+            <div className="flex items-center gap-3 px-5 py-4 bg-white dark:bg-[#1a1a1a] border-b border-gray-100 dark:border-[#252525] shrink-0">
               <div className="flex-1">
                 <h2 className="text-sm font-bold text-gray-900 leading-tight">Configuración</h2>
                 <p className="text-xs text-gray-400 mt-0.5">
@@ -637,36 +608,62 @@ export default function SettingsDrawer() {
                 </p>
               </div>
 
-              {/* Search */}
-              <div className="relative w-48">
-                <Search
-                  size={13}
-                  className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400 pointer-events-none"
-                />
-                <input
-                  ref={searchRef}
-                  type="text"
-                  placeholder="Buscar..."
-                  value={search}
-                  onChange={(e) => setSearch(e.target.value)}
-                  className="w-full rounded-xl bg-gray-100 border border-transparent pl-8 pr-3 py-2 text-xs text-gray-700 placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-primary/20 focus:border-primary/40 transition-all"
-                />
-              </div>
+              {/* Search — hidden on mobile to save space */}
+                <div className="relative hidden sm:block w-52">
+                  <Search
+                    size={15}
+                    className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400 pointer-events-none"
+                  />
+                  <input
+                    ref={searchRef}
+                    type="text"
+                    placeholder="Buscar..."
+                    value={search}
+                    onChange={(e) => setSearch(e.target.value)}
+                    className="w-full rounded-xl bg-gray-100 border border-transparent pl-10 pr-3 py-2.5 text-sm text-gray-700 placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-primary/20 focus:border-primary/40 transition-all"
+                  />
+                </div>
 
               <button
                 type="button"
                 onClick={closeSettings}
-                className="h-8 w-8 rounded-xl bg-gray-100 flex items-center justify-center text-gray-500 hover:bg-gray-200 hover:text-gray-700 transition-colors focus:outline-none shrink-0"
+                className="h-10 w-10 rounded-xl bg-gray-100 flex items-center justify-center text-gray-500 hover:bg-gray-200 hover:text-gray-700 transition-colors focus:outline-none shrink-0"
                 title="Cerrar"
               >
-                <X size={15} />
+                <X size={18} />
               </button>
             </div>
 
             {/* Body */}
-            <div className="flex flex-1 min-h-0">
-              {/* Left nav */}
-              <nav className="w-44 shrink-0 border-r border-gray-100 bg-white py-3 flex flex-col gap-0.5 overflow-y-auto">
+            <div className="flex flex-1 min-h-0 flex-col sm:flex-row">
+
+              {/* Mobile: horizontal scrollable category tabs */}
+              <div className="sm:hidden overflow-x-auto flex gap-1.5 px-3 py-2.5 border-b border-gray-100 dark:border-[#252525] bg-white dark:bg-[#161616] shrink-0 scrollbar-none" style={{ scrollbarWidth: 'none' }}>
+                {filteredCategories.length === 0 ? (
+                  <p className="text-xs text-gray-400 px-2 py-1 whitespace-nowrap">Sin resultados</p>
+                ) : filteredCategories.map((cat) => {
+                  const Icon = cat.icon
+                  const isActive = currentCategory?.id === cat.id
+                  return (
+                    <button
+                      key={cat.id}
+                      type="button"
+                      onClick={() => setActiveCategory(cat.id)}
+                      className={`flex items-center gap-1.5 whitespace-nowrap px-3 py-2 rounded-xl text-xs font-semibold shrink-0 transition-all duration-150 ${
+                        isActive
+                          ? 'bg-gray-900 text-white shadow-sm'
+                          : 'text-gray-600 bg-gray-100 hover:bg-gray-200'
+                      }`}
+                    >
+                      <Icon size={13} strokeWidth={2} className="shrink-0" />
+                      <span>{cat.label}</span>
+                    </button>
+                  )
+                })}
+              </div>
+
+              {/* Desktop: sidebar nav */}
+              <nav className="hidden sm:flex flex-col w-56 shrink-0 border-r border-gray-100 dark:border-[#252525] bg-white dark:bg-[#161616] py-3 gap-0.5 overflow-y-auto">
                 {filteredCategories.length === 0 ? (
                   <p className="text-xs text-gray-400 px-4 py-3">Sin resultados</p>
                 ) : (
@@ -678,14 +675,14 @@ export default function SettingsDrawer() {
                         key={cat.id}
                         type="button"
                         onClick={() => setActiveCategory(cat.id)}
-                        className={`flex items-center gap-2.5 mx-2 px-3 py-2.5 rounded-xl text-left transition-all duration-150 ${
+                        className={`flex items-center gap-3 mx-2 px-4 py-3.5 rounded-xl text-left transition-all duration-150 ${
                           isActive
-                            ? 'bg-gray-900 text-white shadow-sm'
+                            ? 'bg-gray-900 dark:bg-white/10 text-white dark:text-white shadow-sm'
                             : 'text-gray-600 hover:bg-gray-100 hover:text-gray-900'
                         }`}
                       >
-                        <Icon size={15} strokeWidth={2} className="shrink-0" />
-                        <span className="text-xs font-semibold leading-tight">{cat.label}</span>
+                        <Icon size={18} strokeWidth={2} className="shrink-0" />
+                        <span className="text-sm font-semibold leading-tight">{cat.label}</span>
                       </button>
                     )
                   })
@@ -693,7 +690,7 @@ export default function SettingsDrawer() {
               </nav>
 
               {/* Content */}
-              <div className="flex-1 overflow-y-auto px-5 py-5">
+              <div className="flex-1 overflow-y-auto px-4 sm:px-5 py-5">
                 <AnimatePresence mode="wait">
                   <motion.div
                     key={currentCategory?.id ?? 'empty'}
@@ -718,7 +715,7 @@ export default function SettingsDrawer() {
             </div>
 
             {/* Footer */}
-            <div className="shrink-0 flex items-center gap-3 px-5 py-3.5 bg-white border-t border-gray-100">
+            <div className="shrink-0 flex items-center gap-3 px-5 py-3.5 bg-white dark:bg-[#1a1a1a] border-t border-gray-100 dark:border-[#252525]">
               <AnimatePresence>
                 {hasUnsavedChanges && (
                   <motion.div
@@ -738,7 +735,7 @@ export default function SettingsDrawer() {
               <button
                 type="button"
                 onClick={handleReset}
-                className="flex items-center gap-1.5 rounded-xl border border-gray-200 bg-white px-4 py-2 text-xs font-semibold text-gray-600 hover:bg-gray-50 hover:text-gray-800 transition-colors"
+                className="flex items-center gap-1.5 rounded-xl border border-gray-200 dark:border-[#333] bg-white dark:bg-[#1e1e1e] px-4 py-2 text-xs font-semibold text-gray-600 dark:text-gray-400 hover:bg-gray-50 dark:hover:bg-[#252525] hover:text-gray-800 transition-colors"
               >
                 <RotateCcw size={12} />
                 Restablecer
@@ -747,9 +744,9 @@ export default function SettingsDrawer() {
               <button
                 type="button"
                 onClick={handleSave}
-                className="flex items-center gap-1.5 rounded-xl bg-gray-900 px-4 py-2 text-xs font-semibold text-white hover:bg-gray-700 transition-colors shadow-sm"
+                className="flex items-center gap-1.5 rounded-xl bg-gray-900 px-5 py-2.5 text-sm font-semibold text-white hover:bg-gray-700 transition-colors shadow-sm"
               >
-                <Save size={12} />
+                <Save size={14} />
                 Guardar cambios
               </button>
             </div>

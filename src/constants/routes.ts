@@ -8,5 +8,8 @@ export const ROUTES = {
   ATTENDANCE: '/attendance',
   CALENDAR: '/calendar',
   EXPENSES: '/expenses',
+  MEMBERSHIPS: '/memberships',
   DASHBOARD: '/dashboard',
+  USERS: '/usuarios',
+  SETTINGS: '/settings',
 } as const

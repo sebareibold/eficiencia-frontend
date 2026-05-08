@@ -7,7 +7,7 @@ export function useAttendance() {
   const [isLoading, setIsLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
 
-  const fetchByShiftAndDate = useCallback(async (shiftId: number, date: string) => {
+  const fetchByShiftAndDate = useCallback(async (shiftId: string, date: string) => {
     setIsLoading(true)
     setError(null)
     try {

@@ -23,7 +23,19 @@ function processQueue(error: unknown, token: string | null) {
 }
 
 api.interceptors.response.use(
-  (response) => response,
+  (response) => {
+    // Desenvuelve el wrapper { data, message, statusCode } que aplica el backend globalmente
+    if (
+      response.data &&
+      typeof response.data === 'object' &&
+      'data' in response.data &&
+      'message' in response.data &&
+      'statusCode' in response.data
+    ) {
+      response.data = response.data.data
+    }
+    return response
+  },
   async (error) => {
     const originalRequest = error.config
 
@@ -52,9 +64,11 @@ api.interceptors.response.use(
         const { data } = await axios.post(`${import.meta.env.VITE_API_URL}/auth/refresh`, {
           refreshToken,
         })
-        setTokens(data.accessToken, data.refreshToken)
-        processQueue(null, data.accessToken)
-        originalRequest.headers.Authorization = `Bearer ${data.accessToken}`
+        // El refresh endpoint también está envuelto
+        const tokens = data?.data ?? data
+        setTokens(tokens.accessToken, tokens.refreshToken ?? refreshToken)
+        processQueue(null, tokens.accessToken)
+        originalRequest.headers.Authorization = `Bearer ${tokens.accessToken}`
         return api(originalRequest)
       } catch (err) {
         processQueue(err, null)
