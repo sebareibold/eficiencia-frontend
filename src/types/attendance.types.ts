@@ -1,14 +1,15 @@
 export interface AttendanceRecord {
-  id: number
-  clientId: number
+  id: string
+  clientId: string
   clientName: string
-  shiftId: number
+  shiftId: string
+  shiftLabel: string
   date: string
   present: boolean
 }
 
 export interface AttendanceByShift {
-  shiftId: number
+  shiftId: string
   date: string
   records: AttendanceRecord[]
 }

@@ -3,7 +3,7 @@ import { motion, AnimatePresence } from 'framer-motion'
 import { ease, duration } from '../../lib/motion'
 import {
   Settings, LogOut, Users, CreditCard, LayoutDashboard,
-  MoreHorizontal, Dumbbell, Tag, Wallet, Menu, X, UserCog,
+  MoreHorizontal, Dumbbell, Tag, Wallet, Menu, X, UserCog, BookOpen,
 } from 'lucide-react'
 import { useAuthStore } from '../../store/authStore'
 import { useUiStore } from '../../store/uiStore'
@@ -15,8 +15,8 @@ const NAV_TABS = [
   { label: 'Turnos',    to: ROUTES.SHIFTS,       adminOnly: false, icon: Dumbbell },
   { label: 'Clientes',  to: ROUTES.CLIENTS,      adminOnly: false, icon: Users },
   { label: 'Pagos',     to: ROUTES.PAYMENTS,     adminOnly: false, icon: CreditCard },
-  { label: 'Membresía', to: ROUTES.MEMBERSHIPS,  adminOnly: true,  icon: Tag },
   { label: 'Gastos',    to: ROUTES.EXPENSES,     adminOnly: true,  icon: Wallet },
+  { label: 'Ejercicios', to: ROUTES.EXERCISES,   adminOnly: false, icon: BookOpen },
   { label: 'Usuarios',  to: ROUTES.USERS,        adminOnly: true,  icon: UserCog },
 ]
 

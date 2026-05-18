@@ -1,5 +1,6 @@
 import { create } from 'zustand'
 import { persist } from 'zustand/middleware'
+import type { ConfiguracionData } from '../api/configuracion.api'
 
 const DEFAULT_SETTINGS = {
   appearance: {
@@ -20,6 +21,8 @@ const DEFAULT_SETTINGS = {
     reports: false,
     frequency: 'instant' as 'instant' | 'daily' | 'weekly',
     channel: 'app' as 'app' | 'email' | 'both',
+    // Email de destino para el motor de notificaciones del admin
+    adminEmail: '' as string,
   },
   system: {
     language: 'es' as 'es' | 'en',
@@ -46,6 +49,7 @@ interface SettingsState {
   updateSystem: (updates: Partial<SystemSettings>) => void
   saveSettings: () => void
   resetToDefaults: () => void
+  applyFromServer: (config: Partial<ConfiguracionData>) => void
 }
 
 export const useSettingsStore = create<SettingsState>()(
@@ -75,6 +79,17 @@ export const useSettingsStore = create<SettingsState>()(
         })),
       saveSettings: () => set({ hasUnsavedChanges: false }),
       resetToDefaults: () => set({ ...DEFAULT_SETTINGS, hasUnsavedChanges: false }),
+      // Aplica la configuración guardada en el servidor sobreescribiendo el estado local
+      applyFromServer: (config) =>
+        set((s) => ({
+          appearance: {
+            ...s.appearance,
+            ...(config.tema        !== undefined && { theme:       config.tema as 'light' | 'dark' }),
+            ...(config.accentColor !== undefined && { accentColor: config.accentColor }),
+            ...(config.density     !== undefined && { density:     config.density as 'compact' | 'comfortable' }),
+          },
+          hasUnsavedChanges: false,
+        })),
     }),
     { name: 'eficiencia-settings' },
   ),

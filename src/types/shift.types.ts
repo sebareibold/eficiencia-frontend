@@ -4,23 +4,26 @@ export interface Shift {
   id: number
   name: string
   room: string
-  day: WeekDay
+  days: WeekDay[]       // todos los días en que se dicta (soporte multi-día)
+  recurrente: boolean   // true = recurrente semanal, false = evento puntual
   startTime: string
   endTime: string
   capacity: number
   enrolled: number
+  profesorId: string    // UUID del Profesor (para pre-rellenar el select de edición)
+  profesorNombre: string
   createdAt: string
 }
 
 export interface CreateShiftDto {
-  name: string
   room: string
-  day: WeekDay
+  days: WeekDay[]
+  recurrente: boolean
   startTime: string
   endTime: string
   capacity: number
   profesorId?: string
-  clientIds?: number[]
+  clientIds?: string[]
 }
 
 export interface UpdateShiftDto extends Partial<CreateShiftDto> {}

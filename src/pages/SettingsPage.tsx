@@ -21,6 +21,7 @@ import {
 import { useUiStore } from '../store/uiStore'
 import { useSettingsStore } from '../store/settingsStore'
 import { useAuthStore } from '../store/authStore'
+import { configuracionApi } from '../api/configuracion.api'
 
 // ─── Sub-components ──────────────────────────────────────────────────────────
 
@@ -689,8 +690,18 @@ export default function SettingsPage() {
     return cat.label.toLowerCase().includes(q) || cat.keywords.some((k) => k.includes(q))
   })
 
-  function handleSave() {
+  async function handleSave() {
     saveSettings()
+    const { appearance } = useSettingsStore.getState()
+    try {
+      await configuracionApi.update({
+        tema: appearance.theme,
+        accentColor: appearance.accentColor,
+        density: appearance.density,
+      })
+    } catch {
+      // La config local ya se guardó; si falla el server no se bloquea el UX
+    }
     useUiStore.getState().addToast('Configuración guardada', 'success')
   }
 

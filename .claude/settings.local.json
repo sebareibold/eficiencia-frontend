@@ -7,7 +7,8 @@
       "Bash(npx tsc *)",
       "Read(//d/Proyectos/App Web - Eficiencia//**)",
       "Read(//d/Proyectos//**)",
-      "Bash(npx prisma *)"
+      "Bash(npx prisma *)",
+      "Bash(cmd *)"
     ]
   }
 }

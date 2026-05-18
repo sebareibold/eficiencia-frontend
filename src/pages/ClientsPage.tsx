@@ -16,7 +16,6 @@ import Modal from '../components/ui/Modal'
 import Input from '../components/ui/Input'
 import Table, { type Column } from '../components/ui/Table'
 import Skeleton from '../components/ui/Skeleton'
-import { formatDate } from '../utils/formatDate'
 import type { Client } from '../types/client.types'
 import type { ClientStatus } from '../constants/clientStatus'
 import { ROUTES } from '../constants/routes'
@@ -121,12 +120,17 @@ export default function ClientsPage() {
       render: (c) => <Badge status={c.status} />,
     },
     {
-      key: 'membershipExpiresAt',
-      header: 'Vencimiento',
+      key: 'planName',
+      header: 'Plan',
       render: (c) => (
-        <span className="text-sm text-saas-muted">
-          {c.membershipExpiresAt ? formatDate(c.membershipExpiresAt) : '—'}
-        </span>
+        c.planName
+          ? <div className="flex flex-col gap-0.5">
+              <span className="text-sm font-medium text-gray-900 dark:text-white">{c.planName}</span>
+              {c.planFrequency && (
+                <span className="text-xs text-saas-muted">{c.planFrequency}× por semana</span>
+              )}
+            </div>
+          : <span className="text-sm text-saas-muted">—</span>
       ),
     },
     {
@@ -300,13 +304,17 @@ export default function ClientsPage() {
                   {/* Footer */}
                   <div className="flex items-center justify-between gap-2 pt-3 border-t border-black/5 dark:border-white/[0.06]">
                     <Badge status={c.status} />
-                    <div className="text-right shrink-0">
-                      <p className="text-[10px] uppercase tracking-wider text-gray-400 dark:text-gray-500 font-medium leading-tight">
-                        {c.membershipExpiresAt ? 'Vence' : 'DNI'}
-                      </p>
-                      <p className="text-xs font-medium text-gray-600 dark:text-gray-400">
-                        {c.membershipExpiresAt ? formatDate(c.membershipExpiresAt) : c.dni}
-                      </p>
+                    <div className="text-right shrink-0 min-w-0">
+                      {c.planName ? (
+                        <>
+                          <p className="text-xs font-medium text-gray-700 dark:text-gray-300 truncate">{c.planName}</p>
+                          {c.planFrequency && (
+                            <p className="text-[10px] text-gray-400 dark:text-gray-500">{c.planFrequency}× / sem</p>
+                          )}
+                        </>
+                      ) : (
+                        <p className="text-xs text-gray-400 dark:text-gray-500">Sin plan</p>
+                      )}
                     </div>
                   </div>
                 </div>

@@ -1,13 +1,19 @@
 import { useState, useMemo } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
-import { pageVariants, cardVariants, stagger } from '../lib/motion'
-import { Plus, CreditCard, Banknote, ArrowLeftRight, Building2, RefreshCw, CheckCircle2, XCircle, Trash2, Search, Filter, ChevronDown } from 'lucide-react'
+import { pageVariants, cardVariants } from '../lib/motion'
+import {
+  Plus, CreditCard, Banknote, ArrowLeftRight, Building2, RefreshCw,
+  CheckCircle2, XCircle, Trash2, Search, Filter, ChevronDown, Tag,
+  Edit2, Save, X, LayoutList, LayoutGrid,
+} from 'lucide-react'
 import { useForm } from 'react-hook-form'
 import { zodResolver } from '@hookform/resolvers/zod'
 import { z } from 'zod'
 import { format } from 'date-fns'
 import { usePayments } from '../hooks/usePayments'
+import { useMemberships } from '../hooks/useMemberships'
 import { paymentsApi } from '../api/payments.api'
+import { membershipsApi } from '../api/memberships.api'
 import { clientsApi } from '../api/clients.api'
 import { useUiStore } from '../store/uiStore'
 import Button from '../components/ui/Button'
@@ -40,15 +46,21 @@ const schema = z.object({
   invoiced: z.boolean().optional(),
   notes: z.string().optional(),
 })
-
 type FormValues = z.infer<typeof schema>
-
 type MethodFilter = 'all' | PaymentMethod
 
 export default function PaymentsPage() {
   const today = new Date()
   const currentYear = today.getFullYear()
   const YEARS = [currentYear, currentYear - 1, currentYear - 2].map(String)
+
+  // ── Vista de pagos: lista o grid
+  const [viewMode, setViewMode] = useState<'list' | 'grid'>('list')
+
+  // ── Membresías state
+  const [membCreateOpen,  setMembCreateOpen]  = useState(false)
+  const [membEditingId,   setMembEditingId]   = useState<number | null>(null)
+  const [membSubmitting,  setMembSubmitting]  = useState(false)
 
   const [isFiltersOpen, setIsFiltersOpen] = useState(false)
   const [dateMode, setDateMode] = useState<'year' | 'range'>('year')
@@ -65,6 +77,21 @@ export default function PaymentsPage() {
   const [clientSearch, setClientSearch] = useState('')
   const [clientOptions, setClientOptions] = useState<{ value: string; label: string }[]>([])
   const [loadingClients, setLoadingClients] = useState(false)
+
+  const { memberships, isLoading: membLoading, error: membError, refetch: refetchMemb } = useMemberships()
+
+  const membSchema = z.object({
+    name:          z.string().min(1, 'Requerido'),
+    price:         z.string().min(1, 'Requerido').refine(v => Number(v) > 0, 'Inválido'),
+    classesPerWeek:z.string().min(1, 'Requerido').refine(v => Number(v) > 0, 'Inválido'),
+    description:   z.string().optional(),
+  })
+  type MembValues = z.infer<typeof membSchema>
+
+  const {
+    register: membRegister, handleSubmit: membHandleSubmit,
+    formState: { errors: membErrors }, reset: membReset, setValue: membSetValue,
+  } = useForm<MembValues>({ resolver: zodResolver(membSchema), defaultValues: { classesPerWeek: '2' } })
 
   const { payments, isLoading, error, refetch } = usePayments({
     desde: dateFrom || undefined,
@@ -163,6 +190,55 @@ export default function PaymentsPage() {
     }
   }
 
+  async function onMembSubmit(data: MembValues) {
+    setMembSubmitting(true)
+    try {
+      if (membEditingId !== null) {
+        await membershipsApi.update(membEditingId, {
+          name: data.name, price: Number(data.price),
+          classesPerWeek: Number(data.classesPerWeek), description: data.description,
+        })
+        addToast('Membresía actualizada', 'success')
+        setMembEditingId(null)
+      } else {
+        await membershipsApi.create({
+          name: data.name, price: Number(data.price),
+          classesPerWeek: Number(data.classesPerWeek), description: data.description,
+        })
+        addToast('Membresía creada', 'success')
+        setMembCreateOpen(false)
+      }
+      membReset()
+      refetchMemb()
+    } catch {
+      addToast('Error al guardar la membresía', 'error')
+    } finally {
+      setMembSubmitting(false)
+    }
+  }
+
+  async function deleteMembership(id: number) {
+    if (!confirm('¿Eliminar esta membresía?')) return
+    try {
+      await membershipsApi.remove(id)
+      addToast('Membresía eliminada', 'success')
+      refetchMemb()
+    } catch {
+      addToast('Error al eliminar', 'error')
+    }
+  }
+
+  function startMembEdit(m: { id: number; name: string; price: number; classesPerWeek: number; description?: string }) {
+    setMembEditingId(m.id)
+    membSetValue('name', m.name)
+    membSetValue('price', String(m.price))
+    membSetValue('classesPerWeek', String(m.classesPerWeek))
+    membSetValue('description', m.description || '')
+  }
+
+  const inputCls = 'w-full rounded-xl border-2 border-saas-border bg-white/60 dark:bg-white/5 px-3.5 py-2.5 text-sm text-gray-900 dark:text-white placeholder:text-gray-400 transition-all focus:border-primary focus:outline-none'
+  const labelCls = 'mb-1.5 block text-xs font-bold uppercase tracking-widest text-gray-400 dark:text-gray-500'
+
   const summaryCards = [
     { label: 'Total cobrado', value: totals.total, icon: CreditCard, color: 'text-primary', bgColor: 'bg-primary/10' },
     { label: 'Efectivo', value: totals.byCash, icon: Banknote, color: 'text-green-400', bgColor: 'bg-green-500/10' },
@@ -171,25 +247,29 @@ export default function PaymentsPage() {
   ]
 
   return (
-    <motion.div
-      {...pageVariants}
-      className="space-y-8 pb-12 relative z-10"
-    >
-      {/* Hyper-Modern Header */}
+    <motion.div {...pageVariants} className="space-y-8 pb-12 relative z-10">
+
+      {/* Header */}
       <div className="flex flex-col sm:flex-row sm:items-end justify-between gap-6">
         <div>
           <h1 className="text-3xl md:text-4xl font-black tracking-tighter text-gray-900 dark:text-white drop-shadow-sm">Pagos</h1>
           <p className="mt-2 text-sm font-semibold text-gray-500 dark:text-gray-400">
-            Gestioná los ingresos y facturación de tus clientes
+            Gestioná los ingresos y planes del gimnasio
           </p>
         </div>
-        
         <div className="flex items-center gap-3">
           <button
-            onClick={refetch}
+            onClick={() => { refetch(); refetchMemb() }}
             className="flex h-11 w-11 items-center justify-center rounded-2xl border border-white/50 dark:border-white/10 bg-white/30 dark:bg-black/30 backdrop-blur-xl text-gray-600 dark:text-gray-300 transition-all hover:scale-105 hover:bg-white/50 dark:hover:bg-black/50 shadow-sm"
           >
             <RefreshCw size={18} />
+          </button>
+          <button
+            onClick={() => { membReset(); setMembCreateOpen(true) }}
+            className="flex items-center gap-2 rounded-xl border border-white/50 dark:border-white/10 bg-white/30 dark:bg-black/30 backdrop-blur-xl px-4 py-2.5 text-sm font-semibold text-gray-700 dark:text-gray-200 hover:bg-white/50 dark:hover:bg-black/50 transition-all shadow-sm"
+          >
+            <Plus size={13} strokeWidth={2.5} />
+            Nueva membresía
           </button>
           <button
             onClick={() => { setModalOpen(true); loadClients('') }}
@@ -203,7 +283,9 @@ export default function PaymentsPage() {
         </div>
       </div>
 
-      {/* Top Row: KPI Micro-Bento */}
+      {/* ══ SECCIÓN PAGOS ══ */}
+
+      {/* KPI strip */}
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-4 md:gap-6">
         {summaryCards.map(card => (
           <KpiCard
@@ -218,20 +300,44 @@ export default function PaymentsPage() {
         ))}
       </div>
 
-      {/* Complex Filter Bar Container */}
+      {/* Filtros + toggle vista */}
       <div className="rounded-[2rem] border border-white/50 dark:border-white/10 bg-white/30 dark:bg-black/30 backdrop-blur-3xl shadow-[0_8px_32px_rgba(0,0,0,0.04)] dark:shadow-[0_8px_32px_rgba(0,0,0,0.3)]">
-        <button
-          onClick={() => setIsFiltersOpen(v => !v)}
-          className="w-full flex items-center justify-between gap-2 px-6 py-4 text-gray-800 dark:text-white font-bold"
-        >
-          <div className="flex items-center gap-2">
+        <div className="flex items-center justify-between px-6 py-4">
+          <button
+            onClick={() => setIsFiltersOpen(v => !v)}
+            className="flex items-center gap-2 text-gray-800 dark:text-white font-bold"
+          >
             <Filter size={18} className="text-primary" />
             <span>Filtros Avanzados</span>
+            <motion.span animate={{ rotate: isFiltersOpen ? 180 : 0 }} transition={{ duration: 0.2 }}>
+              <ChevronDown size={18} className="text-gray-400" />
+            </motion.span>
+          </button>
+
+          {/* Toggle Lista / Grid */}
+          <div className="flex gap-1 p-1 rounded-xl bg-white/40 dark:bg-white/[0.04] border border-gray-200/60 dark:border-white/[0.07]">
+            <button
+              onClick={() => setViewMode('list')}
+              className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold transition-all ${
+                viewMode === 'list'
+                  ? 'bg-white dark:bg-white/[0.09] text-gray-900 dark:text-white shadow-sm'
+                  : 'text-gray-500 dark:text-[#8A8A9A] hover:text-gray-800 dark:hover:text-gray-200'
+              }`}
+            >
+              <LayoutList size={14} /> Lista
+            </button>
+            <button
+              onClick={() => setViewMode('grid')}
+              className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold transition-all ${
+                viewMode === 'grid'
+                  ? 'bg-white dark:bg-white/[0.09] text-gray-900 dark:text-white shadow-sm'
+                  : 'text-gray-500 dark:text-[#8A8A9A] hover:text-gray-800 dark:hover:text-gray-200'
+              }`}
+            >
+              <LayoutGrid size={14} /> Cards
+            </button>
           </div>
-          <motion.span animate={{ rotate: isFiltersOpen ? 180 : 0 }} transition={{ duration: 0.2 }}>
-            <ChevronDown size={18} className="text-gray-400" />
-          </motion.span>
-        </button>
+        </div>
 
         <AnimatePresence initial={false}>
           {isFiltersOpen && (
@@ -245,7 +351,6 @@ export default function PaymentsPage() {
             >
               <div className="px-6 pb-6 flex flex-col gap-4">
                 <div className="flex flex-col md:flex-row gap-4 flex-wrap">
-                  {/* Buscar */}
                   <div className="flex-1 min-w-[180px] relative">
                     <label className="block text-xs font-semibold uppercase tracking-wider text-gray-500 dark:text-gray-400 mb-2">Buscar Cliente</label>
                     <div className="relative">
@@ -259,8 +364,6 @@ export default function PaymentsPage() {
                       />
                     </div>
                   </div>
-
-                  {/* Método */}
                   <div className="w-full md:w-44">
                     <label className="block text-xs font-semibold uppercase tracking-wider text-gray-500 dark:text-gray-400 mb-2">Método</label>
                     <select
@@ -274,8 +377,6 @@ export default function PaymentsPage() {
                       <option value="card">Débito</option>
                     </select>
                   </div>
-
-                  {/* Facturado */}
                   <div className="w-full md:w-40">
                     <label className="block text-xs font-semibold uppercase tracking-wider text-gray-500 dark:text-gray-400 mb-2">Facturado</label>
                     <select
@@ -288,8 +389,6 @@ export default function PaymentsPage() {
                       <option value="no">No</option>
                     </select>
                   </div>
-
-                  {/* Período: modo */}
                   <div className="w-full md:w-40">
                     <label className="block text-xs font-semibold uppercase tracking-wider text-gray-500 dark:text-gray-400 mb-2">Período</label>
                     <select
@@ -306,8 +405,6 @@ export default function PaymentsPage() {
                       <option value="range">Por rango</option>
                     </select>
                   </div>
-
-                  {/* Año (visible si modo = year) */}
                   {dateMode === 'year' && (
                     <div className="w-full md:w-36">
                       <label className="block text-xs font-semibold uppercase tracking-wider text-gray-500 dark:text-gray-400 mb-2">Año</label>
@@ -321,55 +418,27 @@ export default function PaymentsPage() {
                       </select>
                     </div>
                   )}
-
-                  {/* Rango de fechas (visible si modo = range) */}
-                  {dateMode === 'range' && (
-                    <>
-                      <div className="w-full md:w-44">
-                        <label className="block text-xs font-semibold uppercase tracking-wider text-gray-500 dark:text-gray-400 mb-2">Desde</label>
-                        <input
-                          type="date"
-                          value={dateFrom}
-                          onChange={e => setDateFrom(e.target.value)}
-                          className="w-full rounded-xl bg-white/50 dark:bg-black/40 backdrop-blur-xl border border-white/50 dark:border-white/10 px-4 py-2.5 text-sm font-semibold text-gray-800 dark:text-gray-200 focus:outline-none focus:ring-2 focus:ring-primary/50 transition-all shadow-sm"
-                        />
-                      </div>
-                      <div className="w-full md:w-44">
-                        <label className="block text-xs font-semibold uppercase tracking-wider text-gray-500 dark:text-gray-400 mb-2">Hasta</label>
-                        <input
-                          type="date"
-                          value={dateTo}
-                          onChange={e => setDateTo(e.target.value)}
-                          className="w-full rounded-xl bg-white/50 dark:bg-black/40 backdrop-blur-xl border border-white/50 dark:border-white/10 px-4 py-2.5 text-sm font-semibold text-gray-800 dark:text-gray-200 focus:outline-none focus:ring-2 focus:ring-primary/50 transition-all shadow-sm"
-                        />
-                      </div>
-                    </>
-                  )}
-
-                  {/* Monto mín */}
+                  {dateMode === 'range' && (<>
+                    <div className="w-full md:w-44">
+                      <label className="block text-xs font-semibold uppercase tracking-wider text-gray-500 dark:text-gray-400 mb-2">Desde</label>
+                      <input type="date" value={dateFrom} onChange={e => setDateFrom(e.target.value)}
+                        className="w-full rounded-xl bg-white/50 dark:bg-black/40 backdrop-blur-xl border border-white/50 dark:border-white/10 px-4 py-2.5 text-sm font-semibold text-gray-800 dark:text-gray-200 focus:outline-none focus:ring-2 focus:ring-primary/50 transition-all shadow-sm" />
+                    </div>
+                    <div className="w-full md:w-44">
+                      <label className="block text-xs font-semibold uppercase tracking-wider text-gray-500 dark:text-gray-400 mb-2">Hasta</label>
+                      <input type="date" value={dateTo} onChange={e => setDateTo(e.target.value)}
+                        className="w-full rounded-xl bg-white/50 dark:bg-black/40 backdrop-blur-xl border border-white/50 dark:border-white/10 px-4 py-2.5 text-sm font-semibold text-gray-800 dark:text-gray-200 focus:outline-none focus:ring-2 focus:ring-primary/50 transition-all shadow-sm" />
+                    </div>
+                  </>)}
                   <div className="w-full md:w-36">
                     <label className="block text-xs font-semibold uppercase tracking-wider text-gray-500 dark:text-gray-400 mb-2">Monto mín.</label>
-                    <input
-                      type="number"
-                      min="0"
-                      placeholder="0"
-                      value={amountMin}
-                      onChange={e => setAmountMin(e.target.value)}
-                      className="w-full rounded-xl bg-white/50 dark:bg-black/40 backdrop-blur-xl border border-white/50 dark:border-white/10 px-4 py-2.5 text-sm font-semibold text-gray-800 dark:text-gray-200 placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-primary/50 transition-all shadow-sm"
-                    />
+                    <input type="number" min="0" placeholder="0" value={amountMin} onChange={e => setAmountMin(e.target.value)}
+                      className="w-full rounded-xl bg-white/50 dark:bg-black/40 backdrop-blur-xl border border-white/50 dark:border-white/10 px-4 py-2.5 text-sm font-semibold text-gray-800 dark:text-gray-200 placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-primary/50 transition-all shadow-sm" />
                   </div>
-
-                  {/* Monto máx */}
                   <div className="w-full md:w-36">
                     <label className="block text-xs font-semibold uppercase tracking-wider text-gray-500 dark:text-gray-400 mb-2">Monto máx.</label>
-                    <input
-                      type="number"
-                      min="0"
-                      placeholder="∞"
-                      value={amountMax}
-                      onChange={e => setAmountMax(e.target.value)}
-                      className="w-full rounded-xl bg-white/50 dark:bg-black/40 backdrop-blur-xl border border-white/50 dark:border-white/10 px-4 py-2.5 text-sm font-semibold text-gray-800 dark:text-gray-200 placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-primary/50 transition-all shadow-sm"
-                    />
+                    <input type="number" min="0" placeholder="∞" value={amountMax} onChange={e => setAmountMax(e.target.value)}
+                      className="w-full rounded-xl bg-white/50 dark:bg-black/40 backdrop-blur-xl border border-white/50 dark:border-white/10 px-4 py-2.5 text-sm font-semibold text-gray-800 dark:text-gray-200 placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-primary/50 transition-all shadow-sm" />
                   </div>
                 </div>
               </div>
@@ -378,110 +447,320 @@ export default function PaymentsPage() {
         </AnimatePresence>
       </div>
 
-      {/* Mobile card list */}
-      <div className="md:hidden space-y-3">
-        {isLoading ? (
-          <div className="space-y-3">
-            {Array.from({ length: 5 }).map((_, i) => <Skeleton key={i} className="h-[88px] rounded-2xl" />)}
-          </div>
-        ) : error ? (
-          <div className="py-12 flex flex-col items-center gap-3 text-center">
-            <p className="text-sm font-bold text-red-500">Error al cargar los pagos.</p>
-            <button onClick={refetch} className="text-xs font-bold text-red-400 underline">Reintentar</button>
-          </div>
-        ) : filtered.length === 0 ? (
-          <p className="py-12 text-center text-sm text-gray-500 dark:text-gray-400">No hay pagos con los filtros actuales</p>
-        ) : filtered.map(p => (
-          <div key={p.id} className="flex items-center gap-3 rounded-2xl border border-white/50 dark:border-white/10 bg-white/60 dark:bg-black/40 backdrop-blur-xl px-4 py-3.5 shadow-sm">
-            <div className="flex-1 min-w-0">
-              <p className="font-bold text-sm text-gray-900 dark:text-white truncate leading-tight">{p.clientName}</p>
-              <div className="flex items-center gap-2 mt-1.5 flex-wrap">
-                <span className="inline-flex items-center gap-1 rounded-lg border border-white/50 dark:border-white/10 bg-white/60 dark:bg-white/5 px-2 py-0.5 text-[11px] font-bold text-gray-700 dark:text-gray-300">
-                  {METHOD_LABELS[p.method] ?? p.method}
-                </span>
-                <span className="text-[11px] text-gray-400 dark:text-gray-500">{formatDate(p.paidAt)}</span>
+      {/* ── Vista Lista (tabla desktop / cards mobile) ── */}
+      {viewMode === 'list' && (<>
+        {/* Mobile */}
+        <div className="md:hidden space-y-3">
+          {isLoading ? (
+            <div className="space-y-3">
+              {Array.from({ length: 5 }).map((_, i) => <Skeleton key={i} className="h-[88px] rounded-2xl" />)}
+            </div>
+          ) : error ? (
+            <div className="py-12 flex flex-col items-center gap-3 text-center">
+              <p className="text-sm font-bold text-red-500">Error al cargar los pagos.</p>
+              <button onClick={refetch} className="text-xs font-bold text-red-400 underline">Reintentar</button>
+            </div>
+          ) : filtered.length === 0 ? (
+            <p className="py-12 text-center text-sm text-gray-500 dark:text-gray-400">No hay pagos con los filtros actuales</p>
+          ) : filtered.map(p => (
+            <div key={p.id} className="flex items-center gap-3 rounded-2xl border border-white/50 dark:border-white/10 bg-white/60 dark:bg-black/40 backdrop-blur-xl px-4 py-3.5 shadow-sm">
+              <div className="flex-1 min-w-0">
+                <p className="font-bold text-sm text-gray-900 dark:text-white truncate leading-tight">{p.clientName}</p>
+                <div className="flex items-center gap-2 mt-1.5 flex-wrap">
+                  <span className="inline-flex items-center gap-1 rounded-lg border border-white/50 dark:border-white/10 bg-white/60 dark:bg-white/5 px-2 py-0.5 text-[11px] font-bold text-gray-700 dark:text-gray-300">
+                    {METHOD_LABELS[p.method] ?? p.method}
+                  </span>
+                  <span className="text-[11px] text-gray-400 dark:text-gray-500">{formatDate(p.paidAt)}</span>
+                </div>
+              </div>
+              <div className="flex flex-col items-end gap-2 shrink-0">
+                <span className="text-base font-black text-emerald-600 dark:text-emerald-400">{formatCurrency(p.amount)}</span>
+                <div className="flex items-center gap-1.5">
+                  <button onClick={() => toggleInvoiced(p)} className="transition-transform active:scale-90">
+                    {p.invoiced
+                      ? <CheckCircle2 size={18} className="text-emerald-500" />
+                      : <XCircle size={18} className="text-gray-300 dark:text-gray-600" />}
+                  </button>
+                  <button
+                    onClick={() => deletePayment(p.id)}
+                    className="rounded-lg p-1.5 text-gray-400 hover:bg-red-50 dark:hover:bg-red-500/10 hover:text-red-600 dark:hover:text-red-400 transition-colors"
+                  >
+                    <Trash2 size={14} />
+                  </button>
+                </div>
               </div>
             </div>
-            <div className="flex flex-col items-end gap-2 shrink-0">
-              <span className="text-base font-black text-emerald-600 dark:text-emerald-400">{formatCurrency(p.amount)}</span>
-              <div className="flex items-center gap-1.5">
-                <button onClick={() => toggleInvoiced(p)} className="transition-transform active:scale-90">
-                  {p.invoiced
-                    ? <CheckCircle2 size={18} className="text-emerald-500" />
-                    : <XCircle size={18} className="text-gray-300 dark:text-gray-600" />}
-                </button>
-                <button
-                  onClick={() => deletePayment(p.id)}
-                  className="rounded-lg p-1.5 text-gray-400 hover:bg-red-50 dark:hover:bg-red-500/10 hover:text-red-600 dark:hover:text-red-400 transition-colors"
-                >
-                  <Trash2 size={14} />
-                </button>
-              </div>
-            </div>
-          </div>
-        ))}
-      </div>
+          ))}
+        </div>
 
-      {/* Desktop table */}
-      <div className="hidden md:block overflow-x-auto rounded-[2rem] border border-white/50 dark:border-white/10 bg-white/30 dark:bg-black/30 backdrop-blur-3xl shadow-[0_8px_32px_rgba(0,0,0,0.04)] dark:shadow-[0_8px_32px_rgba(0,0,0,0.3)]">
-        {isLoading ? (
-          <div className="p-8 space-y-4">
-            {Array.from({ length: 5 }).map((_, i) => <Skeleton key={i} className="h-12 w-full rounded-xl" />)}
-          </div>
-        ) : error ? (
-          <div className="px-6 py-16 flex flex-col items-center gap-4 text-center">
-            <p className="text-sm font-bold text-red-500">Error al cargar los pagos. Intentá de nuevo.</p>
-            <button onClick={refetch} className="text-xs font-bold text-red-400 underline hover:text-red-300 transition-colors">Reintentar</button>
-          </div>
-        ) : (
-          <table className="w-full text-sm">
-            <thead className="border-b border-white/20 dark:border-white/10 bg-gray-50/30 dark:bg-black/10">
-              <tr>
-                {['Cliente', 'Monto', 'Método', 'Fecha', 'Facturado', ''].map(h => (
-                  <th key={h} className="px-6 py-4 text-left text-xs font-extrabold uppercase tracking-widest text-gray-500 dark:text-gray-400">{h}</th>
-                ))}
-              </tr>
-            </thead>
-            <tbody className="divide-y divide-white/20 dark:divide-white/10">
-              {filtered.length === 0 ? (
+        {/* Desktop tabla */}
+        <div className="hidden md:block overflow-x-auto rounded-[2rem] border border-white/50 dark:border-white/10 bg-white/30 dark:bg-black/30 backdrop-blur-3xl shadow-[0_8px_32px_rgba(0,0,0,0.04)] dark:shadow-[0_8px_32px_rgba(0,0,0,0.3)]">
+          {isLoading ? (
+            <div className="p-8 space-y-4">
+              {Array.from({ length: 5 }).map((_, i) => <Skeleton key={i} className="h-12 w-full rounded-xl" />)}
+            </div>
+          ) : error ? (
+            <div className="px-6 py-16 flex flex-col items-center gap-4 text-center">
+              <p className="text-sm font-bold text-red-500">Error al cargar los pagos. Intentá de nuevo.</p>
+              <button onClick={refetch} className="text-xs font-bold text-red-400 underline hover:text-red-300 transition-colors">Reintentar</button>
+            </div>
+          ) : (
+            <table className="w-full text-sm">
+              <thead className="border-b border-white/20 dark:border-white/10 bg-gray-50/30 dark:bg-black/10">
                 <tr>
-                  <td colSpan={6} className="px-6 py-16 text-center text-gray-500 dark:text-gray-400 font-medium">
-                    No se encontraron pagos con los filtros actuales
-                  </td>
+                  {['Cliente', 'Monto', 'Método', 'Fecha', 'Facturado', ''].map(h => (
+                    <th key={h} className="px-6 py-4 text-left text-xs font-extrabold uppercase tracking-widest text-gray-500 dark:text-gray-400">{h}</th>
+                  ))}
                 </tr>
-              ) : filtered.map(p => (
-                <tr key={p.id} className="group relative transition-colors hover:bg-white/50 dark:hover:bg-black/50 before:absolute before:bottom-0 before:left-0 before:top-0 before:w-[3px] before:bg-primary before:opacity-0 before:transition-opacity hover:before:opacity-100 bg-transparent">
-                  <td className="px-6 py-4 font-bold text-gray-900 dark:text-white">{p.clientName}</td>
-                  <td className="px-6 py-4 font-black text-emerald-600 dark:text-emerald-400 text-base">{formatCurrency(p.amount)}</td>
-                  <td className="px-6 py-4">
-                    <span className="inline-flex items-center gap-1.5 rounded-xl border border-white/50 dark:border-white/10 bg-white/50 dark:bg-white/5 backdrop-blur-md px-3 py-1 text-xs font-bold text-gray-700 dark:text-gray-200 shadow-sm">
-                      {METHOD_LABELS[p.method] ?? p.method}
-                    </span>
-                  </td>
-                  <td className="px-6 py-4 font-medium text-gray-500 dark:text-gray-400">{formatDate(p.paidAt)}</td>
-                  <td className="px-6 py-4">
-                    <button onClick={() => toggleInvoiced(p)} className="transition-transform hover:scale-110">
-                      {p.invoiced
-                        ? <CheckCircle2 size={20} className="text-emerald-500 drop-shadow-sm" />
-                        : <XCircle size={20} className="text-gray-300 dark:text-gray-600 hover:text-red-500 dark:hover:text-red-400" />}
-                    </button>
-                  </td>
-                  <td className="px-6 py-4 text-right">
-                    <button
-                      onClick={() => deletePayment(p.id)}
-                      className="rounded-xl p-2 text-gray-400 opacity-0 transition-all duration-300 hover:bg-red-50 dark:hover:bg-red-500/10 hover:text-red-600 dark:hover:text-red-400 group-hover:opacity-100"
-                    >
-                      <Trash2 size={16} />
-                    </button>
-                  </td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
+              </thead>
+              <tbody className="divide-y divide-white/20 dark:divide-white/10">
+                {filtered.length === 0 ? (
+                  <tr><td colSpan={6} className="px-6 py-16 text-center text-gray-500 dark:text-gray-400 font-medium">No se encontraron pagos con los filtros actuales</td></tr>
+                ) : filtered.map(p => (
+                  <tr key={p.id} className="group relative transition-colors hover:bg-white/50 dark:hover:bg-black/50 before:absolute before:bottom-0 before:left-0 before:top-0 before:w-[3px] before:bg-primary before:opacity-0 before:transition-opacity hover:before:opacity-100 bg-transparent">
+                    <td className="px-6 py-4 font-bold text-gray-900 dark:text-white">{p.clientName}</td>
+                    <td className="px-6 py-4 font-black text-emerald-600 dark:text-emerald-400 text-base">{formatCurrency(p.amount)}</td>
+                    <td className="px-6 py-4">
+                      <span className="inline-flex items-center gap-1.5 rounded-xl border border-white/50 dark:border-white/10 bg-white/50 dark:bg-white/5 backdrop-blur-md px-3 py-1 text-xs font-bold text-gray-700 dark:text-gray-200 shadow-sm">
+                        {METHOD_LABELS[p.method] ?? p.method}
+                      </span>
+                    </td>
+                    <td className="px-6 py-4 font-medium text-gray-500 dark:text-gray-400">{formatDate(p.paidAt)}</td>
+                    <td className="px-6 py-4">
+                      <button onClick={() => toggleInvoiced(p)} className="transition-transform hover:scale-110">
+                        {p.invoiced
+                          ? <CheckCircle2 size={20} className="text-emerald-500 drop-shadow-sm" />
+                          : <XCircle size={20} className="text-gray-300 dark:text-gray-600 hover:text-red-500 dark:hover:text-red-400" />}
+                      </button>
+                    </td>
+                    <td className="px-6 py-4 text-right">
+                      <button
+                        onClick={() => deletePayment(p.id)}
+                        className="rounded-xl p-2 text-gray-400 opacity-0 transition-all duration-300 hover:bg-red-50 dark:hover:bg-red-500/10 hover:text-red-600 dark:hover:text-red-400 group-hover:opacity-100"
+                      >
+                        <Trash2 size={16} />
+                      </button>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          )}
+        </div>
+      </>)}
+
+      {/* ── Vista Grid (cards) ── */}
+      {viewMode === 'grid' && (
+        <div>
+          {isLoading ? (
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
+              {Array.from({ length: 6 }).map((_, i) => <Skeleton key={i} className="h-36 rounded-2xl" />)}
+            </div>
+          ) : error ? (
+            <div className="py-12 flex flex-col items-center gap-3 text-center">
+              <p className="text-sm font-bold text-red-500">Error al cargar los pagos.</p>
+              <button onClick={refetch} className="text-xs font-bold text-red-400 underline">Reintentar</button>
+            </div>
+          ) : filtered.length === 0 ? (
+            <p className="py-12 text-center text-sm text-gray-500 dark:text-gray-400">No hay pagos con los filtros actuales</p>
+          ) : (
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
+              {filtered.map(p => {
+                const MethodIcon = METHOD_ICONS[p.method] ?? CreditCard
+                return (
+                  <motion.div
+                    key={p.id}
+                    variants={cardVariants}
+                    initial="hidden"
+                    animate="visible"
+                    className="group relative rounded-2xl border border-white/50 dark:border-white/10 bg-white/60 dark:bg-black/40 backdrop-blur-xl p-5 shadow-sm hover:shadow-md hover:-translate-y-0.5 transition-all duration-200"
+                  >
+                    <div className="flex items-start justify-between mb-3">
+                      <div className="flex items-center gap-3">
+                        <div className="h-10 w-10 rounded-xl bg-primary/10 flex items-center justify-center shrink-0">
+                          <MethodIcon size={18} className="text-primary" />
+                        </div>
+                        <div className="min-w-0">
+                          <p className="font-bold text-sm text-gray-900 dark:text-white truncate leading-tight">{p.clientName}</p>
+                          <p className="text-xs text-gray-400 dark:text-gray-500 mt-0.5">{formatDate(p.paidAt)}</p>
+                        </div>
+                      </div>
+                      <button
+                        onClick={() => deletePayment(p.id)}
+                        className="rounded-lg p-1.5 text-gray-300 dark:text-gray-600 opacity-0 group-hover:opacity-100 hover:bg-red-50 dark:hover:bg-red-500/10 hover:text-red-600 dark:hover:text-red-400 transition-all"
+                      >
+                        <Trash2 size={13} />
+                      </button>
+                    </div>
+                    <div className="flex items-center justify-between mt-2">
+                      <span className="text-xl font-black text-emerald-600 dark:text-emerald-400 tabular-nums">
+                        {formatCurrency(p.amount)}
+                      </span>
+                      <div className="flex items-center gap-2">
+                        <span className="inline-flex items-center rounded-lg border border-white/50 dark:border-white/10 bg-white/60 dark:bg-white/5 px-2.5 py-1 text-[11px] font-bold text-gray-700 dark:text-gray-300">
+                          {METHOD_LABELS[p.method] ?? p.method}
+                        </span>
+                        <button onClick={() => toggleInvoiced(p)} className="transition-transform hover:scale-110">
+                          {p.invoiced
+                            ? <CheckCircle2 size={18} className="text-emerald-500" />
+                            : <XCircle size={18} className="text-gray-300 dark:text-gray-600" />}
+                        </button>
+                      </div>
+                    </div>
+                  </motion.div>
+                )
+              })}
+            </div>
+          )}
+        </div>
+      )}
+
+      {/* ══ SECCIÓN MEMBRESÍAS ══ */}
+      <div className="space-y-5">
+        <div className="flex items-center justify-between">
+          <div>
+            <h2 className="text-xl font-black tracking-tighter text-gray-900 dark:text-white">Planes y Membresías</h2>
+            <p className="text-sm text-gray-500 dark:text-gray-400 mt-0.5">Administrá los planes disponibles del gimnasio</p>
+          </div>
+        </div>
+
+        {membError && (
+          <div className="flex items-center gap-3 rounded-xl border border-red-500/20 bg-red-500/10 px-4 py-3">
+            <span className="text-sm text-red-400">{membError}</span>
+            <button onClick={refetchMemb} className="ml-auto text-xs text-red-400 underline">Reintentar</button>
+          </div>
         )}
+
+        <div className="grid grid-cols-1 gap-6 md:grid-cols-2 lg:grid-cols-3">
+          {membLoading ? (
+            Array.from({ length: 3 }).map((_, i) => (
+              <div key={i} className="min-h-[320px] rounded-[2rem] border border-white/50 dark:border-white/10 bg-white/30 dark:bg-black/30 backdrop-blur-3xl p-8">
+                <div className="flex items-center gap-3 mb-8">
+                  <div className="h-12 w-12 rounded-2xl bg-white/10 animate-pulse" />
+                  <div className="h-6 w-32 rounded-lg bg-white/10 animate-pulse" />
+                </div>
+                <div className="h-12 w-40 rounded-lg bg-white/10 animate-pulse mb-2" />
+                <div className="h-4 w-20 rounded-lg bg-white/10 animate-pulse" />
+              </div>
+            ))
+          ) : memberships.length === 0 ? (
+            <div className="col-span-full py-16 text-center text-[#8A8A9A]">
+              No hay planes registrados. Creá el primero.
+            </div>
+          ) : memberships.map(m => {
+            const isEditing = membEditingId === m.id
+            return (
+              <motion.div
+                key={m.id}
+                layout
+                transition={{ duration: 0.3, ease: 'easeInOut' }}
+                className={`relative overflow-hidden rounded-[2rem] border border-white/50 dark:border-white/10 bg-white/30 dark:bg-black/30 backdrop-blur-3xl p-8 shadow-[0_8px_32px_rgba(0,0,0,0.04)] dark:shadow-[0_8px_32px_rgba(0,0,0,0.3)] flex flex-col transition-all duration-300 hover:shadow-[0_20px_40px_rgba(0,0,0,0.08)] dark:hover:shadow-[0_20px_40px_rgba(0,0,0,0.4)] ${
+                  isEditing ? 'min-h-[420px] ring-2 ring-primary/30' : 'min-h-[320px] hover:-translate-y-1'
+                }`}
+              >
+                <div className="relative z-10 flex flex-1 flex-col">
+                  <div className="mb-6 flex items-center justify-between">
+                    <div className="flex items-center gap-3">
+                      <div className={`flex h-12 w-12 items-center justify-center rounded-2xl shadow-inner ${isEditing ? 'bg-primary/15' : 'bg-primary/10'}`}>
+                        <Tag size={22} className="text-primary" />
+                      </div>
+                      {!isEditing && <h3 className="text-xl font-bold text-gray-900 dark:text-white">{m.name}</h3>}
+                      {isEditing && <span className="text-xs font-bold uppercase tracking-widest text-primary">Editando</span>}
+                    </div>
+                    <div className="flex gap-1">
+                      {!isEditing ? (<>
+                        <button onClick={() => startMembEdit(m)} className="rounded-xl p-2 text-gray-400 hover:bg-white/60 dark:hover:bg-white/10 hover:text-gray-900 dark:hover:text-white transition-all">
+                          <Edit2 size={15} />
+                        </button>
+                        <button onClick={() => deleteMembership(m.id)} className="rounded-xl p-2 text-gray-400 hover:bg-red-50 dark:hover:bg-red-500/10 hover:text-red-500 transition-all">
+                          <Trash2 size={15} />
+                        </button>
+                      </>) : (
+                        <button onClick={() => { setMembEditingId(null); membReset() }} className="rounded-xl p-2 text-gray-400 hover:bg-white/60 dark:hover:bg-white/10 hover:text-gray-700 dark:hover:text-white transition-all">
+                          <X size={15} />
+                        </button>
+                      )}
+                    </div>
+                  </div>
+
+                  <AnimatePresence mode="wait">
+                    {!isEditing ? (
+                      <motion.div key="display" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} transition={{ duration: 0.15 }} className="flex flex-1 flex-col">
+                        <div className="mb-8">
+                          <div className="flex items-end gap-1.5">
+                            <span className="text-4xl font-black tabular-nums tracking-tighter text-gray-900 dark:text-white">{formatCurrency(m.price)}</span>
+                            <span className="mb-1 text-sm font-medium text-gray-400">/ mes</span>
+                          </div>
+                        </div>
+                        <div className="mt-auto space-y-3">
+                          <div className="flex items-center gap-2.5 text-sm text-gray-700 dark:text-gray-300">
+                            <CheckCircle2 size={16} className="shrink-0 text-primary" />
+                            <span>{m.classesPerWeek} clases por semana</span>
+                          </div>
+                          {m.description && (
+                            <p className="text-xs text-gray-400 dark:text-gray-500 leading-relaxed line-clamp-3">{m.description}</p>
+                          )}
+                        </div>
+                      </motion.div>
+                    ) : (
+                      <motion.form key="edit" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} transition={{ duration: 0.15 }}
+                        onSubmit={membHandleSubmit(onMembSubmit)} className="flex flex-1 flex-col gap-4">
+                        <div>
+                          <label className={labelCls}>Nombre</label>
+                          <input className={inputCls} placeholder="Nombre del plan" {...membRegister('name')} />
+                          {membErrors.name && <p className="mt-1 text-xs text-red-500">{membErrors.name.message}</p>}
+                        </div>
+                        <div className="grid grid-cols-2 gap-3">
+                          <div>
+                            <label className={labelCls}>Precio / mes</label>
+                            <input type="number" className={inputCls} {...membRegister('price')} />
+                            {membErrors.price && <p className="mt-1 text-xs text-red-500">{membErrors.price.message}</p>}
+                          </div>
+                          <div>
+                            <label className={labelCls}>Clases / semana</label>
+                            <input type="number" className={inputCls} {...membRegister('classesPerWeek')} />
+                          </div>
+                        </div>
+                        <div>
+                          <label className={labelCls}>Descripción</label>
+                          <textarea rows={2} className={`${inputCls} resize-none`} {...membRegister('description')} />
+                        </div>
+                        <div className="mt-auto flex gap-2.5 pt-2">
+                          <button type="button" onClick={() => { setMembEditingId(null); membReset() }}
+                            className="flex-1 rounded-xl border border-saas-border bg-white/50 dark:bg-white/5 py-2.5 text-sm font-semibold text-gray-600 dark:text-gray-300 hover:bg-white dark:hover:bg-white/10 transition-all">
+                            Descartar
+                          </button>
+                          <button type="submit" disabled={membSubmitting}
+                            className="flex flex-1 items-center justify-center gap-2 rounded-xl btn-action py-2.5 text-sm disabled:opacity-60">
+                            {membSubmitting ? <span className="h-4 w-4 animate-spin rounded-full border-2 border-gray-900/30 border-t-gray-900" /> : <Save size={14} />}
+                            Guardar
+                          </button>
+                        </div>
+                      </motion.form>
+                    )}
+                  </AnimatePresence>
+                </div>
+              </motion.div>
+            )
+          })}
+        </div>
       </div>
 
-      {/* Create modal */}
+      {/* Modal crear membresía */}
+      <Modal isOpen={membCreateOpen} onClose={() => { setMembCreateOpen(false); membReset() }} title="Nueva membresía" size="sm">
+        <form onSubmit={membHandleSubmit(onMembSubmit)} className="space-y-4">
+          <Input label="Nombre del plan *" error={membErrors.name?.message} {...membRegister('name')} />
+          <Input label="Precio mensual *" type="number" error={membErrors.price?.message} {...membRegister('price')} />
+          <Input label="Clases por semana *" type="number" error={membErrors.classesPerWeek?.message} {...membRegister('classesPerWeek')} />
+          <Input label="Descripción (opcional)" error={membErrors.description?.message} {...membRegister('description')} />
+          <div className="flex justify-end gap-2 pt-2">
+            <Button variant="ghost" type="button" onClick={() => { setMembCreateOpen(false); membReset() }}>Cancelar</Button>
+            <Button type="submit" isLoading={membSubmitting}>Crear</Button>
+          </div>
+        </form>
+      </Modal>
+
+      {/* Modal registrar pago */}
       <Modal isOpen={modalOpen} onClose={() => { setModalOpen(false); reset() }} title="Registrar pago" size="md">
         <form onSubmit={handleSubmit(onSubmit)} className="space-y-4">
           <div className="flex flex-col gap-1">

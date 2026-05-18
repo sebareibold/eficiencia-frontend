@@ -1,15 +1,14 @@
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useMemo } from 'react'
 import { motion } from 'framer-motion'
-import { ClipboardCheck, RefreshCw, CheckCircle2 } from 'lucide-react'
+import { ClipboardCheck, CheckCircle2, AlertTriangle } from 'lucide-react'
 import { format } from 'date-fns'
 import { useShifts } from '../hooks/useShifts'
 import { useAttendance } from '../hooks/useAttendance'
 import { attendanceApi } from '../api/attendance.api'
-import { clientsApi } from '../api/clients.api'
+import { inscripcionesApi } from '../api/inscripciones.api'
 import { useUiStore } from '../store/uiStore'
 import Skeleton from '../components/ui/Skeleton'
 import Select from '../components/ui/Select'
-import type { Client } from '../types/client.types'
 import type { WeekDay } from '../types/shift.types'
 
 const DAY_LABELS: Record<WeekDay, string> = {
@@ -22,6 +21,16 @@ const DAY_LABELS: Record<WeekDay, string> = {
   sunday: 'Domingo',
 }
 
+const WEEKDAY_TO_JS: Record<WeekDay, number> = {
+  sunday: 0,
+  monday: 1,
+  tuesday: 2,
+  wednesday: 3,
+  thursday: 4,
+  friday: 5,
+  saturday: 6,
+}
+
 export default function AttendancePage() {
   const { shifts, isLoading: loadingShifts } = useShifts()
   const { records, isLoading: loadingAttendance, fetchByShiftAndDate } = useAttendance()
@@ -29,30 +38,50 @@ export default function AttendancePage() {
 
   const [selectedShift, setSelectedShift] = useState('')
   const [selectedDate, setSelectedDate] = useState(format(new Date(), 'yyyy-MM-dd'))
-  const [clients, setClients] = useState<Client[]>([])
+  const [clients, setClients] = useState<{ id: string; name: string }[]>([])
   const [present, setPresent] = useState<Set<string>>(new Set())
   const [isSaving, setIsSaving] = useState(false)
   const [loadingClients, setLoadingClients] = useState(false)
 
-  // When shift changes, load clients for that shift
+  const selectedShiftData = shifts.find(s => String(s.id) === selectedShift)
+
+  // Validación: la fecha seleccionada debe coincidir con un día del turno
+  const dateError = useMemo(() => {
+    if (!selectedShiftData || !selectedDate) return null
+    const jsDay = new Date(selectedDate + 'T12:00:00').getDay()
+    const validDays = selectedShiftData.days.map(d => WEEKDAY_TO_JS[d])
+    if (!validDays.includes(jsDay)) {
+      const names = selectedShiftData.days.map(d => DAY_LABELS[d]).join(', ')
+      return `Este turno solo se dicta los ${names}`
+    }
+    return null
+  }, [selectedShiftData, selectedDate])
+
+  // Cuando cambia el turno, cargar los clientes inscriptos activos
   useEffect(() => {
     if (!selectedShift) return
     setLoadingClients(true)
-    clientsApi.getAll()
-      .then(all => setClients(all.filter(c => c.status === 'active' || c.status === 'expiring')))
-      .catch(() => addToast('Error al cargar clientes', 'error'))
+    inscripcionesApi.getByTurno(selectedShift)
+      .then(inscripciones =>
+        setClients(
+          inscripciones
+            .filter(i => i.estado === 'ACTIVA')
+            .map(i => ({ id: i.clienteId, name: i.clienteNombre }))
+        )
+      )
+      .catch(() => addToast('Error al cargar clientes del turno', 'error'))
       .finally(() => setLoadingClients(false))
   }, [selectedShift])
 
-  // When shift + date both selected, fetch attendance
+  // Cuando cambia turno + fecha, cargar asistencia existente
   useEffect(() => {
     if (!selectedShift || !selectedDate) return
     fetchByShiftAndDate(selectedShift, selectedDate)
   }, [selectedShift, selectedDate])
 
-  // Sync present set from loaded records
+  // Sincronizar checkboxes con los registros cargados del backend
   useEffect(() => {
-    const presentIds = new Set(records.filter(r => r.present).map(r => String(r.clientId)))
+    const presentIds = new Set(records.filter(r => r.present).map(r => r.clientId))
     setPresent(presentIds)
   }, [records])
 
@@ -66,13 +95,12 @@ export default function AttendancePage() {
   }
 
   async function saveAttendance() {
-    if (!selectedShift) return
+    if (!selectedShift || dateError) return
     setIsSaving(true)
     try {
-      const presentIds = clients
-        .filter(c => present.has(String(c.id)))
-        .map(c => String(c.id))
+      const presentIds = clients.filter(c => present.has(c.id)).map(c => c.id)
       await attendanceApi.bulk(selectedShift, selectedDate, presentIds)
+      await fetchByShiftAndDate(selectedShift, selectedDate)
       addToast('Asistencia guardada correctamente', 'success')
     } catch {
       addToast('Error al guardar la asistencia', 'error')
@@ -83,10 +111,8 @@ export default function AttendancePage() {
 
   const shiftOptions = shifts.map(s => ({
     value: String(s.id),
-    label: `${s.name} — ${DAY_LABELS[s.day]} ${s.startTime}–${s.endTime} (Sala ${s.room})`,
+    label: `${s.startTime}–${s.endTime} Sala ${s.room} (${s.days.map(d => DAY_LABELS[d].slice(0, 3)).join('/')})`,
   }))
-
-  const selectedShiftData = shifts.find(s => String(s.id) === selectedShift)
 
   return (
     <motion.div
@@ -100,7 +126,9 @@ export default function AttendancePage() {
         <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-primary/10">
           <ClipboardCheck size={20} className="text-primary" />
         </div>
-        <h1 className="text-3xl md:text-4xl font-black tracking-tighter text-gray-900 dark:text-white drop-shadow-sm">Asistencia</h1>
+        <h1 className="text-3xl md:text-4xl font-black tracking-tighter text-gray-900 dark:text-white drop-shadow-sm">
+          Asistencia
+        </h1>
       </div>
 
       {/* Selectors */}
@@ -132,18 +160,28 @@ export default function AttendancePage() {
         </div>
 
         {selectedShiftData && (
-          <div className="flex items-center gap-2 text-xs text-[#8A8A9A]">
+          <div className="flex flex-wrap items-center gap-2 text-xs text-[#8A8A9A]">
             <span>Sala {selectedShiftData.room}</span>
-            <span>•</span>
+            <span>·</span>
             <span>{selectedShiftData.startTime}–{selectedShiftData.endTime}</span>
-            <span>•</span>
+            <span>·</span>
+            <span>{selectedShiftData.days.map(d => DAY_LABELS[d]).join(' / ')}</span>
+            <span>·</span>
             <span>Cupo: {selectedShiftData.enrolled}/{selectedShiftData.capacity}</span>
+          </div>
+        )}
+
+        {/* Aviso de fecha inválida */}
+        {dateError && (
+          <div className="flex items-center gap-2.5 rounded-xl bg-amber-500/10 border border-amber-500/20 px-4 py-3 text-sm text-amber-400">
+            <AlertTriangle size={16} className="shrink-0" />
+            <span>{dateError}</span>
           </div>
         )}
       </div>
 
-      {/* Attendance list */}
-      {selectedShift && (
+      {/* Lista de asistencia — solo si la fecha es válida */}
+      {selectedShift && !dateError && (
         <div
           className="rounded-2xl border border-white/[0.08] overflow-hidden"
           style={{ background: 'rgba(255,255,255,0.04)', backdropFilter: 'blur(12px)' }}
@@ -160,7 +198,7 @@ export default function AttendancePage() {
             <button
               onClick={saveAttendance}
               disabled={isSaving}
-              className="flex items-center gap-2 rounded-xl btn-action px-4 py-2.5 text-sm"
+              className="flex items-center gap-2 rounded-xl btn-action px-4 py-2.5 text-sm disabled:opacity-50"
             >
               {isSaving
                 ? <span className="h-4 w-4 animate-spin rounded-full border-2 border-gray-900/30 border-t-gray-900" />
@@ -178,12 +216,12 @@ export default function AttendancePage() {
             </div>
           ) : clients.length === 0 ? (
             <div className="py-12 text-center text-[#8A8A9A] text-sm">
-              No hay clientes activos registrados
+              No hay clientes activos inscriptos en este turno
             </div>
           ) : (
             <div className="divide-y divide-white/[0.04]">
               {clients.map(client => {
-                const isPresent = present.has(String(client.id))
+                const isPresent = present.has(client.id)
                 return (
                   <label
                     key={client.id}
@@ -202,11 +240,10 @@ export default function AttendancePage() {
                       type="checkbox"
                       className="sr-only"
                       checked={isPresent}
-                      onChange={() => toggle(String(client.id))}
+                      onChange={() => toggle(client.id)}
                     />
                     <div className="flex-1">
-                      <p className="text-sm font-medium text-white">{client.name} {client.lastName}</p>
-                      {client.email && <p className="text-xs text-[#8A8A9A]">{client.email}</p>}
+                      <p className="text-sm font-medium text-white">{client.name}</p>
                     </div>
                     <span className={`text-xs font-medium px-2 py-0.5 rounded-full ${
                       isPresent ? 'bg-green-500/10 text-green-400' : 'bg-white/[0.06] text-[#8A8A9A]'

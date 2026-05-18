@@ -1,14 +1,19 @@
 import { useState, useEffect, Fragment, useCallback } from 'react'
-import { motion } from 'framer-motion'
+import { motion, AnimatePresence } from 'framer-motion'
 import { pageVariants } from '../lib/motion'
 import {
   Plus, Search, RefreshCw, Edit2, Trash2, UserCheck, UserX,
   ShieldCheck, Users, GraduationCap, Check, X as XIcon,
+  ClipboardList, CheckCircle2, Ban, Save,
 } from 'lucide-react'
 import { useForm } from 'react-hook-form'
 import { zodResolver } from '@hookform/resolvers/zod'
 import { z } from 'zod'
+import { format } from 'date-fns'
+import { es } from 'date-fns/locale'
 import { usuariosApi, type AppUser, type UserRole } from '../api/usuarios.api'
+import { permisosApi, type PermisoEntry } from '../api/permisos.api'
+import { solicitudesApi, type SolicitudEntry } from '../api/solicitudes.api'
 import { useUiStore } from '../store/uiStore'
 import { useAuthStore } from '../store/authStore'
 import Button from '../components/ui/Button'
@@ -19,7 +24,7 @@ import Skeleton from '../components/ui/Skeleton'
 
 // ─── Tipos y constantes ───────────────────────────────────────────────────────
 
-type Tab = 'usuarios' | 'profesores' | 'permisos'
+type Tab = 'usuarios' | 'profesores' | 'permisos' | 'solicitudes'
 
 const ROL_LABELS: Record<UserRole, string> = {
   ADMINISTRADOR: 'Administrador',
@@ -31,6 +36,18 @@ const ROL_COLORS: Record<UserRole, string> = {
   ADMINISTRADOR: 'bg-primary/15 text-amber-700 dark:text-primary border border-primary/30',
   STAFF:         'bg-blue-500/10 text-blue-700 dark:text-blue-400 border border-blue-500/20',
   PROFESOR:      'bg-emerald-500/10 text-emerald-700 dark:text-emerald-400 border border-emerald-500/20',
+}
+
+const SOLICITUD_ESTADO_BADGE: Record<string, string> = {
+  PENDIENTE:  'bg-amber-500/10 text-amber-600 dark:text-amber-400 border border-amber-500/20',
+  APROBADO:   'bg-green-500/10 text-green-700 dark:text-green-400 border border-green-500/20',
+  RECHAZADO:  'bg-red-500/10 text-red-600 dark:text-red-400 border border-red-500/20',
+}
+
+const SOLICITUD_ESTADO_LABEL: Record<string, string> = {
+  PENDIENTE: 'Pendiente',
+  APROBADO: 'Aprobado',
+  RECHAZADO: 'Rechazado',
 }
 
 // ─── Schemas ──────────────────────────────────────────────────────────────────
@@ -72,7 +89,7 @@ function EstadoBadge({ activo }: { activo: boolean }) {
     : <span className="inline-flex items-center gap-1 rounded-full bg-gray-200/60 dark:bg-white/[0.05] px-2.5 py-1 text-xs font-bold text-gray-500 dark:text-gray-400 border border-gray-200 dark:border-white/[0.08]"><XIcon size={10} />Inactivo</span>
 }
 
-// ─── Tab: Usuarios ────────────────────────────────────────────────────────────
+// ─── Tab: Usuarios ─────────────────────────────────────────────────────────────
 
 function UsuariosTab() {
   const addToast  = useUiStore(s => s.addToast)
@@ -168,7 +185,6 @@ function UsuariosTab() {
 
   return (
     <div className="space-y-5">
-      {/* Stats strip */}
       <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
         {([
           { label: 'Administradores', count: countByRol('ADMINISTRADOR'), color: 'text-primary bg-primary/10' },
@@ -187,7 +203,6 @@ function UsuariosTab() {
         ))}
       </div>
 
-      {/* Controls */}
       <div className="flex flex-col sm:flex-row gap-3 items-start sm:items-center justify-between">
         <div className="flex flex-wrap gap-2 items-center">
           <div className="relative">
@@ -224,7 +239,6 @@ function UsuariosTab() {
         </div>
       </div>
 
-      {/* Table */}
       <div className={`${glassCard} overflow-hidden`}>
         {loading ? (
           <div className="p-6 space-y-3">
@@ -289,7 +303,6 @@ function UsuariosTab() {
         )}
       </div>
 
-      {/* Create modal */}
       <Modal isOpen={createOpen} onClose={() => { setCreateOpen(false); resetCreate() }} title="Nuevo usuario" size="md">
         <form onSubmit={hsCreate(onCreate)} className="space-y-4">
           <Input label="Nombre *" error={errCreate.nombre?.message} {...regCreate('nombre')} />
@@ -311,7 +324,6 @@ function UsuariosTab() {
         </form>
       </Modal>
 
-      {/* Edit modal */}
       <Modal isOpen={!!editTarget} onClose={() => setEditTarget(null)} title="Editar usuario" size="md">
         <form onSubmit={hsEdit(onEdit)} className="space-y-4">
           <Input label="Nombre *" error={errEdit.nombre?.message} {...regEdit('nombre')} />
@@ -336,7 +348,7 @@ function UsuariosTab() {
   )
 }
 
-// ─── Tab: Profesores ──────────────────────────────────────────────────────────
+// ─── Tab: Profesores ───────────────────────────────────────────────────────────
 
 const espSchema = z.object({ especialidad: z.string().optional() })
 type EspValues  = z.infer<typeof espSchema>
@@ -412,12 +424,6 @@ function ProfesoresTab() {
 
   return (
     <div className="space-y-5">
-      {/* Info banner */}
-      <div className="rounded-2xl border border-blue-500/20 bg-blue-500/[0.06] px-4 py-3 text-sm text-blue-700 dark:text-blue-300">
-        <strong>Flujo:</strong> Los usuarios con rol Profesor necesitan un <em>perfil de profesor vinculado</em> para poder ser asignados a turnos. Podés crearlos desde la pestaña Usuarios y vincularlos aquí.
-      </div>
-
-      {/* Vinculados */}
       <div className="space-y-3">
         <h3 className="text-sm font-bold uppercase tracking-wider text-[#8A8A9A]">
           Con perfil vinculado ({vinculados.length})
@@ -462,7 +468,6 @@ function ProfesoresTab() {
         </div>
       </div>
 
-      {/* Sin vincular */}
       {noVinculados.length > 0 && (
         <div className="space-y-3">
           <h3 className="text-sm font-bold uppercase tracking-wider text-[#8A8A9A]">
@@ -493,7 +498,6 @@ function ProfesoresTab() {
         </div>
       )}
 
-      {/* Modal vincular */}
       <Modal isOpen={!!linkTarget} onClose={() => { setLinkTarget(null); reset() }} title="Vincular como profesor" size="sm">
         <form onSubmit={handleSubmit(onLink)} className="space-y-4">
           <p className="text-sm text-[#8A8A9A]">
@@ -507,7 +511,6 @@ function ProfesoresTab() {
         </form>
       </Modal>
 
-      {/* Modal editar especialidad */}
       <Modal isOpen={!!editEspTarget} onClose={() => setEditEspTarget(null)} title="Editar especialidad" size="sm">
         <form onSubmit={hsEditEsp(onUpdateEsp)} className="space-y-4">
           <Input label="Especialidad" placeholder="Ej. Crossfit, Yoga, Funcional" {...regEdit('especialidad')} />
@@ -521,17 +524,17 @@ function ProfesoresTab() {
   )
 }
 
-// ─── Tab: Roles y Permisos ────────────────────────────────────────────────────
+// ─── Tab: Roles y Permisos (conectado a BD) ────────────────────────────────────
 
 const ROLES_MATRIX = [
-  { id: 'admin',    name: 'Administrador' },
-  { id: 'staff',    name: 'Staff' },
-  { id: 'profesor', name: 'Profesor' },
+  { id: 'ADMINISTRADOR', name: 'Administrador' },
+  { id: 'STAFF',         name: 'Staff' },
+  { id: 'PROFESOR',      name: 'Profesor' },
 ]
 
 const MODULES_MATRIX = [
   {
-    id: 'clientes', name: 'Gestión de Clientes',
+    id: 'clients', name: 'Gestión de Clientes',
     actions: [
       { id: 'read',   name: 'Ver listado y perfiles' },
       { id: 'create', name: 'Crear nuevos clientes' },
@@ -540,7 +543,7 @@ const MODULES_MATRIX = [
     ],
   },
   {
-    id: 'pagos', name: 'Gestión de Pagos',
+    id: 'payments', name: 'Gestión de Pagos',
     actions: [
       { id: 'read',   name: 'Ver historial de cobros' },
       { id: 'create', name: 'Registrar nuevos cobros' },
@@ -548,7 +551,7 @@ const MODULES_MATRIX = [
     ],
   },
   {
-    id: 'turnos', name: 'Turnos y Calendario',
+    id: 'shifts', name: 'Turnos y Calendario',
     actions: [
       { id: 'read',   name: 'Ver calendario y grilla' },
       { id: 'create', name: 'Crear nuevos turnos' },
@@ -557,21 +560,23 @@ const MODULES_MATRIX = [
     ],
   },
   {
-    id: 'asistencia', name: 'Asistencia',
+    id: 'attendance', name: 'Asistencia',
     actions: [
-      { id: 'read',   name: 'Ver registros de asistencia' },
-      { id: 'mark',   name: 'Tomar asistencia' },
+      { id: 'read', name: 'Ver registros de asistencia' },
+      { id: 'mark', name: 'Tomar asistencia' },
     ],
   },
   {
-    id: 'membresias', name: 'Membresías y Planes',
+    id: 'memberships', name: 'Membresías y Planes',
     actions: [
       { id: 'read',   name: 'Ver membresías y planes' },
-      { id: 'manage', name: 'Gestionar membresías' },
+      { id: 'create', name: 'Crear membresías' },
+      { id: 'update', name: 'Editar membresías' },
+      { id: 'delete', name: 'Eliminar membresías' },
     ],
   },
   {
-    id: 'gastos', name: 'Gastos',
+    id: 'expenses', name: 'Gastos',
     actions: [
       { id: 'read',   name: 'Ver historial de gastos' },
       { id: 'create', name: 'Registrar nuevos gastos' },
@@ -582,161 +587,393 @@ const MODULES_MATRIX = [
   {
     id: 'dashboard', name: 'Dashboard y Métricas',
     actions: [
-      { id: 'view',     name: 'Ver métricas y KPIs' },
-      { id: 'charts',   name: 'Ver gráficos financieros' },
+      { id: 'read', name: 'Ver métricas, KPIs y gráficos' },
     ],
   },
   {
-    id: 'usuarios', name: 'Usuarios y Profesores',
+    id: 'users', name: 'Usuarios y Profesores',
     actions: [
       { id: 'read',   name: 'Ver usuarios y profesores' },
-      { id: 'manage', name: 'Crear, editar y eliminar usuarios' },
+      { id: 'create', name: 'Crear usuarios' },
+      { id: 'update', name: 'Editar usuarios' },
+      { id: 'delete', name: 'Eliminar usuarios' },
     ],
   },
   {
-    id: 'config', name: 'Configuración del Sistema',
+    id: 'rutinas', name: 'Rutinas',
     actions: [
-      { id: 'view',   name: 'Ver configuración' },
-      { id: 'manage', name: 'Modificar configuración global' },
+      { id: 'read',   name: 'Ver rutinas' },
+      { id: 'create', name: 'Crear rutinas' },
+      { id: 'update', name: 'Editar rutinas' },
+      { id: 'delete', name: 'Eliminar rutinas' },
     ],
   },
 ]
 
-type PermMatrix = Record<string, Record<string, Record<string, boolean>>>
-
-const DEFAULT_PERMS: PermMatrix = {
-  admin: {
-    clientes:   { read: true,  create: true,  update: true,  delete: true  },
-    pagos:      { read: true,  create: true,  update: true                  },
-    turnos:     { read: true,  create: true,  update: true,  delete: true  },
-    asistencia: { read: true,  mark: true                                   },
-    membresias: { read: true,  manage: true                                 },
-    gastos:     { read: true,  create: true,  update: true,  delete: true  },
-    dashboard:  { view: true,  charts: true                                 },
-    usuarios:   { read: true,  manage: true                                 },
-    config:     { view: true,  manage: true                                 },
-  },
-  staff: {
-    clientes:   { read: true,  create: true,  update: true,  delete: false },
-    pagos:      { read: true,  create: true,  update: false                 },
-    turnos:     { read: true,  create: false, update: false, delete: false },
-    asistencia: { read: true,  mark: true                                   },
-    membresias: { read: true,  manage: false                                },
-    gastos:     { read: false, create: false, update: false, delete: false },
-    dashboard:  { view: false, charts: false                                },
-    usuarios:   { read: false, manage: false                                },
-    config:     { view: true,  manage: false                                },
-  },
-  profesor: {
-    clientes:   { read: true,  create: false, update: false, delete: false },
-    pagos:      { read: false, create: false, update: false                 },
-    turnos:     { read: true,  create: false, update: false, delete: false },
-    asistencia: { read: true,  mark: true                                   },
-    membresias: { read: false, manage: false                                },
-    gastos:     { read: false, create: false, update: false, delete: false },
-    dashboard:  { view: false, charts: false                                },
-    usuarios:   { read: false, manage: false                                },
-    config:     { view: false, manage: false                                },
-  },
-}
-
 function PermisosTab() {
-  const [perms, setPerms] = useState<PermMatrix>(DEFAULT_PERMS)
+  const addToast = useUiStore(s => s.addToast)
+  const [savedPermisos, setSavedPermisos] = useState<PermisoEntry[]>([])
+  const [localPermisos, setLocalPermisos] = useState<PermisoEntry[]>([])
+  const [loading, setLoading] = useState(true)
+  const [isSaving, setIsSaving] = useState(false)
 
-  const toggle = (roleId: string, modId: string, actionId: string, val: boolean) => {
-    if (roleId === 'admin') return
-    setPerms(prev => ({
-      ...prev,
-      [roleId]: { ...prev[roleId], [modId]: { ...prev[roleId][modId], [actionId]: val } },
-    }))
+  const load = useCallback(() => {
+    setLoading(true)
+    permisosApi.getAll()
+      .then(data => {
+        setSavedPermisos(data)
+        setLocalPermisos(data)
+      })
+      .catch(() => addToast('Error al cargar permisos', 'error'))
+      .finally(() => setLoading(false))
+  }, [])
+
+  useEffect(() => { load() }, [load])
+
+  // Lookup basado en el estado local (para el renderizado de toggles)
+  const localMap: Record<string, PermisoEntry> = {}
+  for (const p of localPermisos) {
+    localMap[`${p.rol}__${p.modulo}__${p.accion}`] = p
+  }
+
+  // Entradas que cambiaron respecto al estado guardado en BD
+  const pendingChanges = localPermisos.filter(lp => {
+    const saved = savedPermisos.find(sp => sp.id === lp.id)
+    return saved && saved.permitido !== lp.permitido
+  })
+  const isDirty = pendingChanges.length > 0
+
+  // Toggle solo actualiza el estado local — NO llama a la API
+  function toggle(rol: string, modulo: string, accion: string) {
+    if (rol === 'ADMINISTRADOR') return
+    const permiso = localMap[`${rol}__${modulo}__${accion}`]
+    if (!permiso) return
+    setLocalPermisos(prev =>
+      prev.map(p => p.id === permiso.id ? { ...p, permitido: !p.permitido } : p)
+    )
+  }
+
+  function descartar() {
+    setLocalPermisos([...savedPermisos])
+  }
+
+  async function guardarCambios() {
+    if (pendingChanges.length === 0) return
+    setIsSaving(true)
+    try {
+      await Promise.all(pendingChanges.map(p => permisosApi.update(p.id, p.permitido)))
+      setSavedPermisos([...localPermisos])
+      addToast(`${pendingChanges.length} permiso${pendingChanges.length !== 1 ? 's' : ''} guardado${pendingChanges.length !== 1 ? 's' : ''} correctamente`, 'success')
+    } catch {
+      addToast('Error al guardar permisos', 'error')
+    } finally {
+      setIsSaving(false)
+    }
   }
 
   return (
     <div className="space-y-4">
-      <div className="rounded-2xl border border-amber-500/20 bg-amber-500/[0.06] px-4 py-3 text-sm text-amber-700 dark:text-amber-300">
-        Esta matriz es <strong>referencial</strong> — los permisos reales se controlan por el rol asignado a cada usuario. El rol <strong>Administrador</strong> tiene acceso total y no puede modificarse.
+      {/* Refresh */}
+      <div className="flex justify-end">
+        <button
+          onClick={load}
+          disabled={isDirty}
+          title={isDirty ? 'Guardá o descartá los cambios antes de recargar' : 'Recargar desde la base de datos'}
+          className="flex h-9 w-9 items-center justify-center rounded-xl border border-saas-border bg-white text-gray-400 hover:text-gray-700 transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
+        >
+          <RefreshCw size={14} />
+        </button>
       </div>
 
+      {/* Tabla de permisos */}
       <div className={`${glassCard} overflow-hidden`}>
-        <div className="overflow-x-auto">
-          <table className="w-full text-sm border-collapse">
-            <thead>
-              <tr className="border-b border-gray-100/60 dark:border-white/[0.06] bg-gray-50/40 dark:bg-white/[0.02]">
-                <th className="px-6 py-4 text-left text-xs font-bold uppercase tracking-wider text-[#8A8A9A] w-2/5">
-                  Módulo / Permiso
-                </th>
-                {ROLES_MATRIX.map(r => (
-                  <th key={r.id} className="px-6 py-4 text-center text-xs font-bold uppercase tracking-wider text-[#8A8A9A]">
-                    {r.name}
+        {loading ? (
+          <div className="p-6 space-y-3">
+            {Array.from({ length: 8 }).map((_, i) => <Skeleton key={i} className="h-10 rounded-xl" />)}
+          </div>
+        ) : (
+          <div className="overflow-x-auto">
+            <table className="w-full text-sm border-collapse">
+              <thead>
+                <tr className="border-b border-gray-100/60 dark:border-white/[0.06] bg-gray-50/40 dark:bg-white/[0.02]">
+                  <th className="px-6 py-4 text-left text-xs font-bold uppercase tracking-wider text-[#8A8A9A] w-2/5">
+                    Módulo / Permiso
                   </th>
-                ))}
-              </tr>
-            </thead>
-            <tbody className="divide-y divide-gray-100/40 dark:divide-white/[0.04]">
-              {MODULES_MATRIX.map(mod => (
-                <Fragment key={mod.id}>
-                  <tr>
-                    <td colSpan={ROLES_MATRIX.length + 1} className="px-6 py-2.5 text-xs font-extrabold text-gray-900 dark:text-white bg-primary/[0.04] dark:bg-primary/[0.06] border-y border-primary/10">
-                      {mod.name}
-                    </td>
-                  </tr>
-                  {mod.actions.map(action => (
-                    <tr key={`${mod.id}-${action.id}`} className="hover:bg-gray-50/50 dark:hover:bg-white/[0.02] transition-colors">
-                      <td className="px-6 py-3.5 pl-10 text-sm font-medium text-gray-600 dark:text-gray-300">
-                        {action.name}
-                      </td>
-                      {ROLES_MATRIX.map(role => {
-                        const checked = perms[role.id]?.[mod.id]?.[action.id] ?? false
-                        const isAdmin = role.id === 'admin'
-                        return (
-                          <td key={role.id} className="px-6 py-3.5 text-center">
-                            <button
-                              type="button"
-                              disabled={isAdmin}
-                              onClick={() => toggle(role.id, mod.id, action.id, !checked)}
-                              className={`relative inline-flex h-5 w-9 shrink-0 items-center rounded-full transition-all duration-200 ${
-                                checked ? 'bg-primary shadow-[0_0_8px_rgb(var(--color-primary)/0.4)]' : 'bg-gray-200 dark:bg-gray-700/50'
-                              } ${isAdmin ? 'cursor-not-allowed opacity-70' : 'cursor-pointer hover:scale-105'}`}
-                            >
-                              <span className={`inline-block h-3.5 w-3.5 transform rounded-full bg-white shadow transition-transform duration-200 ${checked ? 'translate-x-[18px]' : 'translate-x-[3px]'}`} />
-                            </button>
-                          </td>
-                        )
-                      })}
-                    </tr>
+                  {ROLES_MATRIX.map(r => (
+                    <th key={r.id} className="px-6 py-4 text-center text-xs font-bold uppercase tracking-wider text-[#8A8A9A]">
+                      {r.name}
+                    </th>
                   ))}
-                </Fragment>
-              ))}
-            </tbody>
-          </table>
-        </div>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-gray-100/40 dark:divide-white/[0.04]">
+                {MODULES_MATRIX.map(mod => (
+                  <Fragment key={mod.id}>
+                    <tr>
+                      <td colSpan={ROLES_MATRIX.length + 1} className="px-6 py-2.5 text-xs font-extrabold text-gray-900 dark:text-white bg-primary/[0.04] dark:bg-primary/[0.06] border-y border-primary/10">
+                        {mod.name}
+                      </td>
+                    </tr>
+                    {mod.actions.map(action => (
+                      <tr key={`${mod.id}-${action.id}`} className="hover:bg-gray-50/50 dark:hover:bg-white/[0.02] transition-colors">
+                        <td className="px-6 py-3.5 pl-10 text-sm font-medium text-gray-600 dark:text-gray-300">
+                          {action.name}
+                        </td>
+                        {ROLES_MATRIX.map(role => {
+                          const key = `${role.id}__${mod.id}__${action.id}`
+                          const permiso = localMap[key]
+                          const checked = permiso?.permitido ?? false
+                          const isAdmin = role.id === 'ADMINISTRADOR'
+                          const savedPermiso = savedPermisos.find(sp => sp.id === permiso?.id)
+                          const isChanged = savedPermiso && savedPermiso.permitido !== checked
+                          return (
+                            <td key={role.id} className="px-6 py-3.5 text-center">
+                              <div className="inline-flex flex-col items-center gap-1">
+                                <button
+                                  type="button"
+                                  disabled={isAdmin}
+                                  onClick={() => toggle(role.id, mod.id, action.id)}
+                                  className={`relative inline-flex h-5 w-9 shrink-0 items-center rounded-full transition-all duration-200 ${
+                                    checked ? 'bg-primary shadow-[0_0_8px_rgb(var(--color-primary)/0.4)]' : 'bg-gray-200 dark:bg-gray-700/50'
+                                  } ${isAdmin ? 'cursor-not-allowed opacity-70' : 'cursor-pointer hover:scale-105'}`}
+                                >
+                                  <span className={`inline-block h-3.5 w-3.5 transform rounded-full bg-white shadow transition-transform duration-200 ${checked ? 'translate-x-[18px]' : 'translate-x-[3px]'}`} />
+                                </button>
+                                {isChanged && (
+                                  <span className="text-[9px] font-bold text-amber-500 leading-none">sin guardar</span>
+                                )}
+                              </div>
+                            </td>
+                          )
+                        })}
+                      </tr>
+                    ))}
+                  </Fragment>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        )}
       </div>
+
+      {/* Barra de acciones — solo visible cuando hay cambios pendientes */}
+      <AnimatePresence>
+        {isDirty && (
+          <motion.div
+            initial={{ opacity: 0, y: 12 }}
+            animate={{ opacity: 1, y: 0 }}
+            exit={{ opacity: 0, y: 12 }}
+            transition={{ duration: 0.2 }}
+            className="sticky bottom-4 z-20 flex items-center justify-between gap-4 rounded-2xl border border-amber-500/30 bg-amber-500/10 backdrop-blur-xl px-5 py-3.5 shadow-lg"
+          >
+            <p className="text-sm font-semibold text-amber-700 dark:text-amber-300">
+              <span className="font-black">{pendingChanges.length}</span> cambio{pendingChanges.length !== 1 ? 's' : ''} sin guardar
+            </p>
+            <div className="flex items-center gap-2">
+              <button
+                type="button"
+                onClick={descartar}
+                disabled={isSaving}
+                className="rounded-xl border border-amber-500/30 bg-white/60 dark:bg-black/30 px-4 py-2 text-sm font-semibold text-amber-700 dark:text-amber-300 hover:bg-white dark:hover:bg-black/50 transition-all disabled:opacity-50"
+              >
+                Descartar
+              </button>
+              <button
+                type="button"
+                onClick={guardarCambios}
+                disabled={isSaving}
+                className="flex items-center gap-2 rounded-xl bg-primary px-4 py-2 text-sm font-bold text-gray-900 hover:bg-primary-dark transition-all disabled:opacity-60 shadow-sm"
+              >
+                {isSaving
+                  ? <span className="h-4 w-4 animate-spin rounded-full border-2 border-gray-900/30 border-t-gray-900" />
+                  : <Save size={14} />
+                }
+                Guardar cambios
+              </button>
+            </div>
+          </motion.div>
+        )}
+      </AnimatePresence>
     </div>
   )
 }
 
-// ─── Página principal ─────────────────────────────────────────────────────────
+// ─── Tab: Solicitudes de Acceso ────────────────────────────────────────────────
+
+function SolicitudesTab() {
+  const addToast = useUiStore(s => s.addToast)
+  const [solicitudes, setSolicitudes] = useState<SolicitudEntry[]>([])
+  const [loading, setLoading]         = useState(true)
+  const [actioningId, setActioningId] = useState<string | null>(null)
+
+  const load = useCallback(() => {
+    setLoading(true)
+    solicitudesApi.getAll()
+      .then(setSolicitudes)
+      .catch(() => addToast('Error al cargar solicitudes', 'error'))
+      .finally(() => setLoading(false))
+  }, [])
+
+  useEffect(() => { load() }, [load])
+
+  async function aprobar(id: string) {
+    setActioningId(id)
+    try {
+      await solicitudesApi.aprobar(id)
+      addToast('Solicitud aprobada — usuario creado correctamente', 'success')
+      load()
+    } catch (err: any) {
+      addToast(err?.response?.data?.message ?? 'Error al aprobar', 'error')
+    } finally {
+      setActioningId(null)
+    }
+  }
+
+  async function rechazar(id: string) {
+    if (!confirm('¿Rechazar esta solicitud?')) return
+    setActioningId(id)
+    try {
+      await solicitudesApi.rechazar(id)
+      addToast('Solicitud rechazada', 'success')
+      load()
+    } catch {
+      addToast('Error al rechazar', 'error')
+    } finally {
+      setActioningId(null)
+    }
+  }
+
+  const pendientes = solicitudes.filter(s => s.estado === 'PENDIENTE')
+  const procesadas = solicitudes.filter(s => s.estado !== 'PENDIENTE')
+
+  return (
+    <div className="space-y-5">
+      <div className="flex items-center justify-between">
+        <div>
+          <p className="text-sm font-semibold text-gray-900 dark:text-white">
+            {pendientes.length === 0 ? 'Sin solicitudes pendientes' : `${pendientes.length} solicitud${pendientes.length !== 1 ? 'es' : ''} pendiente${pendientes.length !== 1 ? 's' : ''}`}
+          </p>
+          <p className="text-xs text-[#8A8A9A] mt-0.5">Revisá y aprobá o rechazá cada solicitud de acceso</p>
+        </div>
+        <button onClick={load} className="flex h-9 w-9 items-center justify-center rounded-xl border border-saas-border bg-white text-gray-400 hover:text-gray-700 transition-colors">
+          <RefreshCw size={14} />
+        </button>
+      </div>
+
+      {loading ? (
+        <div className="space-y-3">
+          {Array.from({ length: 4 }).map((_, i) => <Skeleton key={i} className="h-16 rounded-2xl" />)}
+        </div>
+      ) : solicitudes.length === 0 ? (
+        <div className={`${glassCard} py-16 text-center`}>
+          <ClipboardList size={28} className="mx-auto mb-3 text-[#8A8A9A] opacity-50" />
+          <p className="text-sm text-[#8A8A9A]">No hay solicitudes de acceso registradas</p>
+        </div>
+      ) : (<>
+        {/* Pendientes */}
+        {pendientes.length > 0 && (
+          <div className="space-y-3">
+            <h3 className="text-xs font-bold uppercase tracking-wider text-[#8A8A9A]">Pendientes de revisión</h3>
+            <div className={`${glassCard} overflow-hidden`}>
+              <div className="divide-y divide-gray-100/60 dark:divide-white/[0.04]">
+                {pendientes.map(s => (
+                  <div key={s.id} className="flex items-center gap-4 px-5 py-4">
+                    <div className="h-10 w-10 rounded-xl bg-amber-500/10 flex items-center justify-center shrink-0 text-sm font-black text-amber-600 dark:text-amber-400">
+                      {s.nombre.charAt(0).toUpperCase()}
+                    </div>
+                    <div className="flex-1 min-w-0">
+                      <div className="flex items-center gap-2 flex-wrap">
+                        <p className="font-semibold text-gray-900 dark:text-white">{s.nombre}</p>
+                        <span className={`inline-flex items-center rounded-full px-2.5 py-0.5 text-xs font-bold ${ROL_COLORS[s.rolSolicitado]}`}>
+                          {ROL_LABELS[s.rolSolicitado]}
+                        </span>
+                      </div>
+                      <p className="text-xs text-[#8A8A9A] mt-0.5">
+                        {s.email} · {format(new Date(s.createdAt), "d MMM yyyy 'a las' HH:mm", { locale: es })}
+                      </p>
+                    </div>
+                    <div className="flex items-center gap-2 shrink-0">
+                      <button
+                        onClick={() => aprobar(s.id)}
+                        disabled={actioningId === s.id}
+                        className="flex items-center gap-1.5 rounded-xl bg-green-500/10 px-3 py-2 text-xs font-semibold text-green-700 dark:text-green-400 hover:bg-green-500/20 transition-all disabled:opacity-50"
+                      >
+                        {actioningId === s.id
+                          ? <span className="h-3.5 w-3.5 animate-spin rounded-full border-2 border-green-400/30 border-t-green-400" />
+                          : <CheckCircle2 size={13} />
+                        }
+                        Aprobar
+                      </button>
+                      <button
+                        onClick={() => rechazar(s.id)}
+                        disabled={actioningId === s.id}
+                        className="flex items-center gap-1.5 rounded-xl bg-red-500/10 px-3 py-2 text-xs font-semibold text-red-600 dark:text-red-400 hover:bg-red-500/20 transition-all disabled:opacity-50"
+                      >
+                        <Ban size={13} /> Rechazar
+                      </button>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* Procesadas */}
+        {procesadas.length > 0 && (
+          <div className="space-y-3">
+            <h3 className="text-xs font-bold uppercase tracking-wider text-[#8A8A9A]">Historial</h3>
+            <div className={`${glassCard} overflow-hidden`}>
+              <div className="divide-y divide-gray-100/60 dark:divide-white/[0.04]">
+                {procesadas.map(s => (
+                  <div key={s.id} className="flex items-center gap-4 px-5 py-3.5 opacity-70">
+                    <div className="h-9 w-9 rounded-xl bg-gray-100 dark:bg-white/[0.06] flex items-center justify-center shrink-0 text-xs font-black text-gray-500 dark:text-gray-400">
+                      {s.nombre.charAt(0).toUpperCase()}
+                    </div>
+                    <div className="flex-1 min-w-0">
+                      <div className="flex items-center gap-2 flex-wrap">
+                        <p className="font-semibold text-sm text-gray-700 dark:text-gray-300">{s.nombre}</p>
+                        <span className={`inline-flex items-center rounded-full px-2 py-0.5 text-[11px] font-bold ${SOLICITUD_ESTADO_BADGE[s.estado]}`}>
+                          {SOLICITUD_ESTADO_LABEL[s.estado]}
+                        </span>
+                      </div>
+                      <p className="text-xs text-[#8A8A9A]">{s.email} · {ROL_LABELS[s.rolSolicitado]}</p>
+                    </div>
+                    <p className="text-xs text-[#8A8A9A] shrink-0">
+                      {s.revisadaAt ? format(new Date(s.revisadaAt), "d MMM yyyy", { locale: es }) : '—'}
+                    </p>
+                  </div>
+                ))}
+              </div>
+            </div>
+          </div>
+        )}
+      </>)}
+    </div>
+  )
+}
+
+// ─── Página principal ──────────────────────────────────────────────────────────
 
 export default function UsersPage() {
   const [tab, setTab] = useState<Tab>('usuarios')
 
   const TABS: { value: Tab; label: string; icon: typeof Users }[] = [
-    { value: 'usuarios',   label: 'Usuarios',        icon: Users       },
-    { value: 'profesores', label: 'Profesores',       icon: GraduationCap },
-    { value: 'permisos',   label: 'Roles y Permisos', icon: ShieldCheck },
+    { value: 'usuarios',    label: 'Usuarios',        icon: Users },
+    { value: 'profesores',  label: 'Profesores',       icon: GraduationCap },
+    { value: 'permisos',    label: 'Roles y Permisos', icon: ShieldCheck },
+    { value: 'solicitudes', label: 'Solicitudes',      icon: ClipboardList },
   ]
 
   return (
     <motion.div {...pageVariants} className="space-y-5">
-      {/* Header */}
       <div>
         <h1 className="text-3xl md:text-4xl font-black tracking-tighter text-gray-900 dark:text-white drop-shadow-sm">
           Usuarios
         </h1>
-        <p className="text-sm text-[#8A8A9A] mt-1">Gestión de cuentas, profesores y permisos del sistema</p>
+        <p className="text-sm text-[#8A8A9A] mt-1">Gestión de cuentas, profesores, permisos y solicitudes de acceso</p>
       </div>
 
-      {/* Tab bar */}
       <div className="flex gap-1 p-1 rounded-2xl bg-white/40 dark:bg-white/[0.04] border border-gray-200/60 dark:border-white/[0.07] w-fit">
         {TABS.map(t => {
           const Icon = t.icon
@@ -757,10 +994,10 @@ export default function UsersPage() {
         })}
       </div>
 
-      {/* Tab content */}
-      {tab === 'usuarios'   && <UsuariosTab />}
-      {tab === 'profesores' && <ProfesoresTab />}
-      {tab === 'permisos'   && <PermisosTab />}
+      {tab === 'usuarios'    && <UsuariosTab />}
+      {tab === 'profesores'  && <ProfesoresTab />}
+      {tab === 'permisos'    && <PermisosTab />}
+      {tab === 'solicitudes' && <SolicitudesTab />}
     </motion.div>
   )
 }

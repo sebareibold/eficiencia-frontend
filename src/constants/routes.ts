@@ -3,8 +3,10 @@ export const ROUTES = {
   HOME: '/',
   CLIENTS: '/clients',
   CLIENT_PROFILE: '/clients/:id',
+  CLIENT_RUTINA: '/clients/:id/rutina',
   PAYMENTS: '/payments',
   SHIFTS: '/shifts',
+  SHIFT_DETAIL: '/shifts/:id',
   ATTENDANCE: '/attendance',
   CALENDAR: '/calendar',
   EXPENSES: '/expenses',
@@ -12,4 +14,5 @@ export const ROUTES = {
   DASHBOARD: '/dashboard',
   USERS: '/usuarios',
   SETTINGS: '/settings',
+  EXERCISES: '/exercises',
 } as const

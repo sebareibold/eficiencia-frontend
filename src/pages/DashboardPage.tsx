@@ -10,7 +10,7 @@ import {
   Tooltip, ResponsiveContainer,
 } from 'recharts'
 import { useDashboard } from '../hooks/useDashboard'
-import Skeleton from '../components/ui/Skeleton'
+import Skeleton, { SkeletonKpiGrid, SkeletonDashboardCharts } from '../components/ui/Skeleton'
 import KpiCard from '../components/ui/KpiCard'
 import { formatCurrency } from '../utils/formatCurrency'
 
@@ -81,16 +81,31 @@ export default function DashboardPage() {
 
   if (isLoading) {
     return (
-      <div className="space-y-6">
-        <Skeleton className="h-8 w-48" />
-        <div className="grid grid-cols-2 gap-4 lg:grid-cols-4">
-          {Array.from({ length: 4 }).map((_, i) => <Skeleton key={i} className="h-32 rounded-2xl" />)}
+      <div className="space-y-8 pb-12">
+        <div className="flex items-end justify-between gap-6">
+          <Skeleton className="h-10 w-52" />
+          <Skeleton className="h-11 w-11 rounded-2xl" />
         </div>
-        <div className="grid gap-4 md:grid-cols-2">
-          <Skeleton className="h-64 rounded-2xl" />
-          <Skeleton className="h-64 rounded-2xl" />
+        <div className="flex flex-col gap-6">
+          <SkeletonKpiGrid />
+          <SkeletonDashboardCharts />
         </div>
-        <Skeleton className="h-64 rounded-2xl" />
+      </div>
+    )
+  }
+
+  if (error) {
+    return (
+      <div className="flex flex-col items-center justify-center gap-4 py-24">
+        <div className="rounded-2xl border border-red-500/20 bg-red-500/10 px-8 py-6 text-center">
+          <p className="text-sm font-medium text-red-400 mb-3">{error}</p>
+          <button
+            onClick={refetch}
+            className="flex items-center gap-2 mx-auto text-xs text-red-400 underline hover:text-red-300 transition-colors"
+          >
+            <RefreshCw size={12} /> Reintentar
+          </button>
+        </div>
       </div>
     )
   }

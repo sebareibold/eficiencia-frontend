@@ -26,17 +26,21 @@ const WEEKDAY_TO_DIA: Record<WeekDay, string> = {
 
 function mapTurno(t: any): Shift {
   const diasSemana: string[] = Array.isArray(t.diasSemana) ? t.diasSemana : []
-  const firstDay = diasSemana[0] ?? ''
-  const day: WeekDay = DIA_TO_WEEKDAY[firstDay.toLowerCase()] ?? 'monday'
+  const days: WeekDay[] = diasSemana
+    .map(d => DIA_TO_WEEKDAY[d.toLowerCase()])
+    .filter((d): d is WeekDay => !!d)
   return {
     id: t.id,
-    name: `Sala ${t.sala} – ${t.horaInicio}`,
+    name: `${t.horaInicio} · Sala ${t.sala}`,
     room: t.sala,
-    day,
+    days: days.length > 0 ? days : ['monday'],
+    recurrente: t.recurrente ?? true,
     startTime: t.horaInicio,
     endTime: t.horaFin,
     capacity: t.cupoMaximo,
     enrolled: t.inscripcionesActivas ?? 0,
+    profesorId: String(t.profesorId ?? ''),
+    profesorNombre: t.profesor?.usuario?.nombre ?? t.profesor?.nombre ?? '',
     createdAt: t.createdAt ?? '',
   }
 }
@@ -63,7 +67,8 @@ export const shiftsApi = {
       sala: dto.room,
       horaInicio: dto.startTime,
       horaFin: dto.endTime,
-      diasSemana: [WEEKDAY_TO_DIA[dto.day]],
+      diasSemana: dto.days.map(d => WEEKDAY_TO_DIA[d]),
+      recurrente: dto.recurrente,
       cupoMaximo: dto.capacity,
       profesorId: dto.profesorId,
     }).then((r) => mapTurno(r.data)),
@@ -73,7 +78,8 @@ export const shiftsApi = {
       ...(dto.room !== undefined && { sala: dto.room }),
       ...(dto.startTime !== undefined && { horaInicio: dto.startTime }),
       ...(dto.endTime !== undefined && { horaFin: dto.endTime }),
-      ...(dto.day !== undefined && { diasSemana: [WEEKDAY_TO_DIA[dto.day]] }),
+      ...(dto.days !== undefined && { diasSemana: dto.days.map(d => WEEKDAY_TO_DIA[d]) }),
+      ...(dto.recurrente !== undefined && { recurrente: dto.recurrente }),
       ...(dto.capacity !== undefined && { cupoMaximo: dto.capacity }),
       ...(dto.profesorId !== undefined && { profesorId: dto.profesorId }),
     }).then((r) => mapTurno(r.data)),

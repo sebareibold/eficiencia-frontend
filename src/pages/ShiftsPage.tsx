@@ -1,10 +1,11 @@
 import { useState, useMemo, useEffect } from 'react'
+import { useNavigate } from 'react-router-dom'
 import { motion, AnimatePresence } from 'framer-motion'
 import { pageVariants } from '../lib/motion'
 import {
   Plus, Clock, Users, RefreshCw, Dumbbell, Trash2,
   LayoutGrid, CalendarDays, ChevronLeft, ChevronRight,
-  Filter, Settings2, X
+  Filter, Settings2, X, Bell, Check, Pencil, UserPlus, ListPlus, Search
 } from 'lucide-react'
 import { useForm } from 'react-hook-form'
 import { zodResolver } from '@hookform/resolvers/zod'
@@ -13,9 +14,14 @@ import { addWeeks, subWeeks, startOfWeek, endOfWeek, addDays, subDays, addMonths
 import { es } from 'date-fns/locale'
 import { useShifts } from '../hooks/useShifts'
 import { useClients } from '../hooks/useClients'
+import { useListaEspera } from '../hooks/useListaEspera'
 import { shiftsApi, professorsApi } from '../api/shifts.api'
+import { listaEsperaApi } from '../api/listaEspera.api'
+import { inscripcionesApi } from '../api/inscripciones.api'
 import { useUiStore } from '../store/uiStore'
 import { useAuthStore } from '../store/authStore'
+import type { EstadoEspera, TipoEspera } from '../types/listaEspera.types'
+import type { InscripcionEntry } from '../api/inscripciones.api'
 import Button from '../components/ui/Button'
 import Modal from '../components/ui/Modal'
 import Input from '../components/ui/Input'
@@ -41,10 +47,11 @@ const JS_TO_WEEKDAY: Record<number, WeekDay | undefined> = {
   1: 'monday', 2: 'tuesday', 3: 'wednesday', 4: 'thursday', 5: 'friday', 6: 'saturday', 0: 'sunday'
 }
 
-const TIMELINE_START_H = 6
-const TIMELINE_END_H   = 22
-const PX_PER_MIN       = 1
-const TIMELINE_HEIGHT  = (TIMELINE_END_H - TIMELINE_START_H) * 60 * PX_PER_MIN
+const TIMELINE_START_H  = 6
+const TIMELINE_END_H    = 22
+const PX_PER_MIN        = 1.3
+const TIMELINE_HEIGHT   = (TIMELINE_END_H - TIMELINE_START_H) * 60 * PX_PER_MIN
+const MAX_MONTH_SHIFTS  = 4   // máximo de filas compactas visibles en la vista mensual
 const HOURS = Array.from(
   { length: TIMELINE_END_H - TIMELINE_START_H + 1 },
   (_, i) => `${String(TIMELINE_START_H + i).padStart(2, '0')}:00`
@@ -53,15 +60,16 @@ const HOURS = Array.from(
 // ─── Schema ───────────────────────────────────────────────────────────────────
 
 const schema = z.object({
-  room:      z.string().min(1, 'La sala es requerida'),
-  day:       z.enum(['monday', 'tuesday', 'wednesday', 'thursday', 'friday', 'saturday', 'sunday'], {
-    errorMap: () => ({ message: 'El día es requerido' })
-  }),
-  startTime: z.string().min(1, 'La hora de inicio es requerida'),
-  endTime:   z.string().min(1, 'La hora de fin es requerida'),
-  capacity:  z.string().min(1, 'El cupo es requerido').refine(v => Number(v) > 0, 'Cupo inválido'),
+  room:       z.string().min(1, 'La sala es requerida'),
+  days:       z.array(
+    z.enum(['monday', 'tuesday', 'wednesday', 'thursday', 'friday', 'saturday', 'sunday'])
+  ).min(1, 'Seleccioná al menos un día'),
+  recurrente: z.boolean().default(true),
+  startTime:  z.string().min(1, 'La hora de inicio es requerida'),
+  endTime:    z.string().min(1, 'La hora de fin es requerida'),
+  capacity:   z.string().min(1, 'El cupo es requerido').refine(v => Number(v) > 0, 'Cupo inválido'),
   profesorId: z.string().min(1, 'El profesor es requerido'),
-  clientIds: z.array(z.number()),
+  clientIds:  z.array(z.string()),
 }).refine(data => data.clientIds.length <= Number(data.capacity || 0), {
   message: 'La cantidad de clientes supera el cupo',
   path: ['clientIds']
@@ -69,8 +77,23 @@ const schema = z.object({
 
 type FormValues = z.infer<typeof schema>
 
-type RoomFilter = 'all' | 'A' | 'B'
-type DayFilter  = 'all' | WeekDay
+// Schema para editar un turno existente (mismo que crear, sin clientIds)
+const editSchema = z.object({
+  room:       z.string().min(1, 'La sala es requerida'),
+  days:       z.array(
+    z.enum(['monday', 'tuesday', 'wednesday', 'thursday', 'friday', 'saturday', 'sunday'])
+  ).min(1, 'Seleccioná al menos un día'),
+  recurrente: z.boolean().default(true),
+  startTime:  z.string().min(1, 'La hora de inicio es requerida'),
+  endTime:    z.string().min(1, 'La hora de fin es requerida'),
+  capacity:   z.string().min(1, 'El cupo es requerido').refine(v => Number(v) > 0, 'Cupo inválido'),
+  profesorId: z.string().min(1, 'El profesor es requerido'),
+})
+type EditFormValues = z.infer<typeof editSchema>
+
+type RoomFilter  = 'all' | 'A' | 'B'
+type DayFilter   = 'all' | WeekDay
+type ShiftLayout = { shift: Shift; colIndex: number; numCols: number }
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 
@@ -90,14 +113,80 @@ function getOccupancyDot(enrolled: number, capacity: number): string {
 
 function getOccupancyStyle(enrolled: number, capacity: number): string {
   const r = enrolled / capacity
-  if (r >= 1)   return 'border-red-500/50 bg-red-500/10 hover:bg-red-500/15'
-  if (r >= 0.8) return 'border-yellow-500/50 bg-yellow-500/10 hover:bg-yellow-500/15'
-  return 'border-green-500/50 bg-green-500/10 hover:bg-green-500/15'
+  if (r >= 1)   return 'border-red-500/50 bg-red-500/10 hover:bg-red-500/25 hover:border-red-500/80'
+  if (r >= 0.8) return 'border-yellow-500/50 bg-yellow-500/10 hover:bg-yellow-500/25 hover:border-yellow-500/80'
+  return 'border-green-500/50 bg-green-500/10 hover:bg-green-500/25 hover:border-green-500/80'
 }
 
 function timeToMinutes(t: string): number {
   const [h, m] = t.split(':').map(Number)
   return h * 60 + m
+}
+
+/**
+ * Asigna colIndex y numCols a cada turno usando un algoritmo greedy con union-find.
+ * Turnos que se solapan forman un "cluster" y se distribuyen en columnas paralelas.
+ * Turnos sin solapamiento siempre obtienen numCols=1 (ancho completo).
+ */
+function computeColumnLayout(shifts: Shift[]): ShiftLayout[] {
+  if (!shifts.length) return []
+
+  const sorted = [...shifts].sort(
+    (a, b) => timeToMinutes(a.startTime) - timeToMinutes(b.startTime)
+  )
+  const n = sorted.length
+
+  // Union-Find comprimido por camino
+  const parent = Array.from({ length: n }, (_, i) => i)
+  function find(x: number): number {
+    while (parent[x] !== x) { parent[x] = parent[parent[x]]; x = parent[x] }
+    return x
+  }
+
+  // Dos turnos se solapan si A.start < B.end Y B.start < A.end
+  for (let i = 0; i < n; i++) {
+    for (let j = i + 1; j < n; j++) {
+      const aStart = timeToMinutes(sorted[i].startTime)
+      const aEnd   = timeToMinutes(sorted[i].endTime)
+      const bStart = timeToMinutes(sorted[j].startTime)
+      const bEnd   = timeToMinutes(sorted[j].endTime)
+      if (aStart < bEnd && bStart < aEnd) {
+        const ri = find(i), rj = find(j)
+        if (ri !== rj) parent[ri] = rj
+      }
+    }
+  }
+
+  // Agrupar índices por cluster
+  const clusters = new Map<number, number[]>()
+  for (let i = 0; i < n; i++) {
+    const root = find(i)
+    if (!clusters.has(root)) clusters.set(root, [])
+    clusters.get(root)!.push(i)
+  }
+
+  const result: ShiftLayout[] = new Array(n)
+
+  clusters.forEach((indices) => {
+    // Asignación greedy de columnas: reutiliza la primera columna libre
+    const colEnds: number[] = []
+    const colOf   = new Array<number>(indices.length)
+
+    indices.forEach((globalIdx, localIdx) => {
+      const startMin = timeToMinutes(sorted[globalIdx].startTime)
+      let col = colEnds.findIndex(end => end <= startMin)
+      if (col === -1) col = colEnds.length
+      colEnds[col] = timeToMinutes(sorted[globalIdx].endTime)
+      colOf[localIdx] = col
+    })
+
+    const numCols = colEnds.length
+    indices.forEach((globalIdx, localIdx) => {
+      result[globalIdx] = { shift: sorted[globalIdx], colIndex: colOf[localIdx], numCols }
+    })
+  })
+
+  return result
 }
 
 // ─── Component ────────────────────────────────────────────────────────────────
@@ -108,6 +197,7 @@ export default function ShiftsPage() {
   const addToast = useUiStore(s => s.addToast)
   const user     = useAuthStore(s => s.user)
   const isAdmin  = user?.role === 'admin'
+  const navigate = useNavigate()
 
   // ── View mode
   const [viewMode, setViewMode] = useState<'grid' | 'calendar' | 'timeline'>('calendar')
@@ -141,13 +231,52 @@ export default function ShiftsPage() {
   const [professors,   setProfessors]   = useState<{ id: string; name: string }[]>([])
   const [profsLoading, setProfsLoading] = useState(false)
 
+  // ── Management panel state
+  const [detailTab,        setDetailTab]        = useState<'edit' | 'inscripciones' | 'espera'>('edit')
+  const [esperaTipoTab,    setEsperaTipoTab]    = useState<'INTERNA' | 'EXTERNA'>('INTERNA')
+  const [actionLoadingIds, setActionLoadingIds] = useState<Set<string>>(new Set())
+
+  // Inscripciones tab
+  const [inscripciones,   setInscripciones]   = useState<InscripcionEntry[]>([])
+  const [loadingInscrip,  setLoadingInscrip]  = useState(false)
+  const [bajandoId,       setBajandoId]       = useState<string | null>(null)
+  const [addClientMode,   setAddClientMode]   = useState(false)
+  const [addClientSearch, setAddClientSearch] = useState('')
+  const [addClientId,     setAddClientId]     = useState('')
+  const [addClientSubmitting, setAddClientSubmitting] = useState(false)
+
+  // Lista de espera — agregar manualmente
+  const [addEsperaMode,        setAddEsperaMode]        = useState(false)
+  const [addEsperaClientSearch,setAddEsperaClientSearch] = useState('')
+  const [addEsperaClientId,    setAddEsperaClientId]    = useState('')
+  const [addEsperaTipo,        setAddEsperaTipo]        = useState<TipoEspera>('INTERNA')
+  const [addEsperaSubmitting,  setAddEsperaSubmitting]  = useState(false)
+
+  // Edit form (separate instance from create form)
+  const {
+    register: editRegister, handleSubmit: editHandleSubmit,
+    formState: { errors: editErrors }, reset: editReset,
+    watch: editWatch, setValue: editSetValue,
+  } = useForm<EditFormValues>({
+    resolver: zodResolver(editSchema),
+    defaultValues: { room: 'A', days: [], recurrente: true, startTime: '', endTime: '', capacity: '', profesorId: '' },
+  })
+  const [editSubmitting, setEditSubmitting] = useState(false)
+  const editDays       = (editWatch('days') || []) as WeekDay[]
+  const editRecurrente = editWatch('recurrente') ?? true
+
+  const { entries: esperaEntries, isLoading: esperaLoading, error: esperaError, refetch: refetchEspera } =
+    useListaEspera(detailShift ? String(detailShift.id) : null)
+
   const { register, handleSubmit, formState: { errors }, reset, watch, setValue } = useForm<FormValues>({
     resolver: zodResolver(schema),
-    defaultValues: { room: 'A', clientIds: [] },
+    defaultValues: { room: 'A', days: [], recurrente: true, clientIds: [] },
   })
 
   const formClientIds = watch('clientIds') || []
   const formCapacity  = Number(watch('capacity')) || 0
+  const formDays      = (watch('days') || []) as WeekDay[]
+  const formRecurrente = watch('recurrente') ?? true
 
   // Carga profesores reales desde la API
   useEffect(() => {
@@ -162,7 +291,7 @@ export default function ShiftsPage() {
   const filtered = useMemo(() =>
     shifts.filter(s =>
       (roomFilter === 'all' || s.room === roomFilter) &&
-      (dayFilter  === 'all' || s.day  === dayFilter)
+      (dayFilter  === 'all' || s.days.includes(dayFilter as WeekDay))
     ),
     [shifts, roomFilter, dayFilter]
   )
@@ -231,7 +360,7 @@ export default function ShiftsPage() {
       visibleDates.forEach(date => {
         const wday = JS_TO_WEEKDAY[date.getDay()];
         if (!wday) return;
-        shifts.filter(s => s.day === wday).forEach(s => {
+        shifts.filter(s => s.days.includes(wday)).forEach(s => {
           const startH = parseInt(s.startTime.split(':')[0], 10);
           const endH = parseInt(s.endTime.split(':')[0], 10);
           for(let h = startH; h <= endH; h++) {
@@ -277,15 +406,24 @@ export default function ShiftsPage() {
     const map: Record<WeekDay, Shift[]> = {
       monday: [], tuesday: [], wednesday: [], thursday: [], friday: [], saturday: [], sunday: [],
     }
-    shifts.forEach(s => { if (map[s.day]) map[s.day].push(s) })
+    shifts.forEach(s => { s.days.forEach(d => { if (map[d]) map[d].push(s) }) })
     Object.values(map).forEach(arr => arr.sort((a, b) => a.startTime.localeCompare(b.startTime)))
     return map
   }, [shifts])
 
+  // Layout de columnas por día: evita solapamiento visual entre turnos simultáneos
+  const layoutsByDay = useMemo(() => {
+    const map = {} as Record<WeekDay, ShiftLayout[]>
+    ;(Object.keys(shiftsByDay) as WeekDay[]).forEach(day => {
+      map[day] = computeColumnLayout(shiftsByDay[day])
+    })
+    return map
+  }, [shiftsByDay])
+
   // ── Derived: timeline
   const timelineShifts = useMemo(() =>
     [...shifts]
-      .filter(s => s.day === timelineDay)
+      .filter(s => s.days.includes(timelineDay))
       .sort((a, b) => a.startTime.localeCompare(b.startTime)),
     [shifts, timelineDay]
   )
@@ -310,7 +448,8 @@ export default function ShiftsPage() {
 
     reset({
       room: room === 'all' ? 'A' : room,
-      day: wday,
+      days: [wday],
+      recurrente: true,
       startTime: timeStr,
       endTime: endTime,
       capacity: '',
@@ -324,14 +463,22 @@ export default function ShiftsPage() {
   async function onCreate(data: FormValues) {
     setIsSubmitting(true)
     try {
-      await shiftsApi.create({
-        room: data.room, day: data.day,
+      const turno = await shiftsApi.create({
+        room: data.room, days: data.days, recurrente: data.recurrente,
         startTime: data.startTime, endTime: data.endTime, capacity: Number(data.capacity),
         profesorId: data.profesorId,
       })
+
+      if (data.clientIds.length > 0) {
+        // Promise.allSettled para que inscripciones individuales que fallen no cancelen el turno creado
+        await Promise.allSettled(
+          data.clientIds.map(clientId => inscripcionesApi.enroll(clientId, String(turno.id)))
+        )
+      }
+
       addToast('Turno creado exitosamente', 'success')
       setCreateOpen(false)
-      reset({ room: 'A', day: undefined, startTime: '', endTime: '', capacity: '', profesorId: '', clientIds: [] })
+      reset({ room: 'A', days: [], recurrente: true, startTime: '', endTime: '', capacity: '', profesorId: '', clientIds: [] })
       refetch()
     } catch {
       addToast('Error al crear el turno', 'error')
@@ -351,6 +498,140 @@ export default function ShiftsPage() {
       addToast('Error al eliminar', 'error')
     } finally {
       setIsDeleting(null)
+    }
+  }
+
+  // Cuando se abre un turno diferente: pre-rellenar el form de edición y limpiar estados auxiliares
+  useEffect(() => {
+    if (!detailShift) return
+    editReset({
+      room:       detailShift.room,
+      days:       detailShift.days,
+      recurrente: detailShift.recurrente,
+      startTime:  detailShift.startTime,
+      endTime:    detailShift.endTime,
+      capacity:   String(detailShift.capacity),
+      profesorId: detailShift.profesorId,
+    })
+    setDetailTab('edit')
+    setEsperaTipoTab('INTERNA')
+    setAddClientMode(false); setAddClientSearch(''); setAddClientId('')
+    setAddEsperaMode(false); setAddEsperaClientSearch(''); setAddEsperaClientId('')
+    setInscripciones([])
+  }, [detailShift?.id])
+
+  // Cargar inscripciones cuando se abre la pestaña correspondiente
+  useEffect(() => {
+    if (detailTab !== 'inscripciones' || !detailShift) return
+    setLoadingInscrip(true)
+    inscripcionesApi.getByTurno(String(detailShift.id))
+      .then(setInscripciones)
+      .catch(() => addToast('Error al cargar inscripciones', 'error'))
+      .finally(() => setLoadingInscrip(false))
+  }, [detailTab, detailShift?.id])
+
+  async function handleEsperaAction(id: string, action: 'notificar' | 'aceptar' | 'rechazar' | 'eliminar') {
+    setActionLoadingIds(prev => new Set([...prev, id]))
+    try {
+      if (action === 'eliminar') {
+        await listaEsperaApi.remove(id)
+        addToast('Entrada eliminada', 'success')
+      } else {
+        const estadoMap: Record<'notificar' | 'aceptar' | 'rechazar', EstadoEspera> = {
+          notificar: 'NOTIFICADO',
+          aceptar:   'ACEPTADO',
+          rechazar:  'RECHAZADO',
+        }
+        await listaEsperaApi.updateEstado(id, estadoMap[action])
+        addToast('Estado actualizado', 'success')
+      }
+      refetchEspera()
+    } catch {
+      addToast('Error al procesar la acción', 'error')
+    } finally {
+      setActionLoadingIds(prev => { const s = new Set(prev); s.delete(id); return s })
+    }
+  }
+
+  // ── Edit submit
+  async function onEditSubmit(data: EditFormValues) {
+    if (!detailShift) return
+    setEditSubmitting(true)
+    try {
+      await shiftsApi.update(detailShift.id, {
+        room: data.room, days: data.days, recurrente: data.recurrente,
+        startTime: data.startTime, endTime: data.endTime,
+        capacity: Number(data.capacity), profesorId: data.profesorId,
+      })
+      addToast('Turno actualizado exitosamente', 'success')
+      refetch()
+      // Sincronizar el detailShift local para que otros tabs reflejen los cambios
+      setDetailShift(prev => prev ? {
+        ...prev, room: data.room, days: data.days, recurrente: data.recurrente,
+        startTime: data.startTime, endTime: data.endTime, capacity: Number(data.capacity),
+      } : null)
+    } catch {
+      addToast('Error al actualizar el turno', 'error')
+    } finally {
+      setEditSubmitting(false)
+    }
+  }
+
+  // ── Dar de baja un inscripto
+  async function handleDarDeBaja(inscripcionId: string) {
+    setBajandoId(inscripcionId)
+    try {
+      await inscripcionesApi.darDeBaja(inscripcionId)
+      addToast('Cliente dado de baja correctamente', 'success')
+      if (detailShift) {
+        inscripcionesApi.getByTurno(String(detailShift.id)).then(setInscripciones).catch(() => {})
+      }
+      refetch()
+    } catch {
+      addToast('Error al dar de baja', 'error')
+    } finally {
+      setBajandoId(null)
+    }
+  }
+
+  // ── Inscribir cliente desde el panel de gestión
+  async function handleAddToShift() {
+    if (!detailShift || !addClientId) return
+    setAddClientSubmitting(true)
+    try {
+      const res = await inscripcionesApi.enroll(addClientId, String(detailShift.id))
+      if (res.enListaEspera) {
+        addToast('Turno lleno — cliente agregado a lista de espera', 'success')
+      } else {
+        addToast('Cliente inscripto correctamente', 'success')
+      }
+      setAddClientMode(false); setAddClientSearch(''); setAddClientId('')
+      if (detailShift) {
+        inscripcionesApi.getByTurno(String(detailShift.id)).then(setInscripciones).catch(() => {})
+      }
+      refetch()
+    } catch (err: any) {
+      const msg = err?.response?.data?.message ?? 'Error al inscribir al cliente'
+      addToast(msg, 'error')
+    } finally {
+      setAddClientSubmitting(false)
+    }
+  }
+
+  // ── Agregar a lista de espera manualmente
+  async function handleAddToWaitingList() {
+    if (!detailShift || !addEsperaClientId) return
+    setAddEsperaSubmitting(true)
+    try {
+      await listaEsperaApi.create(addEsperaClientId, String(detailShift.id), addEsperaTipo)
+      addToast('Cliente agregado a la lista de espera', 'success')
+      setAddEsperaMode(false); setAddEsperaClientSearch(''); setAddEsperaClientId('')
+      refetchEspera()
+    } catch (err: any) {
+      const msg = err?.response?.data?.message ?? 'Error al agregar a lista de espera'
+      addToast(msg, 'error')
+    } finally {
+      setAddEsperaSubmitting(false)
     }
   }
 
@@ -400,7 +681,7 @@ export default function ShiftsPage() {
           {isAdmin && (
             <button
               onClick={() => {
-                reset({ room: '', day: undefined, startTime: '', endTime: '', capacity: '', profesorId: '', clientIds: [] })
+                reset({ room: 'A', days: [], recurrente: true, startTime: '', endTime: '', capacity: '', profesorId: '', clientIds: [] })
                 setClientSearch('')
                 setCreateOpen(true)
               }}
@@ -669,7 +950,7 @@ export default function ShiftsPage() {
                   return (
                     <div
                       key={shift.id}
-                      onClick={() => setDetailShift(shift)}
+                      onClick={() => navigate(`/shifts/${shift.id}`)}
                       className="group relative cursor-pointer overflow-hidden rounded-[2rem] border border-white/50 dark:border-white/10 bg-white/30 dark:bg-black/30 backdrop-blur-3xl p-6 shadow-[0_8px_32px_rgba(0,0,0,0.04)] dark:shadow-[0_8px_32px_rgba(0,0,0,0.3)] transition-all duration-500 hover:-translate-y-1 hover:bg-white/50 dark:hover:bg-black/50 hover:shadow-[0_20px_40px_rgba(0,0,0,0.08)] dark:hover:shadow-[0_20px_40px_rgba(0,0,0,0.4)]"
                     >
                       <div className="absolute top-4 right-4 flex items-center gap-1.5">
@@ -677,7 +958,10 @@ export default function ShiftsPage() {
                         <span className="text-xs text-[#8A8A9A]">Sala {shift.room}</span>
                       </div>
                       <h3 className="pr-16 font-semibold text-gray-900 dark:text-white">{shift.name}</h3>
-                      <p className="mt-0.5 text-xs text-gray-500 dark:text-gray-400">{DAY_LABELS[shift.day]}</p>
+                      <p className="mt-0.5 text-xs text-gray-500 dark:text-gray-400">
+                        {shift.days.map(d => DAY_LABELS[d].slice(0, 3)).join(' · ')}
+                        {!shift.recurrente && <span className="ml-1 text-amber-500"> · puntual</span>}
+                      </p>
                       <div className="mt-3 flex items-center gap-1 text-sm text-[#8A8A9A]">
                         <Clock size={13} />
                         <span>{shift.startTime} – {shift.endTime}</span>
@@ -757,26 +1041,28 @@ export default function ShiftsPage() {
                               {date.getDate()}
                             </span>
                           </div>
-                          <div className="flex-1 overflow-y-auto space-y-1 custom-scrollbar pr-1">
-                            {dayShifts.map(shift => {
-                              const isFull = shift.enrolled >= shift.capacity;
-                              return (
+                          {/* Lista compacta — sin overflow, con fade si hay más de MAX_MONTH_SHIFTS */}
+                          <div
+                            className="flex-1 overflow-hidden min-h-0"
+                            style={dayShifts.length > MAX_MONTH_SHIFTS ? {
+                              maskImage:         'linear-gradient(to bottom, black 60%, transparent 100%)',
+                              WebkitMaskImage:   'linear-gradient(to bottom, black 60%, transparent 100%)',
+                            } : undefined}
+                          >
+                            <div className="space-y-px">
+                              {dayShifts.slice(0, MAX_MONTH_SHIFTS).map(shift => (
                                 <button
                                   key={shift.id}
-                                  onClick={(e) => { e.stopPropagation(); setDetailShift(shift); }}
-                                  className={`w-full text-left px-2 py-1.5 rounded-lg border transition-all hover:scale-[1.02] ${getOccupancyStyle(shift.enrolled, shift.capacity)}`}
+                                  onClick={(e) => { e.stopPropagation(); navigate(`/shifts/${shift.id}`); }}
+                                  className="w-full flex items-center gap-1.5 px-1 py-[3px] rounded text-left transition-colors hover:bg-black/5 dark:hover:bg-white/5"
                                 >
-                                  <div className="flex items-center justify-between gap-1 mb-0.5">
-                                    <span className="font-bold text-[10px] text-gray-900 dark:text-white truncate">{shift.startTime}</span>
-                                    <span className={`h-1.5 w-1.5 flex-shrink-0 rounded-full ${shift.room === 'A' ? 'bg-blue-400' : 'bg-purple-400'}`} />
-                                  </div>
-                                  <p className="text-[10px] font-medium text-gray-700 dark:text-gray-300 truncate">{shift.name}</p>
-                                  <div className="flex items-center gap-1 mt-1 text-[9px] text-gray-500 dark:text-[#8A8A9A]">
-                                    <Users size={8} /> <span>{shift.enrolled}/{shift.capacity}</span>
-                                  </div>
+                                  <span className={`h-1.5 w-1.5 flex-shrink-0 rounded-full ${shift.room === 'A' ? 'bg-blue-400' : 'bg-purple-400'}`} />
+                                  <span className="text-[9px] font-bold text-gray-500 dark:text-[#8A8A9A] flex-shrink-0 tabular-nums leading-none">{shift.startTime}</span>
+                                  <span className="text-[9px] font-medium text-gray-700 dark:text-gray-200 truncate flex-1 leading-none">{shift.name}</span>
+                                  <span className={`h-1.5 w-1.5 flex-shrink-0 rounded-full ${getOccupancyDot(shift.enrolled, shift.capacity)}`} />
                                 </button>
-                              )
-                            })}
+                              ))}
+                            </div>
                           </div>
                         </div>
                       )
@@ -859,18 +1145,31 @@ export default function ShiftsPage() {
                               )
                             })}
 
-                            {dayShifts.map(shift => {
-                              const top = getTimeY(shift.startTime)
-                              const bottom = getTimeY(shift.endTime)
-                              const height = Math.max(40, bottom - top)
+                            {(wday ? layoutsByDay[wday] : []).map(({ shift, colIndex, numCols }) => {
+                              const marginY      = 6
+                              const top    = getTimeY(shift.startTime) + marginY
+                              const bottom = getTimeY(shift.endTime) - marginY
+                              const height = Math.max(42, bottom - top)
                               const isFull = shift.enrolled >= shift.capacity
-                              
+
+                              const marginX      = 8
+                              const gutter       = 4
+                              const leftPercent  = (colIndex / numCols) * 100
+                              const leftPx       = marginX + colIndex * ((-marginX * 2 + gutter) / numCols)
+                              const widthPercent = (1 / numCols) * 100
+                              const widthPx      = ((-marginX * 2 + gutter) / numCols) - gutter
+
                               return (
                                 <button
                                   key={shift.id}
-                                  onClick={(e) => { e.stopPropagation(); setDetailShift(shift); }}
-                                  style={{ top, height }}
-                                  className={`absolute inset-x-1.5 rounded-xl border p-2 text-left overflow-hidden transition-all hover:scale-[1.02] hover:z-10 shadow-sm ${getOccupancyStyle(shift.enrolled, shift.capacity)}`}
+                                  onClick={(e) => { e.stopPropagation(); navigate(`/shifts/${shift.id}`); }}
+                                  style={{
+                                    top,
+                                    height,
+                                    left:  `calc(${leftPercent}% + ${leftPx}px)`,
+                                    width: `calc(${widthPercent}% + ${widthPx}px)`,
+                                  }}
+                                  className={`absolute rounded-xl border p-2 text-left overflow-hidden transition-all hover:z-10 hover:shadow-md ${getOccupancyStyle(shift.enrolled, shift.capacity)}`}
                                 >
                                   <div className="flex items-start justify-between gap-1 mb-1">
                                     <p className="text-[11px] font-bold text-gray-900 dark:text-white leading-tight truncate">
@@ -986,14 +1285,15 @@ export default function ShiftsPage() {
                         />
                       ))}
                       {timelineShifts.filter(s => s.room === 'A').map(shift => {
-                        const top    = (timeToMinutes(shift.startTime) - TIMELINE_START_H * 60) * PX_PER_MIN
-                        const height = Math.max(32, (timeToMinutes(shift.endTime) - timeToMinutes(shift.startTime)) * PX_PER_MIN)
+                        const marginY = 6
+                        const top    = (timeToMinutes(shift.startTime) - TIMELINE_START_H * 60) * PX_PER_MIN + marginY
+                        const height = Math.max(32, (timeToMinutes(shift.endTime) - timeToMinutes(shift.startTime)) * PX_PER_MIN - marginY * 2)
                         const pct    = Math.min((shift.enrolled / shift.capacity) * 100, 100)
                         return (
                           <button
                             key={shift.id}
-                            onClick={(e) => { e.stopPropagation(); setDetailShift(shift); }}
-                            className={`absolute inset-x-1 rounded-lg border px-2 py-1 text-left overflow-hidden transition-all hover:brightness-110 z-10 ${getOccupancyStyle(shift.enrolled, shift.capacity)}`}
+                            onClick={(e) => { e.stopPropagation(); navigate(`/shifts/${shift.id}`); }}
+                            className={`absolute inset-x-2 rounded-lg border px-2 py-1 text-left overflow-hidden transition-all hover:brightness-110 z-10 ${getOccupancyStyle(shift.enrolled, shift.capacity)}`}
                             style={{ top, height }}
                           >
                             <p className="text-[11px] font-semibold text-white truncate leading-tight">{shift.name}</p>
@@ -1018,14 +1318,15 @@ export default function ShiftsPage() {
                         />
                       ))}
                       {timelineShifts.filter(s => s.room === 'B').map(shift => {
-                        const top    = (timeToMinutes(shift.startTime) - TIMELINE_START_H * 60) * PX_PER_MIN
-                        const height = Math.max(32, (timeToMinutes(shift.endTime) - timeToMinutes(shift.startTime)) * PX_PER_MIN)
+                        const marginY = 6
+                        const top    = (timeToMinutes(shift.startTime) - TIMELINE_START_H * 60) * PX_PER_MIN + marginY
+                        const height = Math.max(32, (timeToMinutes(shift.endTime) - timeToMinutes(shift.startTime)) * PX_PER_MIN - marginY * 2)
                         const pct    = Math.min((shift.enrolled / shift.capacity) * 100, 100)
                         return (
                           <button
                             key={shift.id}
-                            onClick={(e) => { e.stopPropagation(); setDetailShift(shift); }}
-                            className={`absolute inset-x-1 rounded-lg border px-2 py-1 text-left overflow-hidden transition-all hover:brightness-110 z-10 ${getOccupancyStyle(shift.enrolled, shift.capacity)}`}
+                            onClick={(e) => { e.stopPropagation(); navigate(`/shifts/${shift.id}`); }}
+                            className={`absolute inset-x-2 rounded-lg border px-2 py-1 text-left overflow-hidden transition-all hover:brightness-110 z-10 ${getOccupancyStyle(shift.enrolled, shift.capacity)}`}
                             style={{ top, height }}
                           >
                             <p className="text-[11px] font-semibold text-white truncate leading-tight">{shift.name}</p>
@@ -1059,37 +1360,393 @@ export default function ShiftsPage() {
         </motion.div>
       </AnimatePresence>
 
-      {/* ── Detail Modal ──────────────────────────────────────────────────────── */}
-      <Modal isOpen={!!detailShift} onClose={() => setDetailShift(null)} title={detailShift?.name ?? ''} size="md">
-        {detailShift && (
+      {/* ── Management Panel Modal (migrado a ShiftDetailPage) ─────────────── */}
+      {false && (
           <div className="space-y-4">
-            <div className="grid grid-cols-2 gap-3 text-sm">
-              <div className="rounded-xl border border-white/[0.08] bg-white/[0.04] p-3">
-                <p className="text-xs text-[#8A8A9A]">Sala</p>
-                <p className="mt-1 font-semibold text-white">Sala {detailShift.room}</p>
-              </div>
-              <div className="rounded-xl border border-white/[0.08] bg-white/[0.04] p-3">
-                <p className="text-xs text-[#8A8A9A]">Día</p>
-                <p className="mt-1 font-semibold text-white">{DAY_LABELS[detailShift.day]}</p>
-              </div>
-              <div className="rounded-xl border border-white/[0.08] bg-white/[0.04] p-3">
-                <p className="text-xs text-[#8A8A9A]">Horario</p>
-                <p className="mt-1 font-semibold text-white">{detailShift.startTime} – {detailShift.endTime}</p>
-              </div>
-              <div className="rounded-xl border border-white/[0.08] bg-white/[0.04] p-3">
-                <p className="text-xs text-[#8A8A9A]">Cupo</p>
-                <p className="mt-1 font-semibold text-white">{detailShift.enrolled}/{detailShift.capacity}</p>
-              </div>
+
+            {/* ── 3 Tabs ── */}
+            <div className="flex gap-1 rounded-xl bg-black/5 dark:bg-white/5 p-1">
+              {([
+                { id: 'edit'          as const, label: 'Editar',         icon: Pencil   },
+                { id: 'inscripciones' as const, label: 'Inscripciones',  icon: Users    },
+                { id: 'espera'        as const, label: 'Lista de espera', icon: ListPlus },
+              ] as const).map(({ id, label, icon: Icon }) => {
+                const badge = id === 'inscripciones' ? detailShift.enrolled
+                            : id === 'espera'        ? esperaEntries.filter(e => e.estado === 'PENDIENTE').length
+                            : 0
+                return (
+                  <button
+                    key={id}
+                    onClick={() => setDetailTab(id)}
+                    className={`flex-1 flex items-center justify-center gap-1.5 rounded-lg py-2 text-xs font-semibold transition-all ${
+                      detailTab === id
+                        ? 'bg-white dark:bg-[#2a2a36] text-gray-900 dark:text-white shadow-sm'
+                        : 'text-gray-500 dark:text-[#8A8A9A] hover:text-gray-700 dark:hover:text-gray-300'
+                    }`}
+                  >
+                    <Icon size={12} />
+                    {label}
+                    {badge > 0 && (
+                      <span className="flex h-4 min-w-[1rem] items-center justify-center rounded-full bg-primary text-[9px] font-bold text-white px-1">
+                        {badge}
+                      </span>
+                    )}
+                  </button>
+                )
+              })}
             </div>
-            <div className="h-2 rounded-full bg-white/10 overflow-hidden">
-              <div
-                className={`h-full rounded-full ${getOccupancyColor(detailShift.enrolled, detailShift.capacity)}`}
-                style={{ width: `${Math.min((detailShift.enrolled / detailShift.capacity) * 100, 100)}%` }}
-              />
-            </div>
+
+            {/* ════════════ TAB: EDITAR ════════════ */}
+            {detailTab === 'edit' && (
+              <form onSubmit={editHandleSubmit(onEditSubmit)} className="space-y-4">
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+
+                  {/* Columna izquierda */}
+                  <div className="space-y-4">
+                    <Select
+                      label="Sala *"
+                      options={[{ value: 'A', label: 'Sala A' }, { value: 'B', label: 'Sala B' }]}
+                      error={editErrors.room?.message}
+                      {...editRegister('room')}
+                    />
+
+                    <div>
+                      <label className="block text-sm font-medium text-gray-700 dark:text-gray-200 mb-2">Días *</label>
+                      <div className="flex flex-wrap gap-1.5">
+                        {DAYS.map(d => {
+                          const sel = editDays.includes(d)
+                          return (
+                            <button key={d} type="button"
+                              onClick={() => {
+                                if (sel) editSetValue('days', editDays.filter(x => x !== d), { shouldValidate: true })
+                                else     editSetValue('days', [...editDays, d],              { shouldValidate: true })
+                              }}
+                              className={`rounded-full px-3 py-1.5 text-xs font-semibold transition-all ${
+                                sel ? 'bg-primary text-white shadow-sm'
+                                    : 'border border-gray-200 dark:border-white/[0.08] bg-white dark:bg-white/[0.04] text-gray-500 dark:text-[#8A8A9A] hover:border-gray-400 dark:hover:border-white/20'
+                              }`}
+                            >{DAY_LABELS[d].slice(0, 3)}</button>
+                          )
+                        })}
+                      </div>
+                      {(editErrors.days as any)?.message && (
+                        <p className="text-xs text-red-500 mt-1">{(editErrors.days as any).message}</p>
+                      )}
+                    </div>
+
+                    <label className="flex items-center justify-between gap-3 p-3 rounded-xl border border-white/[0.08] bg-white/[0.04] cursor-pointer">
+                      <div>
+                        <p className="text-sm font-semibold text-gray-900 dark:text-white">Recurrente semanal</p>
+                        <p className="text-[11px] text-[#8A8A9A] mt-0.5">Se repite todas las semanas</p>
+                      </div>
+                      <div className="relative flex-shrink-0">
+                        <input type="checkbox" {...editRegister('recurrente')} className="sr-only peer" />
+                        <div className={`w-10 h-5 rounded-full transition-colors ${editRecurrente ? 'bg-primary' : 'bg-gray-200 dark:bg-white/10'}`} />
+                        <div className={`absolute top-0.5 w-4 h-4 bg-white rounded-full shadow transition-transform ${editRecurrente ? 'translate-x-5' : 'translate-x-0.5'}`} />
+                      </div>
+                    </label>
+                  </div>
+
+                  {/* Columna derecha */}
+                  <div className="space-y-4">
+                    <div className="grid grid-cols-2 gap-3">
+                      <Input label="Hora inicio *" type="time" error={editErrors.startTime?.message} {...editRegister('startTime')} />
+                      <Input label="Hora fin *"    type="time" error={editErrors.endTime?.message}   {...editRegister('endTime')} />
+                    </div>
+                    <div className="grid grid-cols-2 gap-3">
+                      <Input label="Cupo máximo *" type="number" placeholder="Ej. 15" error={editErrors.capacity?.message} {...editRegister('capacity')} />
+                      <Select
+                        label="Profesor *"
+                        options={[
+                          { value: '', label: profsLoading ? 'Cargando...' : professors.length === 0 ? 'Sin profesores' : 'Seleccionar...' },
+                          ...professors.map(p => ({ value: p.id, label: p.name })),
+                        ]}
+                        error={editErrors.profesorId?.message}
+                        {...editRegister('profesorId')}
+                      />
+                    </div>
+
+                    {/* Ocupación actual (solo lectura) */}
+                    <div className="rounded-xl border border-white/[0.08] bg-white/[0.04] p-3">
+                      <div className="flex justify-between text-xs mb-2">
+                        <span className="text-[#8A8A9A]">Ocupación actual</span>
+                        <span className="font-semibold text-gray-900 dark:text-white">{detailShift.enrolled}/{detailShift.capacity}</span>
+                      </div>
+                      <div className="h-1.5 rounded-full bg-white/10 overflow-hidden">
+                        <div className={`h-full rounded-full ${getOccupancyColor(detailShift.enrolled, detailShift.capacity)}`}
+                          style={{ width: `${Math.min((detailShift.enrolled / detailShift.capacity) * 100, 100)}%` }} />
+                      </div>
+                    </div>
+                  </div>
+                </div>
+
+                <div className="flex justify-end gap-3 pt-2 border-t border-white/[0.08]">
+                  {isAdmin && (
+                    <button type="button" onClick={() => deleteShift(detailShift.id)}
+                      className="flex items-center gap-1.5 rounded-xl bg-red-500/10 px-4 py-2 text-sm font-semibold text-red-600 dark:text-red-400 hover:bg-red-500/20 transition-all">
+                      <Trash2 size={14} /> Eliminar turno
+                    </button>
+                  )}
+                  <Button type="submit" isLoading={editSubmitting} className="px-6">
+                    Guardar cambios
+                  </Button>
+                </div>
+              </form>
+            )}
+
+            {/* ════════════ TAB: INSCRIPCIONES ════════════ */}
+            {detailTab === 'inscripciones' && (() => {
+              const enrolledIds = new Set(inscripciones.map(i => i.clienteId))
+              const filteredForAdd = clients
+                .filter(c => !enrolledIds.has(String(c.id)))
+                .filter(c => !addClientSearch || `${c.name} ${c.lastName}`.toLowerCase().includes(addClientSearch.toLowerCase()))
+                .slice(0, 8)
+              return (
+                <div className="space-y-3">
+                  {/* Header */}
+                  <div className="flex items-center justify-between">
+                    <p className="text-sm font-semibold text-gray-900 dark:text-white">
+                      {inscripciones.length === 0 ? 'Sin inscriptos activos' : `${inscripciones.length} inscripto${inscripciones.length !== 1 ? 's' : ''} activo${inscripciones.length !== 1 ? 's' : ''}`}
+                    </p>
+                    <button onClick={() => { setAddClientMode(m => !m); setAddClientSearch(''); setAddClientId('') }}
+                      className="flex items-center gap-1.5 rounded-xl bg-primary/10 px-3 py-1.5 text-xs font-semibold text-primary hover:bg-primary/20 transition-all">
+                      <UserPlus size={13} /> Agregar cliente
+                    </button>
+                  </div>
+
+                  {/* Panel agregar */}
+                  <AnimatePresence>
+                    {addClientMode && (
+                      <motion.div initial={{ opacity: 0, y: -8 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -8 }}
+                        className="rounded-xl border border-primary/20 bg-primary/5 p-3 space-y-2">
+                        <div className="relative">
+                          <Search size={13} className="absolute left-3 top-1/2 -translate-y-1/2 text-[#8A8A9A]" />
+                          <input
+                            value={addClientSearch} onChange={e => { setAddClientSearch(e.target.value); setAddClientId('') }}
+                            placeholder="Buscar cliente..."
+                            className="w-full rounded-lg border border-white/[0.08] bg-white/[0.04] pl-8 pr-3 py-2 text-sm text-gray-900 dark:text-white placeholder:text-[#8A8A9A] outline-none focus:border-primary/40"
+                          />
+                        </div>
+                        <div className="space-y-1 max-h-40 overflow-y-auto custom-scrollbar">
+                          {filteredForAdd.length === 0 ? (
+                            <p className="text-xs text-[#8A8A9A] text-center py-3">
+                              {addClientSearch ? 'Sin resultados' : 'Todos los clientes ya están inscriptos'}
+                            </p>
+                          ) : filteredForAdd.map(c => (
+                            <button key={c.id} type="button"
+                              onClick={() => setAddClientId(String(c.id))}
+                              className={`w-full flex items-center gap-2 px-3 py-2 rounded-lg text-left text-sm transition-all ${
+                                addClientId === String(c.id)
+                                  ? 'bg-primary/10 border border-primary/30 text-primary'
+                                  : 'hover:bg-black/5 dark:hover:bg-white/5 text-gray-900 dark:text-white'
+                              }`}>
+                              <span className="font-medium">{c.name} {c.lastName}</span>
+                            </button>
+                          ))}
+                        </div>
+                        {addClientId && (
+                          <Button size="sm" onClick={handleAddToShift} isLoading={addClientSubmitting} className="w-full">
+                            Inscribir cliente seleccionado
+                          </Button>
+                        )}
+                      </motion.div>
+                    )}
+                  </AnimatePresence>
+
+                  {/* Lista inscriptos */}
+                  {loadingInscrip ? (
+                    <div className="space-y-2">{[1,2,3].map(i => <div key={i} className="h-12 rounded-xl bg-black/5 dark:bg-white/[0.04] animate-pulse" />)}</div>
+                  ) : inscripciones.length === 0 ? (
+                    <div className="flex flex-col items-center justify-center py-10 text-[#8A8A9A]">
+                      <Users size={28} className="mb-2 opacity-50" />
+                      <p className="text-sm">No hay clientes inscriptos en este turno</p>
+                    </div>
+                  ) : (
+                    <div className="space-y-1.5 max-h-72 overflow-y-auto custom-scrollbar pr-1">
+                      {inscripciones.map(insc => (
+                        <motion.div key={insc.id} initial={{ opacity: 0 }} animate={{ opacity: 1 }}
+                          className="flex items-center gap-3 rounded-xl border border-white/[0.08] bg-white/[0.04] px-3 py-2.5">
+                          <div className="flex-1 min-w-0">
+                            <p className="text-sm font-semibold text-gray-900 dark:text-white truncate">{insc.clienteNombre}</p>
+                            <p className="text-xs text-[#8A8A9A]">Desde {format(new Date(insc.fechaDesde), "d MMM yyyy", { locale: es })}</p>
+                          </div>
+                          <span className="rounded-full bg-green-500/10 px-2.5 py-0.5 text-xs font-semibold text-green-600 dark:text-green-400 border border-green-500/20">
+                            Activo
+                          </span>
+                          <button disabled={bajandoId === insc.id} onClick={() => handleDarDeBaja(insc.id)}
+                            className="flex items-center gap-1 rounded-lg bg-red-500/10 px-2.5 py-1.5 text-xs font-semibold text-red-600 dark:text-red-400 hover:bg-red-500/20 transition-all disabled:opacity-50">
+                            {bajandoId === insc.id ? '...' : <><X size={11} /> Dar de baja</>}
+                          </button>
+                        </motion.div>
+                      ))}
+                    </div>
+                  )}
+                </div>
+              )
+            })()}
+
+            {/* ════════════ TAB: LISTA DE ESPERA ════════════ */}
+            {detailTab === 'espera' && (
+              <div className="space-y-3">
+
+                {/* Agregar a lista de espera */}
+                <div className="flex items-center justify-between">
+                  <p className="text-sm font-semibold text-gray-900 dark:text-white">
+                    {esperaEntries.length === 0 ? 'Lista de espera vacía' : `${esperaEntries.length} entrada${esperaEntries.length !== 1 ? 's' : ''}`}
+                  </p>
+                  <button onClick={() => { setAddEsperaMode(m => !m); setAddEsperaClientSearch(''); setAddEsperaClientId('') }}
+                    className="flex items-center gap-1.5 rounded-xl bg-primary/10 px-3 py-1.5 text-xs font-semibold text-primary hover:bg-primary/20 transition-all">
+                    <ListPlus size={13} /> Agregar a lista
+                  </button>
+                </div>
+
+                <AnimatePresence>
+                  {addEsperaMode && (() => {
+                    const waitlistedIds = new Set(esperaEntries.filter(e => e.estado === 'PENDIENTE' || e.estado === 'NOTIFICADO').map(e => e.clienteId))
+                    const filteredForEspera = clients
+                      .filter(c => !waitlistedIds.has(String(c.id)))
+                      .filter(c => !addEsperaClientSearch || `${c.name} ${c.lastName}`.toLowerCase().includes(addEsperaClientSearch.toLowerCase()))
+                      .slice(0, 8)
+                    return (
+                      <motion.div initial={{ opacity: 0, y: -8 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -8 }}
+                        className="rounded-xl border border-primary/20 bg-primary/5 p-3 space-y-3">
+                        <div className="relative">
+                          <Search size={13} className="absolute left-3 top-1/2 -translate-y-1/2 text-[#8A8A9A]" />
+                          <input
+                            value={addEsperaClientSearch} onChange={e => { setAddEsperaClientSearch(e.target.value); setAddEsperaClientId('') }}
+                            placeholder="Buscar cliente..."
+                            className="w-full rounded-lg border border-white/[0.08] bg-white/[0.04] pl-8 pr-3 py-2 text-sm text-gray-900 dark:text-white placeholder:text-[#8A8A9A] outline-none focus:border-primary/40"
+                          />
+                        </div>
+                        <div className="space-y-1 max-h-36 overflow-y-auto custom-scrollbar">
+                          {filteredForEspera.map(c => (
+                            <button key={c.id} type="button"
+                              onClick={() => setAddEsperaClientId(String(c.id))}
+                              className={`w-full flex items-center gap-2 px-3 py-2 rounded-lg text-left text-sm transition-all ${
+                                addEsperaClientId === String(c.id)
+                                  ? 'bg-primary/10 border border-primary/30 text-primary'
+                                  : 'hover:bg-black/5 dark:hover:bg-white/5 text-gray-900 dark:text-white'
+                              }`}>
+                              {c.name} {c.lastName}
+                            </button>
+                          ))}
+                          {filteredForEspera.length === 0 && (
+                            <p className="text-xs text-[#8A8A9A] text-center py-2">
+                              {addEsperaClientSearch ? 'Sin resultados' : 'No hay clientes disponibles'}
+                            </p>
+                          )}
+                        </div>
+                        {addEsperaClientId && (
+                          <div className="space-y-2">
+                            <div className="flex gap-2">
+                              {(['INTERNA', 'EXTERNA'] as const).map(t => (
+                                <button key={t} type="button" onClick={() => setAddEsperaTipo(t)}
+                                  className={`flex-1 rounded-lg py-1.5 text-xs font-semibold transition-all border ${
+                                    addEsperaTipo === t
+                                      ? 'bg-gray-900 dark:bg-white text-white dark:text-gray-900 border-transparent'
+                                      : 'border-gray-200 dark:border-white/[0.08] text-gray-500 dark:text-[#8A8A9A]'
+                                  }`}>{t === 'INTERNA' ? 'Interna (con membresía)' : 'Externa (sin membresía)'}</button>
+                              ))}
+                            </div>
+                            <Button size="sm" onClick={handleAddToWaitingList} isLoading={addEsperaSubmitting} className="w-full">
+                              Agregar a lista de espera
+                            </Button>
+                          </div>
+                        )}
+                      </motion.div>
+                    )
+                  })()}
+                </AnimatePresence>
+
+                {/* Sub-tabs Interna / Externa */}
+                <div className="flex gap-1.5">
+                  {(['INTERNA', 'EXTERNA'] as const).map(tipo => {
+                    const count = esperaEntries.filter(e => e.tipo === tipo).length
+                    return (
+                      <button key={tipo} onClick={() => setEsperaTipoTab(tipo)}
+                        className={`rounded-full px-4 py-1.5 text-xs font-semibold transition-all flex items-center gap-1.5 ${
+                          esperaTipoTab === tipo
+                            ? 'bg-gray-900 dark:bg-white text-white dark:text-gray-900'
+                            : 'border border-gray-200 dark:border-white/[0.08] bg-white dark:bg-white/[0.04] text-gray-500 dark:text-[#8A8A9A]'
+                        }`}
+                      >
+                        {tipo === 'INTERNA' ? 'Interna' : 'Externa'}
+                        {count > 0 && (
+                          <span className={`flex h-4 min-w-[1rem] items-center justify-center rounded-full text-[10px] font-bold px-1 ${
+                            esperaTipoTab === tipo ? 'bg-white/20 dark:bg-black/20 text-white dark:text-gray-900' : 'bg-gray-200 dark:bg-white/10 text-gray-600 dark:text-gray-300'
+                          }`}>{count}</span>
+                        )}
+                      </button>
+                    )
+                  })}
+                </div>
+
+                {esperaLoading ? (
+                  <div className="space-y-2">{[1,2,3].map(i => <div key={i} className="h-14 rounded-xl bg-black/5 dark:bg-white/[0.04] animate-pulse" />)}</div>
+                ) : esperaError ? (
+                  <div className="rounded-xl border border-red-500/20 bg-red-500/10 px-4 py-3"><p className="text-sm text-red-400">{esperaError}</p></div>
+                ) : (() => {
+                  const filtered = esperaEntries.filter(e => e.tipo === esperaTipoTab)
+                  if (filtered.length === 0) return (
+                    <div className="flex flex-col items-center justify-center py-10 text-[#8A8A9A]">
+                      <Clock size={24} className="mb-2 opacity-50" />
+                      <p className="text-sm">No hay entradas {esperaTipoTab === 'INTERNA' ? 'internas' : 'externas'}</p>
+                    </div>
+                  )
+                  const badgeStyle: Record<string, string> = {
+                    PENDIENTE: 'bg-amber-500/10 text-amber-600 dark:text-amber-400 border border-amber-500/20',
+                    NOTIFICADO:'bg-blue-500/10 text-blue-600 dark:text-blue-400 border border-blue-500/20',
+                    ACEPTADO:  'bg-green-500/10 text-green-600 dark:text-green-400 border border-green-500/20',
+                    RECHAZADO: 'bg-red-500/10 text-red-600 dark:text-red-400 border border-red-500/20',
+                  }
+                  const badgeLabel: Record<string, string> = { PENDIENTE:'Pendiente', NOTIFICADO:'Notificado', ACEPTADO:'Aceptado', RECHAZADO:'Rechazado' }
+                  return (
+                    <div className="space-y-1.5 max-h-72 overflow-y-auto custom-scrollbar pr-1">
+                      {filtered.map(entry => {
+                        const isActioning = actionLoadingIds.has(entry.id)
+                        return (
+                          <motion.div key={entry.id} initial={{ opacity: 0, y: 4 }} animate={{ opacity: 1, y: 0 }}
+                            className="flex items-center gap-3 rounded-xl border border-white/[0.08] bg-white/[0.04] px-3 py-2.5">
+                            <div className="flex-1 min-w-0">
+                              <p className="text-sm font-semibold text-gray-900 dark:text-white truncate">{entry.clienteNombre}</p>
+                              <p className="text-xs text-[#8A8A9A]">{format(new Date(entry.fechaSolicitud), "d MMM yyyy", { locale: es })}</p>
+                            </div>
+                            <span className={`shrink-0 rounded-full px-2.5 py-0.5 text-xs font-semibold ${badgeStyle[entry.estado]}`}>{badgeLabel[entry.estado]}</span>
+                            <div className="flex items-center gap-1.5 shrink-0">
+                              {entry.estado === 'PENDIENTE' && (
+                                <button disabled={isActioning} onClick={() => handleEsperaAction(entry.id, 'notificar')}
+                                  className="flex items-center gap-1 rounded-lg bg-primary/10 px-2.5 py-1.5 text-xs font-semibold text-primary hover:bg-primary/20 transition-all disabled:opacity-50">
+                                  <Bell size={11} /> Notificar
+                                </button>
+                              )}
+                              {entry.estado === 'NOTIFICADO' && (<>
+                                <button disabled={isActioning} onClick={() => handleEsperaAction(entry.id, 'aceptar')}
+                                  className="flex items-center gap-1 rounded-lg bg-green-500/10 px-2 py-1.5 text-xs font-semibold text-green-600 dark:text-green-400 hover:bg-green-500/20 transition-all disabled:opacity-50">
+                                  <Check size={11} /> Aceptó
+                                </button>
+                                <button disabled={isActioning} onClick={() => handleEsperaAction(entry.id, 'rechazar')}
+                                  className="flex items-center gap-1 rounded-lg bg-red-500/10 px-2 py-1.5 text-xs font-semibold text-red-600 dark:text-red-400 hover:bg-red-500/20 transition-all disabled:opacity-50">
+                                  <X size={11} /> Rechazó
+                                </button>
+                              </>)}
+                              {(entry.estado === 'ACEPTADO' || entry.estado === 'RECHAZADO') && (
+                                <button disabled={isActioning} onClick={() => handleEsperaAction(entry.id, 'eliminar')}
+                                  className="flex h-7 w-7 items-center justify-center rounded-lg bg-red-500/10 text-red-400 hover:bg-red-500/20 transition-all disabled:opacity-50">
+                                  <Trash2 size={12} />
+                                </button>
+                              )}
+                            </div>
+                          </motion.div>
+                        )
+                      })}
+                    </div>
+                  )
+                })()}
+              </div>
+            )}
+
           </div>
-        )}
-      </Modal>
+      )}
 
       {/* ── Create Modal ──────────────────────────────────────────────────────── */}
       <Modal isOpen={createOpen} onClose={() => { setCreateOpen(false); reset() }} title="Crear Nuevo Turno" size="2xl">
@@ -1097,34 +1754,59 @@ export default function ShiftsPage() {
           <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
             
             {/* Izquierda: Datos del turno */}
-            <div className="space-y-5">
-              <div className="grid grid-cols-2 gap-4">
-                <Select
-                  label="Sala *"
-                  options={[
-                    { value: '', label: 'Seleccionar...' },
-                    { value: 'A', label: 'Sala A' },
-                    { value: 'B', label: 'Sala B' }
-                  ]}
-                  error={errors.room?.message}
-                  {...register('room')}
-                />
-                <Select
-                  label="Día *"
-                  options={[
-                    { value: '', label: 'Seleccionar...' },
-                    ...DAYS.map(d => ({ value: d, label: DAY_LABELS[d] }))
-                  ]}
-                  error={errors.day?.message}
-                  {...register('day')}
-                />
+            <div className="space-y-4">
+
+              {/* Sala */}
+              <Select
+                label="Sala *"
+                options={[
+                  { value: '', label: 'Seleccionar...' },
+                  { value: 'A', label: 'Sala A' },
+                  { value: 'B', label: 'Sala B' }
+                ]}
+                error={errors.room?.message}
+                {...register('room')}
+              />
+
+              {/* Días de la semana — pills multi-selección */}
+              <div>
+                <label className="block text-sm font-medium text-gray-700 dark:text-gray-200 mb-2">
+                  Días de la semana *
+                </label>
+                <div className="flex flex-wrap gap-1.5">
+                  {DAYS.map(d => {
+                    const selected = formDays.includes(d)
+                    return (
+                      <button
+                        key={d}
+                        type="button"
+                        onClick={() => {
+                          if (selected) setValue('days', formDays.filter(x => x !== d), { shouldValidate: true })
+                          else setValue('days', [...formDays, d], { shouldValidate: true })
+                        }}
+                        className={`rounded-full px-3 py-1.5 text-xs font-semibold transition-all ${
+                          selected
+                            ? 'bg-primary text-white shadow-sm'
+                            : 'border border-gray-200 dark:border-white/[0.08] bg-white dark:bg-white/[0.04] text-gray-500 dark:text-[#8A8A9A] hover:border-gray-400 dark:hover:border-white/20 hover:text-gray-900 dark:hover:text-white'
+                        }`}
+                      >
+                        {DAY_LABELS[d].slice(0, 3)}
+                      </button>
+                    )
+                  })}
+                </div>
+                {(errors.days as any)?.message && (
+                  <p className="text-xs text-red-500 mt-1.5">{(errors.days as any).message}</p>
+                )}
               </div>
 
+              {/* Horario */}
               <div className="grid grid-cols-2 gap-4">
                 <Input label="Hora inicio *" type="time" error={errors.startTime?.message} {...register('startTime')} />
                 <Input label="Hora fin *"    type="time" error={errors.endTime?.message}   {...register('endTime')} />
               </div>
 
+              {/* Cupo + Profesor */}
               <div className="grid grid-cols-2 gap-4">
                 <Input label="Cupo máximo *" type="number" placeholder="Ej. 15" error={errors.capacity?.message} {...register('capacity')} />
                 <Select
@@ -1144,6 +1826,19 @@ export default function ShiftsPage() {
                   {...register('profesorId')}
                 />
               </div>
+
+              {/* Toggle recurrencia */}
+              <label className="flex items-center justify-between gap-4 p-3 rounded-xl border border-white/[0.08] bg-white/[0.04] cursor-pointer select-none">
+                <div>
+                  <p className="text-sm font-semibold text-gray-900 dark:text-white">Recurrente semanal</p>
+                  <p className="text-[11px] text-gray-500 dark:text-[#8A8A9A] mt-0.5">Se repite todas las semanas en los días seleccionados</p>
+                </div>
+                <div className="relative flex-shrink-0">
+                  <input type="checkbox" {...register('recurrente')} className="sr-only peer" />
+                  <div className={`w-10 h-5 rounded-full transition-colors ${formRecurrente ? 'bg-primary' : 'bg-gray-200 dark:bg-white/10'}`} />
+                  <div className={`absolute top-0.5 w-4 h-4 bg-white rounded-full shadow transition-transform ${formRecurrente ? 'translate-x-5' : 'translate-x-0.5'}`} />
+                </div>
+              </label>
 
               {professors.length === 0 && !profsLoading && (
                 <p className="text-xs text-amber-600 dark:text-amber-400 bg-amber-500/10 border border-amber-500/20 rounded-xl px-3 py-2">
@@ -1184,7 +1879,7 @@ export default function ShiftsPage() {
                   }
 
                   return filteredClients.map(c => {
-                    const isSelected = formClientIds.includes(c.id);
+                    const isSelected = formClientIds.includes(String(c.id));
                     const isFull = formClientIds.length >= formCapacity && !isSelected && formCapacity > 0;
                     return (
                       <label 
@@ -1202,8 +1897,8 @@ export default function ShiftsPage() {
                           disabled={isFull}
                           checked={isSelected}
                           onChange={(e) => {
-                            if (e.target.checked) setValue('clientIds', [...formClientIds, c.id], { shouldValidate: true })
-                            else setValue('clientIds', formClientIds.filter(id => id !== c.id), { shouldValidate: true })
+                            if (e.target.checked) setValue('clientIds', [...formClientIds, String(c.id)], { shouldValidate: true })
+                            else setValue('clientIds', formClientIds.filter(id => id !== String(c.id)), { shouldValidate: true })
                           }}
                           className="w-4 h-4 rounded text-primary focus:ring-primary/20 bg-white/10 border-black/20 dark:border-white/20"
                         />
@@ -1217,7 +1912,7 @@ export default function ShiftsPage() {
                             onClick={(e) => {
                               e.preventDefault();
                               e.stopPropagation();
-                              setValue('clientIds', formClientIds.filter(id => id !== c.id), { shouldValidate: true })
+                              setValue('clientIds', formClientIds.filter(id => id !== String(c.id)), { shouldValidate: true })
                             }}
                             className="ml-auto flex h-7 w-7 items-center justify-center rounded-full bg-red-500/10 text-red-500 hover:bg-red-500 hover:text-white transition-all shadow-sm"
                           >
