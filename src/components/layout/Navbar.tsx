@@ -7,25 +7,26 @@ import {
 } from 'lucide-react'
 import { useAuthStore } from '../../store/authStore'
 import { useUiStore } from '../../store/uiStore'
+import { usePermissions, type PermModule } from '../../hooks/usePermissions'
 import { ROUTES } from '../../constants/routes'
 import { useState, useRef, useLayoutEffect, useEffect } from 'react'
 
-const NAV_TABS = [
-  { label: 'Dashboard', to: ROUTES.DASHBOARD,   adminOnly: true,  icon: LayoutDashboard },
-  { label: 'Turnos',    to: ROUTES.SHIFTS,       adminOnly: false, icon: Dumbbell },
-  { label: 'Clientes',  to: ROUTES.CLIENTS,      adminOnly: false, icon: Users },
-  { label: 'Pagos',     to: ROUTES.PAYMENTS,     adminOnly: false, icon: CreditCard },
-  { label: 'Gastos',    to: ROUTES.EXPENSES,     adminOnly: true,  icon: Wallet },
-  { label: 'Ejercicios', to: ROUTES.EXERCISES,   adminOnly: false, icon: BookOpen },
-  { label: 'Usuarios',  to: ROUTES.USERS,        adminOnly: true,  icon: UserCog },
+const NAV_TABS: { label: string; to: string; module: PermModule | null; icon: React.ComponentType<{ size?: number; className?: string }> }[] = [
+  { label: 'Dashboard',  to: ROUTES.DASHBOARD, module: 'dashboard',  icon: LayoutDashboard },
+  { label: 'Turnos',     to: ROUTES.SHIFTS,    module: 'shifts',     icon: Dumbbell },
+  { label: 'Clientes',   to: ROUTES.CLIENTS,   module: 'clients',    icon: Users },
+  { label: 'Pagos',      to: ROUTES.PAYMENTS,  module: 'payments',   icon: CreditCard },
+  { label: 'Gastos',     to: ROUTES.EXPENSES,  module: 'expenses',   icon: Wallet },
+  { label: 'Ejercicios', to: ROUTES.EXERCISES, module: null,         icon: BookOpen },
+  { label: 'Usuarios',   to: ROUTES.USERS,     module: 'users',      icon: UserCog },
 ]
 
 export default function Navbar() {
   const { user, logout } = useAuthStore()
   const { openSettings } = useUiStore()
+  const { can } = usePermissions()
   const navigate = useNavigate()
   const location = useLocation()
-  const isAdmin = user?.role === 'admin'
 
   const [mobileOpen, setMobileOpen] = useState(false)
   const [isDropdownOpen, setIsDropdownOpen] = useState(false)
@@ -35,7 +36,9 @@ export default function Navbar() {
     navigate(ROUTES.LOGIN)
   }
 
-  const visibleTabs = NAV_TABS.filter((t) => !t.adminOnly || isAdmin)
+  const visibleTabs = NAV_TABS.filter(t => t.module === null || can(t.module, 'read'))
+
+  const isAdmin = user?.role === 'admin'
 
   const initials = user
     ? `${user.name.charAt(0)}${user.lastName?.charAt(0) ?? ''}`.toUpperCase()
@@ -141,7 +144,7 @@ export default function Navbar() {
                   to={tab.to}
                   className={({ isActive }) =>
                     `relative flex items-center gap-2 rounded-full px-4 py-2 sm:px-5 sm:py-2.5 text-[0.7rem] sm:text-xs font-semibold transition-colors duration-300 whitespace-nowrap outline-none ${
-                      isActive ? 'text-white' : 'text-gray-600 hover:text-gray-900'
+                      isActive ? 'text-gray-900 dark:text-white' : 'text-gray-600 hover:text-gray-900 hover:bg-black/[0.05] dark:hover:bg-white/[0.06]'
                     }`
                   }
                 >
@@ -150,7 +153,7 @@ export default function Navbar() {
                       {isActive && (
                         <motion.div
                           layoutId="active-nav-pill"
-                          className="absolute inset-0 bg-[#2A2B2A] rounded-full shadow-md"
+                          className="absolute inset-0 rounded-full bg-white/30 dark:bg-black/30 backdrop-blur-3xl border border-white/50 dark:border-white/10 shadow-[0_8px_32px_rgba(0,0,0,0.04),0_0_16px_rgba(251,198,8,0.18)] dark:shadow-[0_8px_32px_rgba(0,0,0,0.3),0_0_20px_rgba(251,198,8,0.22)]"
                           transition={{ type: 'spring', stiffness: 380, damping: 30, duration: duration.base }}
                           style={{ zIndex: -1 }}
                         />
@@ -168,13 +171,13 @@ export default function Navbar() {
                 <button
                   onClick={() => setIsDropdownOpen(!isDropdownOpen)}
                   className={`relative flex items-center gap-2 rounded-full px-4 py-2 sm:px-5 sm:py-2.5 text-[0.7rem] sm:text-xs font-semibold transition-colors duration-300 whitespace-nowrap outline-none ${
-                    isHiddenItemActive || isDropdownOpen ? 'text-white' : 'text-gray-600 hover:text-gray-900'
+                    isHiddenItemActive || isDropdownOpen ? 'text-gray-900 dark:text-white' : 'text-gray-600 hover:text-gray-900 hover:bg-black/[0.05] dark:hover:bg-white/[0.06]'
                   }`}
                 >
                   {(isHiddenItemActive || isDropdownOpen) && (
                     <motion.div
                       layoutId="active-nav-pill"
-                      className="absolute inset-0 bg-[#2A2B2A] rounded-full shadow-md"
+                      className="absolute inset-0 rounded-full bg-white/30 dark:bg-black/30 backdrop-blur-3xl border border-white/50 dark:border-white/10 shadow-[0_8px_32px_rgba(0,0,0,0.04),0_0_16px_rgba(251,198,8,0.18)] dark:shadow-[0_8px_32px_rgba(0,0,0,0.3),0_0_20px_rgba(251,198,8,0.22)]"
                       transition={{ type: 'spring', stiffness: 300, damping: 30 }}
                       style={{ zIndex: -1 }}
                     />
@@ -222,7 +225,7 @@ export default function Navbar() {
             <NavLink
               to={ROUTES.SETTINGS}
               className={({ isActive }) =>
-                `relative flex items-center justify-center h-10 w-10 rounded-full transition-colors ${isActive ? 'text-white' : 'text-gray-500 hover:text-gray-900'}`
+                `relative flex items-center justify-center h-10 w-10 rounded-full transition-colors ${isActive ? 'text-gray-900 dark:text-white' : 'text-gray-500 hover:text-gray-900 hover:bg-black/[0.05] dark:hover:bg-white/[0.06]'}`
               }
               title="Configuración"
             >
@@ -231,7 +234,7 @@ export default function Navbar() {
                   {isActive && (
                     <motion.div
                       layoutId="active-nav-pill"
-                      className="absolute inset-0 bg-[#2A2B2A] rounded-full shadow-md"
+                      className="absolute inset-0 rounded-full bg-white/30 dark:bg-black/30 backdrop-blur-3xl border border-white/50 dark:border-white/10 shadow-[0_8px_32px_rgba(0,0,0,0.04),0_0_16px_rgba(251,198,8,0.18)] dark:shadow-[0_8px_32px_rgba(0,0,0,0.3),0_0_20px_rgba(251,198,8,0.22)]"
                       transition={{ type: 'spring', stiffness: 380, damping: 30 }}
                       style={{ zIndex: 0 }}
                     />
@@ -338,7 +341,7 @@ export default function Navbar() {
                         className={({ isActive }) =>
                           `relative flex items-center gap-4 rounded-2xl px-5 py-[14px] text-[0.95rem] font-semibold transition-all duration-150 overflow-hidden ${
                             isActive
-                              ? 'bg-gray-900 dark:bg-white/[0.09] text-white'
+                              ? 'bg-white/30 dark:bg-black/30 backdrop-blur-3xl border border-white/50 dark:border-white/10 shadow-[0_8px_32px_rgba(0,0,0,0.04),0_0_16px_rgba(251,198,8,0.18)] dark:shadow-[0_8px_32px_rgba(0,0,0,0.3),0_0_20px_rgba(251,198,8,0.22)] text-gray-900 dark:text-white'
                               : 'text-gray-600 dark:text-[#8A8A9A] hover:bg-black/[0.05] dark:hover:bg-white/[0.05] hover:text-gray-900 dark:hover:text-white'
                           }`
                         }
@@ -387,7 +390,7 @@ export default function Navbar() {
                     className={({ isActive }) =>
                       `relative flex items-center gap-4 rounded-2xl px-5 py-[14px] text-[0.9rem] font-semibold transition-all duration-150 overflow-hidden ${
                         isActive
-                          ? 'bg-gray-900 dark:bg-white/[0.09] text-white'
+                          ? 'bg-white/30 dark:bg-black/30 backdrop-blur-3xl border border-white/50 dark:border-white/10 shadow-[0_8px_32px_rgba(0,0,0,0.04),0_0_16px_rgba(251,198,8,0.18)] dark:shadow-[0_8px_32px_rgba(0,0,0,0.3),0_0_20px_rgba(251,198,8,0.22)] text-gray-900 dark:text-white'
                           : 'text-gray-600 dark:text-[#8A8A9A] hover:bg-black/[0.05] dark:hover:bg-white/[0.05] hover:text-gray-900 dark:hover:text-white'
                       }`
                     }

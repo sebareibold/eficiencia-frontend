@@ -1,33 +1,45 @@
+// Gestión de Planes (/planes) — CRUD de los planes del gimnasio
 import api from './axiosInstance'
-import type { Membership, CreateMembershipDto, UpdateMembershipDto } from '../types/membership.types'
+import type { Plan, CreatePlanDto, UpdatePlanDto, TarifaVigente, Modalidad } from '../types/membership.types'
 
-function mapPlan(p: any): Membership {
+function mapTarifa(t: any): TarifaVigente {
+  return {
+    id: t.id,
+    planId: t.planId,
+    modalidad: t.modalidad as Modalidad,
+    precio: Number(t.precio),
+    vigenteDesde: t.vigenteDesde,
+  }
+}
+
+function mapPlan(p: any): Plan {
   return {
     id: p.id,
     name: p.nombre,
-    price: Number(p.precioBase),
     classesPerWeek: p.frecuenciaSemanal,
     description: p.descripcion ?? undefined,
-    createdAt: p.createdAt ?? '',
+    tarifas: Array.isArray(p.tarifas) ? p.tarifas.map(mapTarifa) : [],
+    membresiaCount: p._count?.membresias ?? 0,
   }
 }
 
 export const membershipsApi = {
-  getAll: (): Promise<Membership[]> =>
+  getAll: (): Promise<Plan[]> =>
     api.get('/planes').then((r) => (Array.isArray(r.data) ? r.data : []).map(mapPlan)),
 
-  create: (dto: CreateMembershipDto): Promise<Membership> =>
+  getById: (id: string): Promise<Plan> =>
+    api.get(`/planes/${id}`).then((r) => mapPlan(r.data)),
+
+  create: (dto: CreatePlanDto): Promise<Plan> =>
     api.post('/planes', {
       nombre: dto.name,
-      precioBase: dto.price,
       frecuenciaSemanal: dto.classesPerWeek,
       ...(dto.description !== undefined && { descripcion: dto.description }),
     }).then((r) => mapPlan(r.data)),
 
-  update: (id: string | number, dto: UpdateMembershipDto): Promise<Membership> =>
+  update: (id: string | number, dto: UpdatePlanDto): Promise<Plan> =>
     api.patch(`/planes/${id}`, {
       ...(dto.name !== undefined && { nombre: dto.name }),
-      ...(dto.price !== undefined && { precioBase: dto.price }),
       ...(dto.classesPerWeek !== undefined && { frecuenciaSemanal: dto.classesPerWeek }),
       ...(dto.description !== undefined && { descripcion: dto.description }),
     }).then((r) => mapPlan(r.data)),

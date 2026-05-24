@@ -5,21 +5,25 @@ import { pageVariants } from '../lib/motion'
 import {
   Plus, Clock, Users, RefreshCw, Dumbbell, Trash2,
   LayoutGrid, CalendarDays, ChevronLeft, ChevronRight,
-  Filter, Settings2, X, Bell, Check, Pencil, UserPlus, ListPlus, Search
+  Filter, Settings2, X, Bell, Check, Pencil, UserPlus, ListPlus, Search,
+  CalendarX, AlertOctagon,
 } from 'lucide-react'
 import { useForm } from 'react-hook-form'
 import { zodResolver } from '@hookform/resolvers/zod'
 import { z } from 'zod'
-import { addWeeks, subWeeks, startOfWeek, endOfWeek, addDays, subDays, addMonths, subMonths, startOfMonth, endOfMonth, eachDayOfInterval, format, isSameDay } from 'date-fns'
+import { addWeeks, subWeeks, startOfWeek, endOfWeek, addDays, subDays, addMonths, subMonths, startOfMonth, endOfMonth, eachDayOfInterval, format, isSameDay, parseISO } from 'date-fns'
 import { es } from 'date-fns/locale'
 import { useShifts } from '../hooks/useShifts'
 import { useClients } from '../hooks/useClients'
 import { useListaEspera } from '../hooks/useListaEspera'
 import { shiftsApi, professorsApi } from '../api/shifts.api'
+import { diasEspecialesApi } from '../api/dias-especiales.api'
+import type { DiaEspecial, TipoDiaEspecial } from '../types/dias-especiales.types'
 import { listaEsperaApi } from '../api/listaEspera.api'
 import { inscripcionesApi } from '../api/inscripciones.api'
 import { useUiStore } from '../store/uiStore'
 import { useAuthStore } from '../store/authStore'
+import { usePermissions } from '../hooks/usePermissions'
 import type { EstadoEspera, TipoEspera } from '../types/listaEspera.types'
 import type { InscripcionEntry } from '../api/inscripciones.api'
 import Button from '../components/ui/Button'
@@ -51,7 +55,7 @@ const TIMELINE_START_H  = 6
 const TIMELINE_END_H    = 22
 const PX_PER_MIN        = 1.3
 const TIMELINE_HEIGHT   = (TIMELINE_END_H - TIMELINE_START_H) * 60 * PX_PER_MIN
-const MAX_MONTH_SHIFTS  = 4   // máximo de filas compactas visibles en la vista mensual
+const MAX_MONTH_SHIFTS  = 4
 const HOURS = Array.from(
   { length: TIMELINE_END_H - TIMELINE_START_H + 1 },
   (_, i) => `${String(TIMELINE_START_H + i).padStart(2, '0')}:00`
@@ -60,42 +64,30 @@ const HOURS = Array.from(
 // ─── Schema ───────────────────────────────────────────────────────────────────
 
 const schema = z.object({
-  room:       z.string().min(1, 'La sala es requerida'),
-  days:       z.array(
+  days:            z.array(
     z.enum(['monday', 'tuesday', 'wednesday', 'thursday', 'friday', 'saturday', 'sunday'])
   ).min(1, 'Seleccioná al menos un día'),
-  recurrente: z.boolean().default(true),
-  startTime:  z.string().min(1, 'La hora de inicio es requerida'),
-  endTime:    z.string().min(1, 'La hora de fin es requerida'),
-  capacity:   z.string().min(1, 'El cupo es requerido').refine(v => Number(v) > 0, 'Cupo inválido'),
-  profesorId: z.string().min(1, 'El profesor es requerido'),
-  clientIds:  z.array(z.string()),
-}).refine(data => data.clientIds.length <= Number(data.capacity || 0), {
-  message: 'La cantidad de clientes supera el cupo',
-  path: ['clientIds']
+  recurrente:      z.boolean().default(true),
+  startTime:       z.string().min(1, 'La hora de inicio es requerida'),
+  endTime:         z.string().min(1, 'La hora de fin es requerida'),
+  cupoMaximoSalaA: z.string().min(1).refine(v => Number(v) > 0, 'Cupo inválido'),
+  cupoMaximoSalaB: z.string().min(1).refine(v => Number(v) > 0, 'Cupo inválido'),
+  profesorId:      z.string().min(1, 'El profesor es requerido'),
+  clientIds:       z.array(z.string()),
 })
-
 type FormValues = z.infer<typeof schema>
 
-// Schema para editar un turno existente (mismo que crear, sin clientIds)
-const editSchema = z.object({
-  room:       z.string().min(1, 'La sala es requerida'),
-  days:       z.array(
-    z.enum(['monday', 'tuesday', 'wednesday', 'thursday', 'friday', 'saturday', 'sunday'])
-  ).min(1, 'Seleccioná al menos un día'),
-  recurrente: z.boolean().default(true),
-  startTime:  z.string().min(1, 'La hora de inicio es requerida'),
-  endTime:    z.string().min(1, 'La hora de fin es requerida'),
-  capacity:   z.string().min(1, 'El cupo es requerido').refine(v => Number(v) > 0, 'Cupo inválido'),
-  profesorId: z.string().min(1, 'El profesor es requerido'),
-})
-type EditFormValues = z.infer<typeof editSchema>
-
-type RoomFilter  = 'all' | 'A' | 'B'
 type DayFilter   = 'all' | WeekDay
 type ShiftLayout = { shift: Shift; colIndex: number; numCols: number }
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
+
+// Parsea una fecha ISO del backend como fecha local (evita desfase UTC)
+function parseFechaLocal(fechaISO: string): Date {
+  const parte = fechaISO.split('T')[0]
+  const [y, m, d] = parte.split('-').map(Number)
+  return new Date(y, m - 1, d)
+}
 
 function getOccupancyColor(enrolled: number, capacity: number): string {
   const r = enrolled / capacity
@@ -123,11 +115,6 @@ function timeToMinutes(t: string): number {
   return h * 60 + m
 }
 
-/**
- * Asigna colIndex y numCols a cada turno usando un algoritmo greedy con union-find.
- * Turnos que se solapan forman un "cluster" y se distribuyen en columnas paralelas.
- * Turnos sin solapamiento siempre obtienen numCols=1 (ancho completo).
- */
 function computeColumnLayout(shifts: Shift[]): ShiftLayout[] {
   if (!shifts.length) return []
 
@@ -136,14 +123,12 @@ function computeColumnLayout(shifts: Shift[]): ShiftLayout[] {
   )
   const n = sorted.length
 
-  // Union-Find comprimido por camino
   const parent = Array.from({ length: n }, (_, i) => i)
   function find(x: number): number {
     while (parent[x] !== x) { parent[x] = parent[parent[x]]; x = parent[x] }
     return x
   }
 
-  // Dos turnos se solapan si A.start < B.end Y B.start < A.end
   for (let i = 0; i < n; i++) {
     for (let j = i + 1; j < n; j++) {
       const aStart = timeToMinutes(sorted[i].startTime)
@@ -157,7 +142,6 @@ function computeColumnLayout(shifts: Shift[]): ShiftLayout[] {
     }
   }
 
-  // Agrupar índices por cluster
   const clusters = new Map<number, number[]>()
   for (let i = 0; i < n; i++) {
     const root = find(i)
@@ -168,7 +152,6 @@ function computeColumnLayout(shifts: Shift[]): ShiftLayout[] {
   const result: ShiftLayout[] = new Array(n)
 
   clusters.forEach((indices) => {
-    // Asignación greedy de columnas: reutiliza la primera columna libre
     const colEnds: number[] = []
     const colOf   = new Array<number>(indices.length)
 
@@ -196,15 +179,17 @@ export default function ShiftsPage() {
   const { clients } = useClients()
   const addToast = useUiStore(s => s.addToast)
   const user     = useAuthStore(s => s.user)
-  const isAdmin  = user?.role === 'admin'
+  const { can } = usePermissions()
+  const canCreate = can('shifts', 'create')
+  const canUpdate = can('shifts', 'update')
+  const canDelete = can('shifts', 'delete')
   const navigate = useNavigate()
 
   // ── View mode
   const [viewMode, setViewMode] = useState<'grid' | 'calendar' | 'timeline'>('calendar')
 
   // ── Grid state
-  const [roomFilter, setRoomFilter] = useState<RoomFilter>('all')
-  const [dayFilter,  setDayFilter]  = useState<DayFilter>('all')
+  const [dayFilter, setDayFilter] = useState<DayFilter>('all')
 
   // ── Calendar state
   const [weekStart, setWeekStart] = useState(() => {
@@ -231,51 +216,29 @@ export default function ShiftsPage() {
   const [professors,   setProfessors]   = useState<{ id: string; name: string }[]>([])
   const [profsLoading, setProfsLoading] = useState(false)
 
-  // ── Management panel state
-  const [detailTab,        setDetailTab]        = useState<'edit' | 'inscripciones' | 'espera'>('edit')
-  const [esperaTipoTab,    setEsperaTipoTab]    = useState<'INTERNA' | 'EXTERNA'>('INTERNA')
-  const [actionLoadingIds, setActionLoadingIds] = useState<Set<string>>(new Set())
-
-  // Inscripciones tab
-  const [inscripciones,   setInscripciones]   = useState<InscripcionEntry[]>([])
-  const [loadingInscrip,  setLoadingInscrip]  = useState(false)
-  const [bajandoId,       setBajandoId]       = useState<string | null>(null)
-  const [addClientMode,   setAddClientMode]   = useState(false)
-  const [addClientSearch, setAddClientSearch] = useState('')
-  const [addClientId,     setAddClientId]     = useState('')
-  const [addClientSubmitting, setAddClientSubmitting] = useState(false)
-
-  // Lista de espera — agregar manualmente
-  const [addEsperaMode,        setAddEsperaMode]        = useState(false)
-  const [addEsperaClientSearch,setAddEsperaClientSearch] = useState('')
-  const [addEsperaClientId,    setAddEsperaClientId]    = useState('')
-  const [addEsperaTipo,        setAddEsperaTipo]        = useState<TipoEspera>('INTERNA')
-  const [addEsperaSubmitting,  setAddEsperaSubmitting]  = useState(false)
-
-  // Edit form (separate instance from create form)
-  const {
-    register: editRegister, handleSubmit: editHandleSubmit,
-    formState: { errors: editErrors }, reset: editReset,
-    watch: editWatch, setValue: editSetValue,
-  } = useForm<EditFormValues>({
-    resolver: zodResolver(editSchema),
-    defaultValues: { room: 'A', days: [], recurrente: true, startTime: '', endTime: '', capacity: '', profesorId: '' },
-  })
-  const [editSubmitting, setEditSubmitting] = useState(false)
-  const editDays       = (editWatch('days') || []) as WeekDay[]
-  const editRecurrente = editWatch('recurrente') ?? true
-
-  const { entries: esperaEntries, isLoading: esperaLoading, error: esperaError, refetch: refetchEspera } =
-    useListaEspera(detailShift ? String(detailShift.id) : null)
+  // ── Días especiales state
+  const [diasEspeciales, setDiasEspeciales]             = useState<DiaEspecial[]>([])
+  const [loadingDiasEsp, setLoadingDiasEsp]             = useState(false)
+  const [diaEspModalOpen, setDiaEspModalOpen]           = useState(false)
+  const [diaEspTipo, setDiaEspTipo]                     = useState<TipoDiaEspecial>('CIERRE_TOTAL')
+  const [diaEspFecha, setDiaEspFecha]                   = useState('')
+  const [diaEspMotivo, setDiaEspMotivo]                 = useState('')
+  const [diaEspHoraDesde, setDiaEspHoraDesde]           = useState('')
+  const [diaEspHoraHasta, setDiaEspHoraHasta]           = useState('')
+  const [savingDiaEsp, setSavingDiaEsp]                 = useState(false)
+  const [deletingDiaEspId, setDeletingDiaEspId]         = useState<string | null>(null)
+  const [editingDiaEspId, setEditingDiaEspId]           = useState<string | null>(null)
+  const [anioFiltroEsp, setAnioFiltroEsp]               = useState(() => new Date().getFullYear())
+  const [mesFiltroEsp, setMesFiltroEsp]                 = useState<number | null>(() => new Date().getMonth() + 1)
+  const [sortOrderEsp, setSortOrderEsp]                 = useState<'asc' | 'desc'>('asc')
 
   const { register, handleSubmit, formState: { errors }, reset, watch, setValue } = useForm<FormValues>({
     resolver: zodResolver(schema),
-    defaultValues: { room: 'A', days: [], recurrente: true, clientIds: [] },
+    defaultValues: { days: [], recurrente: true, clientIds: [], cupoMaximoSalaA: '', cupoMaximoSalaB: '' },
   })
 
-  const formClientIds = watch('clientIds') || []
-  const formCapacity  = Number(watch('capacity')) || 0
-  const formDays      = (watch('days') || []) as WeekDay[]
+  const formClientIds  = watch('clientIds') || []
+  const formDays       = (watch('days') || []) as WeekDay[]
   const formRecurrente = watch('recurrente') ?? true
 
   // Carga profesores reales desde la API
@@ -287,16 +250,39 @@ export default function ShiftsPage() {
       .finally(() => setProfsLoading(false))
   }, [])
 
+  // Cargar todos los días especiales una sola vez
+  useEffect(() => {
+    setLoadingDiasEsp(true)
+    diasEspecialesApi.getAll()
+      .then(setDiasEspeciales)
+      .catch(() => setDiasEspeciales([]))
+      .finally(() => setLoadingDiasEsp(false))
+  }, [])
+
+  // ── Derived: días especiales filtrados y ordenados
+  const diasEspecialesFiltrados = useMemo(() => {
+    let lista = diasEspeciales.filter(d => {
+      const fecha = parseFechaLocal(d.fecha)
+      if (fecha.getFullYear() !== anioFiltroEsp) return false
+      if (mesFiltroEsp !== null && fecha.getMonth() + 1 !== mesFiltroEsp) return false
+      return true
+    })
+    lista = [...lista].sort((a, b) => {
+      const diff = parseFechaLocal(a.fecha).getTime() - parseFechaLocal(b.fecha).getTime()
+      return sortOrderEsp === 'asc' ? diff : -diff
+    })
+    return lista
+  }, [diasEspeciales, anioFiltroEsp, mesFiltroEsp, sortOrderEsp])
+
   // ── Derived: grid
   const filtered = useMemo(() =>
     shifts.filter(s =>
-      (roomFilter === 'all' || s.room === roomFilter) &&
-      (dayFilter  === 'all' || s.days.includes(dayFilter as WeekDay))
+      dayFilter === 'all' || s.days.includes(dayFilter as WeekDay)
     ),
-    [shifts, roomFilter, dayFilter]
+    [shifts, dayFilter]
   )
 
-  // ── Derived: calendar nav limits (1day mode: ±2 days from today)
+  // ── Derived: calendar nav limits
   const todayMidnight = useMemo(() => {
     const d = new Date(); d.setHours(0, 0, 0, 0); return d
   }, [])
@@ -363,9 +349,7 @@ export default function ShiftsPage() {
         shifts.filter(s => s.days.includes(wday)).forEach(s => {
           const startH = parseInt(s.startTime.split(':')[0], 10);
           const endH = parseInt(s.endTime.split(':')[0], 10);
-          for(let h = startH; h <= endH; h++) {
-            active.add(h);
-          }
+          for(let h = startH; h <= endH; h++) { active.add(h); }
         });
       });
     }
@@ -375,26 +359,22 @@ export default function ShiftsPage() {
   const { offsets, totalHeight } = useMemo(() => {
     let currentOffset = 0;
     const offs: Record<string, number> = {};
-    
     HOURS.forEach(hStr => {
       const h = parseInt(hStr.split(':')[0], 10);
       offs[hStr] = currentOffset;
-      
       if (calendarViewMode === 'extended' || activeHourInts.has(h)) {
         currentOffset += 60 * PX_PER_MIN;
       }
     });
     return { offsets: offs, totalHeight: currentOffset };
-  }, [HOURS, calendarViewMode, activeHourInts])
+  }, [calendarViewMode, activeHourInts])
 
   const getTimeY = (timeStr: string) => {
     const h = parseInt(timeStr.split(':')[0], 10);
     const m = parseInt(timeStr.split(':')[1], 10);
-    
     const hClamped = Math.max(TIMELINE_START_H, Math.min(h, TIMELINE_END_H));
     const hourKey = `${String(hClamped).padStart(2, '0')}:00`;
     const baseY = offsets[hourKey] ?? 0;
-    
     if (calendarViewMode === 'extended' || activeHourInts.has(hClamped)) {
       return baseY + (m * PX_PER_MIN);
     } else {
@@ -411,7 +391,6 @@ export default function ShiftsPage() {
     return map
   }, [shifts])
 
-  // Layout de columnas por día: evita solapamiento visual entre turnos simultáneos
   const layoutsByDay = useMemo(() => {
     const map = {} as Record<WeekDay, ShiftLayout[]>
     ;(Object.keys(shiftsByDay) as WeekDay[]).forEach(day => {
@@ -435,9 +414,8 @@ export default function ShiftsPage() {
 
   // ── Handlers
 
-  const handleEmptySlotClick = (wday: WeekDay, timeStr: string, room: RoomFilter = 'A') => {
-    if (!isAdmin) return;
-    
+  const handleEmptySlotClick = (wday: WeekDay, timeStr: string) => {
+    if (!canCreate) return;
     let endTime = '';
     if (timeStr) {
       const [h, m] = timeStr.split(':').map(Number);
@@ -445,14 +423,13 @@ export default function ShiftsPage() {
       const endM = m.toString().padStart(2, '0');
       endTime = `${endH}:${endM}`;
     }
-
     reset({
-      room: room === 'all' ? 'A' : room,
       days: [wday],
       recurrente: true,
       startTime: timeStr,
-      endTime: endTime,
-      capacity: '',
+      endTime,
+      cupoMaximoSalaA: '',
+      cupoMaximoSalaB: '',
       profesorId: '',
       clientIds: []
     });
@@ -464,21 +441,22 @@ export default function ShiftsPage() {
     setIsSubmitting(true)
     try {
       const turno = await shiftsApi.create({
-        room: data.room, days: data.days, recurrente: data.recurrente,
-        startTime: data.startTime, endTime: data.endTime, capacity: Number(data.capacity),
+        days: data.days, recurrente: data.recurrente,
+        startTime: data.startTime, endTime: data.endTime,
+        cupoMaximoSalaA: Number(data.cupoMaximoSalaA),
+        cupoMaximoSalaB: Number(data.cupoMaximoSalaB),
         profesorId: data.profesorId,
       })
 
       if (data.clientIds.length > 0) {
-        // Promise.allSettled para que inscripciones individuales que fallen no cancelen el turno creado
         await Promise.allSettled(
-          data.clientIds.map(clientId => inscripcionesApi.enroll(clientId, String(turno.id)))
+          data.clientIds.map(clientId => inscripcionesApi.enroll(clientId, String(turno.id), 'A'))
         )
       }
 
       addToast('Turno creado exitosamente', 'success')
       setCreateOpen(false)
-      reset({ room: 'A', days: [], recurrente: true, startTime: '', endTime: '', capacity: '', profesorId: '', clientIds: [] })
+      reset({ days: [], recurrente: true, cupoMaximoSalaA: '', cupoMaximoSalaB: '', profesorId: '', clientIds: [] })
       refetch()
     } catch {
       addToast('Error al crear el turno', 'error')
@@ -501,140 +479,6 @@ export default function ShiftsPage() {
     }
   }
 
-  // Cuando se abre un turno diferente: pre-rellenar el form de edición y limpiar estados auxiliares
-  useEffect(() => {
-    if (!detailShift) return
-    editReset({
-      room:       detailShift.room,
-      days:       detailShift.days,
-      recurrente: detailShift.recurrente,
-      startTime:  detailShift.startTime,
-      endTime:    detailShift.endTime,
-      capacity:   String(detailShift.capacity),
-      profesorId: detailShift.profesorId,
-    })
-    setDetailTab('edit')
-    setEsperaTipoTab('INTERNA')
-    setAddClientMode(false); setAddClientSearch(''); setAddClientId('')
-    setAddEsperaMode(false); setAddEsperaClientSearch(''); setAddEsperaClientId('')
-    setInscripciones([])
-  }, [detailShift?.id])
-
-  // Cargar inscripciones cuando se abre la pestaña correspondiente
-  useEffect(() => {
-    if (detailTab !== 'inscripciones' || !detailShift) return
-    setLoadingInscrip(true)
-    inscripcionesApi.getByTurno(String(detailShift.id))
-      .then(setInscripciones)
-      .catch(() => addToast('Error al cargar inscripciones', 'error'))
-      .finally(() => setLoadingInscrip(false))
-  }, [detailTab, detailShift?.id])
-
-  async function handleEsperaAction(id: string, action: 'notificar' | 'aceptar' | 'rechazar' | 'eliminar') {
-    setActionLoadingIds(prev => new Set([...prev, id]))
-    try {
-      if (action === 'eliminar') {
-        await listaEsperaApi.remove(id)
-        addToast('Entrada eliminada', 'success')
-      } else {
-        const estadoMap: Record<'notificar' | 'aceptar' | 'rechazar', EstadoEspera> = {
-          notificar: 'NOTIFICADO',
-          aceptar:   'ACEPTADO',
-          rechazar:  'RECHAZADO',
-        }
-        await listaEsperaApi.updateEstado(id, estadoMap[action])
-        addToast('Estado actualizado', 'success')
-      }
-      refetchEspera()
-    } catch {
-      addToast('Error al procesar la acción', 'error')
-    } finally {
-      setActionLoadingIds(prev => { const s = new Set(prev); s.delete(id); return s })
-    }
-  }
-
-  // ── Edit submit
-  async function onEditSubmit(data: EditFormValues) {
-    if (!detailShift) return
-    setEditSubmitting(true)
-    try {
-      await shiftsApi.update(detailShift.id, {
-        room: data.room, days: data.days, recurrente: data.recurrente,
-        startTime: data.startTime, endTime: data.endTime,
-        capacity: Number(data.capacity), profesorId: data.profesorId,
-      })
-      addToast('Turno actualizado exitosamente', 'success')
-      refetch()
-      // Sincronizar el detailShift local para que otros tabs reflejen los cambios
-      setDetailShift(prev => prev ? {
-        ...prev, room: data.room, days: data.days, recurrente: data.recurrente,
-        startTime: data.startTime, endTime: data.endTime, capacity: Number(data.capacity),
-      } : null)
-    } catch {
-      addToast('Error al actualizar el turno', 'error')
-    } finally {
-      setEditSubmitting(false)
-    }
-  }
-
-  // ── Dar de baja un inscripto
-  async function handleDarDeBaja(inscripcionId: string) {
-    setBajandoId(inscripcionId)
-    try {
-      await inscripcionesApi.darDeBaja(inscripcionId)
-      addToast('Cliente dado de baja correctamente', 'success')
-      if (detailShift) {
-        inscripcionesApi.getByTurno(String(detailShift.id)).then(setInscripciones).catch(() => {})
-      }
-      refetch()
-    } catch {
-      addToast('Error al dar de baja', 'error')
-    } finally {
-      setBajandoId(null)
-    }
-  }
-
-  // ── Inscribir cliente desde el panel de gestión
-  async function handleAddToShift() {
-    if (!detailShift || !addClientId) return
-    setAddClientSubmitting(true)
-    try {
-      const res = await inscripcionesApi.enroll(addClientId, String(detailShift.id))
-      if (res.enListaEspera) {
-        addToast('Turno lleno — cliente agregado a lista de espera', 'success')
-      } else {
-        addToast('Cliente inscripto correctamente', 'success')
-      }
-      setAddClientMode(false); setAddClientSearch(''); setAddClientId('')
-      if (detailShift) {
-        inscripcionesApi.getByTurno(String(detailShift.id)).then(setInscripciones).catch(() => {})
-      }
-      refetch()
-    } catch (err: any) {
-      const msg = err?.response?.data?.message ?? 'Error al inscribir al cliente'
-      addToast(msg, 'error')
-    } finally {
-      setAddClientSubmitting(false)
-    }
-  }
-
-  // ── Agregar a lista de espera manualmente
-  async function handleAddToWaitingList() {
-    if (!detailShift || !addEsperaClientId) return
-    setAddEsperaSubmitting(true)
-    try {
-      await listaEsperaApi.create(addEsperaClientId, String(detailShift.id), addEsperaTipo)
-      addToast('Cliente agregado a la lista de espera', 'success')
-      setAddEsperaMode(false); setAddEsperaClientSearch(''); setAddEsperaClientId('')
-      refetchEspera()
-    } catch (err: any) {
-      const msg = err?.response?.data?.message ?? 'Error al agregar a lista de espera'
-      addToast(msg, 'error')
-    } finally {
-      setAddEsperaSubmitting(false)
-    }
-  }
-
   const VIEW_MODES = [
     { mode: 'calendar' as const, icon: CalendarDays, label: 'Calendario' },
     { mode: 'grid'     as const, icon: LayoutGrid,  label: 'Grilla'     },
@@ -644,11 +488,11 @@ export default function ShiftsPage() {
   // ─── Render ───────────────────────────────────────────────────────────────
 
   return (
-    <motion.div {...pageVariants} className="space-y-6">
+    <motion.div {...pageVariants} className="space-y-4 lg:space-y-6">
 
       {/* ── Header ──────────────────────────────────────────────────────────── */}
       <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
-        <h1 className="text-3xl md:text-4xl font-black tracking-tighter text-gray-900 dark:text-white drop-shadow-sm">
+        <h1 className="text-2xl lg:text-3xl xl:text-4xl font-black tracking-tighter text-gray-900 dark:text-white drop-shadow-sm">
           Turnos
         </h1>
 
@@ -677,11 +521,10 @@ export default function ShiftsPage() {
           >
             <RefreshCw size={16} />
           </button>
-          {/* Acciones principales */}
-          {isAdmin && (
+          {canCreate && (
             <button
               onClick={() => {
-                reset({ room: 'A', days: [], recurrente: true, startTime: '', endTime: '', capacity: '', profesorId: '', clientIds: [] })
+                reset({ days: [], recurrente: true, cupoMaximoSalaA: '', cupoMaximoSalaB: '', profesorId: '', clientIds: [] })
                 setClientSearch('')
                 setCreateOpen(true)
               }}
@@ -698,48 +541,22 @@ export default function ShiftsPage() {
 
       {/* ── Grid filters ────────────────────────────────────────────────────── */}
       {viewMode === 'grid' && (
-        <div className="rounded-[2rem] border border-white/50 dark:border-white/10 bg-white/30 dark:bg-black/30 backdrop-blur-3xl shadow-[0_8px_32px_rgba(0,0,0,0.04)] dark:shadow-[0_8px_32px_rgba(0,0,0,0.3)] px-6 py-4 flex flex-col sm:flex-row gap-4 sm:items-center">
-          {/* Sala */}
-          <div className="flex items-center gap-2 flex-wrap">
-            <span className="text-[11px] font-bold uppercase tracking-widest text-gray-400 dark:text-[#8A8A9A] w-8 shrink-0">Sala</span>
-            <div className="flex gap-1.5">
-              {(['all', 'A', 'B'] as const).map(r => (
-                <button
-                  key={r}
-                  onClick={() => setRoomFilter(r)}
-                  className={`rounded-full px-3.5 py-1.5 text-xs font-semibold transition-all ${
-                    roomFilter === r
-                      ? 'bg-gray-900 dark:bg-white text-white dark:text-gray-900 shadow-sm'
-                      : 'border border-gray-200 dark:border-white/[0.08] bg-white dark:bg-white/[0.04] text-gray-500 dark:text-[#8A8A9A] hover:border-gray-400 dark:hover:border-white/20 hover:text-gray-900 dark:hover:text-gray-100'
-                  }`}
-                >
-                  {r === 'all' ? 'Todas' : `Sala ${r}`}
-                </button>
-              ))}
-            </div>
-          </div>
-
-          {/* Divider */}
-          <div className="hidden sm:block w-px h-6 bg-gray-200 dark:bg-white/[0.08] shrink-0" />
-
-          {/* Día */}
-          <div className="flex items-center gap-2 flex-wrap">
-            <span className="text-[11px] font-bold uppercase tracking-widest text-gray-400 dark:text-[#8A8A9A] w-8 shrink-0">Día</span>
-            <div className="flex gap-1.5 flex-wrap">
-              {(['all', ...DAYS] as DayFilter[]).map(d => (
-                <button
-                  key={d}
-                  onClick={() => setDayFilter(d)}
-                  className={`rounded-full px-3.5 py-1.5 text-xs font-semibold transition-all ${
-                    dayFilter === d
-                      ? 'bg-gray-900 dark:bg-white text-white dark:text-gray-900 shadow-sm'
-                      : 'border border-gray-200 dark:border-white/[0.08] bg-white dark:bg-white/[0.04] text-gray-500 dark:text-[#8A8A9A] hover:border-gray-400 dark:hover:border-white/20 hover:text-gray-900 dark:hover:text-gray-100'
-                  }`}
-                >
-                  {d === 'all' ? 'Todos' : DAY_LABELS[d].slice(0, 3)}
-                </button>
-              ))}
-            </div>
+        <div className="rounded-2xl lg:rounded-[2rem] border border-white/50 dark:border-white/10 bg-white/30 dark:bg-black/30 backdrop-blur-3xl shadow-[0_8px_32px_rgba(0,0,0,0.04)] dark:shadow-[0_8px_32px_rgba(0,0,0,0.3)] px-6 py-4 flex items-center gap-4 flex-wrap">
+          <span className="text-[11px] font-bold uppercase tracking-widest text-gray-400 dark:text-[#8A8A9A] shrink-0">Día</span>
+          <div className="flex gap-1.5 flex-wrap">
+            {(['all', ...DAYS] as DayFilter[]).map(d => (
+              <button
+                key={d}
+                onClick={() => setDayFilter(d)}
+                className={`rounded-full px-3.5 py-1.5 text-xs font-semibold transition-all ${
+                  dayFilter === d
+                    ? 'bg-gray-900 dark:bg-white text-white dark:text-gray-900 shadow-sm'
+                    : 'border border-gray-200 dark:border-white/[0.08] bg-white dark:bg-white/[0.04] text-gray-500 dark:text-[#8A8A9A] hover:border-gray-400 dark:hover:border-white/20 hover:text-gray-900 dark:hover:text-gray-100'
+                }`}
+              >
+                {d === 'all' ? 'Todos' : DAY_LABELS[d].slice(0, 3)}
+              </button>
+            ))}
           </div>
         </div>
       )}
@@ -757,21 +574,20 @@ export default function ShiftsPage() {
                   ? `${format(currentDates[0] || weekStart, 'd MMM', { locale: es })} - ${format(currentDates[currentDates.length-1] || weekStart, 'd MMM', { locale: es })}`
                   : `Semana ${format(weekStart, 'd', { locale: es })} ${format(weekStart, 'MMM', { locale: es })}`}
             </h2>
-            
-            {/* Filter Overlay Wrapper */}
+
             <div className="relative">
               <button
                 onClick={() => setShowCalendarFilters(!showCalendarFilters)}
                 className={`flex items-center gap-2 rounded-xl border px-3 py-1.5 text-sm font-semibold transition-all shadow-sm ${
                   showCalendarFilters || (calendarRange === 'week' && (calendarViewMode === 'optimized' || calendarSelectedDays.length !== DAYS.length))
-                    ? 'border-gray-900 bg-gray-900 text-white dark:border-white dark:bg-white dark:text-gray-900' 
+                    ? 'border-gray-900 bg-gray-900 text-white dark:border-white dark:bg-white dark:text-gray-900'
                     : 'border-white/50 dark:border-white/10 bg-white/30 dark:bg-black/30 backdrop-blur-xl text-gray-700 dark:text-gray-200 hover:bg-white/50 dark:hover:bg-black/50'
                 }`}
               >
-                <Settings2 size={16} /> 
+                <Settings2 size={16} />
                 <span className="hidden sm:inline">Opciones</span>
               </button>
-              
+
               <AnimatePresence>
                 {showCalendarFilters && (
                   <motion.div
@@ -782,7 +598,6 @@ export default function ShiftsPage() {
                     className="absolute left-0 top-full mt-2 w-72 rounded-[1.5rem] border border-white/50 dark:border-white/10 bg-white/80 dark:bg-[#1a1a24]/80 backdrop-blur-3xl p-5 shadow-[0_20px_40px_rgba(0,0,0,0.1)] dark:shadow-[0_20px_40px_rgba(0,0,0,0.5)] z-50"
                   >
                     <div className="space-y-5">
-                      {/* Rango Temporal */}
                       <div>
                         <label className="text-xs font-bold text-gray-500 dark:text-[#8A8A9A] uppercase tracking-wider mb-2 block">
                           Rango Temporal
@@ -809,7 +624,6 @@ export default function ShiftsPage() {
                         </div>
                       </div>
 
-                      {/* Selector de Días */}
                       {calendarRange === 'week' && (
                         <div>
                           <label className="text-xs font-bold text-gray-500 dark:text-[#8A8A9A] uppercase tracking-wider mb-2 block">
@@ -821,7 +635,7 @@ export default function ShiftsPage() {
                               return (
                                 <button
                                   key={d}
-                                  onClick={() => setCalendarSelectedDays(prev => 
+                                  onClick={() => setCalendarSelectedDays(prev =>
                                     prev.includes(d) ? prev.filter(x => x !== d) : [...prev, d]
                                   )}
                                   className={`rounded-full px-3 py-1 text-xs font-semibold transition-all ${
@@ -838,7 +652,6 @@ export default function ShiftsPage() {
                         </div>
                       )}
 
-                      {/* Lógica de Visualización */}
                       {calendarRange !== 'month' && (
                         <div>
                           <label className="text-xs font-bold text-gray-500 dark:text-[#8A8A9A] uppercase tracking-wider mb-2 block">
@@ -934,7 +747,7 @@ export default function ShiftsPage() {
             isLoading ? (
               <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
                 {Array.from({ length: 6 }).map((_, i) => (
-                  <Skeleton key={i} className="h-40 rounded-2xl" />
+                  <Skeleton key={i} className="h-48 rounded-2xl" />
                 ))}
               </div>
             ) : filtered.length === 0 ? (
@@ -945,19 +758,17 @@ export default function ShiftsPage() {
             ) : (
               <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
                 {filtered.map(shift => {
-                  const pct    = Math.min((shift.enrolled / shift.capacity) * 100, 100)
-                  const isFull = shift.enrolled >= shift.capacity
+                  const pctA = Math.min((shift.inscritosA / shift.cupoMaximoSalaA) * 100, 100)
+                  const pctB = Math.min((shift.inscritosB / shift.cupoMaximoSalaB) * 100, 100)
+                  const isFullA = shift.inscritosA >= shift.cupoMaximoSalaA
+                  const isFullB = shift.inscritosB >= shift.cupoMaximoSalaB
                   return (
                     <div
                       key={shift.id}
                       onClick={() => navigate(`/shifts/${shift.id}`)}
-                      className="group relative cursor-pointer overflow-hidden rounded-[2rem] border border-white/50 dark:border-white/10 bg-white/30 dark:bg-black/30 backdrop-blur-3xl p-6 shadow-[0_8px_32px_rgba(0,0,0,0.04)] dark:shadow-[0_8px_32px_rgba(0,0,0,0.3)] transition-all duration-500 hover:-translate-y-1 hover:bg-white/50 dark:hover:bg-black/50 hover:shadow-[0_20px_40px_rgba(0,0,0,0.08)] dark:hover:shadow-[0_20px_40px_rgba(0,0,0,0.4)]"
+                      className="group relative cursor-pointer overflow-hidden rounded-2xl lg:rounded-[2rem] border border-white/50 dark:border-white/10 bg-white/30 dark:bg-black/30 backdrop-blur-3xl p-6 shadow-[0_8px_32px_rgba(0,0,0,0.04)] dark:shadow-[0_8px_32px_rgba(0,0,0,0.3)] transition-all duration-500 hover:-translate-y-1 hover:bg-white/50 dark:hover:bg-black/50 hover:shadow-[0_20px_40px_rgba(0,0,0,0.08)] dark:hover:shadow-[0_20px_40px_rgba(0,0,0,0.4)]"
                     >
-                      <div className="absolute top-4 right-4 flex items-center gap-1.5">
-                        <span className={`h-2 w-2 rounded-full ${shift.room === 'A' ? 'bg-blue-400' : 'bg-purple-400'}`} />
-                        <span className="text-xs text-[#8A8A9A]">Sala {shift.room}</span>
-                      </div>
-                      <h3 className="pr-16 font-semibold text-gray-900 dark:text-white">{shift.name}</h3>
+                      <h3 className="font-semibold text-gray-900 dark:text-white">{shift.name}</h3>
                       <p className="mt-0.5 text-xs text-gray-500 dark:text-gray-400">
                         {shift.days.map(d => DAY_LABELS[d].slice(0, 3)).join(' · ')}
                         {!shift.recurrente && <span className="ml-1 text-amber-500"> · puntual</span>}
@@ -966,23 +777,39 @@ export default function ShiftsPage() {
                         <Clock size={13} />
                         <span>{shift.startTime} – {shift.endTime}</span>
                       </div>
-                      <div className="mt-4 space-y-1.5">
-                        <div className="flex items-center justify-between text-xs">
-                          <span className="flex items-center gap-1 text-[#8A8A9A]">
-                            <Users size={12} />{shift.enrolled}/{shift.capacity}
-                          </span>
-                          <span className={isFull ? 'text-red-400' : 'text-green-400'}>
-                            {isFull ? 'Lleno' : `${shift.capacity - shift.enrolled} libre${shift.capacity - shift.enrolled !== 1 ? 's' : ''}`}
-                          </span>
+                      <div className="mt-4 space-y-2">
+                        {/* Sala A bar */}
+                        <div>
+                          <div className="flex items-center justify-between text-xs mb-1">
+                            <span className="flex items-center gap-1 text-[#8A8A9A]">
+                              <span className="h-1.5 w-1.5 rounded-full bg-blue-400" />
+                              Sala A · {shift.inscritosA}/{shift.cupoMaximoSalaA}
+                            </span>
+                            <span className={isFullA ? 'text-red-400 font-semibold' : 'text-green-400'}>
+                              {isFullA ? 'Lleno' : `${shift.cupoMaximoSalaA - shift.inscritosA} libre${shift.cupoMaximoSalaA - shift.inscritosA !== 1 ? 's' : ''}`}
+                            </span>
+                          </div>
+                          <div className="h-1.5 rounded-full bg-white/10 overflow-hidden">
+                            <div className={`h-full rounded-full transition-all ${getOccupancyColor(shift.inscritosA, shift.cupoMaximoSalaA)}`} style={{ width: `${pctA}%` }} />
+                          </div>
                         </div>
-                        <div className="h-1.5 rounded-full bg-white/10 overflow-hidden">
-                          <div
-                            className={`h-full rounded-full transition-all ${getOccupancyColor(shift.enrolled, shift.capacity)}`}
-                            style={{ width: `${pct}%` }}
-                          />
+                        {/* Sala B bar */}
+                        <div>
+                          <div className="flex items-center justify-between text-xs mb-1">
+                            <span className="flex items-center gap-1 text-[#8A8A9A]">
+                              <span className="h-1.5 w-1.5 rounded-full bg-purple-400" />
+                              Sala B · {shift.inscritosB}/{shift.cupoMaximoSalaB}
+                            </span>
+                            <span className={isFullB ? 'text-red-400 font-semibold' : 'text-green-400'}>
+                              {isFullB ? 'Lleno' : `${shift.cupoMaximoSalaB - shift.inscritosB} libre${shift.cupoMaximoSalaB - shift.inscritosB !== 1 ? 's' : ''}`}
+                            </span>
+                          </div>
+                          <div className="h-1.5 rounded-full bg-white/10 overflow-hidden">
+                            <div className={`h-full rounded-full transition-all ${getOccupancyColor(shift.inscritosB, shift.cupoMaximoSalaB)}`} style={{ width: `${pctB}%` }} />
+                          </div>
                         </div>
                       </div>
-                      {isAdmin && (
+                      {canDelete && (
                         <div className="absolute bottom-4 right-4 flex gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
                           <button
                             onClick={e => { e.stopPropagation(); deleteShift(shift.id) }}
@@ -1001,16 +828,16 @@ export default function ShiftsPage() {
 
           {/* ════════════════ CALENDAR VIEW ════════════════ */}
           {viewMode === 'calendar' && (
-            <div className="rounded-[2rem] border border-gray-200 dark:border-white/[0.06] bg-white/30 dark:bg-black/30 backdrop-blur-3xl shadow-[0_8px_32px_rgba(0,0,0,0.04)] dark:shadow-[0_8px_32px_rgba(0,0,0,0.3)] overflow-hidden flex flex-col">
-              
+            <div className="rounded-2xl lg:rounded-[2rem] border border-gray-200 dark:border-white/[0.06] bg-white/30 dark:bg-black/30 backdrop-blur-3xl shadow-[0_8px_32px_rgba(0,0,0,0.04)] dark:shadow-[0_8px_32px_rgba(0,0,0,0.3)] overflow-hidden flex flex-col">
+
               {isLoading ? (
-                <div className="p-8 space-y-4">
+                <div className="p-4 lg:p-6 xl:p-8 space-y-3 lg:space-y-4">
                   {Array.from({ length: 4 }).map((_, i) => <Skeleton key={i} className="h-20 rounded-xl w-full" />)}
                 </div>
               ) : calendarRange === 'month' ? (
                 /* ── Month Grid View ── */
                 <div className="overflow-x-auto">
-                <div className="flex flex-col flex-1 min-h-[600px] min-w-[560px] bg-white/20 dark:bg-black/20">
+                <div className="flex flex-col flex-1 min-h-[360px] lg:min-h-[480px] xl:min-h-[600px] min-w-[560px] bg-white/20 dark:bg-black/20">
                   <div className="grid grid-cols-7 border-b border-gray-200 dark:border-white/[0.06] bg-white/50 dark:bg-black/20 sticky top-0 z-20">
                     {['Lunes', 'Martes', 'Miércoles', 'Jueves', 'Viernes', 'Sábado', 'Domingo'].map(d => (
                       <div key={d} className="py-3 text-center border-r last:border-r-0 border-gray-200 dark:border-white/[0.06]">
@@ -1024,45 +851,72 @@ export default function ShiftsPage() {
                       const dayShifts = wday ? shiftsByDay[wday] ?? [] : [];
                       const isCurrentMonth = date.getMonth() === weekStart.getMonth();
                       const isToday = isSameDay(date, new Date());
-                      
+                      const diaEsp = diasEspeciales.find(d => isSameDay(parseFechaLocal(d.fecha), date))
+
                       return (
-                        <div 
-                          key={i} 
-                          onClick={() => {
-                            if (wday && isAdmin) handleEmptySlotClick(wday, '08:00');
-                          }}
-                          className={`border-b border-r border-gray-200 dark:border-white/[0.06] p-1.5 sm:p-2 flex flex-col min-h-[120px] transition-colors ${isAdmin ? 'cursor-pointer hover:bg-black/5 dark:hover:bg-white/5' : ''}
+                        <div
+                          key={i}
+                          onClick={() => { if (wday && canCreate && !diaEsp) handleEmptySlotClick(wday, '08:00'); }}
+                          className={`relative border-b border-r border-gray-200 dark:border-white/[0.06] p-1.5 sm:p-2 flex flex-col min-h-[72px] lg:min-h-[96px] xl:min-h-[120px] transition-colors
+                            ${!diaEsp && canCreate ? 'cursor-pointer hover:bg-black/5 dark:hover:bg-white/5' : ''}
                             ${!isCurrentMonth ? 'bg-gray-50/50 dark:bg-black/40 opacity-60' : 'bg-transparent'}
-                            ${isToday ? 'bg-primary/[0.03]' : ''}
+                            ${isToday && !diaEsp ? 'bg-primary/[0.03]' : ''}
+                            ${diaEsp?.tipo === 'CIERRE_TOTAL' ? 'bg-red-500/[0.06] dark:bg-red-500/[0.10]' : ''}
+                            ${diaEsp?.tipo === 'HORARIO_REDUCIDO' ? 'bg-amber-500/[0.04] dark:bg-amber-500/[0.08]' : ''}
                           `}
                         >
-                          <div className="flex justify-end mb-1 sm:mb-2 pointer-events-none">
-                            <span className={`flex items-center justify-center h-6 w-6 text-xs font-bold rounded-full ${isToday ? 'bg-primary text-white' : 'text-gray-600 dark:text-[#8A8A9A]'}`}>
+                          {/* Header: número de día + badge */}
+                          <div className="flex items-start justify-between mb-1 sm:mb-1.5">
+                            <span className={`flex items-center justify-center h-6 w-6 text-xs font-bold rounded-full ${isToday && !diaEsp ? 'bg-primary text-white' : diaEsp?.tipo === 'CIERRE_TOTAL' ? 'text-red-500 dark:text-red-400' : diaEsp ? 'text-amber-600 dark:text-amber-400' : 'text-gray-600 dark:text-[#8A8A9A]'}`}>
                               {date.getDate()}
                             </span>
+                            {diaEsp && (
+                              <span className={`flex items-center gap-0.5 rounded-md px-1 py-0.5 text-[8px] font-bold leading-none ${diaEsp.tipo === 'CIERRE_TOTAL' ? 'bg-red-500 text-white' : 'bg-amber-400 text-black'}`}>
+                                <CalendarX size={7} className="shrink-0" />
+                                {diaEsp.tipo === 'CIERRE_TOTAL' ? 'Cerrado' : 'Reducido'}
+                              </span>
+                            )}
                           </div>
-                          {/* Lista compacta — sin overflow, con fade si hay más de MAX_MONTH_SHIFTS */}
-                          <div
-                            className="flex-1 overflow-hidden min-h-0"
-                            style={dayShifts.length > MAX_MONTH_SHIFTS ? {
-                              maskImage:         'linear-gradient(to bottom, black 60%, transparent 100%)',
-                              WebkitMaskImage:   'linear-gradient(to bottom, black 60%, transparent 100%)',
-                            } : undefined}
-                          >
-                            <div className="space-y-px">
+
+                          {/* Turnos (blurred si hay día especial) */}
+                          <div className={`flex-1 overflow-hidden min-h-0 relative ${diaEsp ? 'pointer-events-none' : ''}`}>
+                            <div
+                              className={`space-y-px transition-all ${diaEsp ? 'blur-[2px] opacity-40' : ''}`}
+                              style={dayShifts.length > MAX_MONTH_SHIFTS ? {
+                                maskImage: 'linear-gradient(to bottom, black 60%, transparent 100%)',
+                                WebkitMaskImage: 'linear-gradient(to bottom, black 60%, transparent 100%)',
+                              } : undefined}
+                            >
                               {dayShifts.slice(0, MAX_MONTH_SHIFTS).map(shift => (
                                 <button
                                   key={shift.id}
-                                  onClick={(e) => { e.stopPropagation(); navigate(`/shifts/${shift.id}`); }}
-                                  className="w-full flex items-center gap-1.5 px-1 py-[3px] rounded text-left transition-colors hover:bg-black/5 dark:hover:bg-white/5"
+                                  onClick={(e) => { e.stopPropagation(); if (!diaEsp) navigate(`/shifts/${shift.id}`); }}
+                                  className="w-full flex items-center gap-1.5 px-1 py-[3px] rounded text-left"
+                                  tabIndex={diaEsp ? -1 : 0}
                                 >
-                                  <span className={`h-1.5 w-1.5 flex-shrink-0 rounded-full ${shift.room === 'A' ? 'bg-blue-400' : 'bg-purple-400'}`} />
+                                  <span className={`h-1.5 w-1.5 flex-shrink-0 rounded-full ${getOccupancyDot(shift.enrolled, shift.capacity)}`} />
                                   <span className="text-[9px] font-bold text-gray-500 dark:text-[#8A8A9A] flex-shrink-0 tabular-nums leading-none">{shift.startTime}</span>
                                   <span className="text-[9px] font-medium text-gray-700 dark:text-gray-200 truncate flex-1 leading-none">{shift.name}</span>
-                                  <span className={`h-1.5 w-1.5 flex-shrink-0 rounded-full ${getOccupancyDot(shift.enrolled, shift.capacity)}`} />
                                 </button>
                               ))}
                             </div>
+
+                            {/* Overlay bloqueante sobre los turnos */}
+                            {diaEsp && (
+                              <div className={`absolute inset-0 flex flex-col items-center justify-center gap-0.5 rounded-lg ${diaEsp.tipo === 'CIERRE_TOTAL' ? 'bg-red-500/10 border border-red-500/20' : 'bg-amber-500/10 border border-amber-400/20'}`}>
+                                <CalendarX size={12} className={diaEsp.tipo === 'CIERRE_TOTAL' ? 'text-red-400' : 'text-amber-400'} />
+                                {diaEsp.tipo === 'CIERRE_TOTAL' && (
+                                  <p className="text-[7px] font-bold text-red-400 text-center leading-tight px-0.5">
+                                    {diaEsp.motivo ?? 'Sin clases'}
+                                  </p>
+                                )}
+                                {diaEsp.tipo === 'HORARIO_REDUCIDO' && diaEsp.horaDesde && (
+                                  <p className="text-[7px] font-bold text-amber-400 text-center leading-tight">
+                                    {diaEsp.horaDesde}–{diaEsp.horaHasta}
+                                  </p>
+                                )}
+                              </div>
+                            )}
                           </div>
                         </div>
                       )
@@ -1079,7 +933,7 @@ export default function ShiftsPage() {
                 <div className="flex flex-1 overflow-hidden">
                   {/* Y-axis Left Column */}
                   <div className="w-16 flex-shrink-0 border-r border-gray-200 dark:border-white/[0.06] bg-white/50 dark:bg-black/20 z-10">
-                    <div className="h-14 border-b border-gray-200 dark:border-white/[0.06]" /> {/* Header spacer */}
+                    <div className="h-14 border-b border-gray-200 dark:border-white/[0.06]" />
                     <div className="relative" style={{ height: totalHeight }}>
                       {HOURS.map((hStr) => {
                         const h = parseInt(hStr.split(':')[0], 10)
@@ -1093,23 +947,38 @@ export default function ShiftsPage() {
                       })}
                     </div>
                   </div>
-                  
+
                   {/* X-axis Days & Grid */}
                   <div className="flex-1 overflow-x-auto relative flex flex-col custom-scrollbar">
                     {/* Day Headers */}
                     <div className="flex border-b border-gray-200 dark:border-white/[0.06] sticky top-0 bg-white/80 dark:bg-[#1a1a24]/80 backdrop-blur-xl z-20">
                       {visibleDates.map((date, i) => {
                         const isToday = isSameDay(date, new Date())
+                        const diaEsp = diasEspeciales.find(d => isSameDay(parseFechaLocal(d.fecha), date))
                         return (
-                          <div key={i} className={`flex-1 min-w-[140px] p-3 text-center border-r last:border-r-0 border-gray-200 dark:border-white/[0.06] ${isToday ? 'bg-primary/5' : ''}`}>
-                            <p className={`text-xs font-bold capitalize ${isToday ? 'text-primary' : 'text-gray-500 dark:text-[#8A8A9A]'}`}>
+                          <div key={i} className={`relative flex-1 min-w-[140px] min-h-[56px] px-3 py-2 flex flex-col items-center justify-center gap-1 text-center border-r last:border-r-0 border-gray-200 dark:border-white/[0.06] ${isToday ? 'bg-primary/5' : ''} ${diaEsp?.tipo === 'CIERRE_TOTAL' ? 'bg-red-500/8 dark:bg-red-500/10' : diaEsp ? 'bg-amber-500/5' : ''}`}>
+                            {diaEsp?.tipo === 'CIERRE_TOTAL' && (
+                              <div className="absolute inset-x-0 bottom-0 h-0.5 bg-red-500" />
+                            )}
+                            {diaEsp?.tipo === 'HORARIO_REDUCIDO' && (
+                              <div className="absolute inset-x-0 bottom-0 h-0.5 bg-amber-400" />
+                            )}
+                            <p className={`text-xs font-bold capitalize ${isToday ? 'text-primary' : diaEsp ? (diaEsp.tipo === 'CIERRE_TOTAL' ? 'text-red-500 dark:text-red-400' : 'text-amber-600 dark:text-amber-400') : 'text-gray-500 dark:text-[#8A8A9A]'}`}>
                               {format(date, 'EEEE d', { locale: es })}
                             </p>
+                            {diaEsp ? (
+                              <span className={`inline-flex items-center gap-0.5 rounded-md px-1.5 py-0.5 text-[9px] font-bold ${diaEsp.tipo === 'CIERRE_TOTAL' ? 'bg-red-500 text-white' : 'bg-amber-400 text-black'}`}>
+                                <CalendarX size={8} className="shrink-0" />
+                                {diaEsp.tipo === 'CIERRE_TOTAL' ? (diaEsp.motivo ?? 'Sin clases') : (diaEsp.horaDesde ? `${diaEsp.horaDesde}–${diaEsp.horaHasta}` : 'Reducido')}
+                              </span>
+                            ) : (
+                              <span className="h-[18px]" />
+                            )}
                           </div>
                         )
                       })}
                     </div>
-                    
+
                     {/* Grid Content */}
                     <div className="flex relative bg-white/20 dark:bg-black/20" style={{ height: totalHeight, minHeight: '400px' }}>
                       {/* Horizontal grid lines */}
@@ -1125,13 +994,13 @@ export default function ShiftsPage() {
                       {/* Day Columns */}
                       {visibleDates.map((date, i) => {
                         const wday = JS_TO_WEEKDAY[date.getDay()]
-                        const dayShifts = wday ? shiftsByDay[wday] ?? [] : []
                         const isToday = isSameDay(date, new Date())
-                        
+                        const diaEspCol = diasEspeciales.find(d => isSameDay(parseFechaLocal(d.fecha), date))
+
                         return (
-                          <div key={i} className={`flex-1 min-w-[140px] relative border-r last:border-r-0 border-gray-200 dark:border-white/[0.06] ${isToday ? 'bg-primary/[0.02]' : ''}`}>
-                            {/* Empty clickable slots */}
-                            {isAdmin && wday && HOURS.map((hStr) => {
+                          <div key={i} className={`flex-1 min-w-[140px] relative border-r last:border-r-0 border-gray-200 dark:border-white/[0.06] ${isToday && !diaEspCol ? 'bg-primary/[0.02]' : ''} ${diaEspCol?.tipo === 'CIERRE_TOTAL' ? 'bg-red-500/[0.04] dark:bg-red-500/[0.07]' : diaEspCol ? 'bg-amber-500/[0.03] dark:bg-amber-500/[0.05]' : ''}`}>
+                            {/* Empty clickable slots — deshabilitados si hay día especial */}
+                            {canCreate && wday && !diaEspCol && HOURS.map((hStr) => {
                               const h = parseInt(hStr.split(':')[0], 10);
                               if (calendarViewMode === 'optimized' && !activeHourInts.has(h)) return null;
                               const top = offsets[hStr];
@@ -1146,51 +1015,102 @@ export default function ShiftsPage() {
                             })}
 
                             {(wday ? layoutsByDay[wday] : []).map(({ shift, colIndex, numCols }) => {
-                              const marginY      = 6
+                              const marginY = 6
                               const top    = getTimeY(shift.startTime) + marginY
                               const bottom = getTimeY(shift.endTime) - marginY
                               const height = Math.max(42, bottom - top)
                               const isFull = shift.enrolled >= shift.capacity
 
-                              const marginX      = 8
-                              const gutter       = 4
-                              const leftPercent  = (colIndex / numCols) * 100
-                              const leftPx       = marginX + colIndex * ((-marginX * 2 + gutter) / numCols)
+                              const marginX     = 8
+                              const gutter      = 4
+                              const leftPercent = (colIndex / numCols) * 100
+                              const leftPx      = marginX + colIndex * ((-marginX * 2 + gutter) / numCols)
                               const widthPercent = (1 / numCols) * 100
-                              const widthPx      = ((-marginX * 2 + gutter) / numCols) - gutter
+                              const widthPx     = ((-marginX * 2 + gutter) / numCols) - gutter
+
+                              const isBlocked = diaEspCol?.tipo === 'CIERRE_TOTAL' || (
+                                diaEspCol?.tipo === 'HORARIO_REDUCIDO' &&
+                                !!diaEspCol.horaDesde && !!diaEspCol.horaHasta &&
+                                (shift.endTime <= diaEspCol.horaDesde || shift.startTime >= diaEspCol.horaHasta)
+                              )
 
                               return (
                                 <button
                                   key={shift.id}
-                                  onClick={(e) => { e.stopPropagation(); navigate(`/shifts/${shift.id}`); }}
+                                  onClick={(e) => { e.stopPropagation(); if (!isBlocked) navigate(`/shifts/${shift.id}`); }}
+                                  tabIndex={isBlocked ? -1 : 0}
                                   style={{
                                     top,
                                     height,
                                     left:  `calc(${leftPercent}% + ${leftPx}px)`,
                                     width: `calc(${widthPercent}% + ${widthPx}px)`,
                                   }}
-                                  className={`absolute rounded-xl border p-2 text-left overflow-hidden transition-all hover:z-10 hover:shadow-md ${getOccupancyStyle(shift.enrolled, shift.capacity)}`}
+                                  className={`absolute rounded-xl border p-2 text-left overflow-hidden transition-all ${!isBlocked ? 'hover:z-10 hover:shadow-md' : 'blur-[1.5px] opacity-40 pointer-events-none'} ${getOccupancyStyle(shift.enrolled, shift.capacity)}`}
                                 >
-                                  <div className="flex items-start justify-between gap-1 mb-1">
-                                    <p className="text-[11px] font-bold text-gray-900 dark:text-white leading-tight truncate">
-                                      {shift.name}
+                                  <p className="text-[11px] font-bold text-gray-900 dark:text-white leading-tight truncate">
+                                    {shift.startTime} – {shift.endTime}
+                                  </p>
+                                  {shift.profesorNombre && (
+                                    <p className="text-[10px] text-gray-500 dark:text-[#8A8A9A] truncate leading-tight mt-0.5">
+                                      {shift.profesorNombre}
                                     </p>
-                                    <span className={`flex-shrink-0 h-1.5 w-1.5 mt-1 rounded-full ${shift.room === 'A' ? 'bg-blue-400' : 'bg-purple-400'}`} />
-                                  </div>
-                                  <div className="flex items-center gap-1 text-[10px] text-gray-600 dark:text-[#8A8A9A] mb-0.5">
-                                    <Clock size={10} /><span>{shift.startTime} – {shift.endTime}</span>
-                                  </div>
-                                  <div className="flex items-center justify-between text-[10px]">
-                                    <span className="flex items-center gap-1 text-gray-600 dark:text-[#8A8A9A]">
-                                      <Users size={10} /> {shift.enrolled}/{shift.capacity}
-                                    </span>
-                                    <span className={`font-semibold ${isFull ? 'text-red-500 dark:text-red-400' : 'text-green-600 dark:text-green-400'}`}>
-                                      {isFull ? 'Lleno' : 'Libre'}
-                                    </span>
-                                  </div>
+                                  )}
+                                  <p className="text-[10px] font-semibold leading-tight mt-1">
+                                    <span className="text-blue-500 dark:text-blue-400">A: {shift.inscritosA}/{shift.cupoMaximoSalaA}</span>
+                                    <span className="text-gray-400 mx-1">·</span>
+                                    <span className="text-purple-500 dark:text-purple-400">B: {shift.inscritosB}/{shift.cupoMaximoSalaB}</span>
+                                  </p>
                                 </button>
                               )
                             })}
+
+                            {/* Overlay cierre total — cubre toda la columna */}
+                            {diaEspCol?.tipo === 'CIERRE_TOTAL' && (
+                              <div className="absolute inset-0 pointer-events-none flex flex-col items-center justify-center gap-2 z-10 bg-red-500/[0.08] dark:bg-red-500/[0.12]">
+                                <div className="flex flex-col items-center gap-1 px-3 py-2 rounded-2xl backdrop-blur-md bg-red-500/20 border border-red-500/30">
+                                  <CalendarX size={18} className="text-red-400" />
+                                  <p className="text-[10px] font-bold text-center leading-snug text-red-400">
+                                    {diaEspCol.motivo ?? 'Sin clases'}
+                                  </p>
+                                </div>
+                              </div>
+                            )}
+
+                            {/* Overlay horario reducido — solo franjas fuera del horario activo */}
+                            {diaEspCol?.tipo === 'HORARIO_REDUCIDO' && diaEspCol.horaDesde && diaEspCol.horaHasta && (() => {
+                              const yDesde = getTimeY(diaEspCol.horaDesde)
+                              const yHasta = getTimeY(diaEspCol.horaHasta)
+                              return (
+                                <>
+                                  {/* Franja antes del horario reducido */}
+                                  {yDesde > 0 && (
+                                    <div
+                                      className="absolute left-0 right-0 z-10 bg-amber-500/[0.10] dark:bg-amber-500/[0.14] border-r-2 border-amber-400/50"
+                                      style={{ top: 0, height: yDesde }}
+                                    >
+                                      <div className="flex items-center justify-center h-full pointer-events-none">
+                                        <span className="text-[9px] font-bold text-amber-500 dark:text-amber-400 bg-amber-500/10 px-1.5 py-0.5 rounded-md">
+                                          Sin clases
+                                        </span>
+                                      </div>
+                                    </div>
+                                  )}
+                                  {/* Franja después del horario reducido */}
+                                  {yHasta < totalHeight && (
+                                    <div
+                                      className="absolute left-0 right-0 z-10 bg-amber-500/[0.10] dark:bg-amber-500/[0.14] border-r-2 border-amber-400/50"
+                                      style={{ top: yHasta, height: totalHeight - yHasta }}
+                                    >
+                                      <div className="flex items-center justify-center h-full pointer-events-none">
+                                        <span className="text-[9px] font-bold text-amber-500 dark:text-amber-400 bg-amber-500/10 px-1.5 py-0.5 rounded-md">
+                                          Sin clases
+                                        </span>
+                                      </div>
+                                    </div>
+                                  )}
+                                </>
+                              )
+                            })()}
                           </div>
                         )
                       })}
@@ -1238,9 +1158,7 @@ export default function ShiftsPage() {
                   <p className="text-sm">No hay turnos para {DAY_LABELS[timelineDay]}</p>
                 </div>
               ) : (
-                <div
-                  className="rounded-[2rem] border border-white/50 dark:border-white/10 bg-white/30 dark:bg-black/30 backdrop-blur-3xl shadow-[0_8px_32px_rgba(0,0,0,0.04)] dark:shadow-[0_8px_32px_rgba(0,0,0,0.3)] overflow-hidden"
-                >
+                <div className="rounded-2xl lg:rounded-[2rem] border border-white/50 dark:border-white/10 bg-white/30 dark:bg-black/30 backdrop-blur-3xl shadow-[0_8px_32px_rgba(0,0,0,0.04)] dark:shadow-[0_8px_32px_rgba(0,0,0,0.3)] overflow-hidden">
                   {/* Room header */}
                   <div className="grid border-b border-white/[0.08]" style={{ gridTemplateColumns: '56px 1fr 1fr' }}>
                     <div className="py-3 border-r border-white/[0.06]" />
@@ -1274,66 +1192,66 @@ export default function ShiftsPage() {
                       ))}
                     </div>
 
-                    {/* Sala A */}
+                    {/* Sala A — ALL shifts with per-sala A occupancy */}
                     <div className="border-r border-white/[0.06] relative">
                       {HOURS.map((h, i) => (
                         <div
                           key={h}
-                          onClick={() => handleEmptySlotClick(timelineDay, h, 'A')}
-                          className={`absolute left-0 right-0 border-t border-white/[0.04] ${isAdmin ? 'cursor-pointer hover:bg-black/5 dark:hover:bg-white/5' : ''}`}
+                          onClick={() => handleEmptySlotClick(timelineDay, h)}
+                          className={`absolute left-0 right-0 border-t border-white/[0.04] ${canCreate ? 'cursor-pointer hover:bg-black/5 dark:hover:bg-white/5' : ''}`}
                           style={{ top: i * 60 * PX_PER_MIN, height: 60 * PX_PER_MIN }}
                         />
                       ))}
-                      {timelineShifts.filter(s => s.room === 'A').map(shift => {
+                      {timelineShifts.map(shift => {
                         const marginY = 6
                         const top    = (timeToMinutes(shift.startTime) - TIMELINE_START_H * 60) * PX_PER_MIN + marginY
                         const height = Math.max(32, (timeToMinutes(shift.endTime) - timeToMinutes(shift.startTime)) * PX_PER_MIN - marginY * 2)
-                        const pct    = Math.min((shift.enrolled / shift.capacity) * 100, 100)
+                        const pct    = Math.min((shift.inscritosA / shift.cupoMaximoSalaA) * 100, 100)
                         return (
                           <button
                             key={shift.id}
                             onClick={(e) => { e.stopPropagation(); navigate(`/shifts/${shift.id}`); }}
-                            className={`absolute inset-x-2 rounded-lg border px-2 py-1 text-left overflow-hidden transition-all hover:brightness-110 z-10 ${getOccupancyStyle(shift.enrolled, shift.capacity)}`}
+                            className={`absolute inset-x-2 rounded-lg border px-2 py-1 text-left overflow-hidden transition-all hover:brightness-110 z-10 ${getOccupancyStyle(shift.inscritosA, shift.cupoMaximoSalaA)}`}
                             style={{ top, height }}
                           >
-                            <p className="text-[11px] font-semibold text-white truncate leading-tight">{shift.name}</p>
+                            <p className="text-[11px] font-semibold text-gray-900 dark:text-white truncate leading-tight">{shift.name}</p>
                             <p className="text-[10px] text-[#8A8A9A] leading-tight">{shift.startTime}–{shift.endTime}</p>
-                            <p className="text-[10px] text-[#8A8A9A] leading-tight">{shift.enrolled}/{shift.capacity}</p>
+                            <p className="text-[10px] text-[#8A8A9A] leading-tight">{shift.inscritosA}/{shift.cupoMaximoSalaA}</p>
                             <div className="absolute bottom-0 left-0 right-0 h-0.5 bg-white/10 overflow-hidden">
-                              <div className={`h-full ${getOccupancyColor(shift.enrolled, shift.capacity)}`} style={{ width: `${pct}%` }} />
+                              <div className={`h-full ${getOccupancyColor(shift.inscritosA, shift.cupoMaximoSalaA)}`} style={{ width: `${pct}%` }} />
                             </div>
                           </button>
                         )
                       })}
                     </div>
 
-                    {/* Sala B */}
+                    {/* Sala B — ALL shifts with per-sala B occupancy */}
                     <div className="relative">
                       {HOURS.map((h, i) => (
                         <div
                           key={h}
-                          onClick={() => handleEmptySlotClick(timelineDay, h, 'B')}
-                          className={`absolute left-0 right-0 border-t border-white/[0.04] ${isAdmin ? 'cursor-pointer hover:bg-black/5 dark:hover:bg-white/5' : ''}`}
+                          onClick={() => handleEmptySlotClick(timelineDay, h)}
+                          className={`absolute left-0 right-0 border-t border-white/[0.04] ${canCreate ? 'cursor-pointer hover:bg-black/5 dark:hover:bg-white/5' : ''}`}
                           style={{ top: i * 60 * PX_PER_MIN, height: 60 * PX_PER_MIN }}
                         />
                       ))}
-                      {timelineShifts.filter(s => s.room === 'B').map(shift => {
+                      {timelineShifts.map(shift => {
                         const marginY = 6
                         const top    = (timeToMinutes(shift.startTime) - TIMELINE_START_H * 60) * PX_PER_MIN + marginY
                         const height = Math.max(32, (timeToMinutes(shift.endTime) - timeToMinutes(shift.startTime)) * PX_PER_MIN - marginY * 2)
-                        const pct    = Math.min((shift.enrolled / shift.capacity) * 100, 100)
+                        const pct    = Math.min((shift.inscritosB / shift.cupoMaximoSalaB) * 100, 100)
                         return (
                           <button
                             key={shift.id}
                             onClick={(e) => { e.stopPropagation(); navigate(`/shifts/${shift.id}`); }}
-                            className={`absolute inset-x-2 rounded-lg border px-2 py-1 text-left overflow-hidden transition-all hover:brightness-110 z-10 ${getOccupancyStyle(shift.enrolled, shift.capacity)}`}
+                            className={`absolute inset-x-2 rounded-lg border px-2 py-1 text-left overflow-hidden transition-all hover:brightness-110 z-10 ${getOccupancyStyle(shift.inscritosB, shift.cupoMaximoSalaB)}`}
                             style={{ top, height }}
                           >
-                            <p className="text-[11px] font-semibold text-white truncate leading-tight">{shift.name}</p>
+                            <p className="text-[11px] font-semibold text-gray-900 dark:text-white truncate leading-tight">{shift.name}</p>
                             <p className="text-[10px] text-[#8A8A9A] leading-tight">{shift.startTime}–{shift.endTime}</p>
-                            <p className="text-[10px] text-[#8A8A9A] leading-tight">{shift.enrolled}/{shift.capacity}</p>
+                            <p className="text-[10px] text-[#8A8A9A] leading-tight">{shift.inscritosB}/{shift.cupoMaximoSalaB}</p>
                             <div className="absolute bottom-0 left-0 right-0 h-0.5 bg-white/10 overflow-hidden">
-                              <div className={`h-full ${getOccupancyColor(shift.enrolled, shift.capacity)}`} style={{ width: `${pct}%` }} />
+                              <div className={`h-full ${getOccupancyColor(shift.inscritosB, shift.cupoMaximoSalaB)}`} style={{ width: `${pct}%` }} />
                             </div>
                           </button>
                         )
@@ -1360,415 +1278,291 @@ export default function ShiftsPage() {
         </motion.div>
       </AnimatePresence>
 
-      {/* ── Management Panel Modal (migrado a ShiftDetailPage) ─────────────── */}
-      {false && (
-          <div className="space-y-4">
+      {/* ══════════════════════════════════════════════════════════════════════
+           SECCIÓN: Días sin Clases
+      ══════════════════════════════════════════════════════════════════════ */}
+      <div className="mt-4 space-y-4">
 
-            {/* ── 3 Tabs ── */}
-            <div className="flex gap-1 rounded-xl bg-black/5 dark:bg-white/5 p-1">
-              {([
-                { id: 'edit'          as const, label: 'Editar',         icon: Pencil   },
-                { id: 'inscripciones' as const, label: 'Inscripciones',  icon: Users    },
-                { id: 'espera'        as const, label: 'Lista de espera', icon: ListPlus },
-              ] as const).map(({ id, label, icon: Icon }) => {
-                const badge = id === 'inscripciones' ? detailShift.enrolled
-                            : id === 'espera'        ? esperaEntries.filter(e => e.estado === 'PENDIENTE').length
-                            : 0
+        {/* Título de sección */}
+        <div className="flex items-center gap-3">
+          <div className="flex h-10 w-10 items-center justify-center rounded-2xl bg-red-500/10">
+            <CalendarX size={20} className="text-red-400" />
+          </div>
+          <div>
+            <h2 className="text-xl font-bold text-gray-900 dark:text-white">Días sin Clases</h2>
+            <p className="text-sm text-[#8A8A9A]">Feriados, cierres y horarios reducidos del gimnasio</p>
+          </div>
+          {canCreate && (
+            <button
+              onClick={() => setDiaEspModalOpen(true)}
+              className="ml-auto flex items-center gap-2 rounded-xl bg-red-500/10 px-4 py-2 text-sm font-semibold text-red-400 hover:bg-red-500/20 transition-all"
+            >
+              <Plus size={14} /> Agregar día
+            </button>
+          )}
+        </div>
+
+        {/* Filtros y controles */}
+        <div className="flex flex-wrap items-center gap-2">
+          {/* Selector de año */}
+          <div className="flex items-center gap-1 rounded-xl border border-gray-200 dark:border-white/[0.08] bg-white/50 dark:bg-white/[0.04] px-1 py-1">
+            <button onClick={() => setAnioFiltroEsp(a => a - 1)}
+              className="flex h-7 w-7 items-center justify-center rounded-lg text-gray-600 dark:text-[#8A8A9A] hover:bg-black/5 dark:hover:bg-white/5 transition-all">
+              <ChevronLeft size={13} />
+            </button>
+            <span className="text-sm font-bold text-gray-900 dark:text-white min-w-[44px] text-center">{anioFiltroEsp}</span>
+            <button onClick={() => setAnioFiltroEsp(a => a + 1)}
+              className="flex h-7 w-7 items-center justify-center rounded-lg text-gray-600 dark:text-[#8A8A9A] hover:bg-black/5 dark:hover:bg-white/5 transition-all">
+              <ChevronRight size={13} />
+            </button>
+          </div>
+
+          {/* Selector de mes */}
+          <div className="flex flex-wrap gap-1">
+            <button
+              onClick={() => setMesFiltroEsp(null)}
+              className={`rounded-full px-3 py-1 text-xs font-semibold transition-all ${mesFiltroEsp === null ? 'bg-gray-900 dark:bg-white text-white dark:text-gray-900' : 'border border-gray-200 dark:border-white/[0.08] text-gray-500 dark:text-[#8A8A9A] hover:bg-black/5 dark:hover:bg-white/5'}`}
+            >
+              Todo el año
+            </button>
+            {['Ene','Feb','Mar','Abr','May','Jun','Jul','Ago','Sep','Oct','Nov','Dic'].map((mes, idx) => (
+              <button
+                key={idx}
+                onClick={() => setMesFiltroEsp(idx + 1)}
+                className={`rounded-full px-3 py-1 text-xs font-semibold transition-all ${mesFiltroEsp === idx + 1 ? 'bg-gray-900 dark:bg-white text-white dark:text-gray-900' : 'border border-gray-200 dark:border-white/[0.08] text-gray-500 dark:text-[#8A8A9A] hover:bg-black/5 dark:hover:bg-white/5'}`}
+              >
+                {mes}
+              </button>
+            ))}
+          </div>
+
+          {/* Orden */}
+          <button
+            onClick={() => setSortOrderEsp(o => o === 'asc' ? 'desc' : 'asc')}
+            className="ml-auto flex items-center gap-1.5 rounded-xl border border-gray-200 dark:border-white/[0.08] bg-white/50 dark:bg-white/[0.04] px-3 py-1.5 text-xs font-semibold text-gray-600 dark:text-[#8A8A9A] hover:bg-white dark:hover:bg-white/[0.08] transition-all"
+          >
+            {sortOrderEsp === 'asc' ? <><ChevronRight size={12} className="rotate-90" /> Más antiguo primero</> : <><ChevronLeft size={12} className="rotate-90" /> Más reciente primero</>}
+          </button>
+        </div>
+
+        {/* Lista */}
+        <div className="rounded-2xl lg:rounded-[2rem] border border-white/50 dark:border-white/[0.08] bg-white/30 dark:bg-black/30 backdrop-blur-3xl shadow-[0_8px_32px_rgba(0,0,0,0.04)] dark:shadow-[0_8px_32px_rgba(0,0,0,0.25)] overflow-hidden">
+          {loadingDiasEsp ? (
+            <div className="p-4 space-y-2">
+              {[1,2,3].map(i => <div key={i} className="h-16 rounded-xl bg-black/[0.03] dark:bg-white/[0.04] animate-pulse" />)}
+            </div>
+          ) : diasEspecialesFiltrados.length === 0 ? (
+            <div className="flex flex-col items-center justify-center gap-3 py-12 text-[#8A8A9A]">
+              <CalendarX size={32} className="opacity-30" />
+              <p className="text-sm">No hay días especiales para el período seleccionado.</p>
+            </div>
+          ) : (
+            <div className="divide-y divide-gray-200/60 dark:divide-white/[0.06]">
+              {diasEspecialesFiltrados.map(dia => {
+                const fecha = parseFechaLocal(dia.fecha)
                 return (
-                  <button
-                    key={id}
-                    onClick={() => setDetailTab(id)}
-                    className={`flex-1 flex items-center justify-center gap-1.5 rounded-lg py-2 text-xs font-semibold transition-all ${
-                      detailTab === id
-                        ? 'bg-white dark:bg-[#2a2a36] text-gray-900 dark:text-white shadow-sm'
-                        : 'text-gray-500 dark:text-[#8A8A9A] hover:text-gray-700 dark:hover:text-gray-300'
-                    }`}
-                  >
-                    <Icon size={12} />
-                    {label}
-                    {badge > 0 && (
-                      <span className="flex h-4 min-w-[1rem] items-center justify-center rounded-full bg-primary text-[9px] font-bold text-white px-1">
-                        {badge}
+                  <div key={dia.id} className={`flex items-center gap-4 px-5 py-4 transition-colors ${dia.tipo === 'CIERRE_TOTAL' ? 'hover:bg-red-500/[0.03]' : 'hover:bg-amber-500/[0.03]'}`}>
+                    {/* Bloque de fecha */}
+                    <div className={`flex flex-col items-center justify-center h-14 w-14 shrink-0 rounded-2xl border ${dia.tipo === 'CIERRE_TOTAL' ? 'border-red-500/30 bg-red-500/10' : 'border-amber-500/30 bg-amber-500/10'}`}>
+                      <span className={`text-xl font-black leading-none ${dia.tipo === 'CIERRE_TOTAL' ? 'text-red-500 dark:text-red-400' : 'text-amber-600 dark:text-amber-400'}`}>
+                        {fecha.getDate()}
                       </span>
+                      <span className={`text-[10px] font-bold uppercase tracking-wide ${dia.tipo === 'CIERRE_TOTAL' ? 'text-red-400/70' : 'text-amber-500/70'}`}>
+                        {format(fecha, 'MMM', { locale: es })}
+                      </span>
+                    </div>
+                    {/* Info */}
+                    <div className="flex-1 min-w-0">
+                      <p className="text-sm font-bold text-gray-900 dark:text-white capitalize">
+                        {format(fecha, "EEEE d 'de' MMMM yyyy", { locale: es })}
+                      </p>
+                      <p className="text-xs text-[#8A8A9A] mt-0.5">
+                        {dia.tipo === 'CIERRE_TOTAL'
+                          ? 'Cierre total del gimnasio'
+                          : `Horario reducido${dia.horaDesde ? `: ${dia.horaDesde} – ${dia.horaHasta}` : ''}`}
+                        {dia.motivo ? ` · ${dia.motivo}` : ''}
+                      </p>
+                    </div>
+                    {/* Badge — siempre visible */}
+                    <span className={`shrink-0 flex items-center gap-1.5 rounded-full border px-3 py-1 text-xs font-semibold ${dia.tipo === 'CIERRE_TOTAL' ? 'border-red-500/20 bg-red-500/10 text-red-400' : 'border-amber-500/20 bg-amber-500/10 text-amber-400'}`}>
+                      {dia.tipo === 'CIERRE_TOTAL'
+                        ? <><CalendarX size={11} /> Cierre total</>
+                        : <><AlertOctagon size={11} /> Horario reducido</>
+                      }
+                    </span>
+                    {/* Acciones — siempre a la derecha */}
+                    {canDelete && (
+                      <div className="shrink-0 flex items-center gap-1">
+                        <button
+                          onClick={() => {
+                            setEditingDiaEspId(dia.id)
+                            setDiaEspFecha(dia.fecha.split('T')[0])
+                            setDiaEspTipo(dia.tipo)
+                            setDiaEspMotivo(dia.motivo ?? '')
+                            setDiaEspHoraDesde(dia.horaDesde ?? '')
+                            setDiaEspHoraHasta(dia.horaHasta ?? '')
+                            setDiaEspModalOpen(true)
+                          }}
+                          className="flex h-8 w-8 items-center justify-center rounded-xl bg-white/[0.06] text-gray-400 hover:bg-white/10 hover:text-white transition-all"
+                        >
+                          <Pencil size={13} />
+                        </button>
+                        <button
+                          disabled={deletingDiaEspId === dia.id}
+                          onClick={async () => {
+                            setDeletingDiaEspId(dia.id)
+                            try {
+                              await diasEspecialesApi.remove(dia.id)
+                              setDiasEspeciales(prev => prev.filter(d => d.id !== dia.id))
+                              addToast('Día especial eliminado', 'success')
+                            } catch {
+                              addToast('Error al eliminar', 'error')
+                            } finally {
+                              setDeletingDiaEspId(null)
+                            }
+                          }}
+                          className="flex h-8 w-8 items-center justify-center rounded-xl bg-red-500/10 text-red-400 hover:bg-red-500/20 transition-all disabled:opacity-50"
+                        >
+                          {deletingDiaEspId === dia.id ? '…' : <Trash2 size={13} />}
+                        </button>
+                      </div>
                     )}
-                  </button>
+                  </div>
                 )
               })}
             </div>
+          )}
+        </div>
+      </div>
 
-            {/* ════════════ TAB: EDITAR ════════════ */}
-            {detailTab === 'edit' && (
-              <form onSubmit={editHandleSubmit(onEditSubmit)} className="space-y-4">
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-
-                  {/* Columna izquierda */}
-                  <div className="space-y-4">
-                    <Select
-                      label="Sala *"
-                      options={[{ value: 'A', label: 'Sala A' }, { value: 'B', label: 'Sala B' }]}
-                      error={editErrors.room?.message}
-                      {...editRegister('room')}
-                    />
-
-                    <div>
-                      <label className="block text-sm font-medium text-gray-700 dark:text-gray-200 mb-2">Días *</label>
-                      <div className="flex flex-wrap gap-1.5">
-                        {DAYS.map(d => {
-                          const sel = editDays.includes(d)
-                          return (
-                            <button key={d} type="button"
-                              onClick={() => {
-                                if (sel) editSetValue('days', editDays.filter(x => x !== d), { shouldValidate: true })
-                                else     editSetValue('days', [...editDays, d],              { shouldValidate: true })
-                              }}
-                              className={`rounded-full px-3 py-1.5 text-xs font-semibold transition-all ${
-                                sel ? 'bg-primary text-white shadow-sm'
-                                    : 'border border-gray-200 dark:border-white/[0.08] bg-white dark:bg-white/[0.04] text-gray-500 dark:text-[#8A8A9A] hover:border-gray-400 dark:hover:border-white/20'
-                              }`}
-                            >{DAY_LABELS[d].slice(0, 3)}</button>
-                          )
-                        })}
-                      </div>
-                      {(editErrors.days as any)?.message && (
-                        <p className="text-xs text-red-500 mt-1">{(editErrors.days as any).message}</p>
-                      )}
-                    </div>
-
-                    <label className="flex items-center justify-between gap-3 p-3 rounded-xl border border-white/[0.08] bg-white/[0.04] cursor-pointer">
-                      <div>
-                        <p className="text-sm font-semibold text-gray-900 dark:text-white">Recurrente semanal</p>
-                        <p className="text-[11px] text-[#8A8A9A] mt-0.5">Se repite todas las semanas</p>
-                      </div>
-                      <div className="relative flex-shrink-0">
-                        <input type="checkbox" {...editRegister('recurrente')} className="sr-only peer" />
-                        <div className={`w-10 h-5 rounded-full transition-colors ${editRecurrente ? 'bg-primary' : 'bg-gray-200 dark:bg-white/10'}`} />
-                        <div className={`absolute top-0.5 w-4 h-4 bg-white rounded-full shadow transition-transform ${editRecurrente ? 'translate-x-5' : 'translate-x-0.5'}`} />
-                      </div>
-                    </label>
-                  </div>
-
-                  {/* Columna derecha */}
-                  <div className="space-y-4">
-                    <div className="grid grid-cols-2 gap-3">
-                      <Input label="Hora inicio *" type="time" error={editErrors.startTime?.message} {...editRegister('startTime')} />
-                      <Input label="Hora fin *"    type="time" error={editErrors.endTime?.message}   {...editRegister('endTime')} />
-                    </div>
-                    <div className="grid grid-cols-2 gap-3">
-                      <Input label="Cupo máximo *" type="number" placeholder="Ej. 15" error={editErrors.capacity?.message} {...editRegister('capacity')} />
-                      <Select
-                        label="Profesor *"
-                        options={[
-                          { value: '', label: profsLoading ? 'Cargando...' : professors.length === 0 ? 'Sin profesores' : 'Seleccionar...' },
-                          ...professors.map(p => ({ value: p.id, label: p.name })),
-                        ]}
-                        error={editErrors.profesorId?.message}
-                        {...editRegister('profesorId')}
-                      />
-                    </div>
-
-                    {/* Ocupación actual (solo lectura) */}
-                    <div className="rounded-xl border border-white/[0.08] bg-white/[0.04] p-3">
-                      <div className="flex justify-between text-xs mb-2">
-                        <span className="text-[#8A8A9A]">Ocupación actual</span>
-                        <span className="font-semibold text-gray-900 dark:text-white">{detailShift.enrolled}/{detailShift.capacity}</span>
-                      </div>
-                      <div className="h-1.5 rounded-full bg-white/10 overflow-hidden">
-                        <div className={`h-full rounded-full ${getOccupancyColor(detailShift.enrolled, detailShift.capacity)}`}
-                          style={{ width: `${Math.min((detailShift.enrolled / detailShift.capacity) * 100, 100)}%` }} />
-                      </div>
-                    </div>
-                  </div>
-                </div>
-
-                <div className="flex justify-end gap-3 pt-2 border-t border-white/[0.08]">
-                  {isAdmin && (
-                    <button type="button" onClick={() => deleteShift(detailShift.id)}
-                      className="flex items-center gap-1.5 rounded-xl bg-red-500/10 px-4 py-2 text-sm font-semibold text-red-600 dark:text-red-400 hover:bg-red-500/20 transition-all">
-                      <Trash2 size={14} /> Eliminar turno
-                    </button>
-                  )}
-                  <Button type="submit" isLoading={editSubmitting} className="px-6">
-                    Guardar cambios
-                  </Button>
-                </div>
-              </form>
-            )}
-
-            {/* ════════════ TAB: INSCRIPCIONES ════════════ */}
-            {detailTab === 'inscripciones' && (() => {
-              const enrolledIds = new Set(inscripciones.map(i => i.clienteId))
-              const filteredForAdd = clients
-                .filter(c => !enrolledIds.has(String(c.id)))
-                .filter(c => !addClientSearch || `${c.name} ${c.lastName}`.toLowerCase().includes(addClientSearch.toLowerCase()))
-                .slice(0, 8)
-              return (
-                <div className="space-y-3">
-                  {/* Header */}
-                  <div className="flex items-center justify-between">
-                    <p className="text-sm font-semibold text-gray-900 dark:text-white">
-                      {inscripciones.length === 0 ? 'Sin inscriptos activos' : `${inscripciones.length} inscripto${inscripciones.length !== 1 ? 's' : ''} activo${inscripciones.length !== 1 ? 's' : ''}`}
-                    </p>
-                    <button onClick={() => { setAddClientMode(m => !m); setAddClientSearch(''); setAddClientId('') }}
-                      className="flex items-center gap-1.5 rounded-xl bg-primary/10 px-3 py-1.5 text-xs font-semibold text-primary hover:bg-primary/20 transition-all">
-                      <UserPlus size={13} /> Agregar cliente
-                    </button>
-                  </div>
-
-                  {/* Panel agregar */}
-                  <AnimatePresence>
-                    {addClientMode && (
-                      <motion.div initial={{ opacity: 0, y: -8 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -8 }}
-                        className="rounded-xl border border-primary/20 bg-primary/5 p-3 space-y-2">
-                        <div className="relative">
-                          <Search size={13} className="absolute left-3 top-1/2 -translate-y-1/2 text-[#8A8A9A]" />
-                          <input
-                            value={addClientSearch} onChange={e => { setAddClientSearch(e.target.value); setAddClientId('') }}
-                            placeholder="Buscar cliente..."
-                            className="w-full rounded-lg border border-white/[0.08] bg-white/[0.04] pl-8 pr-3 py-2 text-sm text-gray-900 dark:text-white placeholder:text-[#8A8A9A] outline-none focus:border-primary/40"
-                          />
-                        </div>
-                        <div className="space-y-1 max-h-40 overflow-y-auto custom-scrollbar">
-                          {filteredForAdd.length === 0 ? (
-                            <p className="text-xs text-[#8A8A9A] text-center py-3">
-                              {addClientSearch ? 'Sin resultados' : 'Todos los clientes ya están inscriptos'}
-                            </p>
-                          ) : filteredForAdd.map(c => (
-                            <button key={c.id} type="button"
-                              onClick={() => setAddClientId(String(c.id))}
-                              className={`w-full flex items-center gap-2 px-3 py-2 rounded-lg text-left text-sm transition-all ${
-                                addClientId === String(c.id)
-                                  ? 'bg-primary/10 border border-primary/30 text-primary'
-                                  : 'hover:bg-black/5 dark:hover:bg-white/5 text-gray-900 dark:text-white'
-                              }`}>
-                              <span className="font-medium">{c.name} {c.lastName}</span>
-                            </button>
-                          ))}
-                        </div>
-                        {addClientId && (
-                          <Button size="sm" onClick={handleAddToShift} isLoading={addClientSubmitting} className="w-full">
-                            Inscribir cliente seleccionado
-                          </Button>
-                        )}
-                      </motion.div>
-                    )}
-                  </AnimatePresence>
-
-                  {/* Lista inscriptos */}
-                  {loadingInscrip ? (
-                    <div className="space-y-2">{[1,2,3].map(i => <div key={i} className="h-12 rounded-xl bg-black/5 dark:bg-white/[0.04] animate-pulse" />)}</div>
-                  ) : inscripciones.length === 0 ? (
-                    <div className="flex flex-col items-center justify-center py-10 text-[#8A8A9A]">
-                      <Users size={28} className="mb-2 opacity-50" />
-                      <p className="text-sm">No hay clientes inscriptos en este turno</p>
-                    </div>
-                  ) : (
-                    <div className="space-y-1.5 max-h-72 overflow-y-auto custom-scrollbar pr-1">
-                      {inscripciones.map(insc => (
-                        <motion.div key={insc.id} initial={{ opacity: 0 }} animate={{ opacity: 1 }}
-                          className="flex items-center gap-3 rounded-xl border border-white/[0.08] bg-white/[0.04] px-3 py-2.5">
-                          <div className="flex-1 min-w-0">
-                            <p className="text-sm font-semibold text-gray-900 dark:text-white truncate">{insc.clienteNombre}</p>
-                            <p className="text-xs text-[#8A8A9A]">Desde {format(new Date(insc.fechaDesde), "d MMM yyyy", { locale: es })}</p>
-                          </div>
-                          <span className="rounded-full bg-green-500/10 px-2.5 py-0.5 text-xs font-semibold text-green-600 dark:text-green-400 border border-green-500/20">
-                            Activo
-                          </span>
-                          <button disabled={bajandoId === insc.id} onClick={() => handleDarDeBaja(insc.id)}
-                            className="flex items-center gap-1 rounded-lg bg-red-500/10 px-2.5 py-1.5 text-xs font-semibold text-red-600 dark:text-red-400 hover:bg-red-500/20 transition-all disabled:opacity-50">
-                            {bajandoId === insc.id ? '...' : <><X size={11} /> Dar de baja</>}
-                          </button>
-                        </motion.div>
-                      ))}
-                    </div>
-                  )}
-                </div>
-              )
-            })()}
-
-            {/* ════════════ TAB: LISTA DE ESPERA ════════════ */}
-            {detailTab === 'espera' && (
-              <div className="space-y-3">
-
-                {/* Agregar a lista de espera */}
-                <div className="flex items-center justify-between">
-                  <p className="text-sm font-semibold text-gray-900 dark:text-white">
-                    {esperaEntries.length === 0 ? 'Lista de espera vacía' : `${esperaEntries.length} entrada${esperaEntries.length !== 1 ? 's' : ''}`}
-                  </p>
-                  <button onClick={() => { setAddEsperaMode(m => !m); setAddEsperaClientSearch(''); setAddEsperaClientId('') }}
-                    className="flex items-center gap-1.5 rounded-xl bg-primary/10 px-3 py-1.5 text-xs font-semibold text-primary hover:bg-primary/20 transition-all">
-                    <ListPlus size={13} /> Agregar a lista
-                  </button>
-                </div>
-
-                <AnimatePresence>
-                  {addEsperaMode && (() => {
-                    const waitlistedIds = new Set(esperaEntries.filter(e => e.estado === 'PENDIENTE' || e.estado === 'NOTIFICADO').map(e => e.clienteId))
-                    const filteredForEspera = clients
-                      .filter(c => !waitlistedIds.has(String(c.id)))
-                      .filter(c => !addEsperaClientSearch || `${c.name} ${c.lastName}`.toLowerCase().includes(addEsperaClientSearch.toLowerCase()))
-                      .slice(0, 8)
-                    return (
-                      <motion.div initial={{ opacity: 0, y: -8 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -8 }}
-                        className="rounded-xl border border-primary/20 bg-primary/5 p-3 space-y-3">
-                        <div className="relative">
-                          <Search size={13} className="absolute left-3 top-1/2 -translate-y-1/2 text-[#8A8A9A]" />
-                          <input
-                            value={addEsperaClientSearch} onChange={e => { setAddEsperaClientSearch(e.target.value); setAddEsperaClientId('') }}
-                            placeholder="Buscar cliente..."
-                            className="w-full rounded-lg border border-white/[0.08] bg-white/[0.04] pl-8 pr-3 py-2 text-sm text-gray-900 dark:text-white placeholder:text-[#8A8A9A] outline-none focus:border-primary/40"
-                          />
-                        </div>
-                        <div className="space-y-1 max-h-36 overflow-y-auto custom-scrollbar">
-                          {filteredForEspera.map(c => (
-                            <button key={c.id} type="button"
-                              onClick={() => setAddEsperaClientId(String(c.id))}
-                              className={`w-full flex items-center gap-2 px-3 py-2 rounded-lg text-left text-sm transition-all ${
-                                addEsperaClientId === String(c.id)
-                                  ? 'bg-primary/10 border border-primary/30 text-primary'
-                                  : 'hover:bg-black/5 dark:hover:bg-white/5 text-gray-900 dark:text-white'
-                              }`}>
-                              {c.name} {c.lastName}
-                            </button>
-                          ))}
-                          {filteredForEspera.length === 0 && (
-                            <p className="text-xs text-[#8A8A9A] text-center py-2">
-                              {addEsperaClientSearch ? 'Sin resultados' : 'No hay clientes disponibles'}
-                            </p>
-                          )}
-                        </div>
-                        {addEsperaClientId && (
-                          <div className="space-y-2">
-                            <div className="flex gap-2">
-                              {(['INTERNA', 'EXTERNA'] as const).map(t => (
-                                <button key={t} type="button" onClick={() => setAddEsperaTipo(t)}
-                                  className={`flex-1 rounded-lg py-1.5 text-xs font-semibold transition-all border ${
-                                    addEsperaTipo === t
-                                      ? 'bg-gray-900 dark:bg-white text-white dark:text-gray-900 border-transparent'
-                                      : 'border-gray-200 dark:border-white/[0.08] text-gray-500 dark:text-[#8A8A9A]'
-                                  }`}>{t === 'INTERNA' ? 'Interna (con membresía)' : 'Externa (sin membresía)'}</button>
-                              ))}
-                            </div>
-                            <Button size="sm" onClick={handleAddToWaitingList} isLoading={addEsperaSubmitting} className="w-full">
-                              Agregar a lista de espera
-                            </Button>
-                          </div>
-                        )}
-                      </motion.div>
-                    )
-                  })()}
-                </AnimatePresence>
-
-                {/* Sub-tabs Interna / Externa */}
-                <div className="flex gap-1.5">
-                  {(['INTERNA', 'EXTERNA'] as const).map(tipo => {
-                    const count = esperaEntries.filter(e => e.tipo === tipo).length
-                    return (
-                      <button key={tipo} onClick={() => setEsperaTipoTab(tipo)}
-                        className={`rounded-full px-4 py-1.5 text-xs font-semibold transition-all flex items-center gap-1.5 ${
-                          esperaTipoTab === tipo
-                            ? 'bg-gray-900 dark:bg-white text-white dark:text-gray-900'
-                            : 'border border-gray-200 dark:border-white/[0.08] bg-white dark:bg-white/[0.04] text-gray-500 dark:text-[#8A8A9A]'
-                        }`}
-                      >
-                        {tipo === 'INTERNA' ? 'Interna' : 'Externa'}
-                        {count > 0 && (
-                          <span className={`flex h-4 min-w-[1rem] items-center justify-center rounded-full text-[10px] font-bold px-1 ${
-                            esperaTipoTab === tipo ? 'bg-white/20 dark:bg-black/20 text-white dark:text-gray-900' : 'bg-gray-200 dark:bg-white/10 text-gray-600 dark:text-gray-300'
-                          }`}>{count}</span>
-                        )}
-                      </button>
-                    )
-                  })}
-                </div>
-
-                {esperaLoading ? (
-                  <div className="space-y-2">{[1,2,3].map(i => <div key={i} className="h-14 rounded-xl bg-black/5 dark:bg-white/[0.04] animate-pulse" />)}</div>
-                ) : esperaError ? (
-                  <div className="rounded-xl border border-red-500/20 bg-red-500/10 px-4 py-3"><p className="text-sm text-red-400">{esperaError}</p></div>
-                ) : (() => {
-                  const filtered = esperaEntries.filter(e => e.tipo === esperaTipoTab)
-                  if (filtered.length === 0) return (
-                    <div className="flex flex-col items-center justify-center py-10 text-[#8A8A9A]">
-                      <Clock size={24} className="mb-2 opacity-50" />
-                      <p className="text-sm">No hay entradas {esperaTipoTab === 'INTERNA' ? 'internas' : 'externas'}</p>
-                    </div>
-                  )
-                  const badgeStyle: Record<string, string> = {
-                    PENDIENTE: 'bg-amber-500/10 text-amber-600 dark:text-amber-400 border border-amber-500/20',
-                    NOTIFICADO:'bg-blue-500/10 text-blue-600 dark:text-blue-400 border border-blue-500/20',
-                    ACEPTADO:  'bg-green-500/10 text-green-600 dark:text-green-400 border border-green-500/20',
-                    RECHAZADO: 'bg-red-500/10 text-red-600 dark:text-red-400 border border-red-500/20',
-                  }
-                  const badgeLabel: Record<string, string> = { PENDIENTE:'Pendiente', NOTIFICADO:'Notificado', ACEPTADO:'Aceptado', RECHAZADO:'Rechazado' }
-                  return (
-                    <div className="space-y-1.5 max-h-72 overflow-y-auto custom-scrollbar pr-1">
-                      {filtered.map(entry => {
-                        const isActioning = actionLoadingIds.has(entry.id)
-                        return (
-                          <motion.div key={entry.id} initial={{ opacity: 0, y: 4 }} animate={{ opacity: 1, y: 0 }}
-                            className="flex items-center gap-3 rounded-xl border border-white/[0.08] bg-white/[0.04] px-3 py-2.5">
-                            <div className="flex-1 min-w-0">
-                              <p className="text-sm font-semibold text-gray-900 dark:text-white truncate">{entry.clienteNombre}</p>
-                              <p className="text-xs text-[#8A8A9A]">{format(new Date(entry.fechaSolicitud), "d MMM yyyy", { locale: es })}</p>
-                            </div>
-                            <span className={`shrink-0 rounded-full px-2.5 py-0.5 text-xs font-semibold ${badgeStyle[entry.estado]}`}>{badgeLabel[entry.estado]}</span>
-                            <div className="flex items-center gap-1.5 shrink-0">
-                              {entry.estado === 'PENDIENTE' && (
-                                <button disabled={isActioning} onClick={() => handleEsperaAction(entry.id, 'notificar')}
-                                  className="flex items-center gap-1 rounded-lg bg-primary/10 px-2.5 py-1.5 text-xs font-semibold text-primary hover:bg-primary/20 transition-all disabled:opacity-50">
-                                  <Bell size={11} /> Notificar
-                                </button>
-                              )}
-                              {entry.estado === 'NOTIFICADO' && (<>
-                                <button disabled={isActioning} onClick={() => handleEsperaAction(entry.id, 'aceptar')}
-                                  className="flex items-center gap-1 rounded-lg bg-green-500/10 px-2 py-1.5 text-xs font-semibold text-green-600 dark:text-green-400 hover:bg-green-500/20 transition-all disabled:opacity-50">
-                                  <Check size={11} /> Aceptó
-                                </button>
-                                <button disabled={isActioning} onClick={() => handleEsperaAction(entry.id, 'rechazar')}
-                                  className="flex items-center gap-1 rounded-lg bg-red-500/10 px-2 py-1.5 text-xs font-semibold text-red-600 dark:text-red-400 hover:bg-red-500/20 transition-all disabled:opacity-50">
-                                  <X size={11} /> Rechazó
-                                </button>
-                              </>)}
-                              {(entry.estado === 'ACEPTADO' || entry.estado === 'RECHAZADO') && (
-                                <button disabled={isActioning} onClick={() => handleEsperaAction(entry.id, 'eliminar')}
-                                  className="flex h-7 w-7 items-center justify-center rounded-lg bg-red-500/10 text-red-400 hover:bg-red-500/20 transition-all disabled:opacity-50">
-                                  <Trash2 size={12} />
-                                </button>
-                              )}
-                            </div>
-                          </motion.div>
-                        )
-                      })}
-                    </div>
-                  )
-                })()}
-              </div>
-            )}
-
+      {/* ── Modal: Agregar / Editar Día Especial ─────────────────────────────── */}
+      <Modal
+        isOpen={diaEspModalOpen}
+        onClose={() => {
+          setDiaEspModalOpen(false)
+          setEditingDiaEspId(null)
+          setDiaEspFecha(''); setDiaEspMotivo(''); setDiaEspHoraDesde(''); setDiaEspHoraHasta('')
+          setDiaEspTipo('CIERRE_TOTAL')
+        }}
+        title={editingDiaEspId ? 'Editar día especial' : 'Agregar día sin clases'}
+      >
+        <div className="space-y-4">
+          <div>
+            <label className="text-xs font-semibold text-gray-500 dark:text-[#8A8A9A] mb-1.5 block">Fecha</label>
+            <input
+              type="date"
+              value={diaEspFecha}
+              onChange={e => setDiaEspFecha(e.target.value)}
+              className="w-full rounded-xl border border-gray-200 dark:border-white/[0.08] bg-white dark:bg-white/[0.04] px-3 py-2.5 text-sm text-gray-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-primary/30"
+            />
           </div>
-      )}
+          <div>
+            <label className="text-xs font-semibold text-gray-500 dark:text-[#8A8A9A] mb-1.5 block">Tipo</label>
+            <div className="flex gap-2">
+              {(['CIERRE_TOTAL', 'HORARIO_REDUCIDO'] as TipoDiaEspecial[]).map(t => (
+                <button
+                  key={t}
+                  type="button"
+                  onClick={() => setDiaEspTipo(t)}
+                  className={`flex-1 rounded-xl py-2.5 text-xs font-semibold transition-all border ${diaEspTipo === t ? 'bg-gray-900 dark:bg-white text-white dark:text-gray-900 border-transparent' : 'border-gray-200 dark:border-white/[0.08] text-gray-500 dark:text-[#8A8A9A] hover:bg-black/5 dark:hover:bg-white/5'}`}
+                >
+                  {t === 'CIERRE_TOTAL' ? 'Cierre total' : 'Horario reducido'}
+                </button>
+              ))}
+            </div>
+          </div>
+          {diaEspTipo === 'HORARIO_REDUCIDO' && (
+            <div className="space-y-2">
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className="text-xs font-semibold text-gray-500 dark:text-[#8A8A9A] mb-1.5 block">Hora desde</label>
+                  <input type="time" value={diaEspHoraDesde} onChange={e => setDiaEspHoraDesde(e.target.value)}
+                    className="w-full rounded-xl border border-gray-200 dark:border-white/[0.08] bg-white dark:bg-white/[0.04] px-3 py-2.5 text-sm text-gray-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-primary/30" />
+                </div>
+                <div>
+                  <label className="text-xs font-semibold text-gray-500 dark:text-[#8A8A9A] mb-1.5 block">Hora hasta</label>
+                  <input type="time" value={diaEspHoraHasta} onChange={e => setDiaEspHoraHasta(e.target.value)}
+                    className="w-full rounded-xl border border-gray-200 dark:border-white/[0.08] bg-white dark:bg-white/[0.04] px-3 py-2.5 text-sm text-gray-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-primary/30" />
+                </div>
+              </div>
+              <p className="text-xs text-[#8A8A9A] leading-snug">
+                Ingresá el rango de horas en que el gimnasio funciona ese día. Por ejemplo, si abre a las 9 y cierra a las 13, ponés <span className="font-semibold text-gray-600 dark:text-gray-400">09:00</span> y <span className="font-semibold text-gray-600 dark:text-gray-400">13:00</span>. Usá formato de 24 horas.
+              </p>
+            </div>
+          )}
+          <div>
+            <label className="text-xs font-semibold text-gray-500 dark:text-[#8A8A9A] mb-1.5 block">Motivo <span className="font-normal">(opcional)</span></label>
+            <input
+              type="text"
+              value={diaEspMotivo}
+              onChange={e => setDiaEspMotivo(e.target.value)}
+              placeholder="Ej: Feriado nacional, mantenimiento…"
+              className="w-full rounded-xl border border-gray-200 dark:border-white/[0.08] bg-white dark:bg-white/[0.04] px-3 py-2.5 text-sm text-gray-900 dark:text-white placeholder:text-gray-400 dark:placeholder:text-[#8A8A9A] focus:outline-none focus:ring-2 focus:ring-primary/30"
+            />
+          </div>
+          <div className="flex justify-end gap-3 pt-2 border-t border-gray-200 dark:border-white/[0.06]">
+            <button
+              onClick={() => {
+                setDiaEspModalOpen(false)
+                setEditingDiaEspId(null)
+                setDiaEspFecha(''); setDiaEspMotivo(''); setDiaEspHoraDesde(''); setDiaEspHoraHasta('')
+                setDiaEspTipo('CIERRE_TOTAL')
+              }}
+              className="px-4 py-2 text-sm font-semibold text-gray-500 dark:text-[#8A8A9A] hover:text-gray-700 dark:hover:text-white transition-colors"
+            >
+              Cancelar
+            </button>
+            <button
+              disabled={!diaEspFecha || savingDiaEsp}
+              onClick={async () => {
+                setSavingDiaEsp(true)
+                try {
+                  const payload = {
+                    fecha: diaEspFecha,
+                    tipo: diaEspTipo,
+                    motivo: diaEspMotivo || undefined,
+                    horaDesde: diaEspTipo === 'HORARIO_REDUCIDO' ? diaEspHoraDesde || undefined : undefined,
+                    horaHasta: diaEspTipo === 'HORARIO_REDUCIDO' ? diaEspHoraHasta || undefined : undefined,
+                  }
+                  if (editingDiaEspId) {
+                    const actualizado = await diasEspecialesApi.update(editingDiaEspId, payload)
+                    setDiasEspeciales(prev =>
+                      prev.map(d => d.id === editingDiaEspId ? actualizado : d)
+                        .sort((a, b) => a.fecha.localeCompare(b.fecha))
+                    )
+                    addToast('Día especial actualizado', 'success')
+                  } else {
+                    const nuevo = await diasEspecialesApi.create(payload)
+                    setDiasEspeciales(prev => [...prev, nuevo].sort((a, b) => a.fecha.localeCompare(b.fecha)))
+                    addToast('Día especial registrado', 'success')
+                  }
+                  setDiaEspModalOpen(false)
+                  setEditingDiaEspId(null)
+                  setDiaEspFecha(''); setDiaEspMotivo(''); setDiaEspHoraDesde(''); setDiaEspHoraHasta('')
+                  setDiaEspTipo('CIERRE_TOTAL')
+                } catch {
+                  addToast('Error al guardar', 'error')
+                } finally {
+                  setSavingDiaEsp(false)
+                }
+              }}
+              className="flex items-center gap-1.5 rounded-xl bg-primary px-5 py-2 text-sm font-bold text-black hover:bg-primary-dark transition-all disabled:opacity-50 shadow-lg shadow-primary/20"
+            >
+              {savingDiaEsp ? '…' : <><Check size={14} /> {editingDiaEspId ? 'Actualizar' : 'Guardar'}</>}
+            </button>
+          </div>
+        </div>
+      </Modal>
 
       {/* ── Create Modal ──────────────────────────────────────────────────────── */}
       <Modal isOpen={createOpen} onClose={() => { setCreateOpen(false); reset() }} title="Crear Nuevo Turno" size="2xl">
         <form onSubmit={handleSubmit(onCreate)} className="space-y-5">
           <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-            
+
             {/* Izquierda: Datos del turno */}
             <div className="space-y-4">
 
-              {/* Sala */}
-              <Select
-                label="Sala *"
-                options={[
-                  { value: '', label: 'Seleccionar...' },
-                  { value: 'A', label: 'Sala A' },
-                  { value: 'B', label: 'Sala B' }
-                ]}
-                error={errors.room?.message}
-                {...register('room')}
-              />
-
-              {/* Días de la semana — pills multi-selección */}
+              {/* Días de la semana */}
               <div>
                 <label className="block text-sm font-medium text-gray-700 dark:text-gray-200 mb-2">
                   Días de la semana *
@@ -1806,26 +1600,33 @@ export default function ShiftsPage() {
                 <Input label="Hora fin *"    type="time" error={errors.endTime?.message}   {...register('endTime')} />
               </div>
 
-              {/* Cupo + Profesor */}
+              {/* Cupos por sala */}
               <div className="grid grid-cols-2 gap-4">
-                <Input label="Cupo máximo *" type="number" placeholder="Ej. 15" error={errors.capacity?.message} {...register('capacity')} />
-                <Select
-                  label="Profesor *"
-                  options={[
-                    {
-                      value: '',
-                      label: profsLoading
-                        ? 'Cargando...'
-                        : professors.length === 0
-                          ? 'Sin profesores registrados'
-                          : 'Seleccionar...',
-                    },
-                    ...professors.map(p => ({ value: p.id, label: p.name }))
-                  ]}
-                  error={errors.profesorId?.message}
-                  {...register('profesorId')}
+                <Input
+                  label="Cupo Sala A *" type="number" placeholder="Ej. 10"
+                  error={errors.cupoMaximoSalaA?.message}
+                  {...register('cupoMaximoSalaA')}
+                />
+                <Input
+                  label="Cupo Sala B *" type="number" placeholder="Ej. 10"
+                  error={errors.cupoMaximoSalaB?.message}
+                  {...register('cupoMaximoSalaB')}
                 />
               </div>
+
+              {/* Profesor */}
+              <Select
+                label="Profesor *"
+                options={[
+                  {
+                    value: '',
+                    label: profsLoading ? 'Cargando...' : professors.length === 0 ? 'Sin profesores registrados' : 'Seleccionar...',
+                  },
+                  ...professors.map(p => ({ value: p.id, label: p.name }))
+                ]}
+                error={errors.profesorId?.message}
+                {...register('profesorId')}
+              />
 
               {/* Toggle recurrencia */}
               <label className="flex items-center justify-between gap-4 p-3 rounded-xl border border-white/[0.08] bg-white/[0.04] cursor-pointer select-none">
@@ -1847,17 +1648,17 @@ export default function ShiftsPage() {
               )}
             </div>
 
-            {/* Derecha: Inscribir Clientes */}
+            {/* Derecha: Inscribir Clientes (Sala A por defecto) */}
             <div className="flex flex-col bg-white/5 dark:bg-black/20 rounded-2xl p-4 border border-gray-200 dark:border-white/10 overflow-hidden">
               <div className="flex items-center justify-between mb-3 shrink-0">
                 <label className="text-sm font-bold text-gray-900 dark:text-white flex items-center gap-2">
-                  <Users size={16} className="text-primary" /> Inscribir Clientes
+                  <Users size={16} className="text-primary" /> Inscribir en Sala A
                 </label>
-                <span className={`text-xs font-semibold px-2 py-1 rounded-lg ${formClientIds.length > formCapacity && formCapacity > 0 ? 'bg-red-500/20 text-red-500' : 'bg-black/5 dark:bg-white/10 text-gray-500 dark:text-gray-400'}`}>
-                  {formClientIds.length} / {formCapacity || '?'}
+                <span className="text-xs font-semibold px-2 py-1 rounded-lg bg-black/5 dark:bg-white/10 text-gray-500 dark:text-gray-400">
+                  {formClientIds.length} seleccionado{formClientIds.length !== 1 ? 's' : ''}
                 </span>
               </div>
-              
+
               <div className="mb-3 shrink-0">
                 <Input
                   placeholder="Buscar por nombre o apellido..."
@@ -1870,31 +1671,29 @@ export default function ShiftsPage() {
                 {clients.length === 0 ? (
                   <p className="text-xs text-gray-500 text-center py-6">No hay clientes disponibles</p>
                 ) : (() => {
-                  const filteredClients = clients.filter(c => 
-                    `${c.name} ${c.lastName}`.toLowerCase().includes(clientSearch.toLowerCase())
+                  const shiftDias = formDays.length
+                  const filteredClients = clients.filter(c =>
+                    `${c.name} ${c.lastName}`.toLowerCase().includes(clientSearch.toLowerCase()) &&
+                    (!c.planFrequency || (c.diasUsados + shiftDias) <= Number(c.planFrequency))
                   );
-                  
+
                   if (filteredClients.length === 0) {
-                    return <p className="text-xs text-gray-500 text-center py-6">No se encontraron clientes que coincidan con la búsqueda.</p>;
+                    return <p className="text-xs text-gray-500 text-center py-6">Sin resultados para la búsqueda.</p>;
                   }
 
                   return filteredClients.map(c => {
                     const isSelected = formClientIds.includes(String(c.id));
-                    const isFull = formClientIds.length >= formCapacity && !isSelected && formCapacity > 0;
                     return (
-                      <label 
-                        key={c.id} 
+                      <label
+                        key={c.id}
                         className={`flex items-center gap-3 p-2.5 rounded-xl border transition-all cursor-pointer select-none ${
-                          isSelected 
-                            ? 'border-primary/50 bg-primary/5 dark:bg-primary/10' 
-                            : isFull 
-                              ? 'border-transparent opacity-40 cursor-not-allowed grayscale' 
-                              : 'border-black/5 dark:border-white/10 hover:bg-black/5 dark:hover:bg-white/5'
+                          isSelected
+                            ? 'border-primary/50 bg-primary/5 dark:bg-primary/10'
+                            : 'border-black/5 dark:border-white/10 hover:bg-black/5 dark:hover:bg-white/5'
                         }`}
                       >
-                        <input 
-                          type="checkbox" 
-                          disabled={isFull}
+                        <input
+                          type="checkbox"
                           checked={isSelected}
                           onChange={(e) => {
                             if (e.target.checked) setValue('clientIds', [...formClientIds, String(c.id)], { shouldValidate: true })
@@ -1924,13 +1723,10 @@ export default function ShiftsPage() {
                   })
                 })()}
               </div>
-              {errors.clientIds?.message && (
-                <p className="mt-3 text-xs text-red-500 font-medium text-center">{errors.clientIds.message}</p>
-              )}
             </div>
-            
+
           </div>
-          
+
           <div className="flex justify-end gap-3 pt-4 border-t border-gray-200 dark:border-white/10 mt-6">
             <Button type="submit" isLoading={isSubmitting} className="px-8 font-bold shadow-lg shadow-primary/20">Guardar y crear</Button>
           </div>

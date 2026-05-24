@@ -1,4 +1,4 @@
-import { useState, useEffect, useMemo } from 'react'
+﻿import { useState, useEffect, useMemo } from 'react'
 import { motion } from 'framer-motion'
 import { ClipboardCheck, CheckCircle2, AlertTriangle } from 'lucide-react'
 import { format } from 'date-fns'
@@ -119,14 +119,14 @@ export default function AttendancePage() {
       initial={{ opacity: 0, y: 10 }}
       animate={{ opacity: 1, y: 0 }}
       transition={{ duration: 0.2 }}
-      className="space-y-6"
+      className="space-y-4 lg:space-y-6"
     >
       {/* Header */}
       <div className="flex items-center gap-3">
         <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-primary/10">
           <ClipboardCheck size={20} className="text-primary" />
         </div>
-        <h1 className="text-3xl md:text-4xl font-black tracking-tighter text-gray-900 dark:text-white drop-shadow-sm">
+        <h1 className="text-2xl lg:text-3xl xl:text-4xl font-black tracking-tighter text-gray-900 dark:text-white drop-shadow-sm">
           Asistencia
         </h1>
       </div>

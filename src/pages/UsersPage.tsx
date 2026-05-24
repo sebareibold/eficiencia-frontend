@@ -1,4 +1,4 @@
-import { useState, useEffect, Fragment, useCallback } from 'react'
+﻿import { useState, useEffect, Fragment, useCallback } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
 import { pageVariants } from '../lib/motion'
 import {
@@ -211,15 +211,15 @@ function UsuariosTab() {
               value={search}
               onChange={e => setSearch(e.target.value)}
               placeholder="Buscar por nombre o email…"
-              className="w-64 rounded-xl border border-saas-border bg-white py-2 pl-9 pr-4 text-sm text-gray-900 placeholder:text-gray-400 focus:border-gray-400 focus:outline-none focus:ring-2 focus:ring-gray-200 transition-all"
+              className="w-64 rounded-xl border border-white/50 dark:border-white/[0.08] bg-white/60 dark:bg-white/[0.04] backdrop-blur-sm py-2 pl-9 pr-4 text-sm text-gray-900 dark:text-white placeholder:text-gray-400 focus:border-gray-300 dark:focus:border-white/20 focus:outline-none transition-all"
             />
           </div>
-          <div className="flex gap-1 rounded-xl border border-saas-border bg-white p-1">
+          <div className="flex gap-1 rounded-xl border border-white/50 dark:border-white/[0.08] bg-white/40 dark:bg-white/[0.04] backdrop-blur-sm p-1">
             {(['all', 'ADMINISTRADOR', 'STAFF', 'PROFESOR'] as const).map(r => (
               <button
                 key={r}
                 onClick={() => setRolFilter(r)}
-                className={`rounded-lg px-3 py-1.5 text-xs font-semibold transition-colors ${rolFilter === r ? 'bg-gray-900 text-white' : 'text-gray-500 hover:text-gray-800'}`}
+                className={`rounded-lg px-3 py-1.5 text-xs font-semibold transition-colors ${rolFilter === r ? 'bg-gray-900 dark:bg-white/[0.12] text-white' : 'text-gray-500 dark:text-[#8A8A9A] hover:text-gray-800 dark:hover:text-white'}`}
               >
                 {r === 'all' ? 'Todos' : ROL_LABELS[r]}
               </button>
@@ -227,7 +227,7 @@ function UsuariosTab() {
           </div>
         </div>
         <div className="flex gap-2">
-          <button onClick={load} className="flex h-9 w-9 items-center justify-center rounded-xl border border-saas-border bg-white text-gray-400 hover:text-gray-700 transition-colors">
+          <button onClick={load} className="flex h-9 w-9 items-center justify-center rounded-xl border border-white/50 dark:border-white/[0.08] bg-white/60 dark:bg-white/[0.04] backdrop-blur-sm text-gray-400 hover:text-gray-700 dark:hover:text-white transition-colors">
             <RefreshCw size={14} />
           </button>
           <button
@@ -679,7 +679,7 @@ function PermisosTab() {
           onClick={load}
           disabled={isDirty}
           title={isDirty ? 'Guardá o descartá los cambios antes de recargar' : 'Recargar desde la base de datos'}
-          className="flex h-9 w-9 items-center justify-center rounded-xl border border-saas-border bg-white text-gray-400 hover:text-gray-700 transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
+          className="flex h-9 w-9 items-center justify-center rounded-xl border border-white/50 dark:border-white/[0.08] bg-white/60 dark:bg-white/[0.04] backdrop-blur-sm text-gray-400 hover:text-gray-700 dark:hover:text-white transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
         >
           <RefreshCw size={14} />
         </button>
@@ -855,7 +855,7 @@ function SolicitudesTab() {
           </p>
           <p className="text-xs text-[#8A8A9A] mt-0.5">Revisá y aprobá o rechazá cada solicitud de acceso</p>
         </div>
-        <button onClick={load} className="flex h-9 w-9 items-center justify-center rounded-xl border border-saas-border bg-white text-gray-400 hover:text-gray-700 transition-colors">
+        <button onClick={load} className="flex h-9 w-9 items-center justify-center rounded-xl border border-white/50 dark:border-white/[0.08] bg-white/60 dark:bg-white/[0.04] backdrop-blur-sm text-gray-400 hover:text-gray-700 dark:hover:text-white transition-colors">
           <RefreshCw size={14} />
         </button>
       </div>
@@ -968,7 +968,7 @@ export default function UsersPage() {
   return (
     <motion.div {...pageVariants} className="space-y-5">
       <div>
-        <h1 className="text-3xl md:text-4xl font-black tracking-tighter text-gray-900 dark:text-white drop-shadow-sm">
+        <h1 className="text-2xl lg:text-3xl xl:text-4xl font-black tracking-tighter text-gray-900 dark:text-white drop-shadow-sm">
           Usuarios
         </h1>
         <p className="text-sm text-[#8A8A9A] mt-1">Gestión de cuentas, profesores, permisos y solicitudes de acceso</p>

@@ -10,6 +10,18 @@ export interface Payment {
   paidAt: string
   notes: string | null
   createdAt: string
+  membresiaId: string | null
+  cuotaNumero: number | null
+  membresia?: {
+    id: string
+    planNombre: string
+    planFrecuencia: number
+    estado: string
+    modalidad: string
+    precio: number
+    fechaInicio: string
+    fechaVencimiento: string
+  } | null
 }
 
 export interface CreatePaymentDto {
@@ -19,4 +31,6 @@ export interface CreatePaymentDto {
   invoiced?: boolean
   paidAt: string
   notes?: string
+  membresiaId?: string
+  cuotaNumero?: number
 }

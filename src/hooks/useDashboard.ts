@@ -1,7 +1,7 @@
 import { useState, useEffect, useCallback } from 'react'
 import { dashboardApi, type DashboardStats } from '../api/dashboard.api'
 
-export function useDashboard(params?: { from?: string; to?: string }) {
+export function useDashboard(params?: { from?: string; to?: string; historicoMeses?: number }) {
   const [stats, setStats] = useState<DashboardStats | null>(null)
   const [isLoading, setIsLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
@@ -18,7 +18,7 @@ export function useDashboard(params?: { from?: string; to?: string }) {
     } finally {
       setIsLoading(false)
     }
-  }, [params?.from, params?.to])
+  }, [params?.from, params?.to, params?.historicoMeses])
 
   useEffect(() => { fetch() }, [fetch])
 

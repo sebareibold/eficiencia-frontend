@@ -13,7 +13,7 @@ El frontend consume la API REST del repo `eficiencia-backend`.
 - **Deploy destino:** Vercel
 - **Backend local:** `http://localhost:3000`
 - **Backend prod:** Railway (pendiente deploy)
-- **Estado (17/05/2026):** Frontend 100% implementado, conectado al backend real — todos los endpoints y enums mapeados en `/api/`
+- **Estado (20/05/2026):** Plataforma completa. Refactor membresías (TarifaVigente + Modalidad). Dashboard rediseñado con 5 secciones + alertas operativas. Sistema de permisos dinámicos implementado. Responsive fix aplicado en todas las páginas.
 
 > La app **registra** pagos (quién pagó, cuánto, cómo). No procesa cobros online. Sin MercadoPago ni Stripe.
 
@@ -143,15 +143,19 @@ src/
 /                   → redirect → /clients
 /clients            → ClientsPage        (admin + staff, PrivateRoute)
 /clients/:id        → ClientProfilePage  (admin + staff)
+/clients/:id/rutina → ClientRutinaPage   (admin + staff)
 /payments           → PaymentsPage       (admin + staff)
+/payments/:id       → PaymentDetailPage  (admin + staff)
 /shifts             → ShiftsPage         (admin + staff)
 /shifts/:id         → ShiftDetailPage    (admin + staff)
 /attendance         → AttendancePage     (admin + staff)
 /calendar           → CalendarPage       (admin + staff)
+/exercises          → ExercisesPage      (admin + staff)
 /expenses           → ExpensesPage       (solo admin, RoleGuard)
+/memberships        → MembershipsPage    (solo admin, RoleGuard)
 /dashboard          → DashboardPage      (solo admin, RoleGuard)
-/settings           → SettingsPage       (PrivateRoute)
-/client-rutina/:id  → ClientRutinaPage   (admin + staff)
+/usuarios           → UsersPage          (solo admin, RoleGuard)
+/settings           → SettingsPage       (solo admin, RoleGuard)
 *                   → redirect → /clients
 ```
 
@@ -221,11 +225,24 @@ colors: {
 
 ### PaymentsPage
 - Vista unificada — sin tabs de navegación superior
-- Sección pagos: KPIs + panel de filtros avanzados colapsable + toggle **Lista/Grid**
-  - Vista Lista: tabla desktop / cards mobile
+- Sección pagos: KPIs + toolbar (filtros colapsable + contador resultados + toggle Lista/Grid)
+  - Vista Lista desktop: tabla 5 columnas — Cliente (avatar inicial) · Importe · Método·Fecha · Estado (badge clickable toggle facturado) · Acciones (trash hover)
+  - Vista Lista mobile: cards con avatar inicial + método·fecha en línea + badge facturado
   - Vista Grid: cards en grid 1/2/3 columnas
-- Sección membresías: debajo de la sección de pagos, siempre visible
+  - Click en fila/card → navega a `/payments/:id` (PaymentDetailPage)
+- Separación con `min-h-[25vh]` spacer antes de la sección membresías
+- Sección membresías: debajo del fold, visible solo al scrollear
 - Header: dos botones independientes "Nueva membresía" y "Nuevo pago"
+
+### PaymentDetailPage
+- Ruta `/payments/:id`, accesible para admin + staff
+- Back button → `/payments`
+- Hero card: monto grande, método con color e ícono propios, fecha, badge facturado
+- Card cliente con nombre + botón "Ver perfil →" que linkea a `/clients/:clientId`
+- Card comprobante/notas (si existe)
+- Card membresía vinculada con estado badge coloreado (si existe)
+- Acciones: toggle facturado (todos) · eliminar (solo admin)
+- Desde ClientProfilePage: botón "Ver" en cuotas + click en fila de tabla de pagos navegan aquí
 
 ### ShiftDetailPage
 - Card hero: información del turno + barra de ocupación
@@ -325,18 +342,53 @@ VITE_API_URL=https://<railway-url>   # producción
 - Todos los archivos API (`/api/`)
 - Todos los hooks (`/hooks/`)
 - Todos los tipos (`/types/`)
-- ClientsPage, ClientProfilePage
-- **PaymentsPage** — vista unificada con toggle Lista/Grid + membresías debajo
-- **ShiftDetailPage** — tab "Resumen", orden: Resumen→Inscripciones→Asistencia→Lista de Espera, edición inline
-- ShiftsPage, AttendancePage, CalendarPage
-- ExpensesPage, DashboardPage
-- **UsersPage** — 4 tabs: Usuarios, Profesores, Roles y Permisos (API real), Solicitudes
-- ClientRutinaPage
+- ClientsPage, ClientProfilePage, ClientRutinaPage
+- PaymentsPage, PaymentDetailPage, ShiftsPage, ShiftDetailPage
+- AttendancePage, CalendarPage, ExpensesPage
+- UsersPage (4 tabs: Usuarios / Profesores / Permisos API / Solicitudes)
+- ScrollToTop global en navegación entre rutas
+
+### Sesión 20/05/2026 — cambios aplicados ✅
+
+**Membresías (Opción B — refactor completo):**
+- `Modalidad` enum actualizado: `TRANSFERENCIA_MENSUAL | EFECTIVO | MEMBRESIA_3_MESES | MEMBRESIA_6_MESES`
+- Nuevo `tarifas.api.ts`: `getAll`, `getMatriz`, `create`, `updatePrecio`
+- `memberships.api.ts` sin `precioBase`, incluye `tarifas[]` en cada plan
+- `membresiasCliente.api.ts` actualizado con nuevos valores de modalidad
+- `membership.types.ts` reescrito: `Plan`, `TarifaVigente`, `Modalidad`, labels
+- `PaymentsPage` — sección planes rediseñada: cards con tabla de 4 modalidades, edición de precio inline (formulario expandible dentro del mismo row), edición del plan inline dentro del card (AnimatePresence), selector visual de sesiones (botones 2× / 3× / Full), `PermissionGuard` gatea botones con `can()`
+- Ruta `/memberships` eliminada — todo el CRUD de planes vive en `/payments`
+
+**Dashboard rediseñado (5 secciones):**
+- **KPIs**: 4 cards (clientes activos, ingresos, gastos, ganancia neta)
+- **Alertas operativas**: clientes en deuda (clickeable → /clients), membresías por vencer en 7 días, membresías por vencer en 30 días
+- **Financiero**: AreaChart ingresos vs gastos vs ganancia (6 meses) + BarChart por método de cobro
+- **Clientes y planes**: DonutChart por estado + BarChart horizontal por plan + DonutChart gastos por categoría
+- **Facturación**: progress bar animada facturado/sin facturar + resumen del período
+- Skeleton completo que replica las 5 secciones con proporciones exactas
+- `dashboard.api.ts` reescrito: solo 2 llamadas paralelas (antes hacía 8+). Usa `/dashboard/historico` en vez de 6 llamadas mensuales
+
+**Sistema de permisos dinámicos:**
+- `PermissionGuard` (nuevo): reemplaza `RoleGuard` hardcodeado. Cada ruta gateada por `can(module, 'read')` de la matriz dinámica
+- `Layout.tsx`: refresh automático de permisos en mount + `window focus` — cambios del admin se propagan sin re-login
+- `Navbar`: items visibles según `can(module, 'read')` en lugar de `adminOnly: boolean`
+- `usePermissions`: sin cambios en la interfaz, ahora siempre tiene datos del servidor al mount
+- Gates aplicadas en páginas: `ClientsPage` (create), `PaymentsPage` (create/delete pagos, create/update membresías), `ShiftsPage` (create/delete turnos)
+
+**Responsive fix (patrón `base → lg: → xl:`):**
+- Todos los h1: `text-2xl lg:text-3xl xl:text-4xl`
+- Wrappers de página: `space-y-5 md:space-y-7 xl:space-y-10`
+- KPI grids: `gap-2 md:gap-4 xl:gap-6`
+- Cards: `rounded-2xl lg:rounded-[2rem]`, `p-4 lg:p-6 xl:p-8`
+- Dashboard charts: `min-h` adaptativos (3 niveles)
+- ShiftsPage calendar: `min-h-[72px] lg:min-h-[96px] xl:min-h-[120px]` por celda
+- `space-y-6` → `space-y-4 lg:space-y-6` en ClientsPage, ExpensesPage, ShiftsPage, AttendancePage
 
 ### Pendiente ⚠️
+- ⚠️ **Testear responsive en notebook 15"** — los fixes están aplicados pero no fueron verificados visualmente en una pantalla real de 1366×768 o similar. Hacer una pasada en el browser con DevTools → responsive mode antes de la reunión del 21/05
+- ⚠️ **Testear sistema de permisos con usuarios reales** — crear un usuario STAFF y un PROFESOR, verificar que: (a) las rutas protegidas redirigen correctamente, (b) los botones de acción se ocultan/muestran según la matriz, (c) al modificar permisos en UsersPage el cambio se refleja sin re-login (window focus)
 - Variables de entorno en Vercel (`VITE_API_URL` apuntando a Railway)
-- Deploy en Vercel
-- Configurar `vercel.json` con rewrite SPA para React Router
+- Deploy en Vercel + `vercel.json` con rewrite SPA
 
 ---
 

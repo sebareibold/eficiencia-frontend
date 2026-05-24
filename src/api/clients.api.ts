@@ -9,7 +9,8 @@ function mapEstado(estado: string): ClientStatus {
 }
 
 function mapCliente(c: any): Client {
-  const membership = c.membresias?.[0]
+  const membresias: any[] = c.membresias ?? []
+  const membership = membresias.find(m => m.estado === 'ACTIVA') ?? membresias[0] ?? null
   const plan = membership?.plan
   return {
     id: c.id,
@@ -24,6 +25,11 @@ function mapCliente(c: any): Client {
     planName: plan?.nombre ?? null,
     planPrice: plan?.precioBase != null ? Number(plan.precioBase) : null,
     planFrequency: plan?.frecuenciaSemanal ?? null,
+    membershipId: membership?.id ?? null,
+    membershipStatus: membership?.estado ?? null,
+    membershipModalidad: membership?.modalidad ?? null,
+    membershipPrecio: membership?.precio != null ? Number(membership.precio) : null,
+    diasUsados: c.diasUsados ?? 0,
     createdAt: c.createdAt,
     updatedAt: c.updatedAt ?? c.createdAt,
   }
@@ -46,6 +52,7 @@ export const clientsApi = {
       apellido: dto.lastName,
       email: dto.email || undefined,
       telefono: dto.phone || undefined,
+      dni: dto.dni || undefined,
       fechaInicio: new Date().toISOString(),
     }).then((r) => mapCliente(r.data)),
 
@@ -55,6 +62,7 @@ export const clientsApi = {
       ...(dto.lastName !== undefined && { apellido: dto.lastName }),
       ...(dto.email !== undefined && { email: dto.email }),
       ...(dto.phone !== undefined && { telefono: dto.phone }),
+      ...(dto.dni !== undefined && { dni: dto.dni }),
     }).then((r) => mapCliente(r.data)),
 
   remove: (id: string | number) => api.delete(`/clientes/${id}`),

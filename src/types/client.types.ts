@@ -13,6 +13,11 @@ export interface Client {
   planName?: string | null
   planPrice?: number | null
   planFrequency?: number | null
+  membershipId?: string | null
+  membershipStatus?: 'ACTIVA' | 'VENCIDA' | 'CANCELADA' | null
+  membershipModalidad?: 'MENSUAL' | 'TRES_MESES' | 'SEIS_MESES' | null
+  membershipPrecio?: number | null
+  diasUsados: number
   createdAt: string
   updatedAt: string
 }

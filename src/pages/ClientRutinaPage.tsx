@@ -405,6 +405,11 @@ function NuevaRutinaForm({
   const [profId, setProfId] = useState(professors[0]?.id ?? '')
   const [saving, setSaving] = useState(false)
 
+  // Sincroniza profId cuando los profesores cargan después del mount
+  useEffect(() => {
+    if (professors.length > 0 && !profId) setProfId(professors[0].id)
+  }, [professors])
+
   async function submit() {
     if (!nombre.trim()) return
     if (isAdmin && !profId) { addToast('Seleccioná un profesor', 'error'); return }

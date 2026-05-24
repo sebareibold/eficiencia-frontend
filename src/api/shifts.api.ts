@@ -29,16 +29,25 @@ function mapTurno(t: any): Shift {
   const days: WeekDay[] = diasSemana
     .map(d => DIA_TO_WEEKDAY[d.toLowerCase()])
     .filter((d): d is WeekDay => !!d)
+
+  const cupoMaximoSalaA: number = t.cupoMaximoSalaA ?? 0
+  const cupoMaximoSalaB: number = t.cupoMaximoSalaB ?? 0
+  const inscritosA: number = t.inscritosA ?? 0
+  const inscritosB: number = t.inscritosB ?? 0
+
   return {
     id: t.id,
-    name: `${t.horaInicio} · Sala ${t.sala}`,
-    room: t.sala,
+    name: `${t.horaInicio} – ${t.horaFin}`,
     days: days.length > 0 ? days : ['monday'],
     recurrente: t.recurrente ?? true,
     startTime: t.horaInicio,
     endTime: t.horaFin,
-    capacity: t.cupoMaximo,
-    enrolled: t.inscripcionesActivas ?? 0,
+    cupoMaximoSalaA,
+    cupoMaximoSalaB,
+    inscritosA,
+    inscritosB,
+    capacity: cupoMaximoSalaA + cupoMaximoSalaB,
+    enrolled: inscritosA + inscritosB,
     profesorId: String(t.profesorId ?? ''),
     profesorNombre: t.profesor?.usuario?.nombre ?? t.profesor?.nombre ?? '',
     createdAt: t.createdAt ?? '',
@@ -64,23 +73,23 @@ export const shiftsApi = {
 
   create: (dto: CreateShiftDto): Promise<Shift> =>
     api.post('/turnos', {
-      sala: dto.room,
       horaInicio: dto.startTime,
       horaFin: dto.endTime,
       diasSemana: dto.days.map(d => WEEKDAY_TO_DIA[d]),
       recurrente: dto.recurrente,
-      cupoMaximo: dto.capacity,
+      cupoMaximoSalaA: dto.cupoMaximoSalaA,
+      cupoMaximoSalaB: dto.cupoMaximoSalaB,
       profesorId: dto.profesorId,
     }).then((r) => mapTurno(r.data)),
 
   update: (id: string | number, dto: UpdateShiftDto): Promise<Shift> =>
     api.patch(`/turnos/${id}`, {
-      ...(dto.room !== undefined && { sala: dto.room }),
       ...(dto.startTime !== undefined && { horaInicio: dto.startTime }),
       ...(dto.endTime !== undefined && { horaFin: dto.endTime }),
       ...(dto.days !== undefined && { diasSemana: dto.days.map(d => WEEKDAY_TO_DIA[d]) }),
       ...(dto.recurrente !== undefined && { recurrente: dto.recurrente }),
-      ...(dto.capacity !== undefined && { cupoMaximo: dto.capacity }),
+      ...(dto.cupoMaximoSalaA !== undefined && { cupoMaximoSalaA: dto.cupoMaximoSalaA }),
+      ...(dto.cupoMaximoSalaB !== undefined && { cupoMaximoSalaB: dto.cupoMaximoSalaB }),
       ...(dto.profesorId !== undefined && { profesorId: dto.profesorId }),
     }).then((r) => mapTurno(r.data)),
 

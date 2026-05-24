@@ -76,8 +76,8 @@ function SegmentedControl<T extends string>({
             onClick={() => onChange(opt.value)}
             className={`flex-1 flex items-center justify-center gap-2 rounded-xl px-4 py-2 text-xs font-bold transition-all duration-300 ${
               isActive
-                ? 'bg-white dark:bg-[#2A2B2A] shadow-[0_4px_12px_rgba(0,0,0,0.05)] text-gray-900 dark:text-white scale-[1.02]'
-                : 'text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-200 hover:bg-white/40'
+                ? 'bg-white dark:bg-white/[0.10] backdrop-blur-sm shadow-[0_4px_12px_rgba(0,0,0,0.05)] dark:shadow-[0_4px_12px_rgba(0,0,0,0.3)] text-gray-900 dark:text-white scale-[1.02]'
+                : 'text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-200 hover:bg-white/40 dark:hover:bg-white/[0.06]'
             }`}
           >
             {opt.icon && <span className={isActive ? 'text-primary' : ''}>{opt.icon}</span>}
@@ -746,7 +746,7 @@ export default function SettingsPage() {
       </div>
 
       {/* Settings Sub-Nav */}
-      <div className="rounded-2xl border border-white/60 dark:border-white/[0.07] bg-white/50 dark:bg-black/20 backdrop-blur-xl p-1.5 shadow-[0_2px_12px_rgba(0,0,0,0.04)] dark:shadow-none">
+      <div className="rounded-2xl border border-white/50 dark:border-white/10 bg-white/30 dark:bg-black/30 backdrop-blur-3xl p-1.5 shadow-[0_8px_32px_rgba(0,0,0,0.04)] dark:shadow-[0_8px_32px_rgba(0,0,0,0.3)]">
         <div className="flex items-center gap-1 overflow-x-auto no-scrollbar">
           {filteredCategories.length === 0 ? (
             <p className="text-xs text-gray-400 px-3 py-2.5 whitespace-nowrap">Sin resultados para "{search}"</p>
@@ -761,14 +761,14 @@ export default function SettingsPage() {
                   onClick={() => setActiveCategory(cat.id)}
                   className={`relative flex items-center gap-2.5 px-4 py-2.5 rounded-xl whitespace-nowrap outline-none shrink-0 transition-colors duration-150 ${
                     isActive
-                      ? 'text-white'
+                      ? 'text-gray-900 dark:text-white'
                       : 'text-gray-500 dark:text-[#8A8A9A] hover:text-gray-800 dark:hover:text-gray-200 hover:bg-black/[0.05] dark:hover:bg-white/[0.06]'
                   }`}
                 >
                   {isActive && (
                     <motion.div
                       layoutId="settings-tab-active"
-                      className="absolute inset-0 rounded-xl bg-gray-900 dark:bg-white/[0.14]"
+                      className="absolute inset-0 rounded-xl bg-white/30 dark:bg-black/30 backdrop-blur-3xl border border-white/50 dark:border-white/10 shadow-[0_4px_12px_rgba(0,0,0,0.06)] dark:shadow-[0_4px_12px_rgba(0,0,0,0.3)]"
                       initial={false}
                       transition={{ type: 'spring', stiffness: 400, damping: 38 }}
                     />

@@ -1,4 +1,4 @@
-import React, { useState, useMemo } from 'react'
+﻿import React, { useState, useMemo, useEffect } from 'react'
 import { motion } from 'framer-motion'
 import { pageVariants } from '../lib/motion'
 import { Plus, Receipt, Wallet, Building, Wrench, RefreshCw, Trash2, Edit2, LayoutGrid, List, ArrowUp, ArrowDown, ArrowUpDown, ChevronLeft, ChevronRight, Search, X } from 'lucide-react'
@@ -82,6 +82,16 @@ type ViewMode = 'table' | 'grid'
 type SortKey = 'date' | 'amount' | 'category'
 type SortDir = 'asc' | 'desc'
 type PeriodMode = 'month' | 'year' | 'all'
+type ChartGroupBy = 'day' | 'week' | 'month'
+
+function isoWeekKey(dateStr: string): string {
+  const d = new Date(dateStr)
+  const day = d.getDay() || 7
+  d.setDate(d.getDate() + 4 - day)
+  const yearStart = new Date(d.getFullYear(), 0, 1)
+  const wk = Math.ceil(((d.getTime() - yearStart.getTime()) / 86400000 + 1) / 7)
+  return `${d.getFullYear()}-W${String(wk).padStart(2, '0')}`
+}
 
 function SortIcon({ active, dir }: { active: boolean; dir: SortDir }) {
   if (!active) return <ArrowUpDown size={12} className="opacity-30" />
@@ -93,6 +103,7 @@ function SortIcon({ active, dir }: { active: boolean; dir: SortDir }) {
 export default function ExpensesPage() {
   const today = new Date()
   const [periodMode, setPeriodMode] = useState<PeriodMode>('all')
+  const [chartGroupBy, setChartGroupBy] = useState<ChartGroupBy>('month')
   const [month, setMonth] = useState(format(today, 'yyyy-MM'))
   const [year, setYear] = useState(format(today, 'yyyy'))
   const [categoryFilter, setCategoryFilter] = useState<CategoryFilter>('all')
@@ -116,6 +127,10 @@ export default function ExpensesPage() {
     defaultValues: { category: 'VARIABLE', date: format(today, 'yyyy-MM-dd') },
   })
   const watchedCategory = watch('category')
+
+  useEffect(() => {
+    setChartGroupBy(periodMode === 'month' ? 'day' : 'month')
+  }, [periodMode])
 
   const periodExpenses = useMemo(() => {
     if (periodMode === 'year') return rawExpenses.filter(e => e.date.startsWith(year))
@@ -183,14 +198,25 @@ export default function ExpensesPage() {
   }, [periodExpenses])
 
   const chartData = useMemo(() => {
-    if (periodMode === 'month') {
+    if (chartGroupBy === 'day') {
       const byDay = periodExpenses.reduce((acc, exp) => {
         acc[exp.date] = (acc[exp.date] || 0) + exp.amount
         return acc
       }, {} as Record<string, number>)
       return Object.keys(byDay).sort().map(d => ({ date: formatDate(d), amount: byDay[d] }))
     }
-    // year / all → agrupar por mes
+    if (chartGroupBy === 'week') {
+      const byWeek = periodExpenses.reduce((acc, exp) => {
+        const key = isoWeekKey(exp.date)
+        acc[key] = (acc[key] || 0) + exp.amount
+        return acc
+      }, {} as Record<string, number>)
+      return Object.keys(byWeek).sort().map(key => {
+        const [, wk] = key.split('-W')
+        return { date: `Sem ${wk}`, amount: byWeek[key] }
+      })
+    }
+    // month grouping
     const byMonth = periodExpenses.reduce((acc, exp) => {
       const key = exp.date.substring(0, 7)
       acc[key] = (acc[key] || 0) + exp.amount
@@ -203,7 +229,7 @@ export default function ExpensesPage() {
         : MONTH_NAMES[m - 1].substring(0, 3)
       return { date: label, amount: byMonth[key] }
     })
-  }, [periodExpenses, periodMode])
+  }, [periodExpenses, periodMode, chartGroupBy])
 
   const categoryBreakdown = useMemo(() => {
     const total = totals.total || 1
@@ -273,24 +299,26 @@ export default function ExpensesPage() {
   ]
 
   return (
-    <motion.div {...pageVariants} className="space-y-6">
+    <motion.div {...pageVariants} className="space-y-4 lg:space-y-6">
       {/* Header */}
       <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
         <div>
-          <h1 className="text-3xl md:text-4xl font-black tracking-tighter text-gray-900 dark:text-white drop-shadow-sm">
+          <h1 className="text-2xl lg:text-3xl xl:text-4xl font-black tracking-tighter text-gray-900 dark:text-white drop-shadow-sm">
             Gastos
           </h1>
         </div>
 
         <div className="flex items-center gap-2.5 flex-wrap">
           {/* Selector de período */}
-          <div className="flex items-center overflow-hidden rounded-xl border border-saas-border bg-white shadow-sm">
+          <div className="flex items-center overflow-hidden rounded-xl border border-saas-border dark:border-white/[0.08] bg-white/60 dark:bg-white/[0.04] backdrop-blur-sm shadow-sm">
             {(['month', 'year', 'all'] as PeriodMode[]).map((m, i) => (
               <button
                 key={m}
                 onClick={() => setPeriodMode(m)}
-                className={`h-9 px-3.5 text-sm font-medium transition-colors ${i > 0 ? 'border-l border-saas-border' : ''} ${
-                  periodMode === m ? 'bg-gray-900 text-white' : 'text-gray-500 hover:bg-saas-bg hover:text-gray-700'
+                className={`h-9 px-3.5 text-sm font-medium transition-colors ${i > 0 ? 'border-l border-saas-border dark:border-white/[0.08]' : ''} ${
+                  periodMode === m
+                    ? 'bg-gray-900 dark:bg-white/[0.12] text-white'
+                    : 'text-gray-500 dark:text-[#8A8A9A] hover:bg-saas-bg dark:hover:bg-white/[0.06] hover:text-gray-700 dark:hover:text-white'
                 }`}
               >
                 {m === 'month' ? 'Mes' : m === 'year' ? 'Año' : 'Histórico'}
@@ -298,17 +326,17 @@ export default function ExpensesPage() {
             ))}
           </div>
 
-          {/* Navegador unificado — siempre visible, ancho fijo */}
-          <div className="flex items-center overflow-hidden rounded-xl border border-saas-border bg-white shadow-sm">
+          {/* Navegador unificado */}
+          <div className="flex items-center overflow-hidden rounded-xl border border-saas-border dark:border-white/[0.08] bg-white/60 dark:bg-white/[0.04] backdrop-blur-sm shadow-sm">
             <button
               onClick={() => periodMode === 'month' ? navigateMonth(-1) : navigateYear(-1)}
-              className={`flex h-9 w-9 items-center justify-center border-r border-saas-border text-gray-400 transition-all hover:bg-saas-bg hover:text-gray-700 active:scale-[0.92] ${
+              className={`flex h-9 w-9 items-center justify-center border-r border-saas-border dark:border-white/[0.08] text-gray-400 dark:text-[#8A8A9A] transition-all hover:bg-saas-bg dark:hover:bg-white/[0.06] hover:text-gray-700 dark:hover:text-white active:scale-[0.92] ${
                 periodMode === 'all' ? 'pointer-events-none opacity-0' : ''
               }`}
             >
               <ChevronLeft size={15} />
             </button>
-            <span className="w-[148px] text-center text-sm font-semibold text-gray-800">
+            <span className="w-[148px] text-center text-sm font-semibold text-gray-800 dark:text-white">
               {periodMode === 'month'
                 ? getMonthLabel(month)
                 : periodMode === 'year'
@@ -321,7 +349,7 @@ export default function ExpensesPage() {
                 (periodMode === 'month' && month >= format(today, 'yyyy-MM')) ||
                 (periodMode === 'year' && year >= format(today, 'yyyy'))
               }
-              className={`flex h-9 w-9 items-center justify-center border-l border-saas-border text-gray-400 transition-all hover:bg-saas-bg hover:text-gray-700 active:scale-[0.92] disabled:cursor-not-allowed disabled:opacity-30 ${
+              className={`flex h-9 w-9 items-center justify-center border-l border-saas-border dark:border-white/[0.08] text-gray-400 dark:text-[#8A8A9A] transition-all hover:bg-saas-bg dark:hover:bg-white/[0.06] hover:text-gray-700 dark:hover:text-white active:scale-[0.92] disabled:cursor-not-allowed disabled:opacity-30 ${
                 periodMode === 'all' ? 'pointer-events-none opacity-0' : ''
               }`}
             >
@@ -333,7 +361,7 @@ export default function ExpensesPage() {
           <button
             onClick={refetch}
             title="Actualizar"
-            className="flex h-9 w-9 items-center justify-center rounded-xl border border-saas-border bg-white text-gray-400 transition-all hover:bg-saas-bg hover:text-gray-700 active:scale-[0.9]"
+            className="flex h-9 w-9 items-center justify-center rounded-xl border border-saas-border dark:border-white/[0.08] bg-white/60 dark:bg-white/[0.04] backdrop-blur-sm text-gray-400 dark:text-[#8A8A9A] transition-all hover:bg-saas-bg dark:hover:bg-white/[0.08] hover:text-gray-700 dark:hover:text-white active:scale-[0.9]"
           >
             <RefreshCw size={14} />
           </button>
@@ -352,7 +380,7 @@ export default function ExpensesPage() {
       </div>
 
       {/* Two-column layout */}
-      <div className="grid grid-cols-1 xl:grid-cols-[1fr_360px] gap-6 items-start">
+      <div className="grid grid-cols-1 xl:grid-cols-[1fr_360px] gap-4 lg:gap-6 items-start">
 
         {/* ─── LEFT: resumen + controles + tabla/grid ─── */}
         <div className="space-y-5 min-w-0">
@@ -375,13 +403,13 @@ export default function ExpensesPage() {
 
           {/* Búsqueda por descripción */}
           <div className="relative">
-            <Search size={14} className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" />
+            <Search size={14} className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-gray-400 dark:text-[#8A8A9A]" />
             <input
               type="text"
               value={search}
               onChange={e => setSearch(e.target.value)}
               placeholder="Buscar por descripción..."
-              className="w-full rounded-xl border border-saas-border bg-white py-2.5 pl-9 pr-9 text-sm text-gray-900 placeholder:text-gray-400 transition-all focus:border-gray-400 focus:outline-none focus:ring-2 focus:ring-gray-200"
+              className="w-full rounded-xl border border-saas-border dark:border-white/[0.08] bg-white/60 dark:bg-white/[0.04] backdrop-blur-sm py-2.5 pl-9 pr-9 text-sm text-gray-900 dark:text-white placeholder:text-gray-400 dark:placeholder:text-[#8A8A9A] transition-all focus:border-gray-400 dark:focus:border-white/20 focus:outline-none focus:ring-2 focus:ring-gray-200 dark:focus:ring-white/10"
             />
             {search && (
               <button
@@ -404,13 +432,13 @@ export default function ExpensesPage() {
                   className={`relative inline-flex items-center rounded-full px-3 py-1.5 text-sm font-medium transition-colors ${
                     categoryFilter === c
                       ? 'text-white'
-                      : 'border border-saas-border bg-white text-gray-700 hover:bg-saas-hover'
+                      : 'border border-saas-border dark:border-white/[0.08] bg-white/60 dark:bg-white/[0.04] text-gray-700 dark:text-[#8A8A9A] hover:bg-saas-hover dark:hover:bg-white/[0.08] hover:text-gray-900 dark:hover:text-white'
                   }`}
                 >
                   {categoryFilter === c && (
                     <motion.div
                       layoutId="filter-category"
-                      className="absolute inset-0 rounded-full bg-gray-900"
+                      className="absolute inset-0 rounded-full bg-gray-900 dark:bg-white/[0.15]"
                       transition={{ type: 'spring', stiffness: 380, damping: 30 }}
                       style={{ zIndex: 0 }}
                     />
@@ -426,15 +454,15 @@ export default function ExpensesPage() {
 
             {/* Sort buttons */}
             <div className="flex items-center gap-1.5">
-              <span className="text-xs font-medium text-saas-muted">Ordenar:</span>
+              <span className="text-xs font-medium text-saas-muted dark:text-[#8A8A9A]">Ordenar:</span>
               {(['date', 'amount', 'category'] as SortKey[]).map(k => (
                 <button
                   key={k}
                   onClick={() => toggleSort(k)}
                   className={`flex items-center gap-1 rounded-lg px-2.5 py-1.5 text-xs font-medium transition-colors ${
                     sortKey === k
-                      ? 'bg-gray-900 text-white'
-                      : 'border border-saas-border bg-white text-gray-600 hover:bg-saas-bg'
+                      ? 'bg-gray-900 dark:bg-white/[0.12] text-white'
+                      : 'border border-saas-border dark:border-white/[0.08] bg-white/60 dark:bg-white/[0.04] text-gray-600 dark:text-[#8A8A9A] hover:bg-saas-bg dark:hover:bg-white/[0.08] hover:text-gray-900 dark:hover:text-white'
                   }`}
                 >
                   {k === 'date' ? 'Fecha' : k === 'amount' ? 'Monto' : 'Tipo'}
@@ -444,12 +472,14 @@ export default function ExpensesPage() {
             </div>
 
             {/* View toggle */}
-            <div className="flex items-center rounded-lg border border-saas-border bg-white p-1">
+            <div className="flex items-center rounded-lg border border-saas-border dark:border-white/[0.08] bg-white/60 dark:bg-white/[0.04] backdrop-blur-sm p-1">
               <button
                 onClick={() => setViewMode('table')}
                 title="Vista tabla"
                 className={`flex items-center justify-center rounded-md p-1.5 transition-colors ${
-                  viewMode === 'table' ? 'bg-gray-900 text-white' : 'text-gray-400 hover:text-gray-700'
+                  viewMode === 'table'
+                    ? 'bg-gray-900 dark:bg-white/[0.12] text-white'
+                    : 'text-gray-400 dark:text-[#8A8A9A] hover:text-gray-700 dark:hover:text-white'
                 }`}
               >
                 <List size={14} />
@@ -458,7 +488,9 @@ export default function ExpensesPage() {
                 onClick={() => setViewMode('grid')}
                 title="Vista tarjetas"
                 className={`flex items-center justify-center rounded-md p-1.5 transition-colors ${
-                  viewMode === 'grid' ? 'bg-gray-900 text-white' : 'text-gray-400 hover:text-gray-700'
+                  viewMode === 'grid'
+                    ? 'bg-gray-900 dark:bg-white/[0.12] text-white'
+                    : 'text-gray-400 dark:text-[#8A8A9A] hover:text-gray-700 dark:hover:text-white'
                 }`}
               >
                 <LayoutGrid size={14} />
@@ -477,7 +509,7 @@ export default function ExpensesPage() {
 
           {/* ── Table view ── */}
           {viewMode === 'table' && (
-            <div className="overflow-x-auto rounded-3xl border border-white/50 dark:border-white/10 bg-white/30 dark:bg-black/30 backdrop-blur-3xl shadow-[0_8px_32px_rgba(0,0,0,0.04)] dark:shadow-[0_8px_32px_rgba(0,0,0,0.3)]">
+            <div className="overflow-x-auto rounded-2xl xl:rounded-3xl border border-white/50 dark:border-white/10 bg-white/30 dark:bg-black/30 backdrop-blur-3xl shadow-[0_8px_32px_rgba(0,0,0,0.04)] dark:shadow-[0_8px_32px_rgba(0,0,0,0.3)]">
               {isLoading ? (
                 <div className="p-4 space-y-3">
                   {Array.from({ length: 6 }).map((_, i) => (
@@ -485,14 +517,21 @@ export default function ExpensesPage() {
                   ))}
                 </div>
               ) : (
-                <table className="w-full text-sm">
-                  <thead className="border-b border-saas-border bg-[#F9F8F6]">
+                <table className="w-full table-fixed text-sm">
+                  <colgroup>
+                    <col />
+                    <col className="w-28" />
+                    <col className="w-32" />
+                    <col className="w-28" />
+                    <col className="w-20" />
+                  </colgroup>
+                  <thead className="border-b border-saas-border dark:border-white/10 bg-[#F9F8F6] dark:bg-white/[0.04]">
                     <tr>
-                      <th className="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wider text-saas-muted">
+                      <th className="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wider text-saas-muted dark:text-gray-400">
                         Descripción
                       </th>
                       <th
-                        className="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wider text-saas-muted cursor-pointer select-none hover:text-gray-700"
+                        className="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wider text-saas-muted dark:text-gray-400 cursor-pointer select-none hover:text-gray-700 dark:hover:text-gray-200"
                         onClick={() => toggleSort('category')}
                       >
                         <div className="flex items-center gap-1">
@@ -500,7 +539,7 @@ export default function ExpensesPage() {
                         </div>
                       </th>
                       <th
-                        className="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wider text-saas-muted cursor-pointer select-none hover:text-gray-700"
+                        className="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wider text-saas-muted dark:text-gray-400 cursor-pointer select-none hover:text-gray-700 dark:hover:text-gray-200"
                         onClick={() => toggleSort('amount')}
                       >
                         <div className="flex items-center gap-1">
@@ -508,7 +547,7 @@ export default function ExpensesPage() {
                         </div>
                       </th>
                       <th
-                        className="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wider text-saas-muted cursor-pointer select-none hover:text-gray-700"
+                        className="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wider text-saas-muted dark:text-gray-400 cursor-pointer select-none hover:text-gray-700 dark:hover:text-gray-200"
                         onClick={() => toggleSort('date')}
                       >
                         <div className="flex items-center gap-1">
@@ -518,37 +557,39 @@ export default function ExpensesPage() {
                       <th className="px-4 py-3" />
                     </tr>
                   </thead>
-                  <tbody className="divide-y divide-saas-divider">
+                  <tbody className="divide-y divide-saas-divider dark:divide-white/[0.06]">
                     {filteredAndSorted.length === 0 ? (
                       <tr>
-                        <td colSpan={5} className="px-4 py-12 text-center text-saas-muted">
+                        <td colSpan={5} className="px-4 py-12 text-center text-saas-muted dark:text-[#8A8A9A]">
                           Sin gastos en este período
                         </td>
                       </tr>
                     ) : filteredAndSorted.map(e => (
-                      <tr
-                        key={e.id}
-                        className="group relative transition-colors hover:bg-white/50 dark:hover:bg-black/50 before:absolute before:bottom-0 before:left-0 before:top-0 before:w-[3px] before:bg-eficiencia-yellow before:opacity-0 before:transition-opacity hover:before:opacity-100 bg-transparent"
-                      >
-                        <td className="px-4 py-3 font-medium text-gray-900">{e.description}</td>
+                      <tr key={e.id} className="group transition-colors hover:bg-black/[0.03] dark:hover:bg-white/[0.04]">
+                        <td className="px-4 py-3 font-medium text-gray-900 dark:text-gray-100 truncate">
+                          <div className="flex items-center gap-2">
+                            <span className="w-0.5 h-4 rounded-full bg-primary opacity-0 group-hover:opacity-100 transition-opacity shrink-0" />
+                            <span className="truncate">{e.description}</span>
+                          </div>
+                        </td>
                         <td className="px-4 py-3">
                           <span className={`inline-flex items-center rounded-full border px-2.5 py-0.5 text-xs font-medium ${CATEGORY_COLORS[e.category] ?? 'bg-gray-100 text-gray-500 border-gray-200'}`}>
                             {CATEGORY_LABELS[e.category] ?? e.category}
                           </span>
                         </td>
-                        <td className="px-4 py-3 font-semibold text-red-600">{formatCurrency(e.amount)}</td>
-                        <td className="px-4 py-3 text-saas-muted">{formatDate(e.date)}</td>
+                        <td className="px-4 py-3 font-semibold text-red-500 dark:text-red-400 tabular-nums">{formatCurrency(e.amount)}</td>
+                        <td className="px-4 py-3 text-saas-muted dark:text-gray-400 tabular-nums">{formatDate(e.date)}</td>
                         <td className="px-4 py-3 text-right">
-                          <div className="flex items-center justify-end gap-2 opacity-0 transition-opacity duration-150 group-hover:opacity-100">
+                          <div className="flex items-center justify-end gap-1 opacity-0 transition-opacity duration-150 group-hover:opacity-100">
                             <button
                               onClick={() => openEdit(e)}
-                              className="rounded-md p-1.5 text-gray-400 transition-all hover:bg-gray-100 hover:text-gray-900"
+                              className="rounded-md p-1.5 text-gray-400 dark:text-[#8A8A9A] transition-all hover:bg-gray-100 dark:hover:bg-white/[0.08] hover:text-gray-900 dark:hover:text-white"
                             >
                               <Edit2 size={14} />
                             </button>
                             <button
                               onClick={() => deleteExpense(e.id)}
-                              className="rounded-md p-1.5 text-gray-400 transition-all hover:bg-red-50 hover:text-red-600"
+                              className="rounded-md p-1.5 text-gray-400 dark:text-[#8A8A9A] transition-all hover:bg-red-50 dark:hover:bg-red-500/10 hover:text-red-600 dark:hover:text-red-400"
                             >
                               <Trash2 size={14} />
                             </button>
@@ -571,7 +612,7 @@ export default function ExpensesPage() {
                 ))}
               </div>
             ) : filteredAndSorted.length === 0 ? (
-              <div className="rounded-3xl border border-white/50 dark:border-white/10 bg-white/30 dark:bg-black/30 backdrop-blur-3xl py-16 text-center text-saas-muted">
+              <div className="rounded-2xl xl:rounded-3xl border border-white/50 dark:border-white/10 bg-white/30 dark:bg-black/30 backdrop-blur-3xl py-16 text-center text-saas-muted">
                 Sin gastos en este período
               </div>
             ) : (
@@ -623,11 +664,31 @@ export default function ExpensesPage() {
         {/* ─── RIGHT: gráfico + desglose por categoría ─── */}
         <div className="xl:sticky xl:top-6 space-y-5">
 
-          {/* Area chart — evolución mensual */}
-          <div className="rounded-3xl border border-white/50 dark:border-white/10 bg-white/30 dark:bg-black/30 backdrop-blur-3xl shadow-[0_8px_32px_rgba(0,0,0,0.04)] dark:shadow-[0_8px_32px_rgba(0,0,0,0.3)] p-6">
-            <h3 className="text-base font-bold text-gray-900 dark:text-white mb-5">
-              {periodMode === 'month' ? 'Evolución del mes' : periodMode === 'year' ? 'Evolución del año' : 'Evolución histórica'}
-            </h3>
+          {/* Area chart — evolución */}
+          <div className="rounded-2xl xl:rounded-3xl border border-white/50 dark:border-white/10 bg-white/30 dark:bg-black/30 backdrop-blur-3xl shadow-[0_8px_32px_rgba(0,0,0,0.04)] dark:shadow-[0_8px_32px_rgba(0,0,0,0.3)] p-6">
+            <div className="flex items-center justify-between mb-5">
+              <h3 className="text-base font-bold text-gray-900 dark:text-white">
+                {periodMode === 'month' ? 'Evolución del mes' : periodMode === 'year' ? 'Evolución del año' : 'Evolución histórica'}
+              </h3>
+              <div className="flex gap-1 rounded-xl bg-gray-100 dark:bg-white/[0.06] p-1">
+                {(periodMode === 'month'
+                  ? [['day', 'Día'], ['week', 'Semana']] as const
+                  : [['week', 'Semana'], ['month', 'Mes']] as const
+                ).map(([g, label]) => (
+                  <button
+                    key={g}
+                    onClick={() => setChartGroupBy(g as ChartGroupBy)}
+                    className={`text-xs font-semibold px-3 py-1 rounded-lg transition-all ${
+                      chartGroupBy === g
+                        ? 'bg-white dark:bg-white/[0.12] text-gray-900 dark:text-white shadow-sm'
+                        : 'text-gray-500 dark:text-[#8A8A9A] hover:text-gray-700 dark:hover:text-white'
+                    }`}
+                  >
+                    {label}
+                  </button>
+                ))}
+              </div>
+            </div>
             <div className="h-56 w-full">
               {isLoading ? (
                 <Skeleton className="h-full w-full rounded-2xl" />
@@ -677,6 +738,8 @@ export default function ExpensesPage() {
                       strokeWidth={2.5}
                       fillOpacity={1}
                       fill="url(#colorAmount)"
+                      dot={{ r: 3, fill: '#F97316', strokeWidth: 0 }}
+                      activeDot={{ r: 5, fill: '#F97316', strokeWidth: 0 }}
                     />
                   </AreaChart>
                 </ResponsiveContainer>
@@ -685,7 +748,7 @@ export default function ExpensesPage() {
           </div>
 
           {/* Category breakdown con barras de progreso */}
-          <div className="rounded-3xl border border-white/50 dark:border-white/10 bg-white/30 dark:bg-black/30 backdrop-blur-3xl shadow-[0_8px_32px_rgba(0,0,0,0.04)] dark:shadow-[0_8px_32px_rgba(0,0,0,0.3)] p-6">
+          <div className="rounded-2xl xl:rounded-3xl border border-white/50 dark:border-white/10 bg-white/30 dark:bg-black/30 backdrop-blur-3xl shadow-[0_8px_32px_rgba(0,0,0,0.04)] dark:shadow-[0_8px_32px_rgba(0,0,0,0.3)] p-6">
             <h3 className="text-base font-bold text-gray-900 dark:text-white mb-5">Por categoría</h3>
             {isLoading ? (
               <div className="space-y-4">

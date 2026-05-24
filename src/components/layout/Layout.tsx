@@ -1,8 +1,28 @@
+import { useEffect } from 'react'
 import { Outlet } from 'react-router-dom'
 import Navbar from './Navbar'
 import ToastContainer from '../ui/Toast'
+import { permisosApi } from '../../api/permisos.api'
+import { useAuthStore } from '../../store/authStore'
 
 export default function Layout() {
+  const setPermissions = useAuthStore(s => s.setPermissions)
+  const accessToken    = useAuthStore(s => s.accessToken)
+
+  // Refresca permisos al montar y cuando la ventana recupera el foco.
+  // Así los cambios que hace el admin se propagan sin que el usuario re-loguee.
+  useEffect(() => {
+    if (!accessToken) return
+    const refresh = () => {
+      permisosApi.getForMyRole()
+        .then(perms => { if (Object.keys(perms).length > 0) setPermissions(perms) })
+        .catch(() => {})
+    }
+    refresh()
+    window.addEventListener('focus', refresh)
+    return () => window.removeEventListener('focus', refresh)
+  }, [accessToken, setPermissions])
+
   return (
     <div className="min-h-screen w-full flex flex-col relative overflow-hidden bg-[#fafafa] dark:bg-[#050505] transition-colors duration-300">
       

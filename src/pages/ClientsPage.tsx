@@ -1,34 +1,15 @@
-import { useState, useMemo } from 'react'
+﻿import { useState, useMemo } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { motion } from 'framer-motion'
 import { pageVariants } from '../lib/motion'
 import { Plus, Search, RefreshCw, LayoutList, LayoutGrid, ChevronRight, Phone, Mail } from 'lucide-react'
-import { useForm } from 'react-hook-form'
-import { zodResolver } from '@hookform/resolvers/zod'
-import { z } from 'zod'
+import { usePermissions } from '../hooks/usePermissions'
 import { useClients } from '../hooks/useClients'
-import { clientsApi } from '../api/clients.api'
-import { useUiStore } from '../store/uiStore'
-import { useAuthStore } from '../store/authStore'
 import Badge from '../components/ui/Badge'
-import Button from '../components/ui/Button'
-import Modal from '../components/ui/Modal'
-import Input from '../components/ui/Input'
 import Table, { type Column } from '../components/ui/Table'
 import Skeleton from '../components/ui/Skeleton'
 import type { Client } from '../types/client.types'
 import type { ClientStatus } from '../constants/clientStatus'
-import { ROUTES } from '../constants/routes'
-
-const schema = z.object({
-  name: z.string().min(1, 'El nombre es requerido'),
-  lastName: z.string().min(1, 'El apellido es requerido'),
-  email: z.string().email('Email inválido').or(z.literal('')),
-  phone: z.string().optional(),
-  dni: z.string().min(1, 'El DNI es requerido'),
-})
-
-type FormValues = z.infer<typeof schema>
 
 type StatusFilter = 'all' | ClientStatus
 
@@ -42,22 +23,14 @@ const STATUS_FILTERS: { value: StatusFilter; label: string }[] = [
 
 export default function ClientsPage() {
   const navigate = useNavigate()
+  const { can } = usePermissions()
   const { clients, isLoading, error, refetch } = useClients()
-  const addToast = useUiStore(s => s.addToast)
-  const user = useAuthStore(s => s.user)
-  const isAdmin = user?.role === 'admin'
 
   const [viewMode, setViewMode] = useState<'table' | 'grid'>(() =>
     typeof window !== 'undefined' && window.innerWidth < 768 ? 'grid' : 'table'
   )
   const [search, setSearch] = useState('')
   const [statusFilter, setStatusFilter] = useState<StatusFilter>('all')
-  const [modalOpen, setModalOpen] = useState(false)
-  const [isSubmitting, setIsSubmitting] = useState(false)
-
-  const { register, handleSubmit, formState: { errors }, reset } = useForm<FormValues>({
-    resolver: zodResolver(schema),
-  })
 
   const filtered = useMemo(() => {
     const q = search.toLowerCase()
@@ -71,27 +44,6 @@ export default function ClientsPage() {
       return matchesSearch && matchesStatus
     })
   }, [clients, search, statusFilter])
-
-  async function onSubmit(data: FormValues) {
-    setIsSubmitting(true)
-    try {
-      await clientsApi.create({
-        name: data.name,
-        lastName: data.lastName,
-        email: data.email ?? '',
-        phone: data.phone ?? '',
-        dni: data.dni,
-      })
-      addToast('Cliente creado correctamente', 'success')
-      setModalOpen(false)
-      reset()
-      refetch()
-    } catch {
-      addToast('Error al crear el cliente', 'error')
-    } finally {
-      setIsSubmitting(false)
-    }
-  }
 
   const columns: Column<Client>[] = [
     {
@@ -145,12 +97,12 @@ export default function ClientsPage() {
   return (
     <motion.div
       {...pageVariants}
-      className="space-y-6"
+      className="space-y-4 lg:space-y-6"
     >
       {/* Header */}
       <div className="mb-6 flex flex-col gap-4 sm:flex-row sm:items-end sm:justify-between">
         <div className="flex flex-col gap-1">
-          <h1 className="text-3xl md:text-4xl font-black tracking-tighter text-gray-900 dark:text-white drop-shadow-sm">Clientes</h1>
+          <h1 className="text-2xl lg:text-3xl xl:text-4xl font-black tracking-tighter text-gray-900 dark:text-white drop-shadow-sm">Clientes</h1>
           {!isLoading && (
             <p className="text-sm text-saas-muted">{filtered.length} resultado{filtered.length !== 1 ? 's' : ''}</p>
           )}
@@ -179,15 +131,17 @@ export default function ClientsPage() {
           >
             <RefreshCw size={15} />
           </button>
-          <button
-            onClick={() => setModalOpen(true)}
-            className="flex items-center gap-2 rounded-xl btn-action px-4 py-2.5 text-sm"
-          >
-            <span className="flex h-5 w-5 items-center justify-center rounded-md bg-gray-900/10">
-              <Plus size={13} strokeWidth={2.5} />
-            </span>
-            Nuevo cliente
-          </button>
+          {can('clients', 'create') && (
+            <button
+              onClick={() => navigate('/clients/new')}
+              className="flex items-center gap-2 rounded-xl btn-action px-4 py-2.5 text-sm"
+            >
+              <span className="flex h-5 w-5 items-center justify-center rounded-md bg-gray-900/10">
+                <Plus size={13} strokeWidth={2.5} />
+              </span>
+              Nuevo cliente
+            </button>
+          )}
         </div>
       </div>
 
@@ -250,7 +204,7 @@ export default function ClientsPage() {
       ) : isLoading ? (
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
           {Array.from({ length: 8 }).map((_, i) => (
-            <Skeleton key={i} className="h-48 rounded-[2rem]" />
+            <Skeleton key={i} className="h-48 rounded-2xl lg:rounded-[2rem]" />
           ))}
         </div>
       ) : filtered.length === 0 ? (
@@ -324,29 +278,6 @@ export default function ClientsPage() {
         </div>
       )}
 
-      {/* Create modal */}
-      <Modal isOpen={modalOpen} onClose={() => { setModalOpen(false); reset() }} title="Nuevo cliente" size="md">
-        <form onSubmit={handleSubmit(onSubmit)} className="space-y-4">
-          <div className="grid grid-cols-2 gap-4">
-            <Input label="Nombre *" error={errors.name?.message} {...register('name')} />
-            <Input label="Apellido *" error={errors.lastName?.message} {...register('lastName')} />
-          </div>
-          <Input label="DNI *" error={errors.dni?.message} {...register('dni')} />
-          <Input label="Email" type="email" error={errors.email?.message} {...register('email')} />
-          <Input label="Teléfono" error={errors.phone?.message} {...register('phone')} />
-          <div className="rounded-lg border border-primary/20 bg-primary/5 px-3 py-2 text-xs text-primary">
-            El primer pago siempre se registra por transferencia bancaria.
-          </div>
-          <div className="flex justify-end gap-2 pt-2">
-            <Button variant="ghost" type="button" onClick={() => { setModalOpen(false); reset() }}>
-              Cancelar
-            </Button>
-            <Button type="submit" isLoading={isSubmitting}>
-              Crear cliente
-            </Button>
-          </div>
-        </form>
-      </Modal>
     </motion.div>
   )
 }

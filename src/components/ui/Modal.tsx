@@ -33,12 +33,12 @@ export default function Modal({ isOpen, onClose, title, children, size = 'md' }:
           <motion.div
             key="panel"
             {...modalVariants}
-            className={`w-full ${sizeClasses[size]} overflow-hidden rounded-[2rem] border border-white/50 dark:border-white/10 bg-white/95 dark:bg-[#0a0a0a]/95 backdrop-blur-3xl shadow-[0_24px_60px_rgba(0,0,0,0.1)] dark:shadow-[0_24px_60px_rgba(0,0,0,0.5)] relative`}
+            className={`w-full ${sizeClasses[size]} max-h-[90vh] flex flex-col rounded-[2rem] border border-white/50 dark:border-white/10 bg-white/95 dark:bg-[#0a0a0a]/95 backdrop-blur-3xl shadow-[0_24px_60px_rgba(0,0,0,0.1)] dark:shadow-[0_24px_60px_rgba(0,0,0,0.5)] relative overflow-hidden`}
             onClick={(e) => e.stopPropagation()}
           >
             {title && (
-              <div className="flex items-center justify-between border-b border-white/20 dark:border-white/10 px-6 py-5">
-                <h2 className="text-xl font-bold tracking-tight text-gray-900 dark:text-white">{title}</h2>
+              <div className="flex items-center justify-between border-b border-white/20 dark:border-white/10 px-6 py-4 shrink-0">
+                <h2 className="text-base font-bold tracking-tight text-gray-900 dark:text-white">{title}</h2>
                 <button
                   onClick={onClose}
                   className="rounded-full p-2 text-gray-500 dark:text-gray-400 transition-all duration-300 hover:bg-black/5 dark:hover:bg-white/10 hover:text-gray-900 dark:hover:text-white active:scale-95"
@@ -47,7 +47,7 @@ export default function Modal({ isOpen, onClose, title, children, size = 'md' }:
                 </button>
               </div>
             )}
-            <div className="px-6 py-5">{children}</div>
+            <div className="px-6 py-5 overflow-hidden">{children}</div>
           </motion.div>
         </motion.div>
       )}

@@ -29,6 +29,20 @@ function mapPago(p: any): Payment {
     paidAt: p.fecha,
     notes: p.comprobante ?? null,
     createdAt: p.createdAt,
+    membresiaId: p.membresiaId ?? null,
+    cuotaNumero: p.cuotaNumero ?? null,
+    membresia: p.membresia
+      ? {
+          id: p.membresia.id,
+          planNombre: p.membresia.plan?.nombre ?? '',
+          planFrecuencia: p.membresia.plan?.frecuenciaSemanal ?? 0,
+          estado: p.membresia.estado,
+          modalidad: p.membresia.modalidad,
+          precio: Number(p.membresia.precio),
+          fechaInicio: p.membresia.fechaInicio,
+          fechaVencimiento: p.membresia.fechaVencimiento,
+        }
+      : null,
   }
 }
 
@@ -52,7 +66,12 @@ export const paymentsApi = {
       facturado: dto.invoiced ?? false,
       fecha: dto.paidAt,
       comprobante: dto.notes,
+      ...(dto.membresiaId && { membresiaId: dto.membresiaId }),
+      ...(dto.cuotaNumero !== undefined && { cuotaNumero: dto.cuotaNumero }),
     }).then((r) => mapPago(r.data)),
+
+  getById: (id: string | number): Promise<Payment> =>
+    api.get(`/pagos/${id}`).then((r) => mapPago(r.data)),
 
   toggleInvoiced: (id: string | number): Promise<Payment> =>
     api.patch(`/pagos/${id}`, { facturado: true }).then((r) => mapPago(r.data)),
