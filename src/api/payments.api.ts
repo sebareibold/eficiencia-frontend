@@ -73,8 +73,8 @@ export const paymentsApi = {
   getById: (id: string | number): Promise<Payment> =>
     api.get(`/pagos/${id}`).then((r) => mapPago(r.data)),
 
-  toggleInvoiced: (id: string | number): Promise<Payment> =>
-    api.patch(`/pagos/${id}`, { facturado: true }).then((r) => mapPago(r.data)),
+  toggleInvoiced: (id: string | number, value: boolean): Promise<void> =>
+    api.patch(`/pagos/${id}`, { facturado: value }),
 
   remove: (id: string | number) => api.delete(`/pagos/${id}`),
 }

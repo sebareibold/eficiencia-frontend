@@ -63,10 +63,11 @@ export default function PaymentDetailPage() {
   async function handleToggleInvoiced() {
     if (!payment) return
     setTogglingInvoiced(true)
+    const newValue = !payment.invoiced
     try {
-      const updated = await paymentsApi.toggleInvoiced(payment.id)
-      setPayment(updated)
-      addToast(`Pago marcado como ${updated.invoiced ? 'facturado' : 'no facturado'}`, 'success')
+      await paymentsApi.toggleInvoiced(payment.id, newValue)
+      setPayment(prev => prev ? { ...prev, invoiced: newValue } : null)
+      addToast(`Pago marcado como ${newValue ? 'facturado' : 'no facturado'}`, 'success')
     } catch {
       addToast('Error al actualizar', 'error')
     } finally {
@@ -246,12 +247,12 @@ export default function PaymentDetailPage() {
                   <p className={`text-sm font-bold transition-colors duration-300 ${
                     payment.invoiced ? 'text-emerald-700 dark:text-emerald-400' : 'text-gray-900 dark:text-white'
                   }`}>
-                    {payment.invoiced ? 'Pago facturado' : 'Sin comprobante'}
+                    {payment.invoiced ? 'Pago facturado' : 'Sin facturar'}
                   </p>
                   <p className="text-xs text-gray-500 dark:text-gray-400 mt-0.5">
                     {payment.invoiced
-                      ? 'Se emitió comprobante para este pago'
-                      : 'No se emitió comprobante para este pago'
+                      ? 'Este pago fue facturado'
+                      : 'Este pago aún no fue facturado'
                     }
                   </p>
                 </div>
