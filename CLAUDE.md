@@ -9,11 +9,11 @@
 App web para la gestión integral del gimnasio **Eficiencia** (cliente: Gonzalo, dueño del gimnasio).
 El frontend consume la API REST del repo `eficiencia-backend`.
 
-- **Entrega:** 28/05/2026
+- **Entrega:** 01/06/2026
 - **Deploy destino:** Vercel
 - **Backend local:** `http://localhost:3000`
 - **Backend prod:** Railway (pendiente deploy)
-- **Estado (20/05/2026):** Plataforma completa. Refactor membresías (TarifaVigente + Modalidad). Dashboard rediseñado con 5 secciones + alertas operativas. Sistema de permisos dinámicos implementado. Responsive fix aplicado en todas las páginas.
+- **Estado (24/05/2026):** Plataforma 100% implementada y conectada al backend real. Dashboard con filtro fechas + vistas Meses/Años/Histórico. Módulo turnos con sala A/B, control días vs plan, días sin clases. settingsStore fix (hasUnsavedChanges excluido de localStorage). Pendiente: deploy Vercel + testing real.
 
 > La app **registra** pagos (quién pagó, cuánto, cómo). No procesa cobros online. Sin MercadoPago ni Stripe.
 
@@ -385,19 +385,19 @@ VITE_API_URL=https://<railway-url>   # producción
 - `space-y-6` → `space-y-4 lg:space-y-6` en ClientsPage, ExpensesPage, ShiftsPage, AttendancePage
 
 ### Pendiente ⚠️
-- ⚠️ **Testear responsive en notebook 15"** — los fixes están aplicados pero no fueron verificados visualmente en una pantalla real de 1366×768 o similar. Hacer una pasada en el browser con DevTools → responsive mode antes de la reunión del 21/05
-- ⚠️ **Testear sistema de permisos con usuarios reales** — crear un usuario STAFF y un PROFESOR, verificar que: (a) las rutas protegidas redirigen correctamente, (b) los botones de acción se ocultan/muestran según la matriz, (c) al modificar permisos en UsersPage el cambio se refleja sin re-login (window focus)
+- ⚠️ **Testear responsive en notebook 15"** — no verificado en pantalla real (1366×768 o similar)
+- ⚠️ **Testear permisos con usuarios reales** — STAFF y PROFESOR: rutas, botones, propagación sin re-login
 - Variables de entorno en Vercel (`VITE_API_URL` apuntando a Railway)
 - Deploy en Vercel + `vercel.json` con rewrite SPA
 
 ---
 
-## Reuniones con el Cliente
+## Reuniones con el Cliente (Gonzalo)
 
 | Fecha | Reunión | Estado |
 |-------|---------|--------|
 | 01/05 | #1 — Layout, login, navegación, design system | ✅ Realizada |
 | 07/05 | #2 — Módulo Clientes completo | ✅ Realizada |
 | 14/05 | #3 — Sistema operativo completo | ✅ Realizada |
-| 21/05 | #4 — Demo final: plataforma integrada + dashboard + flujos admin | Pendiente |
-| 28/05 | Entrega — Deploy producción + capacitación Gonzalo | Pendiente |
+| 23/05 | Demo 3 — Plataforma integrada + turnos + flujos admin | ✅ Realizada |
+| 01/06 | Entrega — Deploy producción + capacitación Gonzalo | Pendiente |

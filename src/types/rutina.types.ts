@@ -1,12 +1,51 @@
-export interface Ejercicio {
+export interface EjecucionCliente {
+  id: string
+  series?: number
+  repeticiones?: string
+  peso?: string
+  rir?: number
+  rpe?: number
+  fecha: string
+  createdAt: string
+}
+
+export interface EjercicioPlan {
+  id: string
+  bloqueId: string
+  catalogoId?: string
+  nombre: string
+  series?: number
+  repeticiones?: string
+  peso?: string
+  rir?: number
+  rpe?: number
+  orden: number
+  ejecuciones: EjecucionCliente[]
+  catalogo?: { nombre: string; patronMovimiento?: string; videoUrl?: string }
+}
+
+export interface Bloque {
+  id: string
+  sesionId: string
+  letra: string
+  orden: number
+  ejerciciosPlan: EjercicioPlan[]
+}
+
+export interface Sesion {
+  id: string
+  semanaId: string
+  dia: string
+  orden: number
+  bloques: Bloque[]
+}
+
+export interface Semana {
   id: string
   rutinaId: string
-  nombre: string
-  series: number
-  repeticiones: string
-  peso?: string
-  notas?: string
-  orden: number
+  numero: number
+  nombre?: string
+  sesiones: Sesion[]
 }
 
 export interface Rutina {
@@ -18,7 +57,7 @@ export interface Rutina {
   activa: boolean
   createdAt: string
   updatedAt: string
-  ejercicios: Ejercicio[]
+  semanas: Semana[]
   cliente?: { nombre: string; apellido: string }
   profesor?: { usuario: { nombre: string } }
 }
@@ -36,21 +75,30 @@ export interface UpdateRutinaPayload {
   activa?: boolean
 }
 
-export interface CreateEjercicioPayload {
+export interface CreateEjercicioPlanPayload {
   nombre: string
-  series: number
-  repeticiones: string
-  peso?: string
-  notas?: string
-  orden?: number
   catalogoId?: string
+  series?: number
+  repeticiones?: string
+  peso?: string
+  rir?: number
+  rpe?: number
+  orden?: number
 }
 
-export interface UpdateEjercicioPayload {
+export interface UpdateEjercicioPlanPayload {
   nombre?: string
   series?: number
   repeticiones?: string
   peso?: string
-  notas?: string
-  orden?: number
+  rir?: number
+  rpe?: number
+}
+
+export interface CreateEjecucionPayload {
+  series?: number
+  repeticiones?: string
+  peso?: string
+  rir?: number
+  rpe?: number
 }

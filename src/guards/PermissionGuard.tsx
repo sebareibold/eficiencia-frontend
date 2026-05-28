@@ -1,5 +1,6 @@
 import { Navigate, Outlet } from 'react-router-dom'
 import { usePermissions, type PermModule, type PermAction } from '../hooks/usePermissions'
+import { useAuthStore } from '../store/authStore'
 import { ROUTES } from '../constants/routes'
 
 interface Props {
@@ -8,8 +9,17 @@ interface Props {
 }
 
 // Guard de ruta basado en la matriz de permisos dinámica.
-// Redirige a /clients si el usuario no tiene el permiso requerido.
+// cliente_comun se redirige a /ejecucion; otros roles sin permiso van a /clients.
 export default function PermissionGuard({ module, action = 'read' }: Props) {
   const { can } = usePermissions()
-  return can(module, action) ? <Outlet /> : <Navigate to={ROUTES.CLIENTS} replace />
+  const user = useAuthStore((s) => s.user)
+
+  if (can(module, action)) return <Outlet />
+
+  return (
+    <Navigate
+      to={user?.role === 'cliente_comun' ? ROUTES.EJECUCION : ROUTES.CLIENTS}
+      replace
+    />
+  )
 }

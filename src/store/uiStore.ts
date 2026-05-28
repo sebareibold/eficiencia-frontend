@@ -16,7 +16,7 @@ interface UiState {
   setSidebarOpen: (open: boolean) => void
   openSettings: () => void
   closeSettings: () => void
-  addToast: (message: string, type?: ToastType) => void
+  addToast: (messageOrToast: string | { message: string; type: ToastType }, type?: ToastType) => void
   removeToast: (id: string) => void
 }
 
@@ -28,9 +28,11 @@ export const useUiStore = create<UiState>((set) => ({
   setSidebarOpen: (open) => set({ sidebarOpen: open }),
   openSettings: () => set({ settingsOpen: true }),
   closeSettings: () => set({ settingsOpen: false }),
-  addToast: (message, type = 'info') => {
+  addToast: (messageOrToast, type = 'info') => {
     const id = crypto.randomUUID()
-    set((s) => ({ toasts: [...s.toasts, { id, message, type }] }))
+    const message = typeof messageOrToast === 'string' ? messageOrToast : messageOrToast.message
+    const resolvedType = typeof messageOrToast === 'string' ? type : messageOrToast.type
+    set((s) => ({ toasts: [...s.toasts, { id, message, type: resolvedType }] }))
     setTimeout(() => {
       set((s) => ({ toasts: s.toasts.filter((t) => t.id !== id) }))
     }, 4000)

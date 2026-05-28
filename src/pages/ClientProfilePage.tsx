@@ -1185,7 +1185,7 @@ const progressPct    = (() => {
                         </div>
                         <div className="flex-1 min-w-0">
                           <p className="text-sm font-bold text-gray-900 dark:text-white truncate">{rutina.nombre}</p>
-                          <p className="text-xs text-gray-500 dark:text-[#8A8A9A]">{rutina.ejercicios.length} ejercicio{rutina.ejercicios.length !== 1 ? 's' : ''}</p>
+                          <p className="text-xs text-gray-500 dark:text-[#8A8A9A]">{(rutina.semanas ?? []).reduce((acc, s) => acc + (s.sesiones ?? []).reduce((a, ses) => a + (ses.bloques ?? []).reduce((b, bl) => b + (bl.ejerciciosPlan ?? []).length, 0), 0), 0)} ejercicios · {(rutina.semanas ?? []).length} semana{(rutina.semanas ?? []).length !== 1 ? 's' : ''}</p>
                         </div>
                         <span className={`text-xs px-2 py-0.5 rounded-full font-semibold shrink-0 ${rutina.activa ? 'bg-green-500/10 text-green-600 dark:text-green-400' : 'bg-gray-100 dark:bg-gray-500/10 text-gray-500 dark:text-[#8A8A9A]'}`}>
                           {rutina.activa ? 'Activa' : 'Inactiva'}

@@ -1,5 +1,6 @@
 import axios from 'axios'
 import api from './axiosInstance'
+import { useAuthStore } from '../store/authStore'
 import type { LoginCredentials, LoginResponse } from '../types/auth.types'
 import type { PermisosMap } from './permisos.api'
 import type { ConfiguracionData } from './configuracion.api'
@@ -48,5 +49,8 @@ export const authApi = {
     return { accessToken, refreshToken, user, permissions, serverConfig }
   },
 
-  logout: () => api.post('/auth/logout'),
+  logout: () => {
+    const { refreshToken } = useAuthStore.getState()
+    return api.post('/auth/logout', refreshToken ? { refreshToken } : {})
+  },
 }

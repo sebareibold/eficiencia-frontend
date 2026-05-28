@@ -8,8 +8,9 @@ import {
 import { useAuthStore } from '../../store/authStore'
 import { useUiStore } from '../../store/uiStore'
 import { usePermissions, type PermModule } from '../../hooks/usePermissions'
+import { authApi } from '../../api/auth.api'
 import { ROUTES } from '../../constants/routes'
-import { useState, useRef, useLayoutEffect, useEffect } from 'react'
+import { useState, useRef, useLayoutEffect, useEffect, useCallback } from 'react'
 
 const NAV_TABS: { label: string; to: string; module: PermModule | null; icon: React.ComponentType<{ size?: number; className?: string }> }[] = [
   { label: 'Dashboard',  to: ROUTES.DASHBOARD, module: 'dashboard',  icon: LayoutDashboard },
@@ -24,19 +25,20 @@ const NAV_TABS: { label: string; to: string; module: PermModule | null; icon: Re
 export default function Navbar() {
   const { user, logout } = useAuthStore()
   const { openSettings } = useUiStore()
-  const { can } = usePermissions()
+  const { canUI } = usePermissions()
   const navigate = useNavigate()
   const location = useLocation()
 
   const [mobileOpen, setMobileOpen] = useState(false)
   const [isDropdownOpen, setIsDropdownOpen] = useState(false)
 
-  function handleLogout() {
+  const handleLogout = useCallback(async () => {
+    try { await authApi.logout() } catch { /* ignorar errores de red */ }
     logout()
     navigate(ROUTES.LOGIN)
-  }
+  }, [logout, navigate])
 
-  const visibleTabs = NAV_TABS.filter(t => t.module === null || can(t.module, 'read'))
+  const visibleTabs = NAV_TABS.filter(t => t.module === null || canUI(t.module, 'read'))
 
   const isAdmin = user?.role === 'admin'
 

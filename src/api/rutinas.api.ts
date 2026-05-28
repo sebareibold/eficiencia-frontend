@@ -1,62 +1,100 @@
 import api from './axiosInstance'
 import type {
   Rutina, CreateRutinaPayload, UpdateRutinaPayload,
-  Ejercicio, CreateEjercicioPayload, UpdateEjercicioPayload,
+  Semana, Sesion, Bloque, EjercicioPlan,
+  CreateEjercicioPlanPayload, UpdateEjercicioPlanPayload,
+  EjecucionCliente, CreateEjecucionPayload,
 } from '../types/rutina.types'
 
-function mapRutina(r: any): Rutina {
-  return {
-    id: String(r.id),
-    clienteId: String(r.clienteId),
-    profesorId: String(r.profesorId),
-    nombre: r.nombre,
-    descripcion: r.descripcion ?? undefined,
-    activa: r.activa,
-    createdAt: r.createdAt,
-    updatedAt: r.updatedAt,
-    ejercicios: (r.ejercicios ?? []).map(mapEjercicio),
-    cliente: r.cliente,
-    profesor: r.profesor,
-  }
-}
-
-function mapEjercicio(e: any): Ejercicio {
-  return {
-    id: String(e.id),
-    rutinaId: String(e.rutinaId),
-    nombre: e.nombre,
-    series: e.series,
-    repeticiones: e.repeticiones,
-    peso: e.peso ?? undefined,
-    notas: e.notas ?? undefined,
-    orden: e.orden ?? 0,
-  }
-}
-
 export const rutinasApi = {
-  getByCliente: (clienteId: string): Promise<Rutina[]> =>
-    api.get('/rutinas', { params: { clienteId } }).then(r =>
-      (Array.isArray(r.data) ? r.data : []).map(mapRutina)
-    ),
+  // ─── Rutinas ───────────────────────────────────────────────────────────────
+  getByCliente: async (clienteId: string): Promise<Rutina[]> => {
+    const r = await api.get('/rutinas', { params: { clienteId } })
+    return Array.isArray(r.data) ? r.data : []
+  },
 
-  getById: (id: string): Promise<Rutina> =>
-    api.get(`/rutinas/${id}`).then(r => mapRutina(r.data)),
+  getById: async (id: string): Promise<Rutina> => {
+    const r = await api.get(`/rutinas/${id}`)
+    return r.data
+  },
 
-  create: (payload: CreateRutinaPayload): Promise<Rutina> =>
-    api.post('/rutinas', payload).then(r => mapRutina(r.data)),
+  create: async (payload: CreateRutinaPayload): Promise<Rutina> => {
+    const r = await api.post('/rutinas', payload)
+    return r.data
+  },
 
-  update: (id: string, payload: UpdateRutinaPayload): Promise<Rutina> =>
-    api.patch(`/rutinas/${id}`, payload).then(r => mapRutina(r.data)),
+  update: async (id: string, payload: UpdateRutinaPayload): Promise<Rutina> => {
+    const r = await api.patch(`/rutinas/${id}`, payload)
+    return r.data
+  },
 
-  remove: (id: string): Promise<void> =>
-    api.delete(`/rutinas/${id}`).then(() => undefined),
+  remove: async (id: string): Promise<void> => {
+    await api.delete(`/rutinas/${id}`)
+  },
 
-  addEjercicio: (rutinaId: string, payload: CreateEjercicioPayload): Promise<Ejercicio> =>
-    api.post(`/rutinas/${rutinaId}/ejercicios`, payload).then(r => mapEjercicio(r.data)),
+  // ─── Semanas ───────────────────────────────────────────────────────────────
+  createSemana: async (rutinaId: string): Promise<Semana> => {
+    const r = await api.post(`/rutinas/${rutinaId}/semanas`)
+    return r.data
+  },
 
-  updateEjercicio: (rutinaId: string, ejercicioId: string, payload: UpdateEjercicioPayload): Promise<Ejercicio> =>
-    api.patch(`/rutinas/${rutinaId}/ejercicios/${ejercicioId}`, payload).then(r => mapEjercicio(r.data)),
+  updateSemana: async (rutinaId: string, semanaId: string, nombre: string): Promise<Semana> => {
+    const r = await api.patch(`/rutinas/${rutinaId}/semanas/${semanaId}`, { nombre })
+    return r.data
+  },
 
-  removeEjercicio: (rutinaId: string, ejercicioId: string): Promise<void> =>
-    api.delete(`/rutinas/${rutinaId}/ejercicios/${ejercicioId}`).then(() => undefined),
+  clonarSemana: async (rutinaId: string, semanaId: string): Promise<Semana> => {
+    const r = await api.post(`/rutinas/${rutinaId}/semanas/${semanaId}/clonar`)
+    return r.data
+  },
+
+  deleteSemana: async (rutinaId: string, semanaId: string): Promise<void> => {
+    await api.delete(`/rutinas/${rutinaId}/semanas/${semanaId}`)
+  },
+
+  // ─── Sesiones ──────────────────────────────────────────────────────────────
+  createSesion: async (semanaId: string, dia: string): Promise<Sesion> => {
+    const r = await api.post(`/rutinas/semanas/${semanaId}/sesiones`, { dia })
+    return r.data
+  },
+
+  updateSesion: async (sesionId: string, dia: string): Promise<Sesion> => {
+    const r = await api.patch(`/rutinas/sesiones/${sesionId}`, { dia })
+    return r.data
+  },
+
+  deleteSesion: async (sesionId: string): Promise<void> => {
+    await api.delete(`/rutinas/sesiones/${sesionId}`)
+  },
+
+  // ─── Bloques ───────────────────────────────────────────────────────────────
+  createBloque: async (sesionId: string, letra: string): Promise<Bloque> => {
+    const r = await api.post(`/rutinas/sesiones/${sesionId}/bloques`, { letra })
+    return r.data
+  },
+
+  deleteBloque: async (bloqueId: string): Promise<void> => {
+    await api.delete(`/rutinas/bloques/${bloqueId}`)
+  },
+
+  // ─── Ejercicios Plan ───────────────────────────────────────────────────────
+  addEjercicio: async (bloqueId: string, payload: CreateEjercicioPlanPayload): Promise<EjercicioPlan> => {
+    const r = await api.post(`/rutinas/bloques/${bloqueId}/ejercicios`, payload)
+    return r.data
+  },
+
+  updateEjercicio: async (ejercicioId: string, payload: UpdateEjercicioPlanPayload): Promise<EjercicioPlan> => {
+    const r = await api.patch(`/rutinas/ejercicios/${ejercicioId}`, payload)
+    return r.data
+  },
+
+  deleteEjercicio: async (ejercicioId: string): Promise<void> => {
+    await api.delete(`/rutinas/ejercicios/${ejercicioId}`)
+  },
+
+  // ─── Ejecuciones ───────────────────────────────────────────────────────────
+  addEjecucion: async (ejercicioId: string, payload: CreateEjecucionPayload): Promise<EjecucionCliente> => {
+    const r = await api.post(`/rutinas/ejercicios/${ejercicioId}/ejecuciones`, payload)
+    return r.data
+  },
 }

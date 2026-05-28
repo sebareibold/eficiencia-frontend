@@ -1,6 +1,7 @@
 import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom'
 import { ROUTES } from './constants/routes'
 import { useThemeApplier } from './hooks/useThemeApplier'
+import { useAuthStore } from './store/authStore'
 import PrivateRoute from './guards/PrivateRoute'
 import PermissionGuard from './guards/PermissionGuard'
 import Layout from './components/layout/Layout'
@@ -21,6 +22,16 @@ import DashboardPage from './pages/DashboardPage'
 import UsersPage from './pages/UsersPage'
 import SettingsPage from './pages/SettingsPage'
 import ExercisesPage from './pages/ExercisesPage'
+import EjecucionPage from './pages/EjecucionPage'
+
+function DefaultRedirect() {
+  const user = useAuthStore((s) => s.user)
+  let to = ROUTES.CLIENTS
+  if (user?.role === 'admin') to = ROUTES.DASHBOARD
+  else if (user?.role === 'profesor') to = ROUTES.SHIFTS
+  else if (user?.role === 'cliente_comun') to = ROUTES.EJECUCION
+  return <Navigate to={to} replace />
+}
 
 export default function App() {
   useThemeApplier()
@@ -33,7 +44,7 @@ export default function App() {
 
         <Route element={<PrivateRoute />}>
           <Route element={<Layout />}>
-            <Route index element={<Navigate to={ROUTES.CLIENTS} replace />} />
+            <Route index element={<DefaultRedirect />} />
 
             {/* Rutas con permiso 'clients' */}
             <Route element={<PermissionGuard module="clients" />}>
@@ -64,6 +75,9 @@ export default function App() {
             {/* Ejercicios — acceso general autenticado */}
             <Route path={ROUTES.EXERCISES} element={<ExercisesPage />} />
 
+            {/* Ejecución — solo CLIENTE_COMUN */}
+            <Route path={ROUTES.EJECUCION} element={<EjecucionPage />} />
+
             {/* Rutas solo Administrador — gated por permiso 'read' */}
             <Route element={<PermissionGuard module="expenses" />}>
               <Route path={ROUTES.EXPENSES} element={<ExpensesPage />} />
@@ -78,7 +92,7 @@ export default function App() {
           </Route>
         </Route>
 
-        <Route path="*" element={<Navigate to={ROUTES.CLIENTS} replace />} />
+        <Route path="*" element={<DefaultRedirect />} />
       </Routes>
     </BrowserRouter>
   )

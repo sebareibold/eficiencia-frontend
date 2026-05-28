@@ -17,4 +17,5 @@ export const ROUTES = {
   USERS: '/usuarios',
   SETTINGS: '/settings',
   EXERCISES: '/exercises',
+  EJECUCION: '/ejecucion',
 } as const

@@ -18,78 +18,43 @@ const inputCls = 'w-full rounded-xl border border-white/50 dark:border-white/[0.
 const labelCls = 'block text-[10px] font-bold text-gray-500 dark:text-[#8A8A9A] mb-1 uppercase tracking-wider'
 const thCls    = 'py-3 px-4 text-left text-[10px] font-bold uppercase tracking-wider text-gray-500 dark:text-[#6B7280]'
 
-const GRUPOS_MUSCULARES = [
-  'Pecho', 'Espalda', 'Hombros', 'Bíceps', 'Tríceps',
-  'Piernas', 'Glúteos', 'Abdomen', 'Pantorrillas', 'Cardio', 'Antebrazos',
-]
-
 const DIFICULTAD_CONFIG = {
-  PRINCIPIANTE: { label: 'Principiante', cls: 'bg-emerald-500/10 text-emerald-400 border border-emerald-500/20' },
-  INTERMEDIO:   { label: 'Intermedio',   cls: 'bg-amber-500/10 text-amber-400 border border-amber-500/20' },
-  AVANZADO:     { label: 'Avanzado',     cls: 'bg-red-500/10 text-red-400 border border-red-500/20' },
+  FACIL:      { label: 'Fácil',      cls: 'bg-emerald-500/10 text-emerald-400 border border-emerald-500/20' },
+  INTERMEDIO: { label: 'Intermedio', cls: 'bg-amber-500/10 text-amber-400 border border-amber-500/20' },
+  AVANZADO:   { label: 'Avanzado',   cls: 'bg-red-500/10 text-red-400 border border-red-500/20' },
 } as const
 
 const ejercicioSchema = z.object({
-  nombre:      z.string().min(1, 'Requerido'),
-  descripcion: z.string().optional(),
-  videoUrl:    z.string().optional(),
-  dificultad:  z.enum(['PRINCIPIANTE', 'INTERMEDIO', 'AVANZADO']),
+  nombre:          z.string().min(1, 'Requerido'),
+  descripcion:     z.string().optional(),
+  videoUrl:        z.string().optional(),
+  patronMovimiento: z.string().optional(),
+  dificultad:      z.enum(['FACIL', 'INTERMEDIO', 'AVANZADO']),
 })
 type FormValues = z.infer<typeof ejercicioSchema>
-
-// ─── GruposChips ──────────────────────────────────────────────────────────────
-
-function GruposChips({
-  selected, onChange,
-}: { selected: string[]; onChange: (g: string[]) => void }) {
-  const toggle = (g: string) =>
-    onChange(selected.includes(g) ? selected.filter(x => x !== g) : [...selected, g])
-
-  return (
-    <div className="flex flex-wrap gap-1.5">
-      {GRUPOS_MUSCULARES.map(g => (
-        <button
-          key={g}
-          type="button"
-          onClick={() => toggle(g)}
-          className={`text-[11px] px-2.5 py-1 rounded-lg font-semibold border transition-colors ${
-            selected.includes(g)
-              ? 'bg-primary/20 text-primary border-primary/30'
-              : 'border-white/[0.08] text-[#8A8A9A] hover:text-white hover:border-white/[0.15]'
-          }`}
-        >
-          {g}
-        </button>
-      ))}
-    </div>
-  )
-}
 
 // ─── EjercicioForm ────────────────────────────────────────────────────────────
 
 function EjercicioForm({
   defaultValues,
-  defaultGrupos,
   onSubmit,
   onCancel,
   isEditing = false,
   isSaving = false,
 }: {
   defaultValues?: Partial<FormValues>
-  defaultGrupos?: string[]
-  onSubmit: (data: FormValues, grupos: string[]) => void
+  onSubmit: (data: FormValues) => void
   onCancel: () => void
   isEditing?: boolean
   isSaving?: boolean
 }) {
-  const [grupos, setGrupos] = useState<string[]>(defaultGrupos ?? [])
   const { register, handleSubmit, formState: { errors } } = useForm<FormValues>({
     resolver: zodResolver(ejercicioSchema),
     defaultValues: { dificultad: 'INTERMEDIO', ...defaultValues },
   })
 
   return (
-    <form onSubmit={handleSubmit(d => onSubmit(d, grupos))} className="space-y-3">
+    <form onSubmit={handleSubmit(d => onSubmit(d))} className="space-y-3">
       <div className="grid grid-cols-2 gap-3">
         <div className="col-span-2 sm:col-span-1">
           <label className={labelCls}>Nombre *</label>
@@ -99,7 +64,7 @@ function EjercicioForm({
         <div className="col-span-2 sm:col-span-1">
           <label className={labelCls}>Dificultad</label>
           <select {...register('dificultad')} className={inputCls + ' cursor-pointer'}>
-            <option value="PRINCIPIANTE">Principiante</option>
+            <option value="FACIL">Fácil</option>
             <option value="INTERMEDIO">Intermedio</option>
             <option value="AVANZADO">Avanzado</option>
           </select>
@@ -122,8 +87,12 @@ function EjercicioForm({
         />
       </div>
       <div>
-        <label className={labelCls}>Grupos musculares</label>
-        <GruposChips selected={grupos} onChange={setGrupos} />
+        <label className={labelCls}>Patrón de movimiento</label>
+        <input
+          {...register('patronMovimiento')}
+          placeholder="ej. Empuje horizontal"
+          className={inputCls}
+        />
       </div>
       <div className="flex gap-2 pt-1">
         <button
@@ -183,14 +152,14 @@ export default function ExercisesPage() {
     return () => clearTimeout(t)
   }, [fetchItems])
 
-  async function handleCreate(data: FormValues, grupos: string[]) {
+  async function handleCreate(data: FormValues) {
     setSavingId('new')
     try {
       await ejerciciosApi.create({
         ...data,
         descripcion: data.descripcion || undefined,
         videoUrl: data.videoUrl || undefined,
-        gruposMusculares: grupos,
+        patronMovimiento: data.patronMovimiento || undefined,
       })
       setShowForm(false)
       fetchItems()
@@ -202,14 +171,14 @@ export default function ExercisesPage() {
     }
   }
 
-  async function handleUpdate(id: string, data: FormValues, grupos: string[]) {
+  async function handleUpdate(id: string, data: FormValues) {
     setSavingId(id)
     try {
       await ejerciciosApi.update(id, {
         ...data,
         descripcion: data.descripcion || undefined,
         videoUrl: data.videoUrl || undefined,
-        gruposMusculares: grupos,
+        patronMovimiento: data.patronMovimiento || undefined,
       })
       setEditingId(null)
       fetchItems()
@@ -276,7 +245,7 @@ export default function ExercisesPage() {
           />
         </div>
         <div className="flex flex-wrap gap-2">
-          {(['todos', 'PRINCIPIANTE', 'INTERMEDIO', 'AVANZADO'] as const).map(d => (
+          {(['todos', 'FACIL', 'INTERMEDIO', 'AVANZADO'] as const).map(d => (
             <button
               key={d}
               onClick={() => setFilterDif(d)}
@@ -286,7 +255,7 @@ export default function ExercisesPage() {
                   : 'border border-saas-border bg-white text-gray-700 hover:bg-saas-hover'
               }`}
             >
-              {d === 'todos' ? 'Todos' : DIFICULTAD_CONFIG[d].label}
+              {d === 'todos' ? 'Todos' : DIFICULTAD_CONFIG[d as keyof typeof DIFICULTAD_CONFIG].label}
             </button>
           ))}
         </div>
@@ -316,6 +285,7 @@ export default function ExercisesPage() {
               onCancel={() => setShowForm(false)}
               isSaving={savingId === 'new'}
             />
+
           </motion.div>
         )}
       </AnimatePresence>
@@ -362,7 +332,7 @@ export default function ExercisesPage() {
               <tr className="border-b border-white/20 dark:border-white/10 bg-gray-50/30 dark:bg-black/10">
                 <th className={`${thCls} w-10`}>#</th>
                 <th className={thCls}>Ejercicio</th>
-                <th className={thCls}>Grupos musculares</th>
+                <th className={thCls}>Patrón de movimiento</th>
                 <th className={`${thCls} text-center`}>Dificultad</th>
                 <th className={`${thCls} text-center w-16`}>Video</th>
                 {isAdmin && <th className="w-24" />}
@@ -388,13 +358,13 @@ export default function ExercisesPage() {
                         </div>
                         <EjercicioForm
                           defaultValues={{
-                            nombre:      ej.nombre,
-                            descripcion: ej.descripcion ?? '',
-                            videoUrl:    ej.videoUrl ?? '',
-                            dificultad:  ej.dificultad,
+                            nombre:           ej.nombre,
+                            descripcion:      ej.descripcion ?? '',
+                            videoUrl:         ej.videoUrl ?? '',
+                            patronMovimiento: ej.patronMovimiento ?? '',
+                            dificultad:       ej.dificultad,
                           }}
-                          defaultGrupos={ej.gruposMusculares}
-                          onSubmit={(data, grupos) => handleUpdate(ej.id, data, grupos)}
+                          onSubmit={(data) => handleUpdate(ej.id, data)}
                           onCancel={() => setEditingId(null)}
                           isEditing
                           isSaving={savingId === ej.id}
@@ -422,22 +392,10 @@ export default function ExercisesPage() {
                       )}
                     </td>
                     <td className="py-3.5 px-4">
-                      {ej.gruposMusculares.length > 0 ? (
-                        <div className="flex flex-wrap gap-1">
-                          {ej.gruposMusculares.slice(0, 3).map(g => (
-                            <span
-                              key={g}
-                              className="text-[10px] px-1.5 py-0.5 rounded-md bg-white/[0.06] text-[#8A8A9A]"
-                            >
-                              {g}
-                            </span>
-                          ))}
-                          {ej.gruposMusculares.length > 3 && (
-                            <span className="text-[10px] text-[#4B4B5A]">
-                              +{ej.gruposMusculares.length - 3}
-                            </span>
-                          )}
-                        </div>
+                      {ej.patronMovimiento ? (
+                        <span className="text-[10px] px-1.5 py-0.5 rounded-md bg-white/[0.06] text-[#8A8A9A]">
+                          {ej.patronMovimiento}
+                        </span>
                       ) : (
                         <span className="text-[#4B4B5A]">—</span>
                       )}

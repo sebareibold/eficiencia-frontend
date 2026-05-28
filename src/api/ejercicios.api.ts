@@ -12,7 +12,7 @@ function mapEjercicio(e: any): EjercicioCatalogo {
     nombre: e.nombre,
     descripcion: e.descripcion ?? undefined,
     videoUrl: e.videoUrl ?? undefined,
-    gruposMusculares: e.gruposMusculares ?? [],
+    patronMovimiento: e.patronMovimiento ?? undefined,
     dificultad: e.dificultad,
     activo: e.activo,
     createdAt: e.createdAt,

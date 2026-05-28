@@ -1,31 +1,79 @@
-import { useEffect } from 'react'
-import { Outlet } from 'react-router-dom'
+import { useEffect, useRef, useCallback } from 'react'
+import { Outlet, useNavigate } from 'react-router-dom'
 import Navbar from './Navbar'
 import ToastContainer from '../ui/Toast'
 import { permisosApi } from '../../api/permisos.api'
 import { useAuthStore } from '../../store/authStore'
+import { authApi } from '../../api/auth.api'
+
+const SESSION_TIMEOUT_MS  = 30 * 60 * 1000  // 30 minutos de inactividad
+const PERMS_INTERVAL_MS   =  5 * 60 * 1000  // refrescar permisos cada 5 minutos
 
 export default function Layout() {
   const setPermissions = useAuthStore(s => s.setPermissions)
   const accessToken    = useAuthStore(s => s.accessToken)
+  const logout         = useAuthStore(s => s.logout)
+  const navigate       = useNavigate()
 
-  // Refresca permisos al montar y cuando la ventana recupera el foco.
-  // Así los cambios que hace el admin se propagan sin que el usuario re-loguee.
+  const inactivityTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
+
+  // ── Logout con invalidación en servidor ────────────────────────────────────
+  const doLogout = useCallback(async () => {
+    try { await authApi.logout() } catch { /* ignorar errores de red al cerrar */ }
+    logout()
+    navigate('/login', { replace: true })
+  }, [logout, navigate])
+
+  // ── Timeout de inactividad — 30 min ────────────────────────────────────────
   useEffect(() => {
     if (!accessToken) return
+
+    const resetTimer = () => {
+      if (inactivityTimer.current) clearTimeout(inactivityTimer.current)
+      inactivityTimer.current = setTimeout(doLogout, SESSION_TIMEOUT_MS)
+    }
+
+    const events = ['mousedown', 'keydown', 'scroll', 'touchstart', 'click']
+    events.forEach(e => window.addEventListener(e, resetTimer, { passive: true }))
+    resetTimer()
+
+    return () => {
+      events.forEach(e => window.removeEventListener(e, resetTimer))
+      if (inactivityTimer.current) clearTimeout(inactivityTimer.current)
+    }
+  }, [accessToken, doLogout])
+
+  // ── Carga y refresco de permisos ────────────────────────────────────────────
+  useEffect(() => {
+    if (!accessToken) return
+
     const refresh = () => {
       permisosApi.getForMyRole()
-        .then(perms => { if (Object.keys(perms).length > 0) setPermissions(perms) })
-        .catch(() => {})
+        .then(perms => {
+          if (Object.keys(perms).length > 0) setPermissions(perms)
+        })
+        .catch(() => {
+          // No actualizar — los permisos previos (o estado deny-by-default) se mantienen
+        })
     }
+
     refresh()
+
+    // Refrescar al recuperar foco (el admin cambió permisos en otra pestaña)
     window.addEventListener('focus', refresh)
-    return () => window.removeEventListener('focus', refresh)
+
+    // Refrescar cada 5 minutos para detectar cambios de rol en sesiones largas
+    const interval = setInterval(refresh, PERMS_INTERVAL_MS)
+
+    return () => {
+      window.removeEventListener('focus', refresh)
+      clearInterval(interval)
+    }
   }, [accessToken, setPermissions])
 
   return (
     <div className="min-h-screen w-full flex flex-col relative overflow-hidden bg-[#fafafa] dark:bg-[#050505] transition-colors duration-300">
-      
+
       {/* 1. Subtle Grid Pattern */}
       <div className="absolute inset-0 bg-[linear-gradient(to_right,#8080800a_1px,transparent_1px),linear-gradient(to_bottom,#8080800a_1px,transparent_1px)] bg-[size:40px_40px] dark:bg-[linear-gradient(to_right,#ffffff05_1px,transparent_1px),linear-gradient(to_bottom,#ffffff05_1px,transparent_1px)]"></div>
 
@@ -62,7 +110,7 @@ export default function Layout() {
         </filter>
         <rect width="100%" height="100%" filter="url(#noiseFilter)" />
       </svg>
-      
+
       <Navbar />
       <main className="flex-1 px-4 py-4 sm:px-5 sm:py-5 md:px-8 md:py-6 lg:px-12 lg:py-7 xl:px-16 xl:py-8 overflow-auto text-gray-800 dark:text-gray-100 relative z-10 w-full max-w-[1600px] mx-auto">
         <Outlet />

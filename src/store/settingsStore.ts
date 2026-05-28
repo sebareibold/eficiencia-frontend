@@ -91,6 +91,14 @@ export const useSettingsStore = create<SettingsState>()(
           hasUnsavedChanges: false,
         })),
     }),
-    { name: 'eficiencia-settings' },
+    {
+      name: 'eficiencia-settings',
+      partialize: (state) => ({
+        appearance: state.appearance,
+        dashboard:     state.dashboard,
+        notifications: state.notifications,
+        system:        state.system,
+      }),
+    },
   ),
 )

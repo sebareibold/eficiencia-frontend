@@ -18,7 +18,8 @@ export type PermAction = 'read' | 'create' | 'update' | 'delete' | 'mark'
 
 type RolePerms = Partial<Record<PermModule, Partial<Record<PermAction, boolean>>>>
 
-// ─── Matriz fallback (usada cuando los permisos del servidor no están disponibles)
+// Matriz local solo para UI (mostrar/ocultar elementos). NUNCA se usa como fallback
+// de autorización — si los permisos del servidor no cargan se deniega todo.
 const MATRIX: Record<UserRole, RolePerms> = {
   admin: {
     clients:     { read: true, create: true, update: true, delete: true  },
@@ -68,20 +69,30 @@ export const ROLE_LABELS: Record<UserRole, string> = {
 export function usePermissions() {
   const user        = useAuthStore(s => s.user)
   const serverPerms = useAuthStore(s => s.permissions)
+  const permsLoaded = useAuthStore(s => s.permissionsLoaded)
   const role: UserRole = user?.role ?? 'staff'
 
   const can = (module: PermModule, action: PermAction): boolean => {
-    // Primero intenta con los permisos del servidor (dinámicos)
-    if (serverPerms && Object.keys(serverPerms).length > 0) {
+    // Deny-by-default: si los permisos del servidor no cargaron aún, denegar todo.
+    // Esto previene escalada de privilegios cuando la carga de permisos falla o tarda.
+    if (!permsLoaded) return false
+    return serverPerms[module]?.[action] ?? false
+  }
+
+  // Solo para hints de UI (Navbar, botones): usa la MATRIX si no hay server perms.
+  // No usar para guards de ruta — usar can() en su lugar.
+  const canUI = (module: PermModule, action: PermAction): boolean => {
+    if (permsLoaded && Object.keys(serverPerms).length > 0) {
       return serverPerms[module]?.[action] ?? false
     }
-    // Fallback a la matriz local
     return MATRIX[role]?.[module]?.[action] ?? false
   }
 
   return {
     can,
+    canUI,
     role,
+    permsLoaded,
     isAdmin:    role === 'admin',
     isStaff:    role === 'staff',
     isProfesor: role === 'profesor',

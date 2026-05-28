@@ -1,11 +1,17 @@
-export type Dificultad = 'PRINCIPIANTE' | 'INTERMEDIO' | 'AVANZADO'
+export type Dificultad = 'FACIL' | 'INTERMEDIO' | 'AVANZADO'
+
+export const DIFICULTAD_LABELS: Record<Dificultad, string> = {
+  FACIL: 'Fácil',
+  INTERMEDIO: 'Intermedio',
+  AVANZADO: 'Avanzado',
+}
 
 export interface EjercicioCatalogo {
   id: string
   nombre: string
   descripcion?: string
   videoUrl?: string
-  gruposMusculares: string[]
+  patronMovimiento?: string
   dificultad: Dificultad
   activo: boolean
   createdAt: string
@@ -16,7 +22,7 @@ export interface CreateEjercicioCatalogoPayload {
   nombre: string
   descripcion?: string
   videoUrl?: string
-  gruposMusculares?: string[]
+  patronMovimiento?: string
   dificultad?: Dificultad
 }
 
@@ -24,12 +30,12 @@ export interface UpdateEjercicioCatalogoPayload {
   nombre?: string
   descripcion?: string
   videoUrl?: string
-  gruposMusculares?: string[]
+  patronMovimiento?: string
   dificultad?: Dificultad
 }
 
 export interface EjerciciosCatalogoFilters {
   nombre?: string
   dificultad?: Dificultad
-  grupoMuscular?: string
+  patronMovimiento?: string
 }

@@ -1,6 +1,7 @@
 # Eficiencia Frontend
 
 Interfaz web para el sistema de gestión del gimnasio **Eficiencia**.
+Consume la API REST del repo `eficiencia-backend`.
 
 ---
 
@@ -10,74 +11,59 @@ Interfaz web para el sistema de gestión del gimnasio **Eficiencia**.
 |---|---|---|
 | **React** | 18 | Framework UI — componentes funcionales + hooks |
 | **Vite** | latest | Bundler y servidor de desarrollo |
-| **TypeScript** | 5 | Tipado estricto en toda la codebase |
+| **TypeScript** | 5 | Tipado estricto (`strict: true`) |
 | **TailwindCSS** | 3 | Estilos utility-first, dark mode por clase `.dark` en `<html>` |
-| **React Router** | v6 | Ruteo declarativo con rutas protegidas (guards) |
-| **Zustand** | latest | Estado global: auth, UI (toasts), preferencias de usuario |
+| **React Router** | v6 | Ruteo declarativo con guards por auth y rol |
+| **Zustand** | latest | Estado global: auth, UI (toasts), preferencias |
 | **Axios** | latest | HTTP client con interceptores automáticos para JWT y refresh |
-| **React Hook Form** | 7 | Formularios de alto rendimiento |
-| **Zod** | latest | Validación de esquemas en formularios |
-| **Recharts** | 2 | Gráficos (BarChart, LineChart) en el Dashboard |
+| **React Hook Form + Zod** | 7 / latest | Formularios con validación de esquemas |
+| **Recharts** | 2 | Gráficos (AreaChart, BarChart, LineChart, PieChart) en el Dashboard |
 | **Framer Motion** | 12 | Animaciones de entrada y transición de páginas |
 | **Lucide React** | latest | Librería de íconos SVG |
 | **date-fns** | 4 | Formateo y manipulación de fechas |
 
 ---
 
-## Qué está construido
+## Módulos implementados
 
-Sistema de gestión completo para gimnasio con las siguientes secciones:
+| Página | Ruta | Acceso |
+|---|---|---|
+| Login + Solicitar acceso | `/login` | Público |
+| Clientes | `/clients` | Admin + Staff |
+| Perfil de cliente | `/clients/:id` | Admin + Staff |
+| Rutina del cliente | `/clients/:id/rutina` | Admin + Staff |
+| Pagos | `/payments` | Admin + Staff |
+| Detalle de pago | `/payments/:id` | Admin + Staff |
+| Turnos | `/shifts` | Admin + Staff |
+| Detalle de turno | `/shifts/:id` | Admin + Staff |
+| Asistencia | `/attendance` | Admin + Staff + Profesor |
+| Calendario | `/calendar` | Admin + Staff + Profesor |
+| Ejercicios | `/exercises` | Admin + Staff |
+| Gastos | `/expenses` | Solo Admin |
+| Dashboard | `/dashboard` | Solo Admin |
+| Usuarios | `/usuarios` | Solo Admin |
+| Configuración | `/settings` | Admin |
 
-### Módulos implementados
+---
 
-**Clientes** (`/clients`)
-- Tabla con búsqueda por nombre/DNI y filtros por estado (Activo, Vencido, En deuda)
-- Perfil individual con historial de pagos y asistencia
-- Modal para crear/editar cliente
+## Autenticación y seguridad
 
-**Pagos** (`/payments`)
-- Resumen mensual de ingresos por método de pago
-- Tabla filtrable por mes, cliente y método
-- Registro de nuevos pagos con marcado de facturación
+- `accessToken` almacenado solo en memoria (Zustand) — **no persiste en localStorage**, protección contra XSS
+- `refreshToken` en Zustand con persistencia en localStorage
+- Axios interceptor de request: añade `Authorization: Bearer <token>` automáticamente
+- Axios interceptor de response: si 401 → intenta `POST /auth/refresh` → si falla, logout + redirect `/login`
+- Logout llama a `POST /auth/logout` para invalidar tokens en el servidor antes de limpiar el store
+- Session timeout de 30 minutos de inactividad
+- Permisos dinámicos: la matriz RBAC se carga desde la API al montar y se refresca cada 5 minutos y en foco de ventana, sin necesidad de re-login
 
-**Turnos** (`/shifts`)
-- Grid de cards con ocupación en tiempo real (inscriptos/cupo)
-- Filtros por sala y día de la semana
-- Modal para crear turnos
+---
 
-**Asistencia** (`/attendance`)
-- Selector de turno + fecha
-- Checklist de clientes inscriptos para marcar presentes
-- Guardado masivo (bulk save)
+## Design System
 
-**Calendario** (`/calendar`)
-- Vista semanal Lunes–Sábado con los turnos de la semana
-- Navegación entre semanas
-- Modal de detalle al clickear un turno
-
-**Gastos** (`/expenses`, solo admin)
-- Resumen mensual por categoría
-- CRUD completo de gastos
-- Filtros por categoría y mes
-
-**Dashboard** (`/dashboard`, solo admin)
-- KPIs: ingresos, gastos, ganancia neta, clientes activos — con comparativa al mes anterior
-- Gráfico de barras por método de pago
-- Gráfico de líneas histórico de ingresos vs gastos
-
-### Sistema de autenticación
-
-- Login con JWT — `accessToken` (15m) + `refreshToken` (7d)
-- Renovación automática de token al recibir 401
-- Guards por autenticación (`PrivateRoute`) y por rol (`RoleGuard`)
-- Roles: `admin` (acceso total) y `staff` (sin gastos ni dashboard)
-
-### Design System
-
-- **Modo oscuro** como modo principal: fondo `#0F0F0F`, surfaces `#1A1A1A`, accent naranja `#F5A623` configurable
-- **Modo claro SaaS**: fondo warm off-white `#F5F4F2` con dot grid, cards blancas
-- Glassmorphism en cards y modals del modo oscuro
-- Color primario del gimnasio: amarillo `#FBC608`
+- **Color primario:** `#FBC608` (amarillo Eficiencia, confirmado por el cliente)
+- **Modo oscuro** (predominante): fondo `#0F0F0F`, surfaces `#1A1A1A`
+- **Glassmorphism** en cards y modals: `background: rgba(255,255,255,0.04)`, `backdrop-filter: blur(12px)`
+- **Modo claro SaaS**: fondo `#F5F4F2` (warm off-white), cards blancas con borde `#E5E3DF`
 - Animaciones de entrada con Framer Motion en todas las páginas
 
 ---
@@ -88,7 +74,7 @@ Sistema de gestión completo para gimnasio con las siguientes secciones:
 npm install          # instalar dependencias
 npm run dev          # servidor de desarrollo en http://localhost:5173
 npm run build        # build de producción
-npm run preview      # preview del build
+npm run preview      # preview del build de producción
 ```
 
 ---
@@ -96,12 +82,13 @@ npm run preview      # preview del build
 ## Variables de entorno
 
 ```env
-# .env.example
 VITE_API_URL=http://localhost:3000
 ```
 
 ---
 
-## Deploy
+## Deploy en Vercel
 
-La app se despliega en **Vercel**. Requiere configurar `VITE_API_URL` apuntando al backend en Railway.
+1. Conectar el repo en Vercel
+2. Agregar variable de entorno `VITE_API_URL` apuntando al backend en Railway
+3. El archivo `vercel.json` en la raíz ya tiene el rewrite SPA configurado
