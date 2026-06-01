@@ -16,8 +16,10 @@ import { permisosApi, type PermisoEntry } from '../api/permisos.api'
 import { solicitudesApi, type SolicitudEntry } from '../api/solicitudes.api'
 import { useUiStore } from '../store/uiStore'
 import { useAuthStore } from '../store/authStore'
+import { useSolicitudesStore } from '../store/solicitudesStore'
 import Button from '../components/ui/Button'
 import Modal from '../components/ui/Modal'
+import ConfirmDialog from '../components/ui/ConfirmDialog'
 import Input from '../components/ui/Input'
 import Select from '../components/ui/Select'
 import Skeleton from '../components/ui/Skeleton'
@@ -28,14 +30,16 @@ type Tab = 'usuarios' | 'profesores' | 'permisos' | 'solicitudes'
 
 const ROL_LABELS: Record<UserRole, string> = {
   ADMINISTRADOR: 'Administrador',
-  STAFF: 'Staff',
-  PROFESOR: 'Profesor',
+  STAFF:         'Staff',
+  PROFESOR:      'Profesor',
+  CLIENTE_COMUN: 'Cliente',
 }
 
 const ROL_COLORS: Record<UserRole, string> = {
   ADMINISTRADOR: 'bg-primary/15 text-amber-700 dark:text-primary border border-primary/30',
   STAFF:         'bg-blue-500/10 text-blue-700 dark:text-blue-400 border border-blue-500/20',
   PROFESOR:      'bg-emerald-500/10 text-emerald-700 dark:text-emerald-400 border border-emerald-500/20',
+  CLIENTE_COMUN: 'bg-purple-500/10 text-purple-700 dark:text-purple-400 border border-purple-500/20',
 }
 
 const SOLICITUD_ESTADO_BADGE: Record<string, string> = {
@@ -48,6 +52,13 @@ const SOLICITUD_ESTADO_LABEL: Record<string, string> = {
   PENDIENTE: 'Pendiente',
   APROBADO: 'Aprobado',
   RECHAZADO: 'Rechazado',
+}
+
+const ROL_DESC: Record<string, string> = {
+  ADMINISTRADOR: 'Acceso completo al sistema',
+  STAFF:         'Clientes, pagos y turnos',
+  PROFESOR:      'Turnos, asistencia y rutinas',
+  CLIENTE_COMUN: 'Cuenta común para ver rutinas',
 }
 
 // ─── Schemas ──────────────────────────────────────────────────────────────────
@@ -103,6 +114,7 @@ function UsuariosTab() {
   const [editTarget, setEditTarget]   = useState<AppUser | null>(null)
   const [isSubmitting, setIsSubmitting] = useState(false)
   const [deletingId, setDeletingId]   = useState<string | null>(null)
+  const [deleteTarget, setDeleteTarget] = useState<AppUser | null>(null)
 
   const load = useCallback(() => {
     setLoading(true)
@@ -163,7 +175,6 @@ function UsuariosTab() {
   }
 
   async function onDelete(user: AppUser) {
-    if (!confirm(`¿Eliminar al usuario ${user.nombre}? Esta acción no se puede deshacer.`)) return
     setDeletingId(user.id)
     try {
       await usuariosApi.remove(user.id)
@@ -173,6 +184,7 @@ function UsuariosTab() {
       addToast(err?.response?.data?.message ?? 'Error al eliminar', 'error')
     } finally {
       setDeletingId(null)
+      setDeleteTarget(null)
     }
   }
 
@@ -286,7 +298,7 @@ function UsuariosTab() {
                         </button>
                         {u.id !== currentUser?.id && (
                           <button
-                            onClick={() => onDelete(u)}
+                            onClick={() => setDeleteTarget(u)}
                             disabled={deletingId === u.id}
                             className="rounded-lg p-1.5 text-gray-400 hover:bg-red-50 dark:hover:bg-red-500/10 hover:text-red-600 dark:hover:text-red-400 transition-all disabled:opacity-40"
                           >
@@ -344,6 +356,16 @@ function UsuariosTab() {
           </div>
         </form>
       </Modal>
+
+      <ConfirmDialog
+        isOpen={!!deleteTarget}
+        title="Eliminar usuario"
+        message={`¿Eliminar a ${deleteTarget?.nombre ?? 'este usuario'}? Esta acción no se puede deshacer.`}
+        confirmLabel="Eliminar"
+        isLoading={deletingId !== null}
+        onConfirm={() => deleteTarget && onDelete(deleteTarget)}
+        onClose={() => setDeleteTarget(null)}
+      />
     </div>
   )
 }
@@ -360,6 +382,7 @@ function ProfesoresTab() {
   const [linking, setLinking]   = useState<string | null>(null)
   const [linkTarget, setLinkTarget] = useState<AppUser | null>(null)
   const [editEspTarget, setEditEspTarget] = useState<AppUser | null>(null)
+  const [unlinkTarget, setUnlinkTarget] = useState<AppUser | null>(null)
 
   const { register, handleSubmit, reset } = useForm<EspValues>({ resolver: zodResolver(espSchema) })
   const { register: regEdit, handleSubmit: hsEditEsp, reset: resetEsp } = useForm<EspValues>({ resolver: zodResolver(espSchema) })
@@ -391,7 +414,6 @@ function ProfesoresTab() {
   }
 
   async function onUnlink(u: AppUser) {
-    if (!confirm(`¿Desvincular el perfil de profesor de ${u.nombre}? Los turnos asignados quedarán sin profesor.`)) return
     setLinking(u.id)
     try {
       const updated = await usuariosApi.unlinkProfesor(u.id)
@@ -454,7 +476,7 @@ function ProfesoresTab() {
                       <Edit2 size={14} />
                     </button>
                     <button
-                      onClick={() => onUnlink(u)}
+                      onClick={() => setUnlinkTarget(u)}
                       disabled={linking === u.id}
                       className="flex items-center gap-1.5 rounded-lg px-3 py-1.5 text-xs font-semibold text-red-500 hover:bg-red-50 dark:hover:bg-red-500/10 transition-all disabled:opacity-40"
                     >
@@ -520,6 +542,16 @@ function ProfesoresTab() {
           </div>
         </form>
       </Modal>
+
+      <ConfirmDialog
+        isOpen={!!unlinkTarget}
+        title="Desvincular profesor"
+        message={`¿Desvincular el perfil de profesor de ${unlinkTarget?.nombre ?? 'este usuario'}? Los turnos asignados quedarán sin profesor.`}
+        confirmLabel="Desvincular"
+        isLoading={linking === unlinkTarget?.id}
+        onConfirm={() => { if (unlinkTarget) { onUnlink(unlinkTarget); setUnlinkTarget(null) } }}
+        onClose={() => setUnlinkTarget(null)}
+      />
     </div>
   )
 }
@@ -802,14 +834,20 @@ function PermisosTab() {
 
 function SolicitudesTab() {
   const addToast = useUiStore(s => s.addToast)
+  const setPendingCount = useSolicitudesStore(s => s.setPendingCount)
   const [solicitudes, setSolicitudes] = useState<SolicitudEntry[]>([])
   const [loading, setLoading]         = useState(true)
   const [actioningId, setActioningId] = useState<string | null>(null)
+  const [rechazarTarget, setRechazarTarget] = useState<string | null>(null)
+  const [eliminarTarget, setEliminarTarget] = useState<string | null>(null)
 
   const load = useCallback(() => {
     setLoading(true)
     solicitudesApi.getAll()
-      .then(setSolicitudes)
+      .then(data => {
+        setSolicitudes(data)
+        setPendingCount(data.filter(s => s.estado === 'PENDIENTE').length)
+      })
       .catch(() => addToast('Error al cargar solicitudes', 'error'))
       .finally(() => setLoading(false))
   }, [])
@@ -830,7 +868,6 @@ function SolicitudesTab() {
   }
 
   async function rechazar(id: string) {
-    if (!confirm('¿Rechazar esta solicitud?')) return
     setActioningId(id)
     try {
       await solicitudesApi.rechazar(id)
@@ -838,6 +875,23 @@ function SolicitudesTab() {
       load()
     } catch {
       addToast('Error al rechazar', 'error')
+    } finally {
+      setActioningId(null)
+    }
+  }
+
+  async function eliminar(id: string) {
+    setActioningId(id)
+    try {
+      await solicitudesApi.remove(id)
+      addToast('Solicitud eliminada', 'success')
+      setSolicitudes(prev => {
+        const next = prev.filter(s => s.id !== id)
+        setPendingCount(next.filter(s => s.estado === 'PENDIENTE').length)
+        return next
+      })
+    } catch {
+      addToast('Error al eliminar', 'error')
     } finally {
       setActioningId(null)
     }
@@ -877,19 +931,25 @@ function SolicitudesTab() {
             <div className={`${glassCard} overflow-hidden`}>
               <div className="divide-y divide-gray-100/60 dark:divide-white/[0.04]">
                 {pendientes.map(s => (
-                  <div key={s.id} className="flex items-center gap-4 px-5 py-4">
-                    <div className="h-10 w-10 rounded-xl bg-amber-500/10 flex items-center justify-center shrink-0 text-sm font-black text-amber-600 dark:text-amber-400">
+                  <div key={s.id} className="flex items-start gap-4 px-5 py-4">
+                    <div className="h-10 w-10 rounded-xl bg-amber-500/10 flex items-center justify-center shrink-0 text-sm font-black text-amber-600 dark:text-amber-400 mt-0.5">
                       {s.nombre.charAt(0).toUpperCase()}
                     </div>
                     <div className="flex-1 min-w-0">
                       <div className="flex items-center gap-2 flex-wrap">
                         <p className="font-semibold text-gray-900 dark:text-white">{s.nombre}</p>
-                        <span className={`inline-flex items-center rounded-full px-2.5 py-0.5 text-xs font-bold ${ROL_COLORS[s.rolSolicitado]}`}>
-                          {ROL_LABELS[s.rolSolicitado]}
+                      </div>
+                      <p className="text-xs text-[#8A8A9A] mt-0.5">{s.email}</p>
+                      <div className="flex items-center gap-2 mt-2 flex-wrap">
+                        <span className={`inline-flex items-center rounded-full px-2.5 py-0.5 text-xs font-bold ${ROL_COLORS[s.rolSolicitado] ?? 'bg-gray-100 text-gray-600'}`}>
+                          {ROL_LABELS[s.rolSolicitado] ?? s.rolSolicitado}
+                        </span>
+                        <span className="text-xs text-[#8A8A9A]">
+                          {ROL_DESC[s.rolSolicitado] ?? ''}
                         </span>
                       </div>
-                      <p className="text-xs text-[#8A8A9A] mt-0.5">
-                        {s.email} · {format(new Date(s.createdAt), "d MMM yyyy 'a las' HH:mm", { locale: es })}
+                      <p className="text-[11px] text-[#8A8A9A] mt-1.5">
+                        Solicitado el {format(new Date(s.createdAt), "d 'de' MMMM yyyy 'a las' HH:mm", { locale: es })}
                       </p>
                     </div>
                     <div className="flex items-center gap-2 shrink-0">
@@ -905,11 +965,19 @@ function SolicitudesTab() {
                         Aprobar
                       </button>
                       <button
-                        onClick={() => rechazar(s.id)}
+                        onClick={() => setRechazarTarget(s.id)}
                         disabled={actioningId === s.id}
                         className="flex items-center gap-1.5 rounded-xl bg-red-500/10 px-3 py-2 text-xs font-semibold text-red-600 dark:text-red-400 hover:bg-red-500/20 transition-all disabled:opacity-50"
                       >
                         <Ban size={13} /> Rechazar
+                      </button>
+                      <button
+                        onClick={() => setEliminarTarget(s.id)}
+                        disabled={actioningId === s.id}
+                        className="flex h-8 w-8 items-center justify-center rounded-xl text-gray-400 hover:text-red-500 hover:bg-red-500/10 transition-all disabled:opacity-50"
+                        title="Eliminar solicitud"
+                      >
+                        <Trash2 size={14} />
                       </button>
                     </div>
                   </div>
@@ -926,8 +994,8 @@ function SolicitudesTab() {
             <div className={`${glassCard} overflow-hidden`}>
               <div className="divide-y divide-gray-100/60 dark:divide-white/[0.04]">
                 {procesadas.map(s => (
-                  <div key={s.id} className="flex items-center gap-4 px-5 py-3.5 opacity-70">
-                    <div className="h-9 w-9 rounded-xl bg-gray-100 dark:bg-white/[0.06] flex items-center justify-center shrink-0 text-xs font-black text-gray-500 dark:text-gray-400">
+                  <div key={s.id} className="flex items-start gap-4 px-5 py-3.5 opacity-70 hover:opacity-100 transition-opacity">
+                    <div className="h-9 w-9 rounded-xl bg-gray-100 dark:bg-white/[0.06] flex items-center justify-center shrink-0 text-xs font-black text-gray-500 dark:text-gray-400 mt-0.5">
                       {s.nombre.charAt(0).toUpperCase()}
                     </div>
                     <div className="flex-1 min-w-0">
@@ -937,11 +1005,26 @@ function SolicitudesTab() {
                           {SOLICITUD_ESTADO_LABEL[s.estado]}
                         </span>
                       </div>
-                      <p className="text-xs text-[#8A8A9A]">{s.email} · {ROL_LABELS[s.rolSolicitado]}</p>
+                      <p className="text-xs text-[#8A8A9A] mt-0.5">{s.email}</p>
+                      <div className="flex items-center gap-2 mt-1.5 flex-wrap">
+                        <span className={`inline-flex items-center rounded-full px-2 py-0.5 text-[11px] font-bold ${ROL_COLORS[s.rolSolicitado] ?? 'bg-gray-100 text-gray-600'}`}>
+                          {ROL_LABELS[s.rolSolicitado] ?? s.rolSolicitado}
+                        </span>
+                        {s.revisadaAt && (
+                          <span className="text-[11px] text-[#8A8A9A]">
+                            · Revisada el {format(new Date(s.revisadaAt), "d MMM yyyy", { locale: es })}
+                          </span>
+                        )}
+                      </div>
                     </div>
-                    <p className="text-xs text-[#8A8A9A] shrink-0">
-                      {s.revisadaAt ? format(new Date(s.revisadaAt), "d MMM yyyy", { locale: es }) : '—'}
-                    </p>
+                    <button
+                      onClick={() => setEliminarTarget(s.id)}
+                      disabled={actioningId === s.id}
+                      className="flex h-8 w-8 items-center justify-center rounded-xl text-gray-400 hover:text-red-500 hover:bg-red-500/10 transition-all disabled:opacity-50 shrink-0"
+                      title="Eliminar solicitud"
+                    >
+                      <Trash2 size={14} />
+                    </button>
                   </div>
                 ))}
               </div>
@@ -949,6 +1032,25 @@ function SolicitudesTab() {
           </div>
         )}
       </>)}
+
+      <ConfirmDialog
+        isOpen={rechazarTarget !== null}
+        title="Rechazar solicitud"
+        message="La solicitud quedará marcada como rechazada y no podrá aprobarse después."
+        confirmLabel="Rechazar"
+        isLoading={actioningId !== null}
+        onConfirm={() => { if (rechazarTarget) { rechazar(rechazarTarget); setRechazarTarget(null) } }}
+        onClose={() => setRechazarTarget(null)}
+      />
+      <ConfirmDialog
+        isOpen={eliminarTarget !== null}
+        title="Eliminar solicitud"
+        message="Se eliminará permanentemente de la base de datos. Esta acción no se puede deshacer."
+        confirmLabel="Eliminar"
+        isLoading={actioningId !== null}
+        onConfirm={() => { if (eliminarTarget) { eliminar(eliminarTarget); setEliminarTarget(null) } }}
+        onClose={() => setEliminarTarget(null)}
+      />
     </div>
   )
 }

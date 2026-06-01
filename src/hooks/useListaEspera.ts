@@ -1,27 +1,19 @@
-import { useState, useEffect, useCallback } from 'react'
+import { useQuery } from '@tanstack/react-query'
 import { listaEsperaApi } from '../api/listaEspera.api'
-import type { ListaEsperaEntry } from '../types/listaEspera.types'
+import { QK } from '../lib/queryKeys'
 
 export function useListaEspera(turnoId: string | null) {
-  const [entries, setEntries] = useState<ListaEsperaEntry[]>([])
-  const [isLoading, setIsLoading] = useState(false)
-  const [error, setError] = useState<string | null>(null)
+  const { data, isPending, error, refetch } = useQuery({
+    queryKey: QK.listaEspera.byTurno(turnoId),
+    queryFn:  () => listaEsperaApi.getByTurno(turnoId!),
+    enabled:  !!turnoId,
+    staleTime: 30_000,
+  })
 
-  const fetch = useCallback(async () => {
-    if (!turnoId) { setEntries([]); return }
-    setIsLoading(true)
-    setError(null)
-    try {
-      const data = await listaEsperaApi.getByTurno(turnoId)
-      setEntries(data)
-    } catch {
-      setError('No se pudo cargar la lista de espera')
-    } finally {
-      setIsLoading(false)
-    }
-  }, [turnoId])
-
-  useEffect(() => { fetch() }, [fetch])
-
-  return { entries, isLoading, error, refetch: fetch }
+  return {
+    entries:   data ?? [],
+    isLoading: !!turnoId && isPending,
+    error:     error ? (error as Error).message : null,
+    refetch:   () => { refetch() },
+  }
 }

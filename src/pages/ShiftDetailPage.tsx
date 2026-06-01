@@ -26,6 +26,8 @@ import Button from '../components/ui/Button'
 import Input from '../components/ui/Input'
 import Select from '../components/ui/Select'
 import Skeleton from '../components/ui/Skeleton'
+import ConfirmDialog from '../components/ui/ConfirmDialog'
+import EmptyState from '../components/ui/EmptyState'
 import type { Shift, WeekDay } from '../types/shift.types'
 import type { InscripcionEntry } from '../api/inscripciones.api'
 import type { TipoEspera, EstadoEspera } from '../types/listaEspera.types'
@@ -90,6 +92,8 @@ export default function ShiftDetailPage() {
   const [loading, setLoading] = useState(true)
   const [tab, setTab] = useState<DetailTab>('resumen')
   const [isEditingShift, setIsEditingShift] = useState(false)
+  const [isConfirmDeleteShift, setIsConfirmDeleteShift] = useState(false)
+  const [isDeletingShift, setIsDeletingShift] = useState(false)
 
   // Inscripciones
   const [inscripciones, setInscripciones] = useState<InscripcionEntry[]>([])
@@ -240,13 +244,15 @@ export default function ShiftDetailPage() {
   }
 
   async function deleteShift() {
-    if (!id || !confirm('¿Eliminar este turno? Esta acción no se puede deshacer.')) return
+    if (!id) return
+    setIsDeletingShift(true)
     try {
       await shiftsApi.remove(id)
       addToast('Turno eliminado', 'success')
       navigate('/shifts')
     } catch {
       addToast('Error al eliminar el turno', 'error')
+      setIsDeletingShift(false)
     }
   }
 
@@ -749,7 +755,7 @@ export default function ShiftDetailPage() {
 
                 <div className="flex items-center justify-between pt-4 border-t border-white/[0.08]">
                   <button
-                    type="button" onClick={deleteShift}
+                    type="button" onClick={() => setIsConfirmDeleteShift(true)}
                     className="flex items-center gap-1.5 rounded-xl bg-red-500/10 px-4 py-2 text-sm font-semibold text-red-400 hover:bg-red-500/20 transition-all"
                   >
                     <Trash2 size={14} /> Eliminar turno
@@ -960,10 +966,7 @@ export default function ShiftDetailPage() {
                     ))}
                   </div>
                 ) : localInscripciones.length === 0 ? (
-                  <div className="flex flex-col items-center justify-center py-10 text-[#8A8A9A]">
-                    <Users size={28} className="mb-2 opacity-50" />
-                    <p className="text-sm">No hay clientes inscriptos en este turno</p>
-                  </div>
+                  <EmptyState icon={Users} message="No hay clientes inscriptos en este turno" className="py-10" />
                 ) : (
                   <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
                     {/* ── Sala A drop zone ── */}
@@ -1126,10 +1129,7 @@ export default function ShiftDetailPage() {
                       </p>
                     )}
                     {activeInscrip.length === 0 ? (
-                      <div className="flex flex-col items-center justify-center py-10 text-[#8A8A9A]">
-                        <Users size={24} className="mb-2 opacity-50" />
-                        <p className="text-sm">No hay clientes inscriptos activos</p>
-                      </div>
+                      <EmptyState icon={Users} message="No hay clientes inscriptos activos" className="py-10" />
                     ) : (
                       <div className="space-y-3 p-4">
                         {activeInscrip.map(insc => {
@@ -1292,10 +1292,7 @@ export default function ShiftDetailPage() {
               ) : (() => {
                 const filteredEspera = esperaEntries.filter(e => e.tipo === esperaTipoTab)
                 if (filteredEspera.length === 0) return (
-                  <div className="flex flex-col items-center justify-center py-10 text-[#8A8A9A]">
-                    <Clock size={24} className="mb-2 opacity-50" />
-                    <p className="text-sm">No hay entradas {esperaTipoTab === 'INTERNA' ? 'internas' : 'externas'}</p>
-                  </div>
+                  <EmptyState icon={Clock} message={`No hay entradas ${esperaTipoTab === 'INTERNA' ? 'internas' : 'externas'}`} className="py-10" />
                 )
                 return (
                   <div className="space-y-1.5">
@@ -1467,6 +1464,16 @@ export default function ShiftDetailPage() {
 
         </div>
       </div>
+
+      <ConfirmDialog
+        isOpen={isConfirmDeleteShift}
+        title="Eliminar turno"
+        message="Se eliminarán también todas las inscripciones y asistencias asociadas. Esta acción no se puede deshacer."
+        confirmLabel="Eliminar"
+        isLoading={isDeletingShift}
+        onConfirm={deleteShift}
+        onClose={() => setIsConfirmDeleteShift(false)}
+      />
     </motion.div>
   )
 }

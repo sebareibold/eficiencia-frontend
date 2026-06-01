@@ -1,4 +1,4 @@
-﻿import React, { useState, useMemo, useEffect } from 'react'
+import React, { useState, useMemo, useEffect } from 'react'
 import { motion } from 'framer-motion'
 import { pageVariants } from '../lib/motion'
 import { Plus, Receipt, Wallet, Building, Wrench, RefreshCw, Trash2, Edit2, LayoutGrid, List, ArrowUp, ArrowDown, ArrowUpDown, ChevronLeft, ChevronRight, Search, X } from 'lucide-react'
@@ -12,6 +12,7 @@ import { expensesApi } from '../api/expenses.api'
 import { useUiStore } from '../store/uiStore'
 import Modal from '../components/ui/Modal'
 import Skeleton from '../components/ui/Skeleton'
+import ConfirmDialog from '../components/ui/ConfirmDialog'
 import KpiCard from '../components/ui/KpiCard'
 import { formatCurrency } from '../utils/formatCurrency'
 import { formatDate } from '../utils/formatDate'
@@ -116,6 +117,8 @@ export default function ExpensesPage() {
   const [createOpen, setCreateOpen] = useState(false)
   const [editExpense, setEditExpense] = useState<Expense | null>(null)
   const [isSubmitting, setIsSubmitting] = useState(false)
+  const [deleteTarget, setDeleteTarget] = useState<number | null>(null)
+  const [isDeleting, setIsDeleting] = useState(false)
 
   const { expenses: rawExpenses, isLoading, error, refetch } = useExpenses(
     periodMode === 'month' ? { month } : {}
@@ -281,13 +284,16 @@ export default function ExpensesPage() {
   }
 
   async function deleteExpense(id: number) {
-    if (!confirm('¿Eliminar este gasto?')) return
+    setIsDeleting(true)
     try {
       await expensesApi.remove(id)
       addToast('Gasto eliminado', 'success')
       refetch()
     } catch {
       addToast('Error al eliminar', 'error')
+    } finally {
+      setIsDeleting(false)
+      setDeleteTarget(null)
     }
   }
 
@@ -403,18 +409,18 @@ export default function ExpensesPage() {
 
           {/* Búsqueda por descripción */}
           <div className="relative">
-            <Search size={14} className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-gray-400 dark:text-[#8A8A9A]" />
+            <Search size={14} className="pointer-events-none absolute left-3.5 top-1/2 -translate-y-1/2 text-gray-400 dark:text-[#8A8A9A]" />
             <input
               type="text"
               value={search}
               onChange={e => setSearch(e.target.value)}
               placeholder="Buscar por descripción..."
-              className="w-full rounded-xl border border-saas-border dark:border-white/[0.08] bg-white/60 dark:bg-white/[0.04] backdrop-blur-sm py-2.5 pl-9 pr-9 text-sm text-gray-900 dark:text-white placeholder:text-gray-400 dark:placeholder:text-[#8A8A9A] transition-all focus:border-gray-400 dark:focus:border-white/20 focus:outline-none focus:ring-2 focus:ring-gray-200 dark:focus:ring-white/10"
+              className="w-full rounded-xl border border-white/50 dark:border-white/10 bg-white/30 dark:bg-black/30 backdrop-blur-xl pl-10 pr-10 py-2 text-xs font-semibold text-gray-800 dark:text-gray-200 placeholder-gray-400 focus:outline-none h-10"
             />
             {search && (
               <button
                 onClick={() => setSearch('')}
-                className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 transition-colors hover:text-gray-700"
+                className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 transition-colors hover:text-gray-700 dark:hover:text-white"
               >
                 <X size={14} />
               </button>
@@ -422,79 +428,102 @@ export default function ExpensesPage() {
           </div>
 
           {/* Controls: filtros + orden + vista */}
-          <div className="flex flex-wrap items-center gap-3">
+          <div className="flex flex-wrap items-center justify-between gap-4">
             {/* Category filter pills */}
-            <div className="flex flex-wrap gap-1.5">
-              {(['all', ...(Object.keys(CATEGORY_LABELS) as ExpenseCategory[])] as CategoryFilter[]).map(c => (
-                <button
-                  key={c}
-                  onClick={() => setCategoryFilter(c)}
-                  className={`relative inline-flex items-center rounded-full px-3 py-1.5 text-sm font-medium transition-colors ${
-                    categoryFilter === c
-                      ? 'text-white'
-                      : 'border border-saas-border dark:border-white/[0.08] bg-white/60 dark:bg-white/[0.04] text-gray-700 dark:text-[#8A8A9A] hover:bg-saas-hover dark:hover:bg-white/[0.08] hover:text-gray-900 dark:hover:text-white'
-                  }`}
-                >
-                  {categoryFilter === c && (
-                    <motion.div
-                      layoutId="filter-category"
-                      className="absolute inset-0 rounded-full bg-gray-900 dark:bg-white/[0.15]"
-                      transition={{ type: 'spring', stiffness: 380, damping: 30 }}
-                      style={{ zIndex: 0 }}
-                    />
-                  )}
-                  <span className="relative z-10">
-                    {c === 'all' ? 'Todos' : CATEGORY_LABELS[c]}
-                  </span>
-                </button>
-              ))}
+            <div className="flex items-center rounded-full border border-white/50 dark:border-white/10 bg-white/30 dark:bg-black/30 backdrop-blur-xl p-1 shadow-sm gap-1 flex-wrap">
+              {(['all', ...(Object.keys(CATEGORY_LABELS) as ExpenseCategory[])] as CategoryFilter[]).map(c => {
+                const isActive = categoryFilter === c
+                return (
+                  <button
+                    key={c}
+                    onClick={() => setCategoryFilter(c)}
+                    className={`relative inline-flex items-center justify-center rounded-full px-4 py-1.5 text-xs font-bold transition-all duration-300 cursor-pointer ${
+                      isActive
+                        ? 'text-white dark:text-gray-900'
+                        : 'text-gray-500 dark:text-[#8A8A9A] hover:text-gray-900 dark:hover:text-white'
+                    }`}
+                  >
+                    {isActive && (
+                      <motion.div
+                        layoutId="filter-category"
+                        className="absolute inset-0 rounded-full bg-gray-900 dark:bg-white shadow-[0_2px_8px_rgba(0,0,0,0.15)]"
+                        transition={{ type: 'spring', stiffness: 380, damping: 30 }}
+                        style={{ zIndex: 0 }}
+                      />
+                    )}
+                    <span className="relative z-10">
+                      {c === 'all' ? 'Todos' : CATEGORY_LABELS[c]}
+                    </span>
+                  </button>
+                )
+              })}
             </div>
 
-            <div className="flex-1" />
+            <div className="flex items-center gap-4 flex-wrap">
+              {/* Sort buttons */}
+              <div className="flex items-center gap-1">
+                <span className="text-[10px] font-bold uppercase tracking-wider text-gray-400 dark:text-[#8A8A9A] ml-1 mr-1">Ordenar:</span>
+                <div className="flex items-center rounded-full border border-white/50 dark:border-white/10 bg-white/30 dark:bg-black/30 backdrop-blur-xl p-1 shadow-sm gap-1">
+                  {(['date', 'amount', 'category'] as SortKey[]).map(k => {
+                    const isActive = sortKey === k
+                    return (
+                      <button
+                        key={k}
+                        onClick={() => toggleSort(k)}
+                        className={`relative inline-flex items-center justify-center rounded-full px-3 py-1.5 text-xs font-bold transition-all duration-300 cursor-pointer ${
+                          isActive
+                            ? 'text-white dark:text-gray-900'
+                            : 'text-gray-500 dark:text-[#8A8A9A] hover:text-gray-900 dark:hover:text-white'
+                        }`}
+                      >
+                        {isActive && (
+                          <motion.div
+                            layoutId="sort-key-expenses"
+                            className="absolute inset-0 rounded-full bg-gray-900 dark:bg-white shadow-[0_2px_8px_rgba(0,0,0,0.15)]"
+                            transition={{ type: 'spring', stiffness: 380, damping: 30 }}
+                            style={{ zIndex: 0 }}
+                          />
+                        )}
+                        <span className="relative z-10 flex items-center gap-1">
+                          {k === 'date' ? 'Fecha' : k === 'amount' ? 'Monto' : 'Tipo'}
+                          <SortIcon active={sortKey === k} dir={sortDir} />
+                        </span>
+                      </button>
+                    )
+                  })}
+                </div>
+              </div>
 
-            {/* Sort buttons */}
-            <div className="flex items-center gap-1.5">
-              <span className="text-xs font-medium text-saas-muted dark:text-[#8A8A9A]">Ordenar:</span>
-              {(['date', 'amount', 'category'] as SortKey[]).map(k => (
-                <button
-                  key={k}
-                  onClick={() => toggleSort(k)}
-                  className={`flex items-center gap-1 rounded-lg px-2.5 py-1.5 text-xs font-medium transition-colors ${
-                    sortKey === k
-                      ? 'bg-gray-900 dark:bg-white/[0.12] text-white'
-                      : 'border border-saas-border dark:border-white/[0.08] bg-white/60 dark:bg-white/[0.04] text-gray-600 dark:text-[#8A8A9A] hover:bg-saas-bg dark:hover:bg-white/[0.08] hover:text-gray-900 dark:hover:text-white'
-                  }`}
-                >
-                  {k === 'date' ? 'Fecha' : k === 'amount' ? 'Monto' : 'Tipo'}
-                  <SortIcon active={sortKey === k} dir={sortDir} />
-                </button>
-              ))}
-            </div>
-
-            {/* View toggle */}
-            <div className="flex items-center rounded-lg border border-saas-border dark:border-white/[0.08] bg-white/60 dark:bg-white/[0.04] backdrop-blur-sm p-1">
-              <button
-                onClick={() => setViewMode('table')}
-                title="Vista tabla"
-                className={`flex items-center justify-center rounded-md p-1.5 transition-colors ${
-                  viewMode === 'table'
-                    ? 'bg-gray-900 dark:bg-white/[0.12] text-white'
-                    : 'text-gray-400 dark:text-[#8A8A9A] hover:text-gray-700 dark:hover:text-white'
-                }`}
-              >
-                <List size={14} />
-              </button>
-              <button
-                onClick={() => setViewMode('grid')}
-                title="Vista tarjetas"
-                className={`flex items-center justify-center rounded-md p-1.5 transition-colors ${
-                  viewMode === 'grid'
-                    ? 'bg-gray-900 dark:bg-white/[0.12] text-white'
-                    : 'text-gray-400 dark:text-[#8A8A9A] hover:text-gray-700 dark:hover:text-white'
-                }`}
-              >
-                <LayoutGrid size={14} />
-              </button>
+              {/* View toggle */}
+              <div className="flex items-center rounded-full border border-white/50 dark:border-white/10 bg-white/30 dark:bg-black/30 backdrop-blur-xl p-1 shadow-sm gap-1 shrink-0">
+                {(['table', 'grid'] as const).map((mode) => {
+                  const isActive = viewMode === mode
+                  return (
+                    <button
+                      key={mode}
+                      onClick={() => setViewMode(mode)}
+                      title={mode === 'table' ? 'Vista tabla' : 'Vista tarjetas'}
+                      className={`relative inline-flex items-center justify-center rounded-full px-4 py-1.5 text-xs font-bold transition-all duration-300 cursor-pointer ${
+                        isActive
+                          ? 'text-white dark:text-gray-900'
+                          : 'text-gray-500 dark:text-[#8A8A9A] hover:text-gray-900 dark:hover:text-white'
+                      }`}
+                    >
+                      {isActive && (
+                        <motion.div
+                          layoutId="view-mode-expenses"
+                          className="absolute inset-0 rounded-full bg-gray-900 dark:bg-white shadow-[0_2px_8px_rgba(0,0,0,0.15)]"
+                          transition={{ type: 'spring', stiffness: 380, damping: 30 }}
+                          style={{ zIndex: 0 }}
+                        />
+                      )}
+                      <span className="relative z-10 flex items-center justify-center">
+                        {mode === 'table' ? <List size={14} /> : <LayoutGrid size={14} />}
+                      </span>
+                    </button>
+                  )
+                })}
+              </div>
             </div>
           </div>
 
@@ -588,7 +617,7 @@ export default function ExpensesPage() {
                               <Edit2 size={14} />
                             </button>
                             <button
-                              onClick={() => deleteExpense(e.id)}
+                              onClick={() => setDeleteTarget(e.id)}
                               className="rounded-md p-1.5 text-gray-400 dark:text-[#8A8A9A] transition-all hover:bg-red-50 dark:hover:bg-red-500/10 hover:text-red-600 dark:hover:text-red-400"
                             >
                               <Trash2 size={14} />
@@ -647,7 +676,7 @@ export default function ExpensesPage() {
                           <Edit2 size={14} />
                         </button>
                         <button
-                          onClick={() => deleteExpense(e.id)}
+                          onClick={() => setDeleteTarget(e.id)}
                           className="rounded-lg p-1.5 text-gray-400 transition-all hover:bg-red-50 hover:text-red-600"
                         >
                           <Trash2 size={14} />
@@ -916,6 +945,16 @@ export default function ExpensesPage() {
 
         </form>
       </Modal>
+
+      <ConfirmDialog
+        isOpen={deleteTarget !== null}
+        title="Eliminar gasto"
+        message="Esta acción no se puede deshacer. El registro quedará eliminado permanentemente."
+        confirmLabel="Eliminar"
+        isLoading={isDeleting}
+        onConfirm={() => deleteTarget !== null && deleteExpense(deleteTarget)}
+        onClose={() => setDeleteTarget(null)}
+      />
     </motion.div>
   )
 }

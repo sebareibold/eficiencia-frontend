@@ -28,23 +28,23 @@ const today = new Date().toISOString().slice(0, 10)
 
 const MODALIDAD_DIAS: Record<Modalidad, number> = {
   TRANSFERENCIA_MENSUAL: 30,
-  EFECTIVO:              30,
-  MEMBRESIA_3_MESES:     90,
-  MEMBRESIA_6_MESES:     180,
+  EFECTIVO: 30,
+  MEMBRESIA_3_MESES: 90,
+  MEMBRESIA_6_MESES: 180,
 }
 
 const MODALIDAD_LABEL: Record<Modalidad, string> = {
   TRANSFERENCIA_MENSUAL: 'Transferencia / Débito',
-  EFECTIVO:              'Efectivo',
-  MEMBRESIA_3_MESES:     '3 meses',
-  MEMBRESIA_6_MESES:     '6 meses',
+  EFECTIVO: 'Efectivo',
+  MEMBRESIA_3_MESES: '3 meses',
+  MEMBRESIA_6_MESES: '6 meses',
 }
 
 const CUOTAS_POR_MODALIDAD: Record<Modalidad, number> = {
   TRANSFERENCIA_MENSUAL: 1,
-  EFECTIVO:              1,
-  MEMBRESIA_3_MESES:     3,
-  MEMBRESIA_6_MESES:     6,
+  EFECTIVO: 1,
+  MEMBRESIA_3_MESES: 3,
+  MEMBRESIA_6_MESES: 6,
 }
 
 const METODO_LABEL: Record<'EFECTIVO' | 'TRANSFERENCIA' | 'DEBITO', string> = {
@@ -59,19 +59,19 @@ const WEEKDAY_LABEL: Record<WeekDay, string> = {
 }
 
 const STEPS = [
-  { id: 1 as const, label: 'Datos',     optional: false },
+  { id: 1 as const, label: 'Datos', optional: false },
   { id: 2 as const, label: 'Membresía', optional: false },
-  { id: 3 as const, label: 'Pago',      optional: false },
-  { id: 4 as const, label: 'Turno',     optional: true  },
-  { id: 5 as const, label: 'Rutina',    optional: true  },
+  { id: 3 as const, label: 'Pago', optional: false },
+  { id: 4 as const, label: 'Turno', optional: true },
+  { id: 5 as const, label: 'Rutina', optional: true },
 ]
 
 const STEP_META: Record<number, { Icon: typeof User; title: string; description: string }> = {
-  1: { Icon: User,      title: 'Datos del cliente',  description: 'Nombre, DNI y datos de contacto del nuevo socio' },
-  2: { Icon: CreditCard,title: 'Membresía',           description: 'Plan, modalidad y precio del período' },
-  3: { Icon: Banknote,  title: 'Primer pago',         description: 'Registrá el pago que realizó el cliente hoy' },
-  4: { Icon: Calendar,  title: 'Turno',               description: 'Asigná el turno al que va a asistir' },
-  5: { Icon: Dumbbell,  title: 'Rutina inicial',      description: 'Creá una rutina de arranque para el cliente' },
+  1: { Icon: User, title: 'Datos del cliente', description: 'Nombre, DNI y datos de contacto del nuevo socio' },
+  2: { Icon: CreditCard, title: 'Membresía', description: 'Plan, modalidad y precio del período' },
+  3: { Icon: Banknote, title: 'Primer pago', description: 'Registrá el pago que realizó el cliente hoy' },
+  4: { Icon: Calendar, title: 'Turno', description: 'Asigná el turno al que va a asistir' },
+  5: { Icon: Dumbbell, title: 'Rutina inicial', description: 'Creá una rutina de arranque para el cliente' },
 }
 
 type StepId = 1 | 2 | 3 | 4 | 5 | 'success'
@@ -173,20 +173,20 @@ function OptionCard({
         'relative text-left rounded-2xl border p-4 transition-all duration-200 overflow-hidden w-full',
         selected
           ? [
-              'border-primary/50 dark:border-primary/40',
-              'bg-gradient-to-br from-[rgba(251,198,8,0.10)] via-[rgba(251,198,8,0.04)] to-transparent',
-              'dark:from-[rgba(251,198,8,0.08)] dark:via-[rgba(251,198,8,0.03)] dark:to-transparent',
-              'shadow-[0_4px_24px_rgba(251,198,8,0.12)] dark:shadow-[0_4px_24px_rgba(251,198,8,0.08)]',
-            ].join(' ')
+            'border-primary/50 dark:border-primary/40',
+            'bg-gradient-to-br from-[rgba(251,198,8,0.10)] via-[rgba(251,198,8,0.04)] to-transparent',
+            'dark:from-[rgba(251,198,8,0.08)] dark:via-[rgba(251,198,8,0.03)] dark:to-transparent',
+            'shadow-[0_4px_24px_rgba(251,198,8,0.12)] dark:shadow-[0_4px_24px_rgba(251,198,8,0.08)]',
+          ].join(' ')
           : [
-              'border-white/50 dark:border-white/10',
-              'bg-white/40 dark:bg-white/[0.04]',
-              'backdrop-blur-xl',
-              'shadow-[0_2px_12px_rgba(0,0,0,0.06),0_1px_3px_rgba(0,0,0,0.04)] dark:shadow-[0_2px_8px_rgba(0,0,0,0.2)]',
-              'hover:border-white/70 dark:hover:border-white/[0.16]',
-              'hover:bg-white/60 dark:hover:bg-white/[0.07]',
-              'hover:shadow-[0_4px_20px_rgba(0,0,0,0.08)] dark:hover:shadow-[0_4px_16px_rgba(0,0,0,0.3)]',
-            ].join(' '),
+            'border-white/50 dark:border-white/10',
+            'bg-white/40 dark:bg-white/[0.04]',
+            'backdrop-blur-xl',
+            'shadow-[0_2px_12px_rgba(0,0,0,0.06),0_1px_3px_rgba(0,0,0,0.04)] dark:shadow-[0_2px_8px_rgba(0,0,0,0.2)]',
+            'hover:border-white/70 dark:hover:border-white/[0.16]',
+            'hover:bg-white/60 dark:hover:bg-white/[0.07]',
+            'hover:shadow-[0_4px_20px_rgba(0,0,0,0.08)] dark:hover:shadow-[0_4px_16px_rgba(0,0,0,0.3)]',
+          ].join(' '),
         className,
       ].join(' ')}
     >
@@ -379,8 +379,8 @@ export default function CreateClientPage() {
                   curr
                     ? 'bg-primary text-black ring-4 ring-primary/25 shadow-[0_0_24px_rgba(251,198,8,0.45),0_0_48px_rgba(251,198,8,0.18)] scale-110'
                     : done
-                    ? 'bg-primary text-black/80 border-2 border-primary/80 shadow-[0_2px_10px_rgba(251,198,8,0.30)]'
-                    : 'bg-white dark:bg-[#111] border-2 border-gray-300 dark:border-white/[0.18] text-gray-500 dark:text-white/50 shadow-[0_2px_8px_rgba(0,0,0,0.08)] dark:shadow-[0_2px_12px_rgba(0,0,0,0.4)]',
+                      ? 'bg-primary text-black/80 border-2 border-primary/80 shadow-[0_2px_10px_rgba(251,198,8,0.30)]'
+                      : 'bg-white dark:bg-[#111] border-2 border-gray-300 dark:border-white/[0.18] text-gray-500 dark:text-white/50 shadow-[0_2px_8px_rgba(0,0,0,0.08)] dark:shadow-[0_2px_12px_rgba(0,0,0,0.4)]',
                 ].join(' ')}
               >
                 {done ? <Check size={14} strokeWidth={2.5} /> : s.id}
@@ -392,7 +392,7 @@ export default function CreateClientPage() {
                   'text-[10px] font-bold uppercase tracking-wider',
                   curr ? 'text-gray-900 dark:text-white'
                     : done ? 'text-primary'
-                    : 'text-gray-400 dark:text-[#4A4A5A]',
+                      : 'text-gray-400 dark:text-[#4A4A5A]',
                 ].join(' ')}>
                   {s.label}
                 </span>
@@ -508,11 +508,11 @@ export default function CreateClientPage() {
 
     const MENSUAL_MODS = [
       { mod: 'TRANSFERENCIA_MENSUAL' as Modalidad, label: 'Transferencia / Débito', Icon: ArrowLeftRight },
-      { mod: 'EFECTIVO'              as Modalidad, label: 'Efectivo',               Icon: Banknote       },
+      { mod: 'EFECTIVO' as Modalidad, label: 'Efectivo', Icon: Banknote },
     ]
     const MEMBRESIA_MODS = [
-      { mod: 'MEMBRESIA_3_MESES' as Modalidad, label: '3 meses',  Icon: Calendar,     dias: 90  },
-      { mod: 'MEMBRESIA_6_MESES' as Modalidad, label: '6 meses',  Icon: CalendarDays, dias: 180 },
+      { mod: 'MEMBRESIA_3_MESES' as Modalidad, label: '3 meses', Icon: Calendar, dias: 90 },
+      { mod: 'MEMBRESIA_6_MESES' as Modalidad, label: '6 meses', Icon: CalendarDays, dias: 180 },
     ]
 
     return (

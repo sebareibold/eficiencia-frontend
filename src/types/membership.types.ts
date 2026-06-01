@@ -5,8 +5,8 @@ export type Modalidad =
   | 'MEMBRESIA_6_MESES'
 
 export const MODALIDAD_LABELS: Record<Modalidad, string> = {
-  TRANSFERENCIA_MENSUAL: 'Transferencia / débito mensual',
-  EFECTIVO: 'Efectivo',
+  TRANSFERENCIA_MENSUAL: 'Mensual — transferencia',
+  EFECTIVO: 'Mensual — efectivo',
   MEMBRESIA_3_MESES: 'Membresía 3 meses',
   MEMBRESIA_6_MESES: 'Membresía 6 meses',
 }

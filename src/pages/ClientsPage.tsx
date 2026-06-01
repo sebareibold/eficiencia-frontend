@@ -1,4 +1,4 @@
-﻿import { useState, useMemo } from 'react'
+import { useState, useMemo } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { motion } from 'framer-motion'
 import { pageVariants } from '../lib/motion'
@@ -20,6 +20,7 @@ const STATUS_FILTERS: { value: StatusFilter; label: string }[] = [
   { value: 'debt', label: 'Deuda' },
   { value: 'inactive', label: 'Inactivo' },
 ]
+
 
 export default function ClientsPage() {
   const navigate = useNavigate()
@@ -103,27 +104,43 @@ export default function ClientsPage() {
       <div className="mb-6 flex flex-col gap-4 sm:flex-row sm:items-end sm:justify-between">
         <div className="flex flex-col gap-1">
           <h1 className="text-2xl lg:text-3xl xl:text-4xl font-black tracking-tighter text-gray-900 dark:text-white drop-shadow-sm">Clientes</h1>
-          {!isLoading && (
+          {isLoading ? (
+            <Skeleton className="h-4 w-24 mt-1" />
+          ) : (
             <p className="text-sm text-saas-muted">{filtered.length} resultado{filtered.length !== 1 ? 's' : ''}</p>
           )}
         </div>
+
         <div className="flex items-center gap-2">
           {/* View toggle */}
-          <div className="flex items-center rounded-xl border border-saas-border dark:border-white/[0.08] bg-white/30 dark:bg-black/30 backdrop-blur-xl overflow-hidden">
-            <button
-              onClick={() => setViewMode('table')}
-              className={`flex h-9 w-9 items-center justify-center transition-all duration-200 ${viewMode === 'table' ? 'bg-gray-900 dark:bg-white/[0.12] text-white' : 'text-gray-400 hover:text-gray-700 dark:hover:text-gray-200'}`}
-              title="Vista tabla"
-            >
-              <LayoutList size={15} />
-            </button>
-            <button
-              onClick={() => setViewMode('grid')}
-              className={`flex h-9 w-9 items-center justify-center transition-all duration-200 ${viewMode === 'grid' ? 'bg-gray-900 dark:bg-white/[0.12] text-white' : 'text-gray-400 hover:text-gray-700 dark:hover:text-gray-200'}`}
-              title="Vista grilla"
-            >
-              <LayoutGrid size={15} />
-            </button>
+          <div className="flex items-center rounded-full border border-white/50 dark:border-white/10 bg-white/30 dark:bg-black/30 backdrop-blur-xl p-1 shadow-sm gap-1 shrink-0">
+            {(['table', 'grid'] as const).map((mode) => {
+              const isActive = viewMode === mode
+              return (
+                <button
+                  key={mode}
+                  onClick={() => setViewMode(mode)}
+                  title={mode === 'table' ? 'Vista tabla' : 'Vista grilla'}
+                  className={`relative inline-flex items-center justify-center rounded-full px-4 py-1.5 text-xs font-bold transition-all duration-300 cursor-pointer ${
+                    isActive
+                      ? 'text-white dark:text-gray-900'
+                      : 'text-gray-500 dark:text-[#8A8A9A] hover:text-gray-900 dark:hover:text-white'
+                  }`}
+                >
+                  {isActive && (
+                    <motion.div
+                      layoutId="view-mode-clients"
+                      className="absolute inset-0 rounded-full bg-gray-900 dark:bg-white shadow-[0_2px_8px_rgba(0,0,0,0.15)]"
+                      transition={{ type: 'spring', stiffness: 380, damping: 30 }}
+                      style={{ zIndex: 0 }}
+                    />
+                  )}
+                  <span className="relative z-10 flex items-center justify-center">
+                    {mode === 'table' ? <LayoutList size={14} /> : <LayoutGrid size={14} />}
+                  </span>
+                </button>
+              )
+            })}
           </div>
           <button
             onClick={refetch}
@@ -148,36 +165,39 @@ export default function ClientsPage() {
       {/* Search + filters */}
       <div className="mb-6 flex w-full flex-col items-center justify-between gap-4 sm:flex-row">
         <div className="relative w-full max-w-md">
-          <Search size={15} className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" />
+          <Search size={14} className="pointer-events-none absolute left-3.5 top-1/2 -translate-y-1/2 text-gray-400 dark:text-[#8A8A9A]" />
           <input
             value={search}
             onChange={e => setSearch(e.target.value)}
             placeholder="Buscar por nombre, email o DNI…"
-            className="w-full rounded-xl border border-saas-border bg-white py-2 pl-10 pr-4 text-sm text-gray-900 transition-all focus:border-eficiencia-yellow focus:outline-none focus:ring-2 focus:ring-eficiencia-yellow/20"
+            className="w-full rounded-xl border border-white/50 dark:border-white/10 bg-white/30 dark:bg-black/30 backdrop-blur-xl pl-10 pr-4 py-2 text-xs font-semibold text-gray-800 dark:text-gray-200 placeholder-gray-400 focus:outline-none h-10"
           />
         </div>
-        <div className="flex flex-wrap gap-2 py-1">
-          {STATUS_FILTERS.map(f => (
-            <button
-              key={f.value}
-              onClick={() => setStatusFilter(f.value)}
-              className={`relative inline-flex items-center gap-1.5 rounded-full px-3 py-1.5 text-sm font-medium transition-colors active:scale-[0.98] ${
-                statusFilter === f.value
-                  ? 'text-white'
-                  : 'border border-saas-border bg-white text-gray-700 hover:bg-saas-hover'
-              }`}
-            >
-              {statusFilter === f.value && (
-                <motion.div
-                  layoutId="filter-status"
-                  className="absolute inset-0 rounded-full bg-gray-900"
-                  transition={{ type: 'spring', stiffness: 380, damping: 30 }}
-                  style={{ zIndex: 0 }}
-                />
-              )}
-              <span className="relative z-10">{f.label}</span>
-            </button>
-          ))}
+        <div className="flex items-center rounded-full border border-white/50 dark:border-white/10 bg-white/30 dark:bg-black/30 backdrop-blur-xl p-1 shadow-sm gap-1 flex-wrap sm:flex-nowrap">
+          {STATUS_FILTERS.map(f => {
+            const isActive = statusFilter === f.value
+            return (
+              <button
+                key={f.value}
+                onClick={() => setStatusFilter(f.value)}
+                className={`relative inline-flex items-center justify-center rounded-full px-4 py-1.5 text-xs font-bold transition-all duration-300 cursor-pointer flex-1 sm:flex-none ${
+                  isActive
+                    ? 'text-white dark:text-gray-900'
+                    : 'text-gray-500 dark:text-[#8A8A9A] hover:text-gray-900 dark:hover:text-white'
+                }`}
+              >
+                {isActive && (
+                  <motion.div
+                    layoutId="filter-status"
+                    className="absolute inset-0 rounded-full bg-gray-900 dark:bg-white shadow-[0_2px_8px_rgba(0,0,0,0.15)]"
+                    transition={{ type: 'spring', stiffness: 380, damping: 30 }}
+                    style={{ zIndex: 0 }}
+                  />
+                )}
+                <span className="relative z-10">{f.label}</span>
+              </button>
+            )
+          })}
         </div>
       </div>
 

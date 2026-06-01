@@ -11,8 +11,10 @@ interface Props {
 // Guard de ruta basado en la matriz de permisos dinámica.
 // cliente_comun se redirige a /ejecucion; otros roles sin permiso van a /clients.
 export default function PermissionGuard({ module, action = 'read' }: Props) {
-  const { can } = usePermissions()
+  const { can, permsLoaded } = usePermissions()
   const user = useAuthStore((s) => s.user)
+
+  if (!permsLoaded) return null
 
   if (can(module, action)) return <Outlet />
 

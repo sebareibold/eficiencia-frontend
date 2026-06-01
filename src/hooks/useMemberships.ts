@@ -1,26 +1,18 @@
-import { useState, useEffect, useCallback } from 'react'
+import { useQuery } from '@tanstack/react-query'
 import { membershipsApi } from '../api/memberships.api'
-import type { Plan } from '../types/membership.types'
+import { QK } from '../lib/queryKeys'
 
 export function useMemberships() {
-  const [memberships, setMemberships] = useState<Plan[]>([])
-  const [isLoading, setIsLoading] = useState(true)
-  const [error, setError] = useState<string | null>(null)
+  const { data, isPending, error, refetch } = useQuery({
+    queryKey: QK.plans.all(),
+    queryFn:  () => membershipsApi.getAll(),
+    staleTime: 300_000, // 5 min — los planes cambian raramente
+  })
 
-  const fetch = useCallback(async () => {
-    setIsLoading(true)
-    setError(null)
-    try {
-      const data = await membershipsApi.getAll()
-      setMemberships(data)
-    } catch {
-      setError('No se pudieron cargar los planes')
-    } finally {
-      setIsLoading(false)
-    }
-  }, [])
-
-  useEffect(() => { fetch() }, [fetch])
-
-  return { memberships, isLoading, error, refetch: fetch }
+  return {
+    memberships: data ?? [],
+    isLoading:   isPending,
+    error:       error ? (error as Error).message : null,
+    refetch:     () => { refetch() },
+  }
 }

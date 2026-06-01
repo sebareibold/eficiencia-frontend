@@ -30,4 +30,7 @@ export const solicitudesApi = {
 
   rechazar: (id: string): Promise<SolicitudEntry> =>
     api.patch(`/solicitudes/${id}/rechazar`).then(r => r.data),
+
+  remove: (id: string): Promise<void> =>
+    api.delete(`/solicitudes/${id}`).then(() => undefined),
 }

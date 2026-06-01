@@ -1,26 +1,36 @@
-import { useState, useEffect, useCallback } from 'react'
+import { useState } from 'react'
+import { useQuery } from '@tanstack/react-query'
 import { paymentsApi } from '../api/payments.api'
-import type { Payment } from '../types/payment.types'
+import { QK } from '../lib/queryKeys'
 
-export function usePayments(params?: { month?: string; anio?: string; desde?: string; hasta?: string; clientId?: number }) {
-  const [payments, setPayments] = useState<Payment[]>([])
-  const [isLoading, setIsLoading] = useState(true)
-  const [error, setError] = useState<string | null>(null)
+interface UsePaymentsParams {
+  month?: string
+  anio?: string
+  desde?: string
+  hasta?: string
+  clientId?: number
+  pageSize?: number
+}
 
-  const fetch = useCallback(async () => {
-    setIsLoading(true)
-    setError(null)
-    try {
-      const data = await paymentsApi.getAll(params)
-      setPayments(data)
-    } catch {
-      setError('No se pudieron cargar los pagos')
-    } finally {
-      setIsLoading(false)
-    }
-  }, [params?.month, params?.anio, params?.desde, params?.hasta, params?.clientId])
+export function usePayments(params?: UsePaymentsParams) {
+  const [currentPage, setCurrentPage] = useState(1)
 
-  useEffect(() => { fetch() }, [fetch])
+  const queryParams = { ...params, page: currentPage }
 
-  return { payments, isLoading, error, refetch: fetch }
+  const { data, isPending, error, refetch } = useQuery({
+    queryKey: QK.payments.all(queryParams),
+    queryFn:  () => paymentsApi.getAll(queryParams),
+    staleTime: 30_000,
+  })
+
+  return {
+    payments:    data?.data       ?? [],
+    total:       data?.total      ?? 0,
+    totalPages:  data?.totalPages ?? 0,
+    currentPage,
+    goToPage:    setCurrentPage,
+    isLoading:   isPending,
+    error:       error ? (error as Error).message : null,
+    refetch:     () => { refetch() },
+  }
 }

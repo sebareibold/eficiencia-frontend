@@ -4,10 +4,16 @@ import type {
   Semana, Sesion, Bloque, EjercicioPlan,
   CreateEjercicioPlanPayload, UpdateEjercicioPlanPayload,
   EjecucionCliente, CreateEjecucionPayload,
+  CrearCompletaPayload, PeriodoEntrenamiento,
 } from '../types/rutina.types'
 
 export const rutinasApi = {
   // ─── Rutinas ───────────────────────────────────────────────────────────────
+  getMiRutina: async (): Promise<Rutina> => {
+    const r = await api.get('/rutinas/mi-rutina')
+    return r.data
+  },
+
   getByCliente: async (clienteId: string): Promise<Rutina[]> => {
     const r = await api.get('/rutinas', { params: { clienteId } })
     return Array.isArray(r.data) ? r.data : []
@@ -95,6 +101,24 @@ export const rutinasApi = {
   // ─── Ejecuciones ───────────────────────────────────────────────────────────
   addEjecucion: async (ejercicioId: string, payload: CreateEjecucionPayload): Promise<EjecucionCliente> => {
     const r = await api.post(`/rutinas/ejercicios/${ejercicioId}/ejecuciones`, payload)
+    return r.data
+  },
+
+  // ─── Crear rutina completa (wizard) ────────────────────────────────────────
+  crearCompleta: async (payload: CrearCompletaPayload): Promise<Rutina> => {
+    const r = await api.post('/rutinas/crear-completa', payload)
+    return r.data
+  },
+
+  nuevoMesociclo: async (rutinaBaseId: string, payload: {
+    nombre: string
+    descripcion?: string
+    cantidadSemanas: number
+    fechaInicio?: string
+    periodo?: PeriodoEntrenamiento
+    plantillaId?: string
+  }): Promise<Rutina> => {
+    const r = await api.post(`/rutinas/${rutinaBaseId}/nuevo-mesociclo`, payload)
     return r.data
   },
 }

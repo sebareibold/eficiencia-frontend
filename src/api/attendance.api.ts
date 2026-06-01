@@ -20,6 +20,26 @@ function mapRecord(r: any): AttendanceRecord {
   }
 }
 
+export type TipoBloqueoAsistencia = 'CIERRE_TOTAL' | 'CANCELACION_TURNO' | 'HORARIO_REDUCIDO'
+
+export interface VerificacionFecha {
+  bloqueado: boolean
+  motivo: string | null
+  tipo: TipoBloqueoAsistencia | null
+  horaDesde?: string
+  horaHasta?: string
+}
+
+export interface EfectividadAsistencia {
+  clienteId: string
+  totalSesiones: number
+  sesionesPresente: number
+  sesionesAusente: number
+  sesionesExcluidas: number
+  efectividad: number | null  // porcentaje 0–100 o null si no hay datos
+  detalle: string
+}
+
 export const attendanceApi = {
   getByShiftAndDate: (shiftId: string, date: string): Promise<AttendanceRecord[]> =>
     api.get('/asistencia', { params: { turnoId: shiftId, fecha: date } })
@@ -35,4 +55,12 @@ export const attendanceApi = {
   getByClient: (clientId: string): Promise<AttendanceRecord[]> =>
     api.get(`/asistencia/cliente/${clientId}`)
       .then((r) => (Array.isArray(r.data) ? r.data : []).map(mapRecord)),
+
+  verificar: (shiftId: string, date: string): Promise<VerificacionFecha> =>
+    api.get('/asistencia/verificar', { params: { turnoId: shiftId, fecha: date } })
+      .then((r) => r.data),
+
+  efectividad: (clientId: string): Promise<EfectividadAsistencia> =>
+    api.get(`/asistencia/efectividad/${clientId}`)
+      .then((r) => r.data),
 }

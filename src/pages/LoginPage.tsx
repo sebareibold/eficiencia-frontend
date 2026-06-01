@@ -19,10 +19,10 @@ const schema = z.object({
 });
 
 const requestSchema = z.object({
-  name:     z.string().min(2, "El nombre es requerido"),
-  email:    z.string().email("Email inválido"),
+  name: z.string().min(2, "El nombre es requerido"),
+  email: z.string().email("Email inválido"),
   password: z.string().min(6, "Mínimo 6 caracteres"),
-  role:     z.enum(["ADMINISTRADOR", "STAFF", "PROFESOR", "CLIENTE_COMUN"], { required_error: "Seleccioná un rol" }),
+  role: z.enum(["ADMINISTRADOR", "STAFF", "PROFESOR", "CLIENTE_COMUN"], { required_error: "Seleccioná un rol" }),
 });
 
 type FormValues = z.infer<typeof schema>;
@@ -113,9 +113,9 @@ export default function LoginPage() {
       applyFromServer(res.serverConfig);
       const role = res.user.role
       const dest = role === 'admin' ? ROUTES.DASHBOARD
-        : role === 'profesor'      ? ROUTES.SHIFTS
-        : role === 'cliente_comun' ? ROUTES.EJECUCION
-        :                            ROUTES.CLIENTS
+        : role === 'profesor' ? ROUTES.SHIFTS
+          : role === 'cliente_comun' ? ROUTES.EJECUCION
+            : ROUTES.CLIENTS
       navigate(dest);
     } catch (err: unknown) {
       const status = (err as any)?.response?.status
@@ -178,23 +178,23 @@ export default function LoginPage() {
         variants={cardVariants}
         initial="hidden"
         animate="visible"
-        className="relative z-10 w-full max-w-[740px] 2xl:max-w-[980px] h-[min(84vh,780px)] rounded-[2.5rem] border border-white/50 dark:border-white/10 bg-white/20 dark:bg-white/[0.03] backdrop-blur-2xl shadow-[0_8px_32px_rgba(0,0,0,0.04)] dark:shadow-[0_8px_32px_rgba(0,0,0,0.3)] p-4 overflow-hidden"
+        className="relative z-10 w-full max-w-[980px] 2xl:max-w-[1240px] h-[min(84vh,780px)] rounded-[2.5rem] border border-white/50 dark:border-white/10 bg-white/20 dark:bg-white/[0.03] backdrop-blur-2xl shadow-[0_8px_32px_rgba(0,0,0,0.04)] dark:shadow-[0_8px_32px_rgba(0,0,0,0.3)] p-4 overflow-hidden"
       >
         {/* Outer card glow effects */}
         <div className="absolute -top-32 -left-32 w-64 h-64 rounded-full bg-[#FBC608]/8 dark:bg-[#FBC608]/4 blur-[100px] pointer-events-none" />
         <div className="absolute -bottom-24 -right-24 w-56 h-56 rounded-full bg-[#FBC608]/6 dark:bg-[#FBC608]/3 blur-[100px] pointer-events-none" />
 
         <div className="relative grid grid-cols-1 lg:grid-cols-12 gap-4 h-full">
-        
+
           {/* ── Left Column (2 Visual Cards) ────────────────────────────── */}
           <div className="hidden lg:flex lg:col-span-5 flex-col gap-4">
             {/* Card 1: Main Display (Carousel) */}
             <div className="flex-[4] relative overflow-hidden rounded-[2rem] bg-black">
               <AnimatePresence mode="wait">
-                <motion.img 
+                <motion.img
                   key={currentImage}
-                  src={gymImages[currentImage]} 
-                  alt={`Gym Interior ${currentImage + 1}`} 
+                  src={gymImages[currentImage]}
+                  alt={`Gym Interior ${currentImage + 1}`}
                   initial={{ opacity: 0, scale: 1.1 }}
                   animate={{ opacity: 1, scale: 1 }}
                   exit={{ opacity: 0, scale: 1.05 }}
@@ -202,9 +202,9 @@ export default function LoginPage() {
                   className="absolute inset-0 w-full h-full object-cover contrast-[1.02] brightness-[0.95]"
                 />
               </AnimatePresence>
-              
+
               <div className="absolute inset-0 bg-gradient-to-t from-black/60 via-black/5 to-transparent" />
-              
+
               <div className="absolute bottom-14 left-8 right-8 z-10">
                 <motion.div
                   initial={{ opacity: 0, x: -20 }}
@@ -227,9 +227,8 @@ export default function LoginPage() {
                   <button
                     key={i}
                     onClick={() => setCurrentImage(i)}
-                    className={`h-1.5 rounded-full transition-all duration-500 ${
-                      i === currentImage ? "w-8 bg-[#FBC608]" : "w-2 bg-white/30 hover:bg-white/50"
-                    }`}
+                    className={`h-1.5 rounded-full transition-all duration-500 ${i === currentImage ? "w-8 bg-[#FBC608]" : "w-2 bg-white/30 hover:bg-white/50"
+                      }`}
                   />
                 ))}
               </div>
@@ -239,7 +238,7 @@ export default function LoginPage() {
 
           {/* ── Right Column (Login Form) ──────────────────────────────── */}
           <div className="lg:col-span-7 flex items-center justify-center p-2 sm:p-4 lg:p-0">
-            <div className={`w-full h-full relative overflow-hidden rounded-[2rem] bg-white/40 dark:bg-black/30 backdrop-blur-xl border border-white/30 dark:border-white/[0.06] px-6 sm:px-10 py-[clamp(1rem,3vh,2.5rem)] flex flex-col ${view === 'request' ? 'justify-start' : 'justify-center'}`}>
+            <div className={`w-full h-full relative overflow-hidden rounded-[2rem] bg-white/40 dark:bg-black/30 backdrop-blur-xl border border-white/30 dark:border-white/[0.06] px-6 sm:px-10 py-[clamp(1rem,3vh,2.5rem)] flex flex-col justify-center`}>
 
               {/* Card inner glow effect */}
               <div className="absolute -top-24 -right-24 w-64 h-64 rounded-full bg-[#FBC608]/10 dark:bg-[#FBC608]/5 blur-3xl pointer-events-none" />
@@ -255,12 +254,12 @@ export default function LoginPage() {
                       animate={{ opacity: 1, y: 0 }}
                       exit={{ opacity: 0, y: -10 }}
                       transition={{ duration: 0.2 }}
-                      className="w-full flex flex-col h-full"
+                      className="w-full flex flex-col"
                     >
                       {/* Logo & Header */}
                       <div className="text-center mb-[clamp(1rem,3vh,2.5rem)]">
                         <div className="flex justify-center mb-[clamp(0.75rem,2.5vh,2rem)]">
-                          <img src="/logo.png" alt="Logo" className="h-[clamp(1.75rem,4.5vh,2.75rem)] w-auto object-contain drop-shadow-md" />
+                          <img src="/logo.png" alt="Logo" className="h-[clamp(4rem,9vh,6.5rem)] w-auto object-contain drop-shadow-md" />
                         </div>
                         <h1 className="text-xl sm:text-2xl font-black tracking-tighter text-gray-900 dark:text-white drop-shadow-sm">
                           Panel de Acceso
@@ -312,8 +311,12 @@ export default function LoginPage() {
                         )}
 
                         <div className="pt-[clamp(0.5rem,1.5vh,1rem)]">
-                          <button type="submit" disabled={isSubmitting} className="group relative w-full inline-flex items-center justify-center gap-2.5 rounded-xl bg-[#FBC608] text-[#111827] font-bold py-3.5 text-sm shadow-lg hover:bg-[#F5A623] transition-all active:scale-[0.97]">
-                            {isSubmitting ? "Iniciando sesión..." : <><LogIn size={20} /> Ingresar al Sistema <ArrowRight size={18} className="opacity-0 -translate-x-1 group-hover:opacity-100 group-hover:translate-x-0 transition-all" /></>}
+                          <button
+                            type="submit"
+                            disabled={isSubmitting}
+                            className="group relative w-full inline-flex items-center justify-center gap-2.5 rounded-xl bg-[#FBC608] text-[#111827] font-bold py-3.5 text-sm shadow-md hover:bg-[#F5A623] active:bg-[#D4A800] transition-colors duration-200 cursor-pointer"
+                          >
+                            {isSubmitting ? "Iniciando sesión..." : <><LogIn size={20} /> Ingresar al Sistema</>}
                           </button>
                           <p className="mt-[clamp(0.75rem,2vh,1.5rem)] text-center text-sm font-semibold text-gray-500 dark:text-gray-400">
                             ¿No tenés acceso?{" "}
@@ -329,7 +332,7 @@ export default function LoginPage() {
                       animate={{ opacity: 1, y: 0 }}
                       exit={{ opacity: 0, y: -10 }}
                       transition={{ duration: 0.2 }}
-                      className="w-full flex flex-col h-full"
+                      className="w-full flex flex-col"
                     >
                       {requestSent ? (
                         <div className="flex flex-col items-center justify-center text-center gap-5 py-8">
@@ -347,80 +350,87 @@ export default function LoginPage() {
                           <button
                             type="button"
                             onClick={() => { setView('login'); setRequestSent(false); resetRequest(); }}
-                            className="w-full rounded-xl bg-[#FBC608] text-[#111827] font-bold py-3 text-sm shadow-lg hover:bg-[#F5A623] transition-all active:scale-[0.97]"
+                            className="w-full rounded-xl bg-[#FBC608] text-[#111827] font-bold py-3 text-sm shadow-md hover:bg-[#F5A623] active:bg-[#D4A800] transition-colors duration-200 cursor-pointer"
                           >
                             Volver al inicio de sesión
                           </button>
                         </div>
                       ) : (
-                      <>
-                      {/* Header */}
-                      <div className="text-center mb-3">
-                        <h1 className="text-xl sm:text-2xl font-black tracking-tighter text-gray-900 dark:text-white">
-                          Solicitar Acceso
-                        </h1>
-                        <p className="mt-1.5 text-sm font-semibold text-gray-500 dark:text-gray-400 max-w-sm mx-auto">
-                          Completá tus datos para solicitar acceso a la plataforma.
-                        </p>
-                      </div>
-
-                      <form onSubmit={handleSubmitRequest(onRequestSubmit)} className="space-y-3 flex-1">
-                        <div className="flex flex-col gap-1.5">
-                          <label className="text-xs font-bold tracking-tight text-gray-700 dark:text-gray-300 ml-1">Nombre Completo</label>
-                          <input {...registerRequest("name")} className="w-full rounded-xl border border-gray-200 dark:border-white/10 bg-white/50 dark:bg-black/40 px-4 py-2.5 text-sm font-semibold text-gray-900 dark:text-white focus:bg-white dark:focus:bg-black/80 focus:outline-none focus:ring-4 focus:ring-[#FBC608]/10" />
-                          {errorsRequest.name && <span className="text-xs font-bold text-red-500 ml-1">{errorsRequest.name.message}</span>}
-                        </div>
-
-                        <div className="flex flex-col gap-1.5">
-                          <label className="text-xs font-bold tracking-tight text-gray-700 dark:text-gray-300 ml-1">Email</label>
-                          <input type="email" {...registerRequest("email")} className="w-full rounded-xl border border-gray-200 dark:border-white/10 bg-white/50 dark:bg-black/40 px-4 py-2.5 text-sm font-semibold text-gray-900 dark:text-white focus:bg-white dark:focus:bg-black/80 focus:outline-none focus:ring-4 focus:ring-[#FBC608]/10" />
-                          {errorsRequest.email && <span className="text-xs font-bold text-red-500 ml-1">{errorsRequest.email.message}</span>}
-                        </div>
-
-                        <div className="flex flex-col gap-1.5">
-                          <label className="text-xs font-bold tracking-tight text-gray-700 dark:text-gray-300 ml-1">Contraseña deseada</label>
-                          <div className="relative">
-                            <input
-                              type={showReqPassword ? "text" : "password"}
-                              {...registerRequest("password")}
-                              className="w-full rounded-xl border border-gray-200 dark:border-white/10 bg-white/50 dark:bg-black/40 px-4 py-2.5 pr-11 text-sm font-semibold text-gray-900 dark:text-white focus:bg-white dark:focus:bg-black/80 focus:outline-none focus:ring-4 focus:ring-[#FBC608]/10"
-                            />
-                            <button type="button" onClick={() => setShowReqPassword(v => !v)} className="absolute right-3.5 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600">
-                              {showReqPassword ? <EyeOff size={15} /> : <Eye size={15} />}
-                            </button>
+                        <>
+                          {/* Header */}
+                          <div className="text-center mb-3">
+                            <div className="flex justify-center mb-3">
+                              <img src="/logo.png" alt="Logo" className="h-[clamp(3.5rem,7.5vh,5.5rem)] w-auto object-contain drop-shadow-md" />
+                            </div>
+                            <h1 className="text-xl sm:text-2xl font-black tracking-tighter text-gray-900 dark:text-white">
+                              Solicitar Acceso
+                            </h1>
+                            <p className="mt-1.5 text-sm font-semibold text-gray-500 dark:text-gray-400 max-w-sm mx-auto">
+                              Completá tus datos para solicitar acceso a la plataforma.
+                            </p>
                           </div>
-                          {errorsRequest.password && <span className="text-xs font-bold text-red-500 ml-1">{errorsRequest.password.message}</span>}
-                        </div>
 
-                        <div className="flex flex-col gap-1.5">
-                          <label className="text-xs font-bold tracking-tight text-gray-700 dark:text-gray-300 ml-1">Rol solicitado</label>
-                          <select
-                            {...registerRequest("role")}
-                            className="w-full rounded-xl border border-gray-200 dark:border-white/10 bg-white/50 dark:bg-black/40 px-4 py-2.5 text-sm font-semibold text-gray-900 dark:text-white focus:bg-white dark:focus:bg-black/80 focus:outline-none focus:ring-4 focus:ring-[#FBC608]/10 cursor-pointer"
-                          >
-                            <option value="">Seleccioná un rol…</option>
-                            <option value="CLIENTE_COMUN">Cliente</option>
-                            <option value="STAFF">Staff</option>
-                            <option value="PROFESOR">Profesor</option>
-                            <option value="ADMINISTRADOR">Administrador</option>
-                          </select>
-                          {errorsRequest.role && <span className="text-xs font-bold text-red-500 ml-1">{errorsRequest.role.message}</span>}
-                        </div>
+                          <form onSubmit={handleSubmitRequest(onRequestSubmit)} className="space-y-3 flex-1">
+                            <div className="flex flex-col gap-1.5">
+                              <label className="text-xs font-bold tracking-tight text-gray-700 dark:text-gray-300 ml-1">Nombre Completo</label>
+                              <input {...registerRequest("name")} className="w-full rounded-xl border border-gray-200 dark:border-white/10 bg-white/50 dark:bg-black/40 px-4 py-2.5 text-sm font-semibold text-gray-900 dark:text-white focus:bg-white dark:focus:bg-black/80 focus:outline-none focus:ring-4 focus:ring-[#FBC608]/10" />
+                              {errorsRequest.name && <span className="text-xs font-bold text-red-500 ml-1">{errorsRequest.name.message}</span>}
+                            </div>
 
-                        <div className="pt-1 space-y-3">
-                          <button type="submit" disabled={isSubmittingRequest} className="w-full rounded-xl bg-[#FBC608] text-[#111827] font-bold py-3 text-sm shadow-lg hover:bg-[#F5A623] transition-all active:scale-[0.97]">
-                            {isSubmittingRequest ? "Enviando..." : "Enviar Solicitud"}
-                          </button>
-                          <button
-                            type="button"
-                            onClick={() => setView('login')}
-                            className="w-full text-center text-sm font-bold text-gray-500 dark:text-gray-400 hover:text-[#FBC608] transition-colors py-1.5"
-                          >
-                            Volver al inicio de sesión
-                          </button>
-                        </div>
-                      </form>
-                      </>
+                            <div className="flex flex-col gap-1.5">
+                              <label className="text-xs font-bold tracking-tight text-gray-700 dark:text-gray-300 ml-1">Email</label>
+                              <input type="email" {...registerRequest("email")} className="w-full rounded-xl border border-gray-200 dark:border-white/10 bg-white/50 dark:bg-black/40 px-4 py-2.5 text-sm font-semibold text-gray-900 dark:text-white focus:bg-white dark:focus:bg-black/80 focus:outline-none focus:ring-4 focus:ring-[#FBC608]/10" />
+                              {errorsRequest.email && <span className="text-xs font-bold text-red-500 ml-1">{errorsRequest.email.message}</span>}
+                            </div>
+
+                            <div className="flex flex-col gap-1.5">
+                              <label className="text-xs font-bold tracking-tight text-gray-700 dark:text-gray-300 ml-1">Contraseña deseada</label>
+                              <div className="relative">
+                                <input
+                                  type={showReqPassword ? "text" : "password"}
+                                  {...registerRequest("password")}
+                                  className="w-full rounded-xl border border-gray-200 dark:border-white/10 bg-white/50 dark:bg-black/40 px-4 py-2.5 pr-11 text-sm font-semibold text-gray-900 dark:text-white focus:bg-white dark:focus:bg-black/80 focus:outline-none focus:ring-4 focus:ring-[#FBC608]/10"
+                                />
+                                <button type="button" onClick={() => setShowReqPassword(v => !v)} className="absolute right-3.5 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600">
+                                  {showReqPassword ? <EyeOff size={15} /> : <Eye size={15} />}
+                                </button>
+                              </div>
+                              {errorsRequest.password && <span className="text-xs font-bold text-red-500 ml-1">{errorsRequest.password.message}</span>}
+                            </div>
+
+                            <div className="flex flex-col gap-1.5">
+                              <label className="text-xs font-bold tracking-tight text-gray-700 dark:text-gray-300 ml-1">Rol solicitado</label>
+                              <select
+                                {...registerRequest("role")}
+                                className="w-full rounded-xl border border-gray-200 dark:border-white/10 bg-white/50 dark:bg-black/40 px-4 py-2.5 text-sm font-semibold text-gray-900 dark:text-white focus:bg-white dark:focus:bg-black/80 focus:outline-none focus:ring-4 focus:ring-[#FBC608]/10 cursor-pointer"
+                              >
+                                <option value="">Seleccioná un rol…</option>
+                                <option value="CLIENTE_COMUN">Cliente del gimnasio</option>
+                                <option value="STAFF">Staff</option>
+                                <option value="PROFESOR">Profesor</option>
+                                <option value="ADMINISTRADOR">Administrador</option>
+                              </select>
+                              {errorsRequest.role && <span className="text-xs font-bold text-red-500 ml-1">{errorsRequest.role.message}</span>}
+                            </div>
+
+                            <div className="pt-1 space-y-3">
+                              <button
+                                type="submit"
+                                disabled={isSubmittingRequest}
+                                className="w-full rounded-xl bg-[#FBC608] text-[#111827] font-bold py-3 text-sm shadow-md hover:bg-[#F5A623] active:bg-[#D4A800] transition-colors duration-200 cursor-pointer"
+                              >
+                                {isSubmittingRequest ? "Enviando..." : "Enviar Solicitud"}
+                              </button>
+                              <button
+                                type="button"
+                                onClick={() => setView('login')}
+                                className="w-full text-center text-sm font-bold text-gray-500 dark:text-gray-400 hover:text-[#FBC608] transition-colors py-1.5"
+                              >
+                                Volver al inicio de sesión
+                              </button>
+                            </div>
+                          </form>
+                        </>
                       )}
                     </motion.div>
                   )}

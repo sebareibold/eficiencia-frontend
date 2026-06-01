@@ -36,7 +36,9 @@ import Button from '../components/ui/Button'
 import Modal from '../components/ui/Modal'
 import Input from '../components/ui/Input'
 import Skeleton, { SkeletonClientProfile } from '../components/ui/Skeleton'
+import EmptyState from '../components/ui/EmptyState'
 import { getStatusLabel } from '../utils/getStatusColor'
+import { MODALIDAD_LABELS } from '../types/membership.types'
 import { formatDate } from '../utils/formatDate'
 import { formatCurrency } from '../utils/formatCurrency'
 import type { Client } from '../types/client.types'
@@ -45,34 +47,33 @@ import type { AttendanceRecord } from '../types/attendance.types'
 
 // ─── Configuración de métodos de pago ─────────────────────────────────────────
 const METHOD_CONFIG: Record<string, { label: string; Icon: typeof Banknote; color: string; bg: string }> = {
-  cash:     { label: 'Efectivo',       Icon: Banknote,       color: 'text-emerald-600 dark:text-emerald-400', bg: 'bg-emerald-500/10' },
-  transfer: { label: 'Transferencia',  Icon: ArrowLeftRight, color: 'text-blue-600 dark:text-blue-400',   bg: 'bg-blue-500/10'    },
-  card:     { label: 'Débito',         Icon: CreditCard,     color: 'text-violet-600 dark:text-violet-400', bg: 'bg-violet-500/10'  },
+  cash: { label: 'Efectivo', Icon: Banknote, color: 'text-emerald-600 dark:text-emerald-400', bg: 'bg-emerald-500/10' },
+  transfer: { label: 'Transferencia', Icon: ArrowLeftRight, color: 'text-blue-600 dark:text-blue-400', bg: 'bg-blue-500/10' },
+  card: { label: 'Débito', Icon: CreditCard, color: 'text-violet-600 dark:text-violet-400', bg: 'bg-violet-500/10' },
 }
 
 // ─── Schema edición ────────────────────────────────────────────────────────────
 const editSchema = z.object({
-  name:      z.string().min(1, 'Requerido'),
-  lastName:  z.string().min(1, 'Requerido'),
-  email:     z.string().email('Email inválido').or(z.literal('')),
-  phone:     z.string().optional(),
-  dni:       z.string().min(1, 'Requerido'),
+  name: z.string().min(1, 'Requerido'),
+  lastName: z.string().min(1, 'Requerido'),
+  email: z.string().email('Email inválido').or(z.literal('')),
+  phone: z.string().optional(),
+  dni: z.string().min(1, 'Requerido'),
 })
 type EditValues = z.infer<typeof editSchema>
-type Tab = 'pagos' | 'asistencia' | 'turnos' | 'rutina'
 
 // ─── Helpers visuales ─────────────────────────────────────────────────────────
 function avatarColors(status: Client['status']) {
-  if (status === 'active')   return 'bg-emerald-500/15 text-emerald-600 dark:text-emerald-400'
+  if (status === 'active') return 'bg-emerald-500/15 text-emerald-600 dark:text-emerald-400'
   if (status === 'expiring') return 'bg-amber-500/15 text-amber-600 dark:text-amber-400'
-  if (status === 'debt')     return 'bg-red-500/15 text-red-600 dark:text-red-400'
+  if (status === 'debt') return 'bg-red-500/15 text-red-600 dark:text-red-400'
   return 'bg-gray-200/60 dark:bg-gray-700/40 text-gray-500 dark:text-gray-400'
 }
 
 function statusBarColor(status: Client['status']) {
-  if (status === 'active')   return 'bg-emerald-500'
+  if (status === 'active') return 'bg-emerald-500'
   if (status === 'expiring') return 'bg-amber-500'
-  if (status === 'debt')     return 'bg-red-500'
+  if (status === 'debt') return 'bg-red-500'
   return 'bg-gray-400'
 }
 
@@ -82,7 +83,7 @@ function membershipDaysLeft(expiresAt: string | null): number | null {
 }
 
 // ─── Glassmorphism card ───────────────────────────────────────────────────────
-const glassCard = 'rounded-[2rem] border border-white/50 dark:border-white/10 bg-white/30 dark:bg-black/30 backdrop-blur-3xl shadow-[0_8px_32px_rgba(0,0,0,0.04)] dark:shadow-[0_8px_32px_rgba(0,0,0,0.3)]'
+const glassCard = 'rounded-[2rem] border border-gray-200 dark:border-white/10 bg-white/30 dark:bg-black/30 backdrop-blur-3xl shadow-[0_8px_32px_rgba(0,0,0,0.04)] dark:shadow-[0_8px_32px_rgba(0,0,0,0.3)]'
 
 const DIA_SHORT: Record<string, string> = {
   lunes: 'Lu', martes: 'Ma', miercoles: 'Mi', 'miércoles': 'Mi',
@@ -94,6 +95,14 @@ const WEEKDAY_SHORT: Record<string, string> = {
   friday: 'Vi', saturday: 'Sá', sunday: 'Do',
 }
 
+
+function formatPlanName(name: string): string {
+  if (!name) return ''
+  const spaced = name.replace(/_/g, ' ')
+  return spaced.split(' ')
+    .map(word => word.charAt(0).toUpperCase() + word.slice(1).toLowerCase())
+    .join(' ')
+}
 
 // ─── Chip de contacto ─────────────────────────────────────────────────────────
 function ContactChip({ icon: Icon, label, href }: { icon: typeof Mail; label: string; href?: string }) {
@@ -107,7 +116,7 @@ function ContactChip({ icon: Icon, label, href }: { icon: typeof Mail; label: st
   if (href) {
     return (
       <a href={href} target="_blank" rel="noopener noreferrer"
-         className={`${base} bg-emerald-500/10 text-emerald-700 dark:text-emerald-400 border-emerald-500/20 hover:bg-emerald-500/20`}>
+        className={`${base} bg-emerald-500/10 text-emerald-700 dark:text-emerald-400 border-emerald-500/20 hover:bg-emerald-500/20`}>
         {content}
         <MessageCircle size={10} className="opacity-50" />
       </a>
@@ -117,18 +126,6 @@ function ContactChip({ icon: Icon, label, href }: { icon: typeof Mail; label: st
     <span className={`${base} bg-white/[0.05] dark:bg-white/[0.04] text-gray-700 dark:text-gray-400 border-gray-200 dark:border-white/[0.08]`}>
       {content}
     </span>
-  )
-}
-
-// ─── Empty state ─────────────────────────────────────────────────────────────
-function EmptyState({ icon: Icon, message }: { icon: typeof Tag; message: string }) {
-  return (
-    <div className="flex flex-col items-center justify-center gap-3 py-14 text-center">
-      <div className="flex h-12 w-12 items-center justify-center rounded-2xl bg-black/[0.04] dark:bg-white/[0.04] border border-white/50 dark:border-white/[0.08]">
-        <Icon size={20} className="text-gray-400 dark:text-[#8A8A9A]" />
-      </div>
-      <p className="text-sm text-gray-500 dark:text-[#8A8A9A]">{message}</p>
-    </div>
   )
 }
 
@@ -146,7 +143,7 @@ function AttendanceTabContent({ attendance }: { attendance: AttendanceRecord[] }
 
   const pieData = [
     { name: 'Presente', value: presentCount, color: '#10B981' },
-    { name: 'Ausente',  value: absentCount,  color: '#EF4444' },
+    { name: 'Ausente', value: absentCount, color: '#EF4444' },
   ]
 
   const monthlyData = useMemo(() => {
@@ -188,27 +185,31 @@ function AttendanceTabContent({ attendance }: { attendance: AttendanceRecord[] }
     [attendance, filterStatus, filterMonth]
   )
 
+  const isDark = typeof document !== 'undefined' && document.documentElement.classList.contains('dark')
+  const tooltipStyle = { background: isDark ? '#1A1A1A' : '#FFFFFF', border: `1px solid ${isDark ? 'rgba(255,255,255,0.08)' : 'rgba(0,0,0,0.08)'}`, borderRadius: 8, fontSize: 11 }
+  const gridStroke = isDark ? 'rgba(255,255,255,0.05)' : 'rgba(0,0,0,0.06)'
+  const tickFill = isDark ? '#8A8A9A' : '#9CA3AF'
+
   const CHART_VIEWS: { value: ChartView; Icon: typeof BarChart2; label: string }[] = [
-    { value: 'resumen',  Icon: PieIcon,        label: 'Resumen'  },
-    { value: 'mensual',  Icon: BarChart2,       label: 'Por mes'  },
-    { value: 'historial',Icon: LineChartIcon,   label: 'Historial'},
+    { value: 'resumen', Icon: PieIcon, label: 'Resumen' },
+    { value: 'mensual', Icon: BarChart2, label: 'Por mes' },
+    { value: 'historial', Icon: LineChartIcon, label: 'Historial' },
   ]
 
   return (
-    <div className="grid grid-cols-2 divide-x divide-white/[0.06]">
+    <div className="grid grid-cols-2 divide-x divide-gray-100 dark:divide-white/[0.06]">
 
       {/* ── Columna izquierda: lista ─────���────────────────────── */}
       <div className="flex flex-col">
         {/* Filtros */}
-        <div className="flex flex-col gap-2 px-4 py-3 border-b border-white/[0.06]">
+        <div className="flex flex-col gap-2 px-4 py-3 border-b border-gray-200 dark:border-white/[0.06]">
           <div className="flex gap-1">
             {([['todos', 'Todos'], ['presentes', 'Presentes'], ['ausentes', 'Ausentes']] as const).map(([v, l]) => (
               <button
                 key={v}
                 onClick={() => setFilterStatus(v)}
-                className={`text-xs font-semibold px-2.5 py-1.5 rounded-lg transition-all ${
-                  filterStatus === v ? 'bg-white/[0.09] text-white' : 'text-[#8A8A9A] hover:text-white'
-                }`}
+                className={`text-xs font-semibold px-2.5 py-1.5 rounded-lg transition-all ${filterStatus === v ? 'bg-gray-200 text-gray-900 dark:bg-white/[0.09] dark:text-white' : 'text-gray-500 dark:text-[#8A8A9A] hover:text-gray-900 dark:hover:text-white'
+                  }`}
               >
                 {l}
               </button>
@@ -217,7 +218,7 @@ function AttendanceTabContent({ attendance }: { attendance: AttendanceRecord[] }
           <select
             value={filterMonth}
             onChange={e => setFilterMonth(e.target.value)}
-            className="text-xs bg-white/[0.04] border border-white/[0.08] rounded-lg px-2 py-1.5 text-[#8A8A9A] focus:outline-none focus:border-white/[0.2] cursor-pointer"
+            className="text-xs bg-gray-100 dark:bg-white/[0.04] border border-gray-300 dark:border-white/[0.08] rounded-lg px-2 py-1.5 text-gray-600 dark:text-[#8A8A9A] focus:outline-none focus:border-gray-400 dark:focus:border-white/[0.2] cursor-pointer"
           >
             {availableMonths.map(m => (
               <option key={m} value={m} className="bg-[#1A1A1A]">
@@ -228,24 +229,23 @@ function AttendanceTabContent({ attendance }: { attendance: AttendanceRecord[] }
         </div>
 
         {/* Lista */}
-        <div className="overflow-y-auto divide-y divide-white/[0.06]" style={{ maxHeight: 360 }}>
+        <div className="overflow-y-auto divide-y divide-gray-100 dark:divide-white/[0.06]" style={{ maxHeight: 360 }}>
           {filtered.length === 0 ? (
-            <p className="text-center text-xs text-[#8A8A9A] py-8">Sin registros</p>
+            <p className="text-center text-xs text-gray-500 dark:text-[#8A8A9A] py-8">Sin registros</p>
           ) : filtered.map(a => (
-            <div key={a.id} className="flex items-center gap-2.5 px-4 py-3 hover:bg-black/30 transition-colors">
-              <div className={`h-7 w-7 rounded-lg flex items-center justify-center shrink-0 ${
-                a.present ? 'bg-emerald-500/10' : 'bg-red-500/10'
-              }`}>
+            <div key={a.id} className="flex items-center gap-2.5 px-4 py-3 hover:bg-gray-100 dark:hover:bg-black/30 transition-colors">
+              <div className={`h-7 w-7 rounded-lg flex items-center justify-center shrink-0 ${a.present ? 'bg-emerald-500/10' : 'bg-red-500/10'
+                }`}>
                 {a.present
                   ? <CheckCircle2 size={13} className="text-emerald-400" />
                   : <XCircle size={13} className="text-red-400" />
                 }
               </div>
               <div className="flex-1 min-w-0">
-                <p className="text-xs font-semibold text-white leading-tight">
+                <p className="text-xs font-semibold text-gray-900 dark:text-white leading-tight">
                   {format(parseISO(a.date), "d MMM yyyy", { locale: es })}
                 </p>
-                <p className="text-[10px] text-[#8A8A9A] truncate">{a.shiftLabel}</p>
+                <p className="text-[10px] text-gray-500 dark:text-[#8A8A9A] truncate">{a.shiftLabel}</p>
               </div>
               <span className={`text-[10px] font-semibold shrink-0 ${a.present ? 'text-emerald-400' : 'text-red-400'}`}>
                 {a.present ? '✓' : '✗'}
@@ -258,29 +258,28 @@ function AttendanceTabContent({ attendance }: { attendance: AttendanceRecord[] }
       {/* ── Columna derecha: stats ────────��───────────────────── */}
       <div className="flex flex-col">
         {/* Stats 2×2 */}
-        <div className="grid grid-cols-2 divide-x divide-y divide-white/[0.06] border-b border-white/[0.06]">
+        <div className="grid grid-cols-2 divide-x divide-y divide-gray-100 dark:divide-white/[0.06] border-b border-gray-200 dark:border-white/[0.06]">
           {[
-            { label: 'Total',      value: attendance.length, color: 'text-white'       },
-            { label: 'Presentes',  value: presentCount,      color: 'text-emerald-400' },
-            { label: 'Ausentes',   value: absentCount,       color: 'text-red-400'     },
-            { label: 'Asistencia', value: `${pct}%`,         color: 'text-primary'     },
+            { label: 'Total', value: attendance.length, color: 'text-gray-900 dark:text-white' },
+            { label: 'Presentes', value: presentCount, color: 'text-emerald-400' },
+            { label: 'Ausentes', value: absentCount, color: 'text-red-400' },
+            { label: 'Asistencia', value: `${pct}%`, color: 'text-primary' },
           ].map(s => (
             <div key={s.label} className="py-4 text-center">
               <p className={`text-xl font-black tabular-nums ${s.color}`}>{s.value}</p>
-              <p className="text-[10px] uppercase tracking-wider text-[#8A8A9A] mt-0.5">{s.label}</p>
+              <p className="text-[10px] uppercase tracking-wider text-gray-500 dark:text-[#8A8A9A] mt-0.5">{s.label}</p>
             </div>
           ))}
         </div>
 
         {/* Chart toggle */}
-        <div className="flex gap-1 px-3 py-2 border-b border-white/[0.06]">
+        <div className="flex gap-1 px-3 py-2 border-b border-gray-200 dark:border-white/[0.06]">
           {CHART_VIEWS.map(({ value, Icon, label }) => (
             <button
               key={value}
               onClick={() => setChartView(value)}
-              className={`flex flex-1 items-center justify-center gap-1 text-[11px] font-semibold py-1.5 rounded-lg transition-all ${
-                chartView === value ? 'bg-white/[0.09] text-white' : 'text-[#8A8A9A] hover:text-white'
-              }`}
+              className={`flex flex-1 items-center justify-center gap-1 text-[11px] font-semibold py-1.5 rounded-lg transition-all ${chartView === value ? 'bg-gray-200 text-gray-900 dark:bg-white/[0.09] dark:text-white' : 'text-gray-500 dark:text-[#8A8A9A] hover:text-gray-900 dark:hover:text-white'
+                }`}
             >
               <Icon size={11} />
               {label}
@@ -298,25 +297,25 @@ function AttendanceTabContent({ attendance }: { attendance: AttendanceRecord[] }
                     {pieData.map((e, i) => <Cell key={i} fill={e.color} />)}
                   </Pie>
                   <Tooltip
-                    contentStyle={{ background: '#1A1A1A', border: '1px solid rgba(255,255,255,0.08)', borderRadius: 8, fontSize: 11 }}
+                    contentStyle={tooltipStyle}
                     formatter={(v: number) => [`${v} días`, '']}
                   />
                 </PieChart>
               </ResponsiveContainer>
               <div className="absolute inset-0 flex items-center justify-center pointer-events-none">
                 <div className="text-center">
-                  <p className="text-2xl font-black text-white">{pct}%</p>
-                  <p className="text-[9px] text-[#8A8A9A] uppercase tracking-wider">asistencia</p>
+                  <p className="text-2xl font-black text-gray-900 dark:text-white">{pct}%</p>
+                  <p className="text-[9px] text-gray-500 dark:text-[#8A8A9A] uppercase tracking-wider">asistencia</p>
                 </div>
               </div>
               <div className="flex justify-center gap-4 mt-1">
                 <div className="flex items-center gap-1">
                   <div className="h-1.5 w-1.5 rounded-full bg-emerald-400" />
-                  <span className="text-[10px] text-[#8A8A9A]">Presente ({presentCount})</span>
+                  <span className="text-[10px] text-gray-500 dark:text-[#8A8A9A]">Presente ({presentCount})</span>
                 </div>
                 <div className="flex items-center gap-1">
                   <div className="h-1.5 w-1.5 rounded-full bg-red-400" />
-                  <span className="text-[10px] text-[#8A8A9A]">Ausente ({absentCount})</span>
+                  <span className="text-[10px] text-gray-500 dark:text-[#8A8A9A]">Ausente ({absentCount})</span>
                 </div>
               </div>
             </div>
@@ -325,15 +324,15 @@ function AttendanceTabContent({ attendance }: { attendance: AttendanceRecord[] }
           {chartView === 'mensual' && (
             <ResponsiveContainer width="100%" height={160}>
               <BarChart data={monthlyData} barSize={8} barGap={2}>
-                <CartesianGrid strokeDasharray="3 3" stroke="rgba(255,255,255,0.05)" vertical={false} />
-                <XAxis dataKey="mes" tick={{ fill: '#8A8A9A', fontSize: 10 }} axisLine={false} tickLine={false} />
-                <YAxis tick={{ fill: '#8A8A9A', fontSize: 10 }} axisLine={false} tickLine={false} width={18} allowDecimals={false} />
+                <CartesianGrid strokeDasharray="3 3" stroke={gridStroke} vertical={false} />
+                <XAxis dataKey="mes" tick={{ fill: tickFill, fontSize: 10 }} axisLine={false} tickLine={false} />
+                <YAxis tick={{ fill: tickFill, fontSize: 10 }} axisLine={false} tickLine={false} width={18} allowDecimals={false} />
                 <Tooltip
-                  contentStyle={{ background: '#1A1A1A', border: '1px solid rgba(255,255,255,0.08)', borderRadius: 8, fontSize: 11 }}
-                  cursor={{ fill: 'rgba(255,255,255,0.03)' }}
+                  contentStyle={tooltipStyle}
+                  cursor={{ fill: isDark ? 'rgba(255,255,255,0.03)' : 'rgba(0,0,0,0.03)' }}
                 />
                 <Bar dataKey="presentes" name="Presentes" fill="#10B981" radius={[3, 3, 0, 0]} />
-                <Bar dataKey="ausentes"  name="Ausentes"  fill="#EF4444" radius={[3, 3, 0, 0]} />
+                <Bar dataKey="ausentes" name="Ausentes" fill="#EF4444" radius={[3, 3, 0, 0]} />
               </BarChart>
             </ResponsiveContainer>
           )}
@@ -343,15 +342,15 @@ function AttendanceTabContent({ attendance }: { attendance: AttendanceRecord[] }
               <AreaChart data={historialData} margin={{ left: -10 }}>
                 <defs>
                   <linearGradient id="gradHist" x1="0" y1="0" x2="0" y2="1">
-                    <stop offset="5%"  stopColor="#FBC608" stopOpacity={0.25} />
-                    <stop offset="95%" stopColor="#FBC608" stopOpacity={0}    />
+                    <stop offset="5%" stopColor="#FBC608" stopOpacity={0.25} />
+                    <stop offset="95%" stopColor="#FBC608" stopOpacity={0} />
                   </linearGradient>
                 </defs>
-                <CartesianGrid strokeDasharray="3 3" stroke="rgba(255,255,255,0.05)" vertical={false} />
-                <XAxis dataKey="fecha" tick={{ fill: '#8A8A9A', fontSize: 9 }} axisLine={false} tickLine={false} interval="preserveStartEnd" />
-                <YAxis tick={{ fill: '#8A8A9A', fontSize: 10 }} axisLine={false} tickLine={false} width={18} allowDecimals={false} />
+                <CartesianGrid strokeDasharray="3 3" stroke={gridStroke} vertical={false} />
+                <XAxis dataKey="fecha" tick={{ fill: tickFill, fontSize: 9 }} axisLine={false} tickLine={false} interval="preserveStartEnd" />
+                <YAxis tick={{ fill: tickFill, fontSize: 10 }} axisLine={false} tickLine={false} width={18} allowDecimals={false} />
                 <Tooltip
-                  contentStyle={{ background: '#1A1A1A', border: '1px solid rgba(255,255,255,0.08)', borderRadius: 8, fontSize: 11 }}
+                  contentStyle={tooltipStyle}
                   formatter={(v: number) => [v, 'Acumuladas']}
                 />
                 <Area type="monotone" dataKey="asistencias" stroke="#FBC608" fill="url(#gradHist)" strokeWidth={2} dot={false} activeDot={{ r: 3, fill: '#FBC608' }} />
@@ -372,13 +371,12 @@ export default function ClientProfilePage() {
   const user = useAuthStore(s => s.user)
   const isAdmin = user?.role === 'admin'
 
-  const [client, setClient]       = useState<Client | null>(null)
-  const [payments, setPayments]   = useState<Payment[]>([])
+  const [client, setClient] = useState<Client | null>(null)
+  const [payments, setPayments] = useState<Payment[]>([])
   const [attendance, setAttendance] = useState<AttendanceRecord[]>([])
-  const [loading, setLoading]     = useState(true)
-  const [tab, setTab]             = useState<Tab>('rutina')
-  const [editOpen, setEditOpen]   = useState(false)
-  const [isSaving, setIsSaving]   = useState(false)
+  const [loading, setLoading] = useState(true)
+  const [editOpen, setEditOpen] = useState(false)
+  const [isSaving, setIsSaving] = useState(false)
   const [membershipDetailOpen, setMembershipDetailOpen] = useState(false)
   const [membershipOpen, setMembershipOpen] = useState(true)
 
@@ -386,14 +384,21 @@ export default function ClientProfilePage() {
   const { rutinas, isLoading: loadingRutinas } = useRutinas(id)
 
   // Turnos — carga lazy al abrir el tab
-  const [inscripciones, setInscripciones]           = useState<InscripcionClienteEntry[]>([])
+  const [inscripciones, setInscripciones] = useState<InscripcionClienteEntry[]>([])
   const [listaEsperaCliente, setListaEsperaCliente] = useState<ListaEsperaClienteEntry[]>([])
-  const [loadingTurnos, setLoadingTurnos]           = useState(false)
-  const [turnosLoaded, setTurnosLoaded]             = useState(false)
-  const [enrollOpen, setEnrollOpen]                 = useState(false)
-  const [allShifts, setAllShifts]                   = useState<Shift[]>([])
-  const [loadingShifts, setLoadingShifts]           = useState(false)
-  const [enrollingId, setEnrollingId]               = useState<string | null>(null)
+  const [loadingTurnos, setLoadingTurnos] = useState(false)
+  const [turnosLoaded, setTurnosLoaded] = useState(false)
+  const [enrollOpen, setEnrollOpen] = useState(false)
+  const [allShifts, setAllShifts] = useState<Shift[]>([])
+  const [loadingShifts, setLoadingShifts] = useState(false)
+  const [enrollingId, setEnrollingId] = useState<string | null>(null)
+
+  const scrollToSection = (sectionId: string) => {
+    const el = document.getElementById(sectionId)
+    if (el) {
+      el.scrollIntoView({ behavior: 'smooth', block: 'start' })
+    }
+  }
 
   const { register, handleSubmit, formState: { errors }, reset } = useForm<EditValues>({
     resolver: zodResolver(editSchema),
@@ -420,7 +425,7 @@ export default function ClientProfilePage() {
   }, [id])
 
   useEffect(() => {
-    if (tab !== 'turnos' || !id || turnosLoaded) return
+    if (!id || turnosLoaded) return
     setLoadingTurnos(true)
     Promise.allSettled([
       inscripcionesApi.getByCliente(id),
@@ -430,7 +435,7 @@ export default function ClientProfilePage() {
       if (espRes.status === 'fulfilled') setListaEsperaCliente(espRes.value)
       setTurnosLoaded(true)
     }).finally(() => setLoadingTurnos(false))
-  }, [tab, id, turnosLoaded])
+  }, [id, turnosLoaded])
 
   useEffect(() => {
     if (!enrollOpen) return
@@ -530,69 +535,55 @@ export default function ClientProfilePage() {
         <div className={`h-4 w-16 ${pulse}`} />
 
         {/* Hero card */}
-        <div className={`${glassCard} p-5 md:p-7`}>
-          <div className="flex gap-5">
-            <div className={`h-16 w-16 md:h-20 md:w-20 rounded-2xl md:rounded-3xl shrink-0 ${pulse}`} />
-            <div className="flex-1 space-y-3 pt-1">
-              <div className={`h-8 w-48 ${pulse}`} />
-              <div className={`h-3.5 w-32 ${pulse}`} />
-              <div className="flex gap-2 pt-1">
-                {[72, 110, 88].map((w, i) => (
-                  <div key={i} className={`h-7 rounded-xl ${pulse}`} style={{ width: w }} />
-                ))}
+        <div className={`${glassCard} overflow-hidden`}>
+          {/* Accent bar */}
+          <div className={`h-1 w-full ${pulse}`} />
+
+          {/* Contenedor 1: Header */}
+          <div className="px-5 md:px-7 pt-5 md:pt-7 pb-3 md:pb-4">
+            <div className="flex gap-5 items-center">
+              <div className={`h-16 w-16 md:h-20 md:w-20 rounded-2xl md:rounded-3xl shrink-0 ${pulse}`} />
+              <div className="flex-1 space-y-2.5 pt-1">
+                <div className={`h-8 w-52 ${pulse}`} />
+                <div className={`h-3.5 w-36 ${pulse}`} />
               </div>
+              <div className={`h-7 w-20 rounded-lg shrink-0 ${pulse}`} />
+            </div>
+          </div>
+
+          {/* Contenedor 2: Tablas */}
+          <div className="px-5 md:px-7 pt-3 md:pt-4 pb-5 md:pb-7">
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+              <div className={`h-36 rounded-2xl ${pulse}`} />
+              <div className={`h-36 rounded-2xl ${pulse}`} />
             </div>
           </div>
         </div>
 
-        {/* Membership card */}
-        <div className={`${glassCard} p-5 md:p-6 space-y-5`}>
-          {/* Header */}
-          <div className="flex items-center justify-between">
-            <div className="flex items-center gap-3">
-              <div className={`h-11 w-11 rounded-xl shrink-0 ${pulse}`} />
+        {/* Secciones */}
+        {[1, 2, 3].map(i => (
+          <div key={i} className={`${glassCard} p-6 space-y-4`} style={{ opacity: 1 - (i - 1) * 0.2 }}>
+            <div className="flex items-center gap-3 pb-3 border-b border-gray-200 dark:border-white/[0.06]">
+              <div className={`h-10 w-10 rounded-xl shrink-0 ${pulse}`} />
               <div className="space-y-2">
-                <div className={`h-5 w-28 ${pulse}`} />
-                <div className={`h-3 w-20 ${pulse}`} />
+                <div className={`h-4 w-40 ${pulse}`} />
+                <div className={`h-3 w-28 ${pulse}`} />
               </div>
             </div>
-            <div className={`h-8 w-20 rounded-xl ${pulse}`} />
+            <div className="space-y-2">
+              {[1, 2].map(j => (
+                <div key={j} className={`h-14 rounded-xl ${pulse}`} style={{ opacity: 1 - (j - 1) * 0.3 }} />
+              ))}
+            </div>
           </div>
-          {/* Stats 2-col */}
-          <div className="grid grid-cols-2 gap-3">
-            <div className={`h-14 rounded-xl ${pulse}`} />
-            <div className={`h-14 rounded-xl ${pulse}`} />
-          </div>
-          {/* Progress bar */}
-          <div className="space-y-2">
-            <div className={`h-3 w-48 ${pulse}`} />
-            <div className={`h-1.5 w-full rounded-full ${pulse}`} />
-          </div>
-          {/* Cuotas */}
-          <div className="space-y-2">
-            <div className={`h-3 w-24 ${pulse}`} />
-            {[1, 2, 3].map(i => (
-              <div key={i} className={`h-12 rounded-xl ${pulse}`} style={{ opacity: 1 - (i - 1) * 0.2 }} />
-            ))}
-          </div>
-        </div>
-
-        {/* Tabs */}
-        <div className="space-y-3">
-          <div className={`h-11 rounded-2xl ${pulse}`} />
-          <div className={`${glassCard} p-6 space-y-3`}>
-            {[1, 2, 3].map(i => (
-              <div key={i} className={`h-14 rounded-xl ${pulse}`} style={{ opacity: 1 - (i - 1) * 0.25 }} />
-            ))}
-          </div>
-        </div>
+        ))}
       </motion.div>
     )
   }
 
   if (!client) {
     return (
-      <div className="flex flex-col items-center justify-center gap-4 py-20 text-[#8A8A9A]">
+      <div className="flex flex-col items-center justify-center gap-4 py-20 text-gray-500 dark:text-[#8A8A9A]">
         <p className="text-sm">Cliente no encontrado.</p>
         <Button variant="ghost" onClick={() => navigate('/clients')}>
           <ArrowLeft size={15} /> Volver
@@ -601,26 +592,20 @@ export default function ClientProfilePage() {
     )
   }
 
-  const initials       = `${client.name.charAt(0)}${client.lastName.charAt(0)}`.toUpperCase()
-  const daysLeft       = membershipDaysLeft(client.membershipExpiresAt)
-const progressPct    = (() => {
+  const initials = `${client.name.charAt(0)}${client.lastName.charAt(0)}`.toUpperCase()
+  const daysLeft = membershipDaysLeft(client.membershipExpiresAt)
+  const progressPct = (() => {
     if (!client.membershipStartDate || !client.membershipExpiresAt) return 0
     const total = new Date(client.membershipExpiresAt).getTime() - new Date(client.membershipStartDate).getTime()
     const elapsed = Date.now() - new Date(client.membershipStartDate).getTime()
     return Math.min(100, Math.max(0, (elapsed / total) * 100))
   })()
-  const progressColor  = daysLeft === null ? 'bg-gray-400' : daysLeft <= 0 ? 'bg-red-500' : daysLeft <= 30 ? 'bg-amber-500' : 'bg-emerald-500'
+  const progressColor = daysLeft === null ? 'bg-gray-400' : daysLeft <= 0 ? 'bg-red-500' : daysLeft <= 30 ? 'bg-amber-500' : 'bg-emerald-500'
 
   const lastPaymentDate = payments.length > 0 ? payments[0].paidAt : null
 
-  const MODALIDAD_LABEL: Record<string, string> = {
-    MENSUAL: 'Mensual',
-    TRES_MESES: '3 meses',
-    SEIS_MESES: '6 meses',
-  }
-
   const CUOTAS_POR_MODALIDAD: Record<string, number> = {
-    MENSUAL: 1, TRES_MESES: 3, SEIS_MESES: 6,
+    TRANSFERENCIA_MENSUAL: 1, EFECTIVO: 1, MEMBRESIA_3_MESES: 3, MEMBRESIA_6_MESES: 6,
   }
 
   // Cronograma de cuotas de la membresía activa
@@ -636,17 +621,17 @@ const progressPct    = (() => {
   })()
 
   const MEMBRESIA_STATUS_CONFIG: Record<string, { label: string; color: string; bg: string; dot: string }> = {
-    ACTIVA:    { label: 'Activa',    color: 'text-emerald-600 dark:text-emerald-400', bg: 'bg-emerald-500/10', dot: 'bg-emerald-500' },
-    VENCIDA:   { label: 'Vencida',   color: 'text-red-600 dark:text-red-400',         bg: 'bg-red-500/10',     dot: 'bg-red-500'     },
-    CANCELADA: { label: 'Cancelada', color: 'text-gray-600 dark:text-gray-400',       bg: 'bg-gray-500/10',   dot: 'bg-gray-400'    },
+    ACTIVA: { label: 'Activa', color: 'text-emerald-600 dark:text-emerald-400', bg: 'bg-emerald-500/10', dot: 'bg-emerald-500' },
+    VENCIDA: { label: 'Vencida', color: 'text-red-600 dark:text-red-400', bg: 'bg-red-500/10', dot: 'bg-red-500' },
+    CANCELADA: { label: 'Cancelada', color: 'text-gray-600 dark:text-gray-400', bg: 'bg-gray-500/10', dot: 'bg-gray-400' },
   }
 
   const planFreqGlobal = client?.planFrequency ? Number(client.planFrequency) : null
   const TABS: { value: Tab; label: string; count: number; sublabel?: string }[] = [
-    { value: 'rutina',     label: 'Rutina',     count: rutinas.length       },
-    { value: 'turnos',     label: 'Clases',     count: 0, sublabel: planFreqGlobal ? `${inscripciones.length}/${planFreqGlobal}` : inscripciones.length > 0 ? String(inscripciones.length) : undefined },
-    { value: 'asistencia', label: 'Asistencia', count: presentDays          },
-    { value: 'pagos',      label: 'Pagos',      count: payments.length      },
+    { value: 'rutina', label: 'Rutina', count: rutinas.length },
+    { value: 'turnos', label: 'Clases', count: 0, sublabel: planFreqGlobal ? `${inscripciones.length}/${planFreqGlobal}` : inscripciones.length > 0 ? String(inscripciones.length) : undefined },
+    { value: 'asistencia', label: 'Asistencia', count: presentDays },
+    { value: 'pagos', label: 'Pagos', count: payments.length },
   ]
 
 
@@ -671,16 +656,17 @@ const progressPct    = (() => {
         {/* Accent bar (status color) */}
         <div className={`h-1 w-full ${statusBarColor(client.status)}`} />
 
-        <div className="p-5 md:p-7">
-          <div className="flex flex-col sm:flex-row gap-5 sm:items-start">
+        {/* ── Contenedor 1: Header ────────────────────────────────────────── */}
+        <div className="px-5 md:px-7 pt-5 md:pt-7 pb-3 md:pb-4">
+          <div className="flex flex-col sm:flex-row gap-5 sm:items-center">
             {/* Avatar */}
             <div className={`h-16 w-16 md:h-20 md:w-20 rounded-2xl md:rounded-3xl flex items-center justify-center text-2xl md:text-3xl font-black shrink-0 ${avatarColors(client.status)}`}>
               {initials}
             </div>
 
-            {/* Datos principales */}
-            <div className="flex-1 min-w-0">
-              <div className="flex flex-wrap items-start justify-between gap-3">
+            {/* Nombre + fecha + acciones */}
+            <div className="flex-1 min-w-0 w-full">
+              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
                 <div>
                   <h1 className="text-2xl md:text-3xl font-black tracking-tight text-gray-900 dark:text-white leading-none">
                     {client.name} {client.lastName}
@@ -690,17 +676,15 @@ const progressPct    = (() => {
                   </p>
                 </div>
                 <div className="flex items-center gap-2 shrink-0">
-                  <span className={`inline-flex items-center gap-1.5 text-xs font-medium px-2.5 py-1.5 rounded-lg ${
-                    client.status === 'active'   ? 'bg-emerald-500/10 text-emerald-600 dark:text-emerald-400'
+                  <span className={`inline-flex items-center gap-1.5 text-xs font-medium px-2.5 py-1.5 rounded-lg ${client.status === 'active' ? 'bg-emerald-500/10 text-emerald-600 dark:text-emerald-400'
                     : client.status === 'expiring' ? 'bg-amber-500/10 text-amber-600 dark:text-amber-400'
-                    : client.status === 'debt'     ? 'bg-red-500/10 text-red-600 dark:text-red-400'
-                    : 'bg-gray-500/10 text-gray-500 dark:text-gray-400'
-                  }`}>
-                    <span className={`h-1.5 w-1.5 rounded-full ${
-                      client.status === 'active' ? 'bg-emerald-500'
+                      : client.status === 'debt' ? 'bg-red-500/10 text-red-600 dark:text-red-400'
+                        : 'bg-gray-500/10 text-gray-500 dark:text-gray-400'
+                    }`}>
+                    <span className={`h-1.5 w-1.5 rounded-full ${client.status === 'active' ? 'bg-emerald-500'
                       : client.status === 'expiring' ? 'bg-amber-500'
-                      : client.status === 'debt' ? 'bg-red-500' : 'bg-gray-400'
-                    }`} />
+                        : client.status === 'debt' ? 'bg-red-500' : 'bg-gray-400'
+                      }`} />
                     {getStatusLabel(client.status)}
                   </span>
                   {isAdmin && (
@@ -714,498 +698,676 @@ const progressPct    = (() => {
                   )}
                 </div>
               </div>
-
-              {/* Contact chips */}
-              <div className="flex flex-wrap gap-2 mt-4">
-                {client.dni
-                  ? <ContactChip icon={Hash} label={`DNI ${client.dni}`} />
-                  : (
-                    <span className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-semibold border bg-white/[0.03] dark:bg-white/[0.02] text-gray-400 dark:text-[#5A5A6A] border-gray-200 dark:border-white/[0.06]">
-                      <Hash size={11} className="shrink-0 opacity-40" />
-                      Sin DNI
-                    </span>
-                  )
-                }
-                {client.email && (
-                  <ContactChip icon={Mail} label={client.email} />
-                )}
-                {client.phone && (
-                  <ContactChip
-                    icon={Phone}
-                    label={client.phone}
-                    href={`https://wa.me/54${client.phone.replace(/\D/g, '')}`}
-                  />
-                )}
-              </div>
             </div>
+          </div>
+        </div>
+
+        {/* ── Contenedor 2: Tablas de Datos ───────────────────────────────── */}
+        <div className="px-5 md:px-7 pt-3 md:pt-4 pb-5 md:pb-7">
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-6 w-full">
+                {/* Tabla Izquierda: Datos Personales */}
+                <div className="rounded-2xl border border-gray-200/60 dark:border-white/[0.08] bg-white/20 dark:bg-white/[0.01] overflow-hidden text-xs">
+                  <div className="grid grid-cols-2 border-b border-gray-200/60 dark:border-white/[0.06] bg-gray-50/50 dark:bg-white/[0.02] px-4 py-2.5 font-bold text-gray-500 dark:text-[#8A8A9A]">
+                    <span>Datos Personales</span>
+                    <span>Valor</span>
+                  </div>
+                  <div className="divide-y divide-gray-100 dark:divide-gray-100 dark:divide-white/[0.04]">
+                    {[
+                      {
+                        label: 'DNI',
+                        value: client.dni || 'Sin DNI',
+                        icon: Hash,
+                        color: 'text-gray-900 dark:text-white font-bold'
+                      },
+                      {
+                        label: 'Email',
+                        value: client.email ? (
+                          <a href={`mailto:${client.email}`} className="text-primary hover:underline transition-all">
+                            {client.email}
+                          </a>
+                        ) : 'Sin email',
+                        icon: Mail,
+                        color: client.email ? 'text-primary font-semibold truncate' : 'text-gray-400 dark:text-gray-500 font-semibold'
+                      },
+                      {
+                        label: 'Teléfono',
+                        value: client.phone ? (
+                          <a
+                            href={`https://wa.me/54${client.phone.replace(/\D/g, '')}`}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            className="text-emerald-600 dark:text-emerald-400 hover:underline inline-flex items-center gap-1 transition-all"
+                          >
+                            {client.phone}
+                          </a>
+                        ) : 'Sin teléfono',
+                        icon: Phone,
+                        color: client.phone ? 'text-emerald-600 dark:text-emerald-400 font-semibold' : 'text-gray-400 dark:text-gray-500'
+                      },
+                      {
+                        label: 'Estado',
+                        value: (
+                          <span className={`inline-flex items-center gap-1.5 text-xs font-semibold px-2 py-0.5 rounded-full ${client.status === 'active' ? 'bg-emerald-500/10 text-emerald-600 dark:text-emerald-400'
+                            : client.status === 'expiring' ? 'bg-amber-500/10 text-amber-600 dark:text-amber-400'
+                              : client.status === 'debt' ? 'bg-red-500/10 text-red-600 dark:text-red-400'
+                                : 'bg-gray-500/10 text-gray-500 dark:text-gray-400'
+                            }`}>
+                            <span className={`h-1.5 w-1.5 rounded-full ${client.status === 'active' ? 'bg-emerald-500'
+                              : client.status === 'expiring' ? 'bg-amber-500'
+                                : client.status === 'debt' ? 'bg-red-500' : 'bg-gray-400'
+                              }`} />
+                            {getStatusLabel(client.status)}
+                          </span>
+                        ),
+                        icon: CheckCircle2,
+                        color: ''
+                      }
+                    ].map((row, idx) => {
+                      const Icon = row.icon
+                      return (
+                        <div key={idx} className="grid grid-cols-2 px-4 py-2.5 hover:bg-black/[0.02] dark:hover:bg-white/[0.01] transition-colors items-center">
+                          <span className="text-gray-500 dark:text-[#8A8A9A] flex items-center gap-1.5 font-semibold">
+                            <Icon size={12} className="opacity-60 text-gray-400 dark:text-gray-500" />
+                            {row.label}
+                          </span>
+                          <span className={`${row.color} truncate`}>
+                            {row.value}
+                          </span>
+                        </div>
+                      )
+                    })}
+                  </div>
+                </div>
+
+                {/* Tabla Derecha: Resumen de Membresía */}
+                <div className="rounded-2xl border border-gray-200/60 dark:border-white/[0.08] bg-white/20 dark:bg-white/[0.01] overflow-hidden text-xs">
+                  <div className="grid grid-cols-2 border-b border-gray-200/60 dark:border-white/[0.06] bg-gray-50/50 dark:bg-white/[0.02] px-4 py-2.5 font-bold text-gray-500 dark:text-[#8A8A9A]">
+                    <span>Resumen de Membresía</span>
+                    <span>Detalle</span>
+                  </div>
+                  <div className="divide-y divide-gray-100 dark:divide-gray-100 dark:divide-white/[0.04]">
+                    {[
+                      {
+                        label: 'Plan',
+                        value: client.planName ? formatPlanName(client.planName) : 'Sin membresía activa',
+                        icon: Dumbbell,
+                        color: client.planName ? 'text-gray-900 dark:text-white font-bold' : 'text-gray-400 dark:text-[#8A8A9A] font-semibold'
+                      },
+                      {
+                        label: 'Modalidad',
+                        value: client.planName && client.membershipModalidad ? MODALIDAD_LABELS[client.membershipModalidad] ?? client.membershipModalidad : '—',
+                        icon: Clock,
+                        color: client.planName ? 'text-gray-700 dark:text-gray-300 font-semibold' : 'text-gray-400 dark:text-[#8A8A9A]'
+                      },
+                      {
+                        label: 'Precio',
+                        value: client.planName && client.membershipPrecio != null ? formatCurrency(client.membershipPrecio) : '—',
+                        icon: Banknote,
+                        color: client.planName ? 'text-primary font-bold' : 'text-gray-400 dark:text-[#8A8A9A]'
+                      },
+                      {
+                        label: 'Vencimiento',
+                        value: !client.planName ? '—' : daysLeft !== null ? (daysLeft > 0 ? `${daysLeft} días restantes` : 'Finalizada') : 'Sin fecha',
+                        icon: CalendarDays,
+                        color: !client.planName ? 'text-gray-400 dark:text-[#8A8A9A]' : daysLeft !== null ? (daysLeft <= 0 ? 'text-red-500 dark:text-red-400 font-semibold' : daysLeft <= 30 ? 'text-amber-500 dark:text-amber-400 font-semibold' : 'text-emerald-500 dark:text-emerald-400 font-semibold') : 'text-gray-500 dark:text-[#8A8A9A]'
+                      }
+                    ].map((row, idx) => {
+                      const Icon = row.icon
+                      return (
+                        <div key={idx} className="grid grid-cols-2 px-4 py-2.5 hover:bg-black/[0.02] dark:hover:bg-white/[0.01] transition-colors items-center">
+                          <span className="text-gray-500 dark:text-[#8A8A9A] flex items-center gap-1.5 font-semibold">
+                            <Icon size={12} className="opacity-60 text-gray-400 dark:text-gray-500" />
+                            {row.label}
+                          </span>
+                          <span className={`${row.color} truncate`}>
+                            {row.value}
+                          </span>
+                        </div>
+                      )
+                    })}
+                  </div>
+                </div>
           </div>
         </div>
       </div>
 
-      {/* ── MEMBRESÍA CARD ──────────────────────────────────────────────────── */}
-      {client.planName ? (
-        <div className={`${glassCard} overflow-hidden`}>
+      {/* ─── CONTENEDOR PRINCIPAL CON SIDEBAR INDEX FIJO PEgado a la pared izquierda ──────────────────────── */}
+      <div className="relative w-full mt-6">
+        {/* Sidebar Index (Fixed on Left Viewport Wall) */}
+        <div className="hidden lg:block fixed left-4 xl:left-6 top-[32vh] z-30 w-36 xl:w-44 space-y-4">
+          <div className={`${glassCard} p-4 bg-white/20 dark:bg-black/45 backdrop-blur-2xl border border-gray-200 dark:border-white/[0.08]`}>
+            <p className="text-[10px] font-bold uppercase tracking-wider text-gray-400 dark:text-[#6A6A7A] mb-3 px-2">
+              Navegación
+            </p>
+            <div className="space-y-1">
+              {[
+                { id: 'rutinas', label: 'Rutinas', icon: BookOpen },
+                { id: 'clases', label: 'Clases', icon: Dumbbell },
+                { id: 'asistencia', label: 'Asistencia', icon: Activity },
+                { id: 'pagos', label: 'Pagos y Fact.', icon: CreditCard },
+              ].map(item => {
+                const Icon = item.icon
+                return (
+                  <button
+                    key={item.id}
+                    onClick={() => scrollToSection(item.id)}
+                    className="w-full flex items-center gap-2.5 px-3 py-2.5 rounded-xl text-xs font-semibold transition-all text-left text-gray-500 dark:text-[#8A8A9A] hover:text-gray-900 dark:hover:text-white hover:bg-white/[0.05]"
+                  >
+                    <Icon size={14} className="opacity-60 group-hover:opacity-100" />
+                    <span>{item.label}</span>
+                  </button>
+                )
+              })}
+            </div>
+          </div>
+        </div>
 
-          <div className="p-5 md:p-6">
+        {/* Bloque de Secciones de Contenido (Offset to clear the fixed sidebar) */}
+        <div className="w-full space-y-6">
+          {/* ─── SECCIÓN 1: RUTINAS ────────────────────────────────────────── */}
+          <div id="rutinas" className={`${glassCard} p-6 space-y-5 scroll-mt-24`}>
+            <div className="flex items-center justify-between border-b border-gray-200 dark:border-white/[0.06] pb-3">
+              <div className="flex items-center gap-3">
+                <div className="h-10 w-10 rounded-xl bg-primary/10 flex items-center justify-center shrink-0">
+                  <BookOpen size={18} className="text-primary" />
+                </div>
+                <div>
+                  <h3 className="text-lg font-black tracking-tight text-gray-900 dark:text-white">Rutinas de Entrenamiento</h3>
+                  <p className="text-xs text-gray-500 dark:text-[#8A8A9A]">Planificación de rutinas y ejercicios del cliente</p>
+                </div>
+              </div>
+              {(isAdmin || user?.role === 'profesor') && (
+                <button
+                  onClick={() => navigate(`/clients/${id}/rutina`)}
+                  className="flex items-center gap-2 rounded-xl btn-action px-4 py-2.5 text-sm"
+                >
+                  <Plus size={13} /> Nueva rutina
+                </button>
+              )}
+            </div>
 
-            {/* Header — clickeable para colapsar/expandir */}
-            <button
-              onClick={() => setMembershipOpen(p => !p)}
-              className="w-full flex items-center justify-between gap-3 group"
-            >
-              <div className="text-left">
-                <h3 className="text-base font-bold text-gray-900 dark:text-white leading-none">{client.planName}</h3>
-                {client.planFrequency && (
-                  <p className="text-xs text-gray-400 dark:text-[#8A8A9A] mt-0.5">{client.planFrequency}× por semana</p>
+            {loadingRutinas ? (
+              <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+                <div className="lg:col-span-2 space-y-3">
+                  <Skeleton className="h-4 w-28 rounded-lg" />
+                  <Skeleton className="h-[140px] w-full rounded-2xl" />
+                </div>
+                <div className="lg:col-span-1 space-y-3">
+                  <Skeleton className="h-4 w-36 rounded-lg" />
+                  <div className="space-y-2">
+                    {[1, 2, 3].map(i => <Skeleton key={i} className="h-14 w-full rounded-xl" />)}
+                  </div>
+                </div>
+              </div>
+            ) : rutinas.length === 0 ? (
+              <div className="flex flex-col items-center gap-3 py-12">
+                <div className="h-12 w-12 rounded-2xl bg-gray-100 dark:bg-white/[0.04] border border-gray-200 dark:border-white/[0.06] flex items-center justify-center">
+                  <BookOpen size={20} className="text-gray-400 dark:text-[#8A8A9A]" />
+                </div>
+                <p className="text-sm text-gray-500 dark:text-[#8A8A9A]">Sin rutinas registradas</p>
+                {(isAdmin || user?.role === 'profesor') && (
+                  <button
+                    onClick={() => navigate(`/clients/${id}/rutina`)}
+                    className="text-xs text-primary hover:underline"
+                  >
+                    Crear la primera rutina →
+                  </button>
                 )}
               </div>
-              <div className="flex items-center gap-2 shrink-0">
-                <span className="text-xs font-semibold text-gray-400 dark:text-[#8A8A9A] group-hover:text-gray-600 dark:group-hover:text-white transition-colors">
-                  Membresía
-                </span>
-                <ChevronDown
-                  size={15}
-                  className={`text-gray-400 dark:text-[#8A8A9A] transition-transform duration-200 ${membershipOpen ? 'rotate-180' : ''}`}
-                />
-              </div>
-            </button>
+            ) : (() => {
+              const activa = rutinas.find(r => r.activa)
+              const inactivas = rutinas.filter(r => !r.activa)
+              return (
+                <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+                  {/* Rutina Activa (Izquierda/Main) */}
+                  <div className="lg:col-span-2 space-y-3">
+                    <h4 className="text-xs font-bold uppercase tracking-widest text-gray-500 dark:text-[#8A8A9A] mb-1 px-1">Rutina Activa</h4>
+                    {activa ? (
+                      <div
+                        onClick={() => navigate(`/clients/${id}/rutina`)}
+                        className="group relative flex flex-col justify-between p-5 rounded-2xl border border-primary/20 bg-primary/[0.02] hover:bg-primary/[0.04] transition-all cursor-pointer overflow-hidden min-h-[140px]"
+                      >
+                        <div className="absolute inset-y-0 left-0 w-[4px] bg-primary rounded-full" />
+                        <div>
+                          <div className="flex items-start justify-between gap-3">
+                            <h5 className="text-base font-black text-gray-900 dark:text-white group-hover:text-primary transition-colors">{activa.nombre}</h5>
+                            <span className="px-2.5 py-0.5 rounded-full text-[10px] font-bold bg-green-500/10 text-green-600 dark:text-green-400 border border-green-500/25 shrink-0">
+                              Activa
+                            </span>
+                          </div>
+                          {activa.descripcion && (
+                            <p className="text-xs text-gray-500 dark:text-[#8A8A9A] mt-2 line-clamp-2">{activa.descripcion}</p>
+                          )}
+                        </div>
+                        <div className="flex items-center justify-between text-xs text-gray-500 dark:text-[#8A8A9A] pt-4 mt-4 border-t border-gray-100 dark:border-white/[0.05]">
+                          <span>
+                            {(activa.semanas ?? []).reduce((acc, s) => acc + (s.sesiones ?? []).reduce((a, ses) => a + (ses.bloques ?? []).reduce((b, bl) => b + (bl.ejerciciosPlan ?? []).length, 0), 0), 0)} ejercicios
+                          </span>
+                          <span>
+                            {(activa.semanas ?? []).length} semana{(activa.semanas ?? []).length !== 1 ? 's' : ''}
+                          </span>
+                        </div>
+                      </div>
+                    ) : (
+                      <div className="flex flex-col items-center justify-center p-6 border border-dashed border-gray-200 dark:border-white/10 rounded-2xl min-h-[140px] text-center text-gray-400 dark:text-[#8A8A9A]">
+                        <AlertTriangle size={20} className="mb-2 text-amber-500/80" />
+                        <p className="text-xs font-semibold">No hay una rutina activa</p>
+                        <p className="text-[10px] opacity-60">Activá una rutina desde el gestor o creá una nueva.</p>
+                      </div>
+                    )}
+                  </div>
 
-            {/* Contenido colapsable */}
-            {membershipOpen && <div className="mt-5 space-y-5">
+                  {/* Rutinas Inactivas/Viejas (Derecha/Chico) */}
+                  <div className="lg:col-span-1 space-y-3">
+                    <h4 className="text-xs font-bold uppercase tracking-widest text-gray-500 dark:text-[#8A8A9A] mb-1 px-1">Historial / Inactivas</h4>
+                    {inactivas.length === 0 ? (
+                      <p className="text-xs text-gray-400 dark:text-[#6A6A7A] italic px-1">No hay rutinas inactivas.</p>
+                    ) : (
+                      <div className="space-y-2.5 max-h-[220px] overflow-y-auto pr-1">
+                        {inactivas.map((rutina: Rutina) => (
+                          <div
+                            key={rutina.id}
+                            onClick={() => navigate(`/clients/${id}/rutina`)}
+                            className="w-full flex items-center gap-3 px-3 py-2.5 rounded-xl border border-gray-200 dark:border-white/[0.05] bg-white/40 dark:bg-white/[0.01] hover:bg-white/70 dark:hover:bg-white/[0.04] transition-all text-left cursor-pointer group"
+                          >
+                            <div className="h-8 w-8 rounded-lg bg-gray-500/10 flex items-center justify-center shrink-0">
+                              <BookOpen size={13} className="text-gray-400" />
+                            </div>
+                            <div className="flex-1 min-w-0">
+                              <p className="text-xs font-bold text-gray-700 dark:text-gray-300 truncate group-hover:text-gray-900 dark:group-hover:text-white transition-colors">{rutina.nombre}</p>
+                              <p className="text-[10px] text-gray-400 dark:text-[#6A6A7A] mt-0.5">
+                                {(rutina.semanas ?? []).length} sem.
+                              </p>
+                            </div>
+                            <span className="text-[10px] px-1.5 py-0.5 rounded bg-gray-500/10 text-gray-500 dark:text-[#8A8A9A] shrink-0">
+                              Inactiva
+                            </span>
+                          </div>
+                        ))}
+                      </div>
+                    )}
+                  </div>
+                </div>
+              )
+            })()}
+          </div>
 
-            {/* Stats — 2 métricas clave */}
-            <div className="grid grid-cols-2 gap-3">
-              <div className="rounded-xl border border-gray-100 dark:border-white/[0.06] bg-gray-50/50 dark:bg-white/[0.02] px-4 py-3">
-                <p className="text-[10px] font-medium uppercase tracking-wider text-gray-400 dark:text-[#5A5A6A]">Modalidad</p>
-                <p className="text-base font-bold text-gray-900 dark:text-white mt-1 leading-none">
-                  {client.membershipModalidad ? (MODALIDAD_LABEL[client.membershipModalidad] ?? client.membershipModalidad) : '—'}
-                </p>
-              </div>
-              <div className="rounded-xl border border-gray-100 dark:border-white/[0.06] bg-gray-50/50 dark:bg-white/[0.02] px-4 py-3">
-                <p className="text-[10px] font-medium uppercase tracking-wider text-gray-400 dark:text-[#5A5A6A]">Precio</p>
-                <p className="text-base font-bold text-primary mt-1 leading-none tabular-nums">
-                  {client.membershipPrecio != null ? formatCurrency(client.membershipPrecio) : '—'}
-                </p>
+          {/* ─── SECCIÓN 2: CLASES ─────────────────────────────────────────── */}
+          <div id="clases" className={`${glassCard} p-6 space-y-5 scroll-mt-24`}>
+            <div className="flex items-center justify-between border-b border-gray-200 dark:border-white/[0.06] pb-3">
+              <div className="flex items-center gap-3">
+                <div className="h-10 w-10 rounded-xl bg-primary/10 flex items-center justify-center shrink-0">
+                  <Dumbbell size={18} className="text-primary" />
+                </div>
+                <div>
+                  <h3 className="text-lg font-black tracking-tight text-gray-900 dark:text-white">Clases y Turnos</h3>
+                  <p className="text-xs text-gray-500 dark:text-[#8A8A9A]">Inscripciones a clases y reservas semanales</p>
+                </div>
               </div>
             </div>
 
-            {/* Barra de período */}
-            {progressPct > 0 && (
-              <div>
-                <div className="flex items-center justify-between mb-2">
-                  <span className="text-[10px] font-medium uppercase tracking-wider text-gray-400 dark:text-[#5A5A6A]">
-                    {client.membershipStartDate ? formatDate(client.membershipStartDate) : '—'}
-                    {' → '}
-                    {client.membershipExpiresAt ? formatDate(client.membershipExpiresAt) : '—'}
-                  </span>
-                  {daysLeft !== null && (
-                    <span className={`text-[11px] font-semibold ${
-                      daysLeft <= 0 ? 'text-red-400' : daysLeft <= 30 ? 'text-amber-400' : 'text-emerald-400'
-                    }`}>
-                      {daysLeft > 0 ? `${daysLeft}d restantes` : 'Finalizada'}
-                    </span>
-                  )}
-                </div>
-                <div className="h-1.5 rounded-full bg-gray-100 dark:bg-white/[0.07] overflow-hidden">
-                  <div className={`h-full rounded-full transition-all duration-700 ${progressColor}`} style={{ width: `${progressPct}%` }} />
-                </div>
-              </div>
-            )}
-
-            {/* Cuotas */}
-            {cuotasSchedule.length > 0 && (
-              <div>
-                <div className="flex items-center justify-between mb-3">
-                  <p className="text-[10px] font-bold uppercase tracking-widest text-gray-400 dark:text-[#6A6A7A]">
-                    Cuotas — {cuotasSchedule.length} {cuotasSchedule.length === 1 ? 'pago' : 'pagos mensuales'}
-                  </p>
-                  <span className="text-[10px] text-[#8A8A9A]">
-                    {cuotasSchedule.filter(c => c.pago).length} de {cuotasSchedule.length} abonadas
-                  </span>
-                </div>
-                <div className="space-y-2">
-                  {cuotasSchedule.map(c => (
-                    <div
-                      key={c.numero}
-                      className={`flex items-center gap-3 rounded-xl border p-3 transition-all ${
-                        c.pago
-                          ? 'border-emerald-200 dark:border-emerald-500/20 bg-emerald-50/50 dark:bg-emerald-500/[0.04]'
-                          : 'border-gray-100 dark:border-white/[0.06] bg-gray-50/30 dark:bg-white/[0.01]'
-                      }`}
-                    >
-                      {/* Izquierda — nombre + fecha */}
-                      <div className="flex-1 min-w-0">
-                        <p className={`text-sm font-semibold leading-none ${c.pago ? 'text-gray-900 dark:text-white' : 'text-gray-400 dark:text-[#6A6A7A]'}`}>
-                          Cuota {c.numero}
-                        </p>
-                        <p className="text-xs text-gray-400 dark:text-[#6A6A7A] mt-0.5">
-                          {c.pago
-                            ? formatDate(c.pago.paidAt)
-                            : format(c.fechaEsperada, "d 'de' MMMM yyyy", { locale: es })
-                          }
-                        </p>
-                      </div>
-
-                      {/* Derecha — monto + botón ver */}
-                      <div className="flex items-center gap-2 shrink-0">
-                        {c.pago && (
-                          <span className="text-sm font-bold text-gray-900 dark:text-white tabular-nums">
-                            {formatCurrency(c.pago.amount)}
-                          </span>
-                        )}
-                        {c.pago ? (
-                          <button
-                            onClick={() => navigate(`/payments/${c.pago!.id}`)}
-                            className="flex items-center gap-1 text-[11px] font-semibold px-2.5 py-1.5 rounded-lg border border-gray-200 dark:border-white/[0.08] bg-white/60 dark:bg-white/[0.04] text-gray-500 dark:text-[#8A8A9A] hover:text-gray-900 dark:hover:text-white hover:border-gray-300 dark:hover:border-white/[0.15] transition-all"
-                          >
-                            Ver
-                          </button>
-                        ) : (
-                          <span className="text-[11px] font-medium px-2.5 py-1.5 rounded-lg bg-gray-100 dark:bg-white/[0.04] text-gray-400 dark:text-[#5A5A6A]">
-                            Pendiente
-                          </span>
-                        )}
-                      </div>
-
-                    </div>
-                  ))}
-                </div>
-              </div>
-            )}
-
-          </div>}
-        </div>
-        </div>
-      ) : (
-        <div className={`${glassCard} p-5 flex items-center gap-4`}>
-          <div className="h-10 w-10 rounded-xl bg-gray-100 dark:bg-white/[0.04] flex items-center justify-center shrink-0">
-            <CreditCard size={16} className="text-gray-400 dark:text-[#6A6A7A]" />
-          </div>
-          <div>
-            <p className="text-sm font-semibold text-gray-900 dark:text-white">Sin membresía activa</p>
-            <p className="text-xs text-gray-400 dark:text-[#6A6A7A] mt-0.5">Este cliente no tiene una membresía asignada.</p>
-          </div>
-        </div>
-      )}
-
-      {/* ── TABS FULL WIDTH ─────────────────────────────────────────────────── */}
-      <div className="space-y-3">
-
-
-          {/* Tab bar */}
-          <div className="flex gap-1 p-1 rounded-2xl bg-white/40 dark:bg-white/[0.04] border border-gray-200/60 dark:border-white/[0.07]">
-            {TABS.map(t => (
-              <button
-                key={t.value}
-                onClick={() => setTab(t.value)}
-                className={`flex items-center justify-center gap-2 flex-1 px-3 py-2 rounded-xl text-sm font-semibold transition-all duration-150 ${
-                  tab === t.value
-                    ? 'bg-white dark:bg-white/[0.09] text-gray-900 dark:text-white shadow-sm'
-                    : 'text-gray-500 dark:text-[#8A8A9A] hover:text-gray-800 dark:hover:text-gray-200'
-                }`}
-              >
-                <span>{t.label}</span>
-                {t.sublabel ? (
-                  <span className={`text-xs tabular-nums ${tab === t.value ? 'text-primary/70' : 'text-gray-400 dark:text-[#8A8A9A]'}`}>
-                    {t.sublabel}
-                  </span>
-                ) : t.count > 0 && (
-                  <span className={`min-w-[20px] text-center text-xs px-1.5 py-0.5 rounded-lg font-bold ${
-                    tab === t.value
-                      ? 'bg-primary/20 text-primary'
-                      : 'bg-gray-100 dark:bg-white/[0.06] text-gray-500 dark:text-[#8A8A9A]'
-                  }`}>
-                    {t.count}
-                  </span>
-                )}
-              </button>
-            ))}
-          </div>
-
-          {/* Tab content */}
-          <div className={`${glassCard} overflow-hidden min-h-[280px]`}>
-
-            {/* ─── PAGOS ─────────────────────────────────────────────────── */}
-            {tab === 'pagos' && (
-              payments.length === 0
-                ? <EmptyState icon={CreditCard} message="Sin pagos registrados" />
-                : (
-                  <div className="overflow-x-auto">
-                    <table className="w-full text-sm">
-                      <thead className="border-b border-white/20 dark:border-white/10 bg-gray-50/30 dark:bg-black/10">
-                        <tr>
-                          {['Método', 'Monto', 'Fecha', 'Comprobante', ''].map(h => (
-                            <th key={h} className="px-5 py-4 text-left text-xs font-extrabold uppercase tracking-widest text-gray-500 dark:text-gray-400">{h}</th>
-                          ))}
-                        </tr>
-                      </thead>
-                      <tbody className="divide-y divide-white/20 dark:divide-white/10">
-                        {payments.map(p => {
-                          const cfg = METHOD_CONFIG[p.method] ?? METHOD_CONFIG.cash
-                          const MethodIcon = cfg.Icon
-                          return (
-                            <tr
-                              key={p.id}
-                              onClick={() => navigate(`/payments/${p.id}`)}
-                              className="group transition-colors hover:bg-white/50 dark:hover:bg-black/50 cursor-pointer"
-                            >
-                              <td className="px-5 py-3.5">
-                                <div className="flex items-center gap-2.5">
-                                  <div className={`h-8 w-8 rounded-xl flex items-center justify-center shrink-0 ${cfg.bg}`}>
-                                    <MethodIcon size={14} className={cfg.color} />
-                                  </div>
-                                  <span className="text-sm font-medium text-gray-700 dark:text-gray-300">{cfg.label}</span>
-                                </div>
-                              </td>
-                              <td className="px-5 py-3.5">
-                                <span className="text-base font-black text-gray-900 dark:text-white tabular-nums">
-                                  {formatCurrency(p.amount)}
-                                </span>
-                              </td>
-                              <td className="px-5 py-3.5 text-[#8A8A9A] text-sm">
-                                {formatDate(p.paidAt)}
-                              </td>
-                              <td className="px-5 py-3.5">
-                                {p.invoiced
-                                  ? <span className="inline-flex items-center gap-1 text-xs font-medium text-emerald-600 dark:text-emerald-400 bg-emerald-500/10 px-2 py-1 rounded-lg"><CheckCircle2 size={12} /> Sí</span>
-                                  : <span className="inline-flex items-center gap-1 text-xs font-medium text-[#8A8A9A] bg-white/[0.05] px-2 py-1 rounded-lg"><XCircle size={12} /> No</span>
-                                }
-                              </td>
-                              <td className="px-5 py-3.5">
-                                <ChevronDown size={14} className="text-[#8A8A9A] -rotate-90 group-hover:text-white transition-colors" />
-                              </td>
-                            </tr>
-                          )
-                        })}
-                      </tbody>
-                    </table>
-                  </div>
-                )
-            )}
-
-            {/* ─── ASISTENCIA ────────────────────────────────────────────── */}
-            {tab === 'asistencia' && (
-              attendance.length === 0
-                ? <EmptyState icon={Activity} message="Sin registros de asistencia" />
-                : <AttendanceTabContent attendance={attendance} />
-            )}
-
-            {/* ─── TURNOS ────────────────────────────────────────────────── */}
-            {tab === 'turnos' && (() => {
+            {(() => {
               const totalDiasUsados = inscripciones.reduce((acc, i) => acc + i.dias.length, 0)
               const planFreq = client.planFrequency ? Number(client.planFrequency) : null
               const limiteAlcanzado = !loadingTurnos && !!planFreq && totalDiasUsados >= planFreq
               return (
-              <div className="flex flex-col">
-                {/* Encabezado inscripciones */}
-                <div className="flex items-center justify-between px-5 py-3 border-b border-white/[0.06]">
-                  <span className="text-xs font-bold uppercase tracking-wider text-[#8A8A9A]">
-                    Inscripciones activas
-                    {!loadingTurnos && (
-                      <span className="ml-1.5 tabular-nums text-white/40">{inscripciones.length}{planFreq ? `/${planFreq}` : ''}</span>
+                <div className="flex flex-col">
+                  {/* Encabezado inscripciones */}
+                  <div className="flex items-center justify-between px-1 py-1 mb-2">
+                    <span className="text-xs font-bold uppercase tracking-wider text-gray-500 dark:text-[#8A8A9A]">
+                      Inscripciones activas
+                      {!loadingTurnos && (
+                        <span className="ml-1.5 tabular-nums text-gray-400 dark:text-white/40">{inscripciones.length}{planFreq ? `/${planFreq}` : ''}</span>
+                      )}
+                    </span>
+                    {isAdmin && (
+                      <button
+                        onClick={() => { if (!limiteAlcanzado) setEnrollOpen(true) }}
+                        disabled={limiteAlcanzado}
+                        title={limiteAlcanzado ? `Límite del plan alcanzado (${planFreq} días/semana)` : undefined}
+                        className={`flex items-center gap-1.5 text-xs font-semibold transition-colors ${limiteAlcanzado ? 'text-gray-500 dark:text-gray-600 cursor-not-allowed opacity-50' : 'text-primary hover:text-primary-dark'}`}
+                      >
+                        <Plus size={13} />
+                        Añadir turno
+                      </button>
                     )}
-                  </span>
-                  {isAdmin && (
-                    <button
-                      onClick={() => { if (!limiteAlcanzado) setEnrollOpen(true) }}
-                      disabled={limiteAlcanzado}
-                      title={limiteAlcanzado ? `Límite del plan alcanzado (${planFreq} días/semana)` : undefined}
-                      className={`flex items-center gap-1.5 text-xs font-semibold transition-colors ${limiteAlcanzado ? 'text-gray-500 dark:text-gray-600 cursor-not-allowed opacity-50' : 'text-primary hover:text-primary-dark'}`}
-                    >
-                      <Plus size={13} />
-                      Añadir turno
-                    </button>
+                  </div>
+
+                  {/* Banner: límite del plan */}
+                  {!loadingTurnos && planFreq && (
+                    limiteAlcanzado ? (
+                      <div className="mt-2 mb-4 flex items-start gap-2.5 rounded-xl border border-red-500/30 bg-red-500/10 backdrop-blur-sm px-4 py-3">
+                        <AlertTriangle size={15} className="text-red-400 shrink-0 mt-0.5" />
+                        <p className="text-xs text-red-600 dark:text-red-300 leading-snug">
+                          Límite alcanzado — el plan permite <span className="font-semibold">{planFreq} día{planFreq !== 1 ? 's' : ''} por semana</span> y ya tiene <span className="font-semibold">{totalDiasUsados} asignado{totalDiasUsados !== 1 ? 's' : ''}</span>. No se pueden agregar más.
+                        </p>
+                      </div>
+                    ) : totalDiasUsados === planFreq - 1 ? (
+                      <div className="mt-2 mb-4 flex items-start gap-2.5 rounded-xl border border-amber-500/30 bg-amber-500/10 backdrop-blur-sm px-4 py-3">
+                        <AlertTriangle size={15} className="text-amber-400 shrink-0 mt-0.5" />
+                        <p className="text-xs text-amber-700 dark:text-amber-300 leading-snug">
+                          Queda <span className="font-semibold">1 día disponible</span> según el plan ({planFreq} días/semana).
+                        </p>
+                      </div>
+                    ) : null
                   )}
-                </div>
 
-                {/* Banner: límite del plan */}
-                {!loadingTurnos && planFreq && (
-                  limiteAlcanzado ? (
-                    <div className="mx-5 mt-3 flex items-start gap-2.5 rounded-xl border border-red-500/30 bg-red-500/10 backdrop-blur-sm px-4 py-3">
-                      <AlertTriangle size={15} className="text-red-400 shrink-0 mt-0.5" />
-                      <p className="text-xs text-red-300 leading-snug">
-                        Límite alcanzado — el plan permite <span className="font-semibold">{planFreq} día{planFreq !== 1 ? 's' : ''} por semana</span> y ya tiene <span className="font-semibold">{totalDiasUsados} asignado{totalDiasUsados !== 1 ? 's' : ''}</span>. No se pueden agregar más.
-                      </p>
-                    </div>
-                  ) : totalDiasUsados === planFreq - 1 ? (
-                    <div className="mx-5 mt-3 flex items-start gap-2.5 rounded-xl border border-amber-500/30 bg-amber-500/10 backdrop-blur-sm px-4 py-3">
-                      <AlertTriangle size={15} className="text-amber-400 shrink-0 mt-0.5" />
-                      <p className="text-xs text-amber-300 leading-snug">
-                        Queda <span className="font-semibold">1 día disponible</span> según el plan ({planFreq} días/semana).
-                      </p>
-                    </div>
-                  ) : null
-                )}
-
-                {/* Lista de inscripciones */}
-                {loadingTurnos ? (
-                  <div className="divide-y divide-white/[0.06]">
-                    {[1, 2].map(i => (
-                      <div key={i} className="flex items-center gap-4 px-5 py-4">
-                        <div className="h-11 w-11 rounded-2xl animate-pulse bg-gray-200/80 dark:bg-white/[0.07] shrink-0" />
-                        <div className="flex-1 space-y-2">
-                          <div className="h-4 w-36 animate-pulse bg-gray-200/80 dark:bg-white/[0.07] rounded" />
-                          <div className="h-3 w-24 animate-pulse bg-gray-200/80 dark:bg-white/[0.07] rounded" />
-                        </div>
-                        <div className="h-7 w-24 animate-pulse bg-gray-200/80 dark:bg-white/[0.07] rounded-xl" />
-                      </div>
-                    ))}
-                  </div>
-                ) : inscripciones.length === 0 ? (
-                  <EmptyState icon={Dumbbell} message="Sin turnos asignados" />
-                ) : (
-                  <div className="divide-y divide-white/[0.06]">
-                    {inscripciones.map(insc => (
-                      <div key={insc.id} className="flex items-center gap-4 px-5 py-4 hover:bg-white/50 dark:hover:bg-black/50 transition-colors">
-                        <div className="h-11 w-11 rounded-2xl bg-primary/10 flex items-center justify-center shrink-0">
-                          <Dumbbell size={20} className="text-primary" />
-                        </div>
-                        <div className="flex-1 min-w-0 space-y-1">
-                          <div className="flex items-center gap-2 flex-wrap">
-                            <p className="text-sm font-bold text-gray-900 dark:text-white">
-                              {insc.horaInicio} – {insc.horaFin}
-                            </p>
-                            <span className={`text-[10px] font-bold px-2 py-0.5 rounded-full ${
-                              insc.sala === 'A'
-                                ? 'bg-blue-500/15 text-blue-600 dark:text-blue-400'
-                                : 'bg-violet-500/15 text-violet-600 dark:text-violet-400'
-                            }`}>
-                              Sala {insc.sala}
-                            </span>
+                  {/* Lista de inscripciones */}
+                  {loadingTurnos ? (
+                    <div className="divide-y divide-gray-100 dark:divide-white/[0.06] border border-gray-200 dark:border-white/[0.06] rounded-2xl overflow-hidden bg-white/50 dark:bg-white/[0.01]">
+                      {[1, 2].map(i => (
+                        <div key={i} className="flex items-center gap-4 px-5 py-4">
+                          <div className="h-11 w-11 rounded-2xl animate-pulse bg-gray-200/80 dark:bg-white/[0.07] shrink-0" />
+                          <div className="flex-1 space-y-2">
+                            <div className="h-4 w-36 animate-pulse bg-gray-200/80 dark:bg-white/[0.07] rounded" />
+                            <div className="h-3 w-24 animate-pulse bg-gray-200/80 dark:bg-white/[0.07] rounded" />
                           </div>
-                          <p className="text-xs text-[#8A8A9A]">
-                            {insc.dias.map(d => DIA_SHORT[d.toLowerCase()] ?? d).join(' · ')}
-                          </p>
+                          <div className="h-7 w-24 animate-pulse bg-gray-200/80 dark:bg-white/[0.07] rounded-xl shrink-0 animate-pulse" />
                         </div>
-                        <button
-                          onClick={() => handleDarDeBaja(insc.id)}
-                          className="flex items-center gap-1.5 text-xs font-semibold text-red-500 hover:text-red-400 shrink-0 px-3 py-1.5 rounded-xl hover:bg-red-500/10 transition-all"
-                        >
-                          <XCircle size={13} />
-                          Dar de baja
-                        </button>
-                      </div>
-                    ))}
-                  </div>
-                )}
-
-                {/* Lista de espera */}
-                {!loadingTurnos && listaEsperaCliente.length > 0 && (
-                  <>
-                    <div className="flex items-center px-5 py-3 border-t border-b border-white/[0.06]">
-                      <span className="text-xs font-bold uppercase tracking-wider text-[#8A8A9A]">
-                        Lista de espera
-                        <span className="ml-1.5 tabular-nums text-white/40">{listaEsperaCliente.length}</span>
-                      </span>
+                      ))}
                     </div>
-                    <div className="divide-y divide-white/[0.06]">
-                      {listaEsperaCliente.map(entry => (
-                        <div key={entry.id} className="flex items-center gap-4 px-5 py-4 hover:bg-white/50 dark:hover:bg-black/50 transition-colors">
-                          <div className="h-11 w-11 rounded-2xl bg-amber-500/10 flex items-center justify-center shrink-0">
-                            <Clock size={20} className="text-amber-500" />
+                  ) : inscripciones.length === 0 ? (
+                    <div className="border border-dashed border-gray-200 dark:border-white/10 rounded-2xl p-6 bg-white/40 dark:bg-white/[0.01]">
+                      <EmptyState icon={Dumbbell} message="Sin turnos asignados" />
+                    </div>
+                  ) : (
+                    <div className="divide-y divide-gray-100 dark:divide-white/[0.06] border border-gray-200 dark:border-white/[0.06] rounded-2xl overflow-hidden bg-white/50 dark:bg-white/[0.01]">
+                      {inscripciones.map(insc => (
+                        <div key={insc.id} className="flex items-center gap-4 px-5 py-4 hover:bg-gray-100 dark:hover:bg-black/50 transition-colors">
+                          <div className="h-11 w-11 rounded-2xl bg-primary/10 flex items-center justify-center shrink-0">
+                            <Dumbbell size={20} className="text-primary" />
                           </div>
                           <div className="flex-1 min-w-0 space-y-1">
                             <div className="flex items-center gap-2 flex-wrap">
                               <p className="text-sm font-bold text-gray-900 dark:text-white">
-                                {entry.horaInicio} – {entry.horaFin}
+                                {insc.horaInicio} – {insc.horaFin}
                               </p>
-                              <span className={`text-[10px] font-bold px-2 py-0.5 rounded-full ${
-                                entry.estado === 'PENDIENTE'
-                                  ? 'bg-amber-500/15 text-amber-600 dark:text-amber-400'
-                                  : 'bg-blue-500/15 text-blue-600 dark:text-blue-400'
-                              }`}>
-                                {entry.estado === 'PENDIENTE' ? 'Pendiente' : 'Notificado'}
+                              <span className={`text-[10px] font-bold px-2 py-0.5 rounded-full ${insc.sala === 'A'
+                                ? 'bg-blue-500/15 text-blue-600 dark:text-blue-400 border border-blue-500/20'
+                                : 'bg-violet-500/15 text-violet-600 dark:text-violet-400 border border-violet-500/20'
+                                }`}>
+                                Sala {insc.sala}
                               </span>
                             </div>
-                            <p className="text-xs text-[#8A8A9A]">
-                              {entry.dias.map(d => DIA_SHORT[d.toLowerCase()] ?? d).join(' · ')}
+                            <p className="text-xs text-gray-500 dark:text-[#8A8A9A]">
+                              {insc.dias.map(d => DIA_SHORT[d.toLowerCase()] ?? d).join(' · ')}
                             </p>
                           </div>
                           <button
-                            onClick={() => handleCancelarEspera(entry.id)}
-                            className="flex items-center gap-1.5 text-xs font-semibold text-gray-500 dark:text-[#8A8A9A] hover:text-red-500 shrink-0 px-3 py-1.5 rounded-xl hover:bg-red-500/10 transition-all"
+                            onClick={() => handleDarDeBaja(insc.id)}
+                            className="flex items-center gap-1.5 text-xs font-semibold text-red-500 hover:text-red-400 shrink-0 px-3 py-1.5 rounded-xl hover:bg-red-500/10 transition-all border border-transparent hover:border-red-500/10"
                           >
                             <XCircle size={13} />
-                            Cancelar
+                            Dar de baja
                           </button>
                         </div>
                       ))}
                     </div>
-                  </>
-                )}
-              </div>
+                  )}
+
+                  {/* Lista de espera */}
+                  {!loadingTurnos && listaEsperaCliente.length > 0 && (
+                    <div className="mt-5">
+                      <div className="flex items-center px-1 py-1 mb-2">
+                        <span className="text-xs font-bold uppercase tracking-wider text-gray-500 dark:text-[#8A8A9A]">
+                          Lista de espera
+                          <span className="ml-1.5 tabular-nums text-gray-400 dark:text-white/40">{listaEsperaCliente.length}</span>
+                        </span>
+                      </div>
+                      <div className="divide-y divide-gray-100 dark:divide-white/[0.06] border border-gray-200 dark:border-white/[0.06] rounded-2xl overflow-hidden bg-white/50 dark:bg-white/[0.01]">
+                        {listaEsperaCliente.map(entry => (
+                          <div key={entry.id} className="flex items-center gap-4 px-5 py-4 hover:bg-gray-100 dark:hover:bg-black/50 transition-colors">
+                            <div className="h-11 w-11 rounded-2xl bg-amber-500/10 flex items-center justify-center shrink-0">
+                              <Clock size={20} className="text-amber-500" />
+                            </div>
+                            <div className="flex-1 min-w-0 space-y-1">
+                              <div className="flex items-center gap-2 flex-wrap">
+                                <p className="text-sm font-bold text-gray-900 dark:text-white">
+                                  {entry.horaInicio} – {entry.horaFin}
+                                </p>
+                                <span className={`text-[10px] font-bold px-2 py-0.5 rounded-full ${entry.estado === 'PENDIENTE'
+                                  ? 'bg-amber-500/15 text-amber-600 dark:text-amber-400 border border-amber-500/20'
+                                  : 'bg-blue-500/15 text-blue-600 dark:text-blue-400 border border-blue-500/20'
+                                  }`}>
+                                  {entry.estado === 'PENDIENTE' ? 'Pendiente' : 'Notificado'}
+                                </span>
+                              </div>
+                              <p className="text-xs text-gray-500 dark:text-[#8A8A9A]">
+                                {entry.dias.map(d => DIA_SHORT[d.toLowerCase()] ?? d).join(' · ')}
+                              </p>
+                            </div>
+                            <button
+                              onClick={() => handleCancelarEspera(entry.id)}
+                              className="flex items-center gap-1.5 text-xs font-semibold text-gray-500 dark:text-[#8A8A9A] hover:text-red-500 shrink-0 px-3 py-1.5 rounded-xl hover:bg-red-500/10 transition-all border border-transparent hover:border-white/5"
+                            >
+                              <XCircle size={13} />
+                              Cancelar
+                            </button>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  )}
+                </div>
               )
             })()}
-            {/* ─── RUTINA ────────────────────────────────────────────────── */}
-            {tab === 'rutina' && (
-              <div className="p-5 space-y-3">
-                <div className="flex items-center justify-between">
-                  <p className="text-xs text-[#8A8A9A]">
-                    {loadingRutinas ? 'Cargando...' : `${rutinas.length} rutina${rutinas.length !== 1 ? 's' : ''}`}
-                  </p>
-                  {(isAdmin || user?.role === 'profesor') && (
-                    <button
-                      onClick={() => navigate(`/clients/${id}/rutina`)}
-                      className="flex items-center gap-1.5 rounded-xl btn-action px-4 py-2 text-sm"
-                    >
-                      <Plus size={13} /> Nueva rutina
-                    </button>
+          </div>
+
+          {/* ─── SECCIÓN 3: ASISTENCIA ───────────────────────────────────────── */}
+          <div id="asistencia" className={`${glassCard} p-6 space-y-5 scroll-mt-24`}>
+            <div className="flex items-center justify-between border-b border-gray-200 dark:border-white/[0.06] pb-3">
+              <div className="flex items-center gap-3">
+                <div className="h-10 w-10 rounded-xl bg-primary/10 flex items-center justify-center shrink-0">
+                  <Activity size={18} className="text-primary" />
+                </div>
+                <div>
+                  <h3 className="text-lg font-black tracking-tight text-gray-900 dark:text-white">Asistencia y Estadísticas</h3>
+                  <p className="text-xs text-gray-500 dark:text-[#8A8A9A]">Registro de ingresos y estadísticas de asistencia</p>
+                </div>
+              </div>
+            </div>
+
+            {attendance.length === 0 ? (
+              <div className="border border-dashed border-gray-200 dark:border-white/10 rounded-2xl p-6 bg-white/40 dark:bg-white/[0.01]">
+                <EmptyState icon={Activity} message="Sin registros de asistencia" />
+              </div>
+            ) : (
+              <AttendanceTabContent attendance={attendance} />
+            )}
+          </div>
+
+          {/* ─── SECCIÓN 4: PAGOS Y FACTURACIÓN ───────────────────────────────────── */}
+          <div id="pagos" className={`${glassCard} p-6 space-y-6 scroll-mt-24`}>
+            <div className="flex items-center justify-between border-b border-gray-200 dark:border-white/[0.06] pb-3">
+              <div className="flex items-center gap-3">
+                <div className="h-10 w-10 rounded-xl bg-primary/10 flex items-center justify-center shrink-0">
+                  <CreditCard size={18} className="text-primary" />
+                </div>
+                <div>
+                  <h3 className="text-lg font-black tracking-tight text-gray-900 dark:text-white">Pagos y Facturación</h3>
+                  <p className="text-xs text-gray-500 dark:text-[#8A8A9A]">Membresía activa, cronograma de cuotas e historial de pagos</p>
+                </div>
+              </div>
+            </div>
+
+            {client.planName ? (
+              <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+                {/* Columna Izquierda/Centro: Información de la Membresía y Cronograma de Cuotas */}
+                <div className="lg:col-span-2 space-y-6">
+                  <div className="rounded-2xl border border-gray-200 dark:border-white/[0.06] bg-white/50 dark:bg-white/[0.02] overflow-hidden">
+                    {/* Header: nombre del plan + badge estado */}
+                    <div className="flex items-center justify-between gap-3 px-5 py-4">
+                      <div className="min-w-0">
+                        <p className="text-[10px] font-semibold uppercase tracking-widest text-gray-400 dark:text-[#5A5A6A] mb-0.5">Plan</p>
+                        <h4 className="text-base font-black text-gray-900 dark:text-white leading-tight">{client.planName}</h4>
+                        {client.planFrequency && (
+                          <p className="text-xs text-gray-400 dark:text-[#6A6A7A] mt-0.5 flex items-center gap-1">
+                            <CalendarDays size={11} />
+                            {client.planFrequency} clase{Number(client.planFrequency) !== 1 ? 's' : ''} por semana
+                          </p>
+                        )}
+                      </div>
+                      {client.membershipStatus && MEMBRESIA_STATUS_CONFIG[client.membershipStatus] && (
+                        <span className={`inline-flex items-center gap-1.5 text-xs font-semibold px-2.5 py-1 rounded-lg shrink-0 ${MEMBRESIA_STATUS_CONFIG[client.membershipStatus].bg} ${MEMBRESIA_STATUS_CONFIG[client.membershipStatus].color}`}>
+                          <span className={`h-1.5 w-1.5 rounded-full ${MEMBRESIA_STATUS_CONFIG[client.membershipStatus].dot}`} />
+                          {MEMBRESIA_STATUS_CONFIG[client.membershipStatus].label}
+                        </span>
+                      )}
+                    </div>
+
+                    {/* Stat strip: Frecuencia · Modalidad · Precio */}
+                    <div className="grid grid-cols-3 divide-x divide-gray-100 dark:divide-white/[0.06] border-t border-gray-100 dark:border-white/[0.06]">
+                      {[
+                        {
+                          label: 'Frecuencia',
+                          value: client.planFrequency ? `${client.planFrequency}× / sem.` : '—',
+                          className: 'text-gray-900 dark:text-white font-black',
+                        },
+                        {
+                          label: 'Modalidad',
+                          value: client.membershipModalidad ? (MODALIDAD_LABELS[client.membershipModalidad] ?? client.membershipModalidad) : '—',
+                          className: 'text-gray-900 dark:text-white font-bold leading-tight',
+                        },
+                        {
+                          label: 'Precio',
+                          value: client.membershipPrecio != null ? formatCurrency(client.membershipPrecio) : '—',
+                          className: 'text-primary font-black tabular-nums',
+                        },
+                      ].map(({ label, value, className }) => (
+                        <div key={label} className="px-4 py-3 text-center">
+                          <p className="text-[10px] font-medium uppercase tracking-wider text-gray-400 dark:text-[#5A5A6A] mb-1">{label}</p>
+                          <p className={`text-sm ${className}`}>{value}</p>
+                        </div>
+                      ))}
+                    </div>
+
+                    {/* Barra de progreso */}
+                    {progressPct > 0 && (
+                      <div className="px-5 py-4 border-t border-gray-100 dark:border-white/[0.06] space-y-2">
+                        <div className="flex items-center justify-between">
+                          <span className="text-[10px] text-gray-400 dark:text-[#5A5A6A]">
+                            {client.membershipStartDate ? formatDate(client.membershipStartDate) : '—'}
+                            {' → '}
+                            {client.membershipExpiresAt ? formatDate(client.membershipExpiresAt) : '—'}
+                          </span>
+                          {daysLeft !== null && (
+                            <span className={`text-xs font-bold ${daysLeft <= 0 ? 'text-red-400' : daysLeft <= 30 ? 'text-amber-400' : 'text-emerald-400'}`}>
+                              {daysLeft > 0 ? `${daysLeft} días restantes` : 'Finalizada'}
+                            </span>
+                          )}
+                        </div>
+                        <div className="h-1.5 rounded-full bg-gray-100 dark:bg-white/[0.07] overflow-hidden">
+                          <div className={`h-full rounded-full transition-all duration-700 ${progressColor}`} style={{ width: `${progressPct}%` }} />
+                        </div>
+                      </div>
+                    )}
+                  </div>
+
+                  {/* Cronograma de Cuotas */}
+                  {cuotasSchedule.length > 0 && (
+                    <div className="space-y-3">
+                      <div className="flex items-center justify-between px-1">
+                        <h4 className="text-xs font-bold uppercase tracking-widest text-gray-400 dark:text-[#6A6A7A]">
+                          Cronograma de Cuotas ({cuotasSchedule.length} mensual{cuotasSchedule.length !== 1 ? 'es' : ''})
+                        </h4>
+                        <span className="text-xs text-gray-500 dark:text-[#8A8A9A]">
+                          {cuotasSchedule.filter(c => c.pago).length} de {cuotasSchedule.length} abonadas
+                        </span>
+                      </div>
+                      <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                        {cuotasSchedule.map(c => (
+                          <div
+                            key={c.numero}
+                            className={`flex items-center justify-between gap-3 rounded-xl border p-4 transition-all ${c.pago
+                              ? 'border-emerald-200 dark:border-emerald-500/20 bg-emerald-50/20 dark:bg-emerald-500/[0.03]'
+                              : 'border-gray-200 dark:border-white/[0.06] bg-white/40 dark:bg-white/[0.01]'
+                              }`}
+                          >
+                            <div className="min-w-0">
+                              <p className={`text-sm font-bold leading-none ${c.pago ? 'text-gray-900 dark:text-white' : 'text-gray-400 dark:text-[#6A6A7A]'}`}>
+                                Cuota {c.numero}
+                              </p>
+                              <p className="text-xs text-gray-400 dark:text-[#6A6A7A] mt-1.5">
+                                {c.pago
+                                  ? `Abonada el ${formatDate(c.pago.paidAt)}`
+                                  : `Vence el ${format(c.fechaEsperada, "d 'de' MMMM", { locale: es })}`
+                                }
+                              </p>
+                            </div>
+                            <div className="flex items-center gap-2 shrink-0">
+                              {c.pago ? (
+                                <div className="flex flex-col items-end">
+                                  <span className="text-sm font-black text-gray-900 dark:text-white tabular-nums">
+                                    {formatCurrency(c.pago.amount)}
+                                  </span>
+                                  <span className="text-[10px] font-bold text-emerald-500 mt-1">Abonada</span>
+                                </div>
+                              ) : (
+                                <span className="text-xs font-semibold px-2.5 py-1 rounded-lg bg-white/50 dark:bg-white/[0.04] text-gray-400 dark:text-[#5A5A6A]">
+                                  Pendiente
+                                </span>
+                              )}
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
                   )}
                 </div>
 
-                {loadingRutinas ? (
-                  <div className="space-y-2">
-                    {[1, 2, 3].map(i => <Skeleton key={i} className="h-14 w-full rounded-2xl" />)}
-                  </div>
-                ) : rutinas.length === 0 ? (
-                  <div className="flex flex-col items-center gap-3 py-12">
-                    <div className="h-12 w-12 rounded-2xl bg-gray-100 dark:bg-white/[0.04] border border-gray-200 dark:border-white/[0.06] flex items-center justify-center">
-                      <BookOpen size={20} className="text-gray-400 dark:text-[#8A8A9A]" />
+                {/* Columna Derecha: Historial de Pagos */}
+                <div className="lg:col-span-1 space-y-3">
+                  <h4 className="text-xs font-bold uppercase tracking-widest text-gray-500 dark:text-[#8A8A9A] mb-1 px-1">Historial de Pagos</h4>
+                  {payments.length === 0 ? (
+                    <EmptyState icon={CreditCard} message="Sin pagos registrados" />
+                  ) : (
+                    <div className="space-y-2.5 max-h-[360px] overflow-y-auto pr-1">
+                      {payments.map(p => {
+                        const cfg = METHOD_CONFIG[p.method] ?? METHOD_CONFIG.cash
+                        const MethodIcon = cfg.Icon
+                        return (
+                          <div
+                            key={p.id}
+                            onClick={() => navigate(`/payments/${p.id}`)}
+                            className="group p-3 rounded-xl border border-gray-200 dark:border-white/[0.05] bg-white/40 dark:bg-white/[0.01] hover:bg-white/70 dark:hover:bg-white/[0.04] transition-all cursor-pointer flex items-center justify-between"
+                          >
+                            <div className="flex items-center gap-2.5 min-w-0">
+                              <div className={`h-8 w-8 rounded-lg flex items-center justify-center shrink-0 ${cfg.bg}`}>
+                                <MethodIcon size={13} className={cfg.color} />
+                              </div>
+                              <div className="min-w-0">
+                                <p className="text-xs font-bold text-gray-800 dark:text-white truncate">{cfg.label}</p>
+                                <p className="text-[10px] text-gray-400 dark:text-[#6A6A7A] mt-0.5">{formatDate(p.paidAt)}</p>
+                              </div>
+                            </div>
+                            <div className="text-right shrink-0">
+                              <span className="text-sm font-black text-gray-900 dark:text-white tabular-nums">
+                                {formatCurrency(p.amount)}
+                              </span>
+                            </div>
+                          </div>
+                        )
+                      })}
                     </div>
-                    <p className="text-sm text-gray-500 dark:text-[#8A8A9A]">Sin rutinas registradas</p>
-                    {(isAdmin || user?.role === 'profesor') && (
-                      <button
-                        onClick={() => navigate(`/clients/${id}/rutina`)}
-                        className="text-xs text-primary hover:underline"
-                      >
-                        Crear la primera rutina →
-                      </button>
-                    )}
-                  </div>
-                ) : (
-                  <div className="space-y-2">
-                    {rutinas.map((rutina: Rutina) => (
-                      <button
-                        key={rutina.id}
-                        onClick={() => navigate(`/clients/${id}/rutina`)}
-                        className="w-full flex items-center gap-3 px-4 py-3.5 rounded-2xl border border-gray-200 dark:border-white/[0.06] bg-gray-50/50 dark:bg-white/[0.02] hover:bg-gray-100/60 dark:hover:bg-white/[0.05] hover:border-gray-300 dark:hover:border-white/[0.1] transition-all text-left"
-                      >
-                        <div className="h-9 w-9 rounded-xl bg-primary/10 flex items-center justify-center shrink-0">
-                          <BookOpen size={15} className="text-primary" />
-                        </div>
-                        <div className="flex-1 min-w-0">
-                          <p className="text-sm font-bold text-gray-900 dark:text-white truncate">{rutina.nombre}</p>
-                          <p className="text-xs text-gray-500 dark:text-[#8A8A9A]">{(rutina.semanas ?? []).reduce((acc, s) => acc + (s.sesiones ?? []).reduce((a, ses) => a + (ses.bloques ?? []).reduce((b, bl) => b + (bl.ejerciciosPlan ?? []).length, 0), 0), 0)} ejercicios · {(rutina.semanas ?? []).length} semana{(rutina.semanas ?? []).length !== 1 ? 's' : ''}</p>
-                        </div>
-                        <span className={`text-xs px-2 py-0.5 rounded-full font-semibold shrink-0 ${rutina.activa ? 'bg-green-500/10 text-green-600 dark:text-green-400' : 'bg-gray-100 dark:bg-gray-500/10 text-gray-500 dark:text-[#8A8A9A]'}`}>
-                          {rutina.activa ? 'Activa' : 'Inactiva'}
-                        </span>
-                        <ChevronDown size={13} className="text-gray-400 dark:text-[#8A8A9A] shrink-0 -rotate-90" />
-                      </button>
-                    ))}
-                    <button
-                      onClick={() => navigate(`/clients/${id}/rutina`)}
-                      className="w-full text-center text-xs text-primary hover:underline pt-1"
-                    >
-                      Gestionar todas las rutinas →
-                    </button>
-                  </div>
-                )}
+                  )}
+                </div>
+              </div>
+            ) : (
+              <div className="flex items-center gap-4 p-5 border border-dashed border-gray-200 dark:border-white/10 rounded-2xl">
+                <div className="h-10 w-10 rounded-xl bg-gray-100 dark:bg-white/[0.04] flex items-center justify-center shrink-0">
+                  <CreditCard size={16} className="text-gray-400 dark:text-[#6A6A7A]" />
+                </div>
+                <div>
+                  <p className="text-sm font-semibold text-gray-900 dark:text-white">Sin membresía activa</p>
+                  <p className="text-xs text-gray-400 dark:text-[#6A6A7A] mt-0.5">Este cliente no tiene una membresía asignada.</p>
+                </div>
               </div>
             )}
-
           </div>
+          <div className="h-[35vh]" />
+        </div>
       </div>
+
 
       {/* ── MODAL MEMBRESÍA ─────────────────────────────────────────────────── */}
       <Modal isOpen={membershipDetailOpen} onClose={() => setMembershipDetailOpen(false)} title="Membresía activa" size="md">
@@ -1220,8 +1382,8 @@ const progressPct    = (() => {
                 </span>
               )}
               {client.membershipModalidad && (
-                <span className="text-sm font-semibold px-3 py-1.5 rounded-xl bg-white/[0.06] text-[#8A8A9A] border border-white/[0.08]">
-                  {MODALIDAD_LABEL[client.membershipModalidad] ?? client.membershipModalidad}
+                <span className="text-sm font-semibold px-3 py-1.5 rounded-xl bg-gray-100 dark:bg-white/[0.06] text-gray-500 dark:text-[#8A8A9A] border border-gray-200 dark:border-white/[0.08]">
+                  {MODALIDAD_LABELS[client.membershipModalidad] ?? client.membershipModalidad}
                 </span>
               )}
             </div>
@@ -1237,9 +1399,9 @@ const progressPct    = (() => {
                 { label: 'Vencimiento', value: client.membershipExpiresAt ? formatDate(client.membershipExpiresAt) : '—' },
                 { label: 'Último pago', value: lastPaymentDate ? formatDate(lastPaymentDate) : '—' },
               ].map(({ label, value }) => (
-                <div key={label} className="rounded-2xl bg-white/[0.04] border border-white/[0.06] p-3">
-                  <p className="text-xs text-[#8A8A9A] mb-1">{label}</p>
-                  <p className="text-sm font-bold text-white">{value}</p>
+                <div key={label} className="rounded-2xl bg-white/50 dark:bg-white/[0.04] border border-gray-200 dark:border-white/[0.06] p-3">
+                  <p className="text-xs text-gray-500 dark:text-[#8A8A9A] mb-1">{label}</p>
+                  <p className="text-sm font-bold text-gray-900 dark:text-white">{value}</p>
                 </div>
               ))}
             </div>
@@ -1248,8 +1410,8 @@ const progressPct    = (() => {
             {progressPct > 0 && (
               <div>
                 <div className="flex justify-between mb-1.5">
-                  <span className="text-xs text-[#8A8A9A]">Período transcurrido</span>
-                  <span className="text-xs font-semibold text-white">{Math.round(progressPct)}%</span>
+                  <span className="text-xs text-gray-500 dark:text-[#8A8A9A]">Período transcurrido</span>
+                  <span className="text-xs font-semibold text-gray-900 dark:text-white">{Math.round(progressPct)}%</span>
                 </div>
                 <div className="h-2 rounded-full bg-white/[0.08] overflow-hidden">
                   <div className={`h-full rounded-full ${progressColor}`} style={{ width: `${progressPct}%` }} />
@@ -1272,98 +1434,97 @@ const progressPct    = (() => {
                 <AlertTriangle size={20} className="text-red-400" />
               </div>
               <p className="text-sm font-semibold text-gray-900 dark:text-white">Límite del plan alcanzado</p>
-              <p className="text-xs text-[#8A8A9A] leading-snug max-w-[260px]">
+              <p className="text-xs text-gray-500 dark:text-[#8A8A9A] leading-snug max-w-[260px]">
                 El plan permite <span className="font-semibold text-gray-700 dark:text-gray-300">{planFreq} día{planFreq !== 1 ? 's' : ''} por semana</span> y ya tiene <span className="font-semibold text-gray-700 dark:text-gray-300">{totalDiasUsados} asignado{totalDiasUsados !== 1 ? 's' : ''}</span>. Para agregar un turno, primero darlo de baja de otro.
               </p>
             </div>
           )
           return loadingShifts ? (
-          <div className="space-y-2">
-            {[1, 2, 3].map(i => (
-              <div key={i} className="h-16 rounded-2xl animate-pulse bg-gray-200/80 dark:bg-white/[0.07]" />
-            ))}
-          </div>
-        ) : (() => {
-          const enrolledIds = new Set(inscripciones.map(i => i.turnoId))
-          const diasDisponibles = planFreq !== null ? planFreq - totalDiasUsados : Infinity
-          const notEnrolled = allShifts.filter(s => !enrolledIds.has(String(s.id)))
-          const available = notEnrolled.filter(s => s.days.length <= diasDisponibles)
-          const exceden = planFreq !== null ? notEnrolled.filter(s => s.days.length > diasDisponibles) : []
-          return notEnrolled.length === 0 ? (
-            <p className="text-sm text-center text-gray-500 dark:text-[#8A8A9A] py-8">
-              El cliente ya está inscripto en todos los turnos disponibles.
-            </p>
-          ) : (
-            <div className="space-y-2 max-h-80 overflow-y-auto pr-1">
-              {available.map(shift => (
-                <div key={shift.id} className="rounded-2xl border border-white/10 dark:border-white/[0.06] bg-white/[0.03] dark:bg-white/[0.02] p-4 space-y-3">
-                  <div className="flex items-center justify-between gap-2">
-                    <div>
-                      <p className="text-sm font-bold text-gray-900 dark:text-white">
-                        {shift.startTime} – {shift.endTime}
-                      </p>
-                      <p className="text-xs text-[#8A8A9A] mt-0.5">
-                        {shift.days.map(d => WEEKDAY_SHORT[d] ?? d).join(' · ')}
-                        {shift.profesorNombre && (
-                          <span className="ml-2 opacity-60">· {shift.profesorNombre}</span>
-                        )}
-                      </p>
-                    </div>
-                  </div>
-                  <div className="flex gap-2">
-                    {(['A', 'B'] as const).map(sala => {
-                      const insc  = sala === 'A' ? shift.inscritosA  : shift.inscritosB
-                      const cupo  = sala === 'A' ? shift.cupoMaximoSalaA : shift.cupoMaximoSalaB
-                      const lleno = insc >= cupo
-                      const loading = enrollingId === (String(shift.id) + sala)
-                      return (
-                        <button
-                          key={sala}
-                          disabled={lleno || !!enrollingId}
-                          onClick={() => handleEnroll(String(shift.id), sala)}
-                          className={`flex-1 py-2 rounded-xl text-xs font-bold transition-all flex items-center justify-center gap-1.5 ${
-                            lleno
-                              ? 'opacity-40 cursor-not-allowed bg-gray-200/50 dark:bg-gray-500/10 text-gray-400'
-                              : 'bg-primary/10 text-primary hover:bg-primary/20 active:scale-95'
-                          }`}
-                        >
-                          {loading ? (
-                            <span className="inline-block h-3 w-3 border-2 border-primary border-t-transparent rounded-full animate-spin" />
-                          ) : (
-                            <>
-                              Sala {sala}
-                              <span className="opacity-60 font-normal">{insc}/{cupo}</span>
-                            </>
-                          )}
-                        </button>
-                      )
-                    })}
-                  </div>
-                </div>
-              ))}
-              {exceden.map(shift => (
-                <div key={shift.id} className="rounded-2xl border border-white/[0.04] bg-white/[0.01] p-4 opacity-50">
-                  <div className="flex items-start justify-between gap-2">
-                    <div>
-                      <p className="text-sm font-bold text-gray-900 dark:text-white">
-                        {shift.startTime} – {shift.endTime}
-                      </p>
-                      <p className="text-xs text-[#8A8A9A] mt-0.5">
-                        {shift.days.map(d => WEEKDAY_SHORT[d] ?? d).join(' · ')}
-                        {shift.profesorNombre && (
-                          <span className="ml-2 opacity-60">· {shift.profesorNombre}</span>
-                        )}
-                      </p>
-                    </div>
-                    <span className="shrink-0 rounded-lg bg-red-500/10 border border-red-500/20 px-2 py-0.5 text-[10px] font-semibold text-red-400">
-                      Excede el plan
-                    </span>
-                  </div>
-                </div>
+            <div className="space-y-2">
+              {[1, 2, 3].map(i => (
+                <div key={i} className="h-16 rounded-2xl animate-pulse bg-gray-200/80 dark:bg-white/[0.07]" />
               ))}
             </div>
-          )
-        })()
+          ) : (() => {
+            const enrolledIds = new Set(inscripciones.map(i => i.turnoId))
+            const diasDisponibles = planFreq !== null ? planFreq - totalDiasUsados : Infinity
+            const notEnrolled = allShifts.filter(s => !enrolledIds.has(String(s.id)))
+            const available = notEnrolled.filter(s => s.days.length <= diasDisponibles)
+            const exceden = planFreq !== null ? notEnrolled.filter(s => s.days.length > diasDisponibles) : []
+            return notEnrolled.length === 0 ? (
+              <p className="text-sm text-center text-gray-500 dark:text-[#8A8A9A] py-8">
+                El cliente ya está inscripto en todos los turnos disponibles.
+              </p>
+            ) : (
+              <div className="space-y-2 max-h-80 overflow-y-auto pr-1">
+                {available.map(shift => (
+                  <div key={shift.id} className="rounded-2xl border border-gray-200 dark:border-white/[0.06] bg-white/40 dark:bg-white/[0.02] p-4 space-y-3">
+                    <div className="flex items-center justify-between gap-2">
+                      <div>
+                        <p className="text-sm font-bold text-gray-900 dark:text-white">
+                          {shift.startTime} – {shift.endTime}
+                        </p>
+                        <p className="text-xs text-gray-500 dark:text-[#8A8A9A] mt-0.5">
+                          {shift.days.map(d => WEEKDAY_SHORT[d] ?? d).join(' · ')}
+                          {shift.profesorNombre && (
+                            <span className="ml-2 opacity-60">· {shift.profesorNombre}</span>
+                          )}
+                        </p>
+                      </div>
+                    </div>
+                    <div className="flex gap-2">
+                      {(['A', 'B'] as const).map(sala => {
+                        const insc = sala === 'A' ? shift.inscritosA : shift.inscritosB
+                        const cupo = sala === 'A' ? shift.cupoMaximoSalaA : shift.cupoMaximoSalaB
+                        const lleno = insc >= cupo
+                        const loading = enrollingId === (String(shift.id) + sala)
+                        return (
+                          <button
+                            key={sala}
+                            disabled={lleno || !!enrollingId}
+                            onClick={() => handleEnroll(String(shift.id), sala)}
+                            className={`flex-1 py-2 rounded-xl text-xs font-bold transition-all flex items-center justify-center gap-1.5 ${lleno
+                              ? 'opacity-40 cursor-not-allowed bg-gray-200/50 dark:bg-gray-500/10 text-gray-400'
+                              : 'bg-primary/10 text-primary hover:bg-primary/20 active:scale-95'
+                              }`}
+                          >
+                            {loading ? (
+                              <span className="inline-block h-3 w-3 border-2 border-primary border-t-transparent rounded-full animate-spin" />
+                            ) : (
+                              <>
+                                Sala {sala}
+                                <span className="opacity-60 font-normal">{insc}/{cupo}</span>
+                              </>
+                            )}
+                          </button>
+                        )
+                      })}
+                    </div>
+                  </div>
+                ))}
+                {exceden.map(shift => (
+                  <div key={shift.id} className="rounded-2xl border border-white/[0.04] bg-white/[0.01] p-4 opacity-50">
+                    <div className="flex items-start justify-between gap-2">
+                      <div>
+                        <p className="text-sm font-bold text-gray-900 dark:text-white">
+                          {shift.startTime} – {shift.endTime}
+                        </p>
+                        <p className="text-xs text-gray-500 dark:text-[#8A8A9A] mt-0.5">
+                          {shift.days.map(d => WEEKDAY_SHORT[d] ?? d).join(' · ')}
+                          {shift.profesorNombre && (
+                            <span className="ml-2 opacity-60">· {shift.profesorNombre}</span>
+                          )}
+                        </p>
+                      </div>
+                      <span className="shrink-0 rounded-lg bg-red-500/10 border border-red-500/20 px-2 py-0.5 text-[10px] font-semibold text-red-400">
+                        Excede el plan
+                      </span>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )
+          })()
         })()}
       </Modal>
 
@@ -1371,11 +1532,11 @@ const progressPct    = (() => {
       <Modal isOpen={editOpen} onClose={() => setEditOpen(false)} title="Editar cliente" size="md">
         <form onSubmit={handleSubmit(onEdit)} className="space-y-4">
           <div className="grid grid-cols-2 gap-4">
-            <Input label="Nombre *"   error={errors.name?.message}     {...register('name')} />
+            <Input label="Nombre *" error={errors.name?.message}     {...register('name')} />
             <Input label="Apellido *" error={errors.lastName?.message}  {...register('lastName')} />
           </div>
-          <Input label="DNI *"   error={errors.dni?.message}   {...register('dni')} />
-          <Input label="Email"   type="email" error={errors.email?.message}  {...register('email')} />
+          <Input label="DNI *" error={errors.dni?.message}   {...register('dni')} />
+          <Input label="Email" type="email" error={errors.email?.message}  {...register('email')} />
           <Input label="Teléfono" error={errors.phone?.message} {...register('phone')} />
           <div className="flex justify-end gap-2 pt-2">
             <Button variant="ghost" type="button" onClick={() => setEditOpen(false)}>Cancelar</Button>

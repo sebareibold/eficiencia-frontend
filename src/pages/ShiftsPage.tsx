@@ -28,9 +28,11 @@ import type { EstadoEspera, TipoEspera } from '../types/listaEspera.types'
 import type { InscripcionEntry } from '../api/inscripciones.api'
 import Button from '../components/ui/Button'
 import Modal from '../components/ui/Modal'
+import ConfirmDialog from '../components/ui/ConfirmDialog'
 import Input from '../components/ui/Input'
 import Select from '../components/ui/Select'
 import Skeleton from '../components/ui/Skeleton'
+import EmptyState from '../components/ui/EmptyState'
 import type { Shift, WeekDay } from '../types/shift.types'
 
 // ─── Constants ────────────────────────────────────────────────────────────────
@@ -212,6 +214,7 @@ export default function ShiftsPage() {
   const [detailShift, setDetailShift] = useState<Shift | null>(null)
   const [isSubmitting, setIsSubmitting] = useState(false)
   const [isDeleting,   setIsDeleting]   = useState<number | null>(null)
+  const [deleteTarget, setDeleteTarget] = useState<number | null>(null)
   const [clientSearch, setClientSearch] = useState('')
   const [professors,   setProfessors]   = useState<{ id: string; name: string }[]>([])
   const [profsLoading, setProfsLoading] = useState(false)
@@ -466,7 +469,6 @@ export default function ShiftsPage() {
   }
 
   async function deleteShift(id: number) {
-    if (!confirm('¿Eliminar este turno?')) return
     setIsDeleting(id)
     try {
       await shiftsApi.remove(id)
@@ -476,6 +478,7 @@ export default function ShiftsPage() {
       addToast('Error al eliminar', 'error')
     } finally {
       setIsDeleting(null)
+      setDeleteTarget(null)
     }
   }
 
@@ -498,21 +501,34 @@ export default function ShiftsPage() {
 
         <div className="flex items-center gap-2">
           {/* View toggle */}
-          <div className="flex items-center rounded-2xl border border-white/50 dark:border-white/10 bg-white/30 dark:bg-black/30 backdrop-blur-xl shadow-sm overflow-hidden">
-            {VIEW_MODES.map(({ mode, icon: Icon, label }) => (
-              <button
-                key={mode}
-                onClick={() => setViewMode(mode)}
-                title={label}
-                className={`flex h-11 w-11 items-center justify-center transition-all ${
-                  viewMode === mode
-                    ? 'bg-gray-900 dark:bg-white text-white dark:text-gray-900'
-                    : 'text-gray-500 dark:text-gray-400 hover:text-gray-900 dark:hover:text-white hover:bg-white/50 dark:hover:bg-black/50'
-                }`}
-              >
-                <Icon size={16} />
-              </button>
-            ))}
+          <div className="flex items-center rounded-full border border-white/50 dark:border-white/10 bg-white/30 dark:bg-black/30 backdrop-blur-xl p-1 shadow-sm gap-1">
+            {VIEW_MODES.map(({ mode, icon: Icon, label }) => {
+              const isActive = viewMode === mode
+              return (
+                <button
+                  key={mode}
+                  onClick={() => setViewMode(mode)}
+                  title={label}
+                  className={`relative inline-flex h-9 w-9 items-center justify-center rounded-full text-xs font-bold transition-all duration-300 cursor-pointer ${
+                    isActive
+                      ? 'text-white dark:text-gray-900'
+                      : 'text-gray-500 dark:text-gray-400 hover:text-gray-900 dark:hover:text-white'
+                  }`}
+                >
+                  {isActive && (
+                    <motion.div
+                      layoutId="view-mode-shifts"
+                      className="absolute inset-0 rounded-full bg-gray-900 dark:bg-white shadow-[0_2px_8px_rgba(0,0,0,0.15)]"
+                      transition={{ type: 'spring', stiffness: 380, damping: 30 }}
+                      style={{ zIndex: 0 }}
+                    />
+                  )}
+                  <span className="relative z-10">
+                    <Icon size={14} />
+                  </span>
+                </button>
+              )
+            })}
           </div>
 
           <button
@@ -542,21 +558,32 @@ export default function ShiftsPage() {
       {/* ── Grid filters ────────────────────────────────────────────────────── */}
       {viewMode === 'grid' && (
         <div className="rounded-2xl lg:rounded-[2rem] border border-white/50 dark:border-white/10 bg-white/30 dark:bg-black/30 backdrop-blur-3xl shadow-[0_8px_32px_rgba(0,0,0,0.04)] dark:shadow-[0_8px_32px_rgba(0,0,0,0.3)] px-6 py-4 flex items-center gap-4 flex-wrap">
-          <span className="text-[11px] font-bold uppercase tracking-widest text-gray-400 dark:text-[#8A8A9A] shrink-0">Día</span>
-          <div className="flex gap-1.5 flex-wrap">
-            {(['all', ...DAYS] as DayFilter[]).map(d => (
-              <button
-                key={d}
-                onClick={() => setDayFilter(d)}
-                className={`rounded-full px-3.5 py-1.5 text-xs font-semibold transition-all ${
-                  dayFilter === d
-                    ? 'bg-gray-900 dark:bg-white text-white dark:text-gray-900 shadow-sm'
-                    : 'border border-gray-200 dark:border-white/[0.08] bg-white dark:bg-white/[0.04] text-gray-500 dark:text-[#8A8A9A] hover:border-gray-400 dark:hover:border-white/20 hover:text-gray-900 dark:hover:text-gray-100'
-                }`}
-              >
-                {d === 'all' ? 'Todos' : DAY_LABELS[d].slice(0, 3)}
-              </button>
-            ))}
+          <span className="text-[10px] font-bold uppercase tracking-wider text-gray-400 dark:text-[#8A8A9A] ml-1 shrink-0">Día</span>
+          <div className="flex items-center rounded-full border border-white/50 dark:border-white/10 bg-white/30 dark:bg-black/30 backdrop-blur-xl p-1 shadow-sm gap-1 flex-wrap">
+            {(['all', ...DAYS] as DayFilter[]).map(d => {
+              const isActive = dayFilter === d
+              return (
+                <button
+                  key={d}
+                  onClick={() => setDayFilter(d)}
+                  className={`relative inline-flex items-center justify-center rounded-full px-3.5 py-1.5 text-xs font-bold transition-all duration-300 cursor-pointer ${
+                    isActive
+                      ? 'text-white dark:text-gray-900'
+                      : 'text-gray-500 dark:text-[#8A8A9A] hover:text-gray-900 dark:hover:text-white'
+                  }`}
+                >
+                  {isActive && (
+                    <motion.div
+                      layoutId="day-filter-shifts"
+                      className="absolute inset-0 rounded-full bg-gray-900 dark:bg-white shadow-[0_2px_8px_rgba(0,0,0,0.15)]"
+                      transition={{ type: 'spring', stiffness: 380, damping: 30 }}
+                      style={{ zIndex: 0 }}
+                    />
+                  )}
+                  <span className="relative z-10">{d === 'all' ? 'Todos' : DAY_LABELS[d].slice(0, 3)}</span>
+                </button>
+              )
+            })}
           </div>
         </div>
       )}
@@ -751,10 +778,7 @@ export default function ShiftsPage() {
                 ))}
               </div>
             ) : filtered.length === 0 ? (
-              <div className="flex flex-col items-center justify-center gap-3 py-20 text-[#8A8A9A]">
-                <Dumbbell size={32} />
-                <p className="text-sm">No hay turnos para los filtros seleccionados</p>
-              </div>
+              <EmptyState icon={Dumbbell} message="No hay turnos para los filtros seleccionados" className="py-20" />
             ) : (
               <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
                 {filtered.map(shift => {
@@ -812,7 +836,7 @@ export default function ShiftsPage() {
                       {canDelete && (
                         <div className="absolute bottom-4 right-4 flex gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
                           <button
-                            onClick={e => { e.stopPropagation(); deleteShift(shift.id) }}
+                            onClick={e => { e.stopPropagation(); setDeleteTarget(shift.id) }}
                             className="flex h-7 w-7 items-center justify-center rounded-lg bg-red-500/10 text-red-400 hover:bg-red-500/20"
                           >
                             {isDeleting === shift.id ? '…' : <Trash2 size={12} />}
@@ -999,10 +1023,19 @@ export default function ShiftsPage() {
 
                         return (
                           <div key={i} className={`flex-1 min-w-[140px] relative border-r last:border-r-0 border-gray-200 dark:border-white/[0.06] ${isToday && !diaEspCol ? 'bg-primary/[0.02]' : ''} ${diaEspCol?.tipo === 'CIERRE_TOTAL' ? 'bg-red-500/[0.04] dark:bg-red-500/[0.07]' : diaEspCol ? 'bg-amber-500/[0.03] dark:bg-amber-500/[0.05]' : ''}`}>
-                            {/* Empty clickable slots — deshabilitados si hay día especial */}
-                            {canCreate && wday && !diaEspCol && HOURS.map((hStr) => {
+                            {/* Empty clickable slots — deshabilitados si hay cierre total o fuera del horario reducido */}
+                            {canCreate && wday && HOURS.map((hStr) => {
                               const h = parseInt(hStr.split(':')[0], 10);
                               if (calendarViewMode === 'optimized' && !activeHourInts.has(h)) return null;
+
+                              const isSlotBlocked = diaEspCol?.tipo === 'CIERRE_TOTAL' || (
+                                diaEspCol?.tipo === 'HORARIO_REDUCIDO' &&
+                                !!diaEspCol.horaDesde && !!diaEspCol.horaHasta &&
+                                (hStr < diaEspCol.horaDesde || hStr >= diaEspCol.horaHasta)
+                              );
+
+                              if (isSlotBlocked) return null;
+
                               const top = offsets[hStr];
                               return (
                                 <div
@@ -1153,10 +1186,7 @@ export default function ShiftsPage() {
                   {Array.from({ length: 5 }).map((_, i) => <Skeleton key={i} className="h-16 rounded-xl" />)}
                 </div>
               ) : timelineShifts.length === 0 ? (
-                <div className="flex flex-col items-center justify-center gap-3 py-16 text-[#8A8A9A]">
-                  <Clock size={32} />
-                  <p className="text-sm">No hay turnos para {DAY_LABELS[timelineDay]}</p>
-                </div>
+                <EmptyState icon={Clock} message={`No hay turnos para ${DAY_LABELS[timelineDay]}`} className="py-16" />
               ) : (
                 <div className="rounded-2xl lg:rounded-[2rem] border border-white/50 dark:border-white/10 bg-white/30 dark:bg-black/30 backdrop-blur-3xl shadow-[0_8px_32px_rgba(0,0,0,0.04)] dark:shadow-[0_8px_32px_rgba(0,0,0,0.3)] overflow-hidden">
                   {/* Room header */}
@@ -1303,46 +1333,57 @@ export default function ShiftsPage() {
         </div>
 
         {/* Filtros y controles */}
-        <div className="flex flex-wrap items-center gap-2">
+        <div className="rounded-2xl lg:rounded-[2rem] border border-white/50 dark:border-white/10 bg-white/30 dark:bg-black/30 backdrop-blur-3xl p-5 shadow-[0_8px_32px_rgba(0,0,0,0.04)] dark:shadow-[0_8px_32px_rgba(0,0,0,0.3)] flex flex-wrap items-end gap-4">
+          
           {/* Selector de año */}
-          <div className="flex items-center gap-1 rounded-xl border border-gray-200 dark:border-white/[0.08] bg-white/50 dark:bg-white/[0.04] px-1 py-1">
-            <button onClick={() => setAnioFiltroEsp(a => a - 1)}
-              className="flex h-7 w-7 items-center justify-center rounded-lg text-gray-600 dark:text-[#8A8A9A] hover:bg-black/5 dark:hover:bg-white/5 transition-all">
-              <ChevronLeft size={13} />
-            </button>
-            <span className="text-sm font-bold text-gray-900 dark:text-white min-w-[44px] text-center">{anioFiltroEsp}</span>
-            <button onClick={() => setAnioFiltroEsp(a => a + 1)}
-              className="flex h-7 w-7 items-center justify-center rounded-lg text-gray-600 dark:text-[#8A8A9A] hover:bg-black/5 dark:hover:bg-white/5 transition-all">
-              <ChevronRight size={13} />
-            </button>
+          <div className="flex flex-col gap-1.5 min-w-[120px] flex-1 sm:flex-initial">
+            <span className="text-[10px] font-bold uppercase tracking-wider text-gray-400 dark:text-[#8A8A9A] ml-1">Año</span>
+            <select
+              value={anioFiltroEsp}
+              onChange={(e) => setAnioFiltroEsp(Number(e.target.value))}
+              className="rounded-xl border border-white/50 dark:border-white/10 bg-white/30 dark:bg-black/30 backdrop-blur-xl px-3.5 py-2 text-xs font-semibold text-gray-800 dark:text-gray-200 focus:outline-none cursor-pointer h-10"
+            >
+              {[2024, 2025, 2026, 2027, 2028, 2029, 2030].map(y => (
+                <option key={y} value={y} className="bg-white dark:bg-[#1a1a24] text-gray-900 dark:text-white">{y}</option>
+              ))}
+            </select>
           </div>
 
           {/* Selector de mes */}
-          <div className="flex flex-wrap gap-1">
-            <button
-              onClick={() => setMesFiltroEsp(null)}
-              className={`rounded-full px-3 py-1 text-xs font-semibold transition-all ${mesFiltroEsp === null ? 'bg-gray-900 dark:bg-white text-white dark:text-gray-900' : 'border border-gray-200 dark:border-white/[0.08] text-gray-500 dark:text-[#8A8A9A] hover:bg-black/5 dark:hover:bg-white/5'}`}
+          <div className="flex flex-col gap-1.5 min-w-[160px] flex-1 sm:flex-initial">
+            <span className="text-[10px] font-bold uppercase tracking-wider text-gray-400 dark:text-[#8A8A9A] ml-1">Mes</span>
+            <select
+              value={mesFiltroEsp ?? ''}
+              onChange={(e) => setMesFiltroEsp(e.target.value === '' ? null : Number(e.target.value))}
+              className="rounded-xl border border-white/50 dark:border-white/10 bg-white/30 dark:bg-black/30 backdrop-blur-xl px-3.5 py-2 text-xs font-semibold text-gray-800 dark:text-gray-200 focus:outline-none cursor-pointer h-10"
             >
-              Todo el año
-            </button>
-            {['Ene','Feb','Mar','Abr','May','Jun','Jul','Ago','Sep','Oct','Nov','Dic'].map((mes, idx) => (
-              <button
-                key={idx}
-                onClick={() => setMesFiltroEsp(idx + 1)}
-                className={`rounded-full px-3 py-1 text-xs font-semibold transition-all ${mesFiltroEsp === idx + 1 ? 'bg-gray-900 dark:bg-white text-white dark:text-gray-900' : 'border border-gray-200 dark:border-white/[0.08] text-gray-500 dark:text-[#8A8A9A] hover:bg-black/5 dark:hover:bg-white/5'}`}
-              >
-                {mes}
-              </button>
-            ))}
+              <option value="" className="bg-white dark:bg-[#1a1a24] text-gray-900 dark:text-white">Todo el año</option>
+              {['Enero', 'Febrero', 'Marzo', 'Abril', 'Mayo', 'Junio', 'Julio', 'Agosto', 'Septiembre', 'Octubre', 'Noviembre', 'Diciembre'].map((mes, idx) => (
+                <option key={idx} value={idx + 1} className="bg-white dark:bg-[#1a1a24] text-gray-900 dark:text-white">{mes}</option>
+              ))}
+            </select>
           </div>
 
           {/* Orden */}
-          <button
-            onClick={() => setSortOrderEsp(o => o === 'asc' ? 'desc' : 'asc')}
-            className="ml-auto flex items-center gap-1.5 rounded-xl border border-gray-200 dark:border-white/[0.08] bg-white/50 dark:bg-white/[0.04] px-3 py-1.5 text-xs font-semibold text-gray-600 dark:text-[#8A8A9A] hover:bg-white dark:hover:bg-white/[0.08] transition-all"
-          >
-            {sortOrderEsp === 'asc' ? <><ChevronRight size={12} className="rotate-90" /> Más antiguo primero</> : <><ChevronLeft size={12} className="rotate-90" /> Más reciente primero</>}
-          </button>
+          <div className="flex flex-col gap-1.5 min-w-[160px] sm:ml-auto w-full sm:w-auto">
+            <span className="text-[10px] font-bold uppercase tracking-wider text-gray-400 dark:text-[#8A8A9A] ml-1">Orden</span>
+            <button
+              onClick={() => setSortOrderEsp(o => o === 'asc' ? 'desc' : 'asc')}
+              className="rounded-xl border border-white/50 dark:border-white/10 bg-white/30 dark:bg-black/30 backdrop-blur-xl px-4 py-2 text-xs font-semibold text-gray-800 dark:text-gray-200 hover:bg-white/50 dark:hover:bg-white/10 transition-colors flex items-center justify-center gap-1.5 cursor-pointer h-10 w-full"
+            >
+              {sortOrderEsp === 'asc' ? (
+                <>
+                  <ChevronRight size={13} className="rotate-90 text-gray-400" />
+                  <span>Más antiguo primero</span>
+                </>
+              ) : (
+                <>
+                  <ChevronLeft size={13} className="rotate-90 text-gray-400" />
+                  <span>Más reciente primero</span>
+                </>
+              )}
+            </button>
+          </div>
         </div>
 
         {/* Lista */}
@@ -1733,7 +1774,15 @@ export default function ShiftsPage() {
         </form>
       </Modal>
 
-
+      <ConfirmDialog
+        isOpen={deleteTarget !== null}
+        title="Eliminar turno"
+        message="Se eliminarán también todas las inscripciones y asistencias asociadas. Esta acción no se puede deshacer."
+        confirmLabel="Eliminar"
+        isLoading={isDeleting !== null}
+        onConfirm={() => deleteTarget !== null && deleteShift(deleteTarget)}
+        onClose={() => setDeleteTarget(null)}
+      />
     </motion.div>
   )
 }

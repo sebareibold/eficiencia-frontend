@@ -1,7 +1,8 @@
-import { useEffect, useRef, useCallback } from 'react'
+import { useEffect, useRef, useCallback, Suspense } from 'react'
 import { Outlet, useNavigate } from 'react-router-dom'
 import Navbar from './Navbar'
 import ToastContainer from '../ui/Toast'
+import PageContentSkeleton from '../ui/PageContentSkeleton'
 import { permisosApi } from '../../api/permisos.api'
 import { useAuthStore } from '../../store/authStore'
 import { authApi } from '../../api/auth.api'
@@ -18,8 +19,9 @@ export default function Layout() {
   const inactivityTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
 
   // ── Logout con invalidación en servidor ────────────────────────────────────
-  const doLogout = useCallback(async () => {
-    try { await authApi.logout() } catch { /* ignorar errores de red al cerrar */ }
+  // Limpia estado y navega de inmediato; la llamada al backend va en el fondo
+  const doLogout = useCallback(() => {
+    authApi.logout().catch(() => {})
     logout()
     navigate('/login', { replace: true })
   }, [logout, navigate])
@@ -113,7 +115,9 @@ export default function Layout() {
 
       <Navbar />
       <main className="flex-1 px-4 py-4 sm:px-5 sm:py-5 md:px-8 md:py-6 lg:px-12 lg:py-7 xl:px-16 xl:py-8 overflow-auto text-gray-800 dark:text-gray-100 relative z-10 w-full max-w-[1600px] mx-auto">
-        <Outlet />
+        <Suspense fallback={<PageContentSkeleton />}>
+          <Outlet />
+        </Suspense>
       </main>
       <ToastContainer />
     </div>

@@ -1,4 +1,4 @@
-import { type ElementType, type ReactNode } from 'react'
+import { memo, type ElementType, type ReactNode } from 'react'
 import Skeleton from './Skeleton'
 
 interface KpiCardProps {
@@ -13,7 +13,7 @@ interface KpiCardProps {
   compact?: boolean
 }
 
-export default function KpiCard({
+const KpiCard = memo(function KpiCard({
   label,
   value,
   icon: Icon,
@@ -83,4 +83,6 @@ export default function KpiCard({
       </div>
     </div>
   )
-}
+})
+
+export default KpiCard

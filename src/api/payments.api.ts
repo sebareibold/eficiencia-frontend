@@ -1,6 +1,14 @@
 import api from './axiosInstance'
 import type { Payment, CreatePaymentDto } from '../types/payment.types'
 
+export interface PaginatedPayments {
+  data: Payment[]
+  total: number
+  page: number
+  pageSize: number
+  totalPages: number
+}
+
 type BackendMetodo = 'EFECTIVO' | 'TRANSFERENCIA' | 'DEBITO' | 'EMPRESA'
 
 function mapMetodoToFrontend(metodo: BackendMetodo): Payment['method'] {
@@ -47,16 +55,28 @@ function mapPago(p: any): Payment {
 }
 
 export const paymentsApi = {
-  getAll: (params?: { month?: string; anio?: string; desde?: string; hasta?: string; clientId?: string | number }): Promise<Payment[]> =>
+  getAll: (params?: {
+    month?: string; anio?: string; desde?: string; hasta?: string
+    clientId?: string | number; page?: number; pageSize?: number
+  }): Promise<PaginatedPayments> =>
     api.get('/pagos', {
       params: {
-        ...(params?.month && { mes: params.month }),
-        ...(params?.anio && { anio: params.anio }),
-        ...(params?.desde && { desde: params.desde }),
-        ...(params?.hasta && { hasta: params.hasta }),
+        ...(params?.month    && { mes:       params.month }),
+        ...(params?.anio     && { anio:      params.anio }),
+        ...(params?.desde    && { desde:     params.desde }),
+        ...(params?.hasta    && { hasta:     params.hasta }),
         ...(params?.clientId && { clienteId: params.clientId }),
+        page:     params?.page     ?? 1,
+        pageSize: params?.pageSize ?? 200,
       },
-    }).then((r) => (Array.isArray(r.data) ? r.data : []).map(mapPago)),
+    }).then((r) => {
+      const raw = r.data
+      if (raw && !Array.isArray(raw) && Array.isArray(raw.data)) {
+        return { ...raw, data: raw.data.map(mapPago) } as PaginatedPayments
+      }
+      const arr = Array.isArray(raw) ? raw : []
+      return { data: arr.map(mapPago), total: arr.length, page: 1, pageSize: arr.length, totalPages: 1 }
+    }),
 
   create: (dto: CreatePaymentDto): Promise<Payment> =>
     api.post('/pagos', {

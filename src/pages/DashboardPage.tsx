@@ -1,5 +1,5 @@
 import { useState, useMemo } from 'react'
-import { motion } from 'framer-motion'
+import { motion, AnimatePresence } from 'framer-motion'
 import { useNavigate } from 'react-router-dom'
 import { pageVariants } from '../lib/motion'
 import {
@@ -10,10 +10,16 @@ import {
 import { format, startOfMonth, endOfMonth, addMonths, subMonths, parseISO } from 'date-fns'
 import {
   AreaChart, Area, BarChart, Bar, PieChart, Pie, Cell,
-  XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Legend,
+  XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer,
 } from 'recharts'
-import { useDashboard } from '../hooks/useDashboard'
-import Skeleton, { SkeletonKpiGrid, SkeletonDashboardCharts } from '../components/ui/Skeleton'
+import {
+  useDashboardAlertas,
+  useDashboardFinanciero,
+  useDashboardClientes,
+  useDashboardFacturacion,
+  useDashboardHistorico,
+} from '../hooks/useDashboard'
+import Skeleton from '../components/ui/Skeleton'
 import KpiCard from '../components/ui/KpiCard'
 import { formatCurrency } from '../utils/formatCurrency'
 import { ROUTES } from '../constants/routes'
@@ -28,7 +34,6 @@ const C = {
   purple:   '#A855F7',
   orange:   '#F97316',
   teal:     '#14B8A6',
-  pink:     '#EC4899',
 }
 
 const PIE_CLIENTES  = [C.green, C.orange, C.red]
@@ -54,22 +59,33 @@ const TooltipStyle = {
 
 type ChartView = 'meses' | 'años' | 'historico'
 
-function ViewToggle({ value, onChange }: { value: ChartView; onChange: (v: ChartView) => void }) {
+function ViewToggle({ value, onChange, layoutId }: { value: ChartView; onChange: (v: ChartView) => void; layoutId: string }) {
   return (
-    <div className="flex items-center rounded-xl border border-saas-border dark:border-white/[0.08] bg-white/[0.6] dark:bg-white/[0.04] backdrop-blur-sm p-0.5 gap-0.5 shrink-0">
-      {([['meses', 'Meses'], ['años', 'Años'], ['historico', 'Histórico']] as [ChartView, string][]).map(([mode, label]) => (
-        <button
-          key={mode}
-          onClick={() => onChange(mode)}
-          className={`px-2.5 py-1 rounded-lg text-[11px] font-bold transition-all ${
-            value === mode
-              ? 'bg-gray-900 dark:bg-white/[0.12] text-white'
-              : 'text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-200'
-          }`}
-        >
-          {label}
-        </button>
-      ))}
+    <div className="flex items-center rounded-full border border-black/[0.08] dark:border-white/10 bg-white/60 dark:bg-black/30 backdrop-blur-xl p-1 shadow-sm gap-1 shrink-0">
+      {([['meses', 'Meses'], ['años', 'Años'], ['historico', 'Histórico']] as [ChartView, string][]).map(([mode, label]) => {
+        const isActive = value === mode
+        return (
+          <button
+            key={mode}
+            onClick={() => onChange(mode)}
+            className={`relative inline-flex items-center justify-center rounded-full px-3.5 py-1.5 text-xs font-bold transition-all duration-300 cursor-pointer ${
+              isActive
+                ? 'text-white dark:text-gray-900'
+                : 'text-gray-500 dark:text-[#8A8A9A] hover:text-gray-900 dark:hover:text-white'
+            }`}
+          >
+            {isActive && (
+              <motion.div
+                layoutId={layoutId}
+                className="absolute inset-0 rounded-full bg-gray-900 dark:bg-white shadow-[0_2px_8px_rgba(0,0,0,0.15)]"
+                transition={{ type: 'spring', stiffness: 380, damping: 30 }}
+                style={{ zIndex: 0 }}
+              />
+            )}
+            <span className="relative z-10">{label}</span>
+          </button>
+        )
+      })}
     </div>
   )
 }
@@ -217,14 +233,25 @@ export default function DashboardPage() {
 
   const historicoMeses = chartView === 'meses' ? 24 : chartView === 'años' ? 60 : 120
 
-  const { stats, isLoading, error, refetch } = useDashboard({ from: fromDate, to: toDate, historicoMeses })
+  // ── 5 hooks granulares — cada sección carga independientemente ────────────────
+  const alertasHook     = useDashboardAlertas()
+  const financieroHook  = useDashboardFinanciero({ desde: fromDate, hasta: toDate })
+  const clientesHook    = useDashboardClientes()
+  const facturacionHook = useDashboardFacturacion({ desde: fromDate, hasta: toDate })
+  const historicoHook   = useDashboardHistorico(historicoMeses)
 
-  // Dataset base: meses = todos los puntos crudos; años = agrupado por año; historico = todos
+  const refetchAll = () => {
+    alertasHook.refetch(); financieroHook.refetch(); clientesHook.refetch()
+    facturacionHook.refetch(); historicoHook.refetch()
+  }
+
+  // Dataset base para gráfico histórico
   const chartData = useMemo(() => {
-    if (!stats?.historico?.length) return []
-    if (chartView !== 'años') return stats.historico
-    const byYear = new Map<string, typeof stats.historico[0]>()
-    for (const p of stats.historico) {
+    const hist = historicoHook.data
+    if (!hist?.length) return []
+    if (chartView !== 'años') return hist
+    const byYear = new Map<string, typeof hist[0]>()
+    for (const p of hist) {
       const year = p.mes.slice(0, 4)
       const ex = byYear.get(year)
       if (ex) {
@@ -236,9 +263,8 @@ export default function DashboardPage() {
       }
     }
     return Array.from(byYear.values()).sort((a, b) => a.label.localeCompare(b.label))
-  }, [stats?.historico, chartView])
+  }, [historicoHook.data, chartView])
 
-  // Ventana visible: en modo meses, 12 puntos deslizantes; en otros modos, todo
   const activeChartData = useMemo(() => {
     if (chartView !== 'meses') return chartData
     const arr = chartData
@@ -267,269 +293,96 @@ export default function DashboardPage() {
   }, [chartView, activeChartData])
 
   const chartSubtitle = useMemo(() => {
-    if (chartView === 'años')     return 'Por año'
+    if (chartView === 'años')      return 'Por año'
     if (chartView === 'historico') return 'Histórico completo'
-    if (!activeChartData.length)  return 'Últimos 12 meses'
-    if (chartMonthOffset === 0)   return 'Últimos 12 meses'
+    if (!activeChartData.length)   return 'Últimos 12 meses'
+    if (chartMonthOffset === 0)    return 'Últimos 12 meses'
     return `${activeChartData[0].label} – ${activeChartData[activeChartData.length - 1].label}`
   }, [chartView, activeChartData, chartMonthOffset])
 
-  const chartHeaderAction = (
+  const makeChartHeaderAction = (id: string) => (
     <div className="flex items-center gap-2">
       {chartView === 'meses' && (
-        <div className="flex items-center rounded-xl border border-saas-border dark:border-white/[0.08] bg-white/[0.6] dark:bg-white/[0.04] backdrop-blur-sm p-0.5">
+        <div className="flex items-center rounded-full border border-black/[0.08] dark:border-white/10 bg-white/60 dark:bg-black/30 backdrop-blur-xl p-1 shadow-sm gap-1">
           <button
             onClick={goChartBack}
             disabled={!canGoBack}
-            className="p-1.5 rounded-lg text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-200 hover:bg-white/40 dark:hover:bg-white/[0.06] transition-all disabled:opacity-30 disabled:cursor-not-allowed"
+            className="flex h-7 w-7 items-center justify-center rounded-full text-gray-500 dark:text-gray-400 hover:text-gray-900 dark:hover:text-white hover:bg-white/40 dark:hover:bg-white/[0.05] transition-all disabled:opacity-30 disabled:cursor-not-allowed cursor-pointer"
           >
             <ChevronLeft size={14} />
           </button>
-          <span className="px-2 text-[11px] font-black text-gray-700 dark:text-gray-200 min-w-[80px] text-center tabular-nums">
+          <span className="px-2 text-[10px] font-bold uppercase tracking-wider text-gray-700 dark:text-gray-200 min-w-[80px] text-center tabular-nums">
             {chartSubtitle}
           </span>
           <button
             onClick={goChartForward}
             disabled={!canGoForward}
-            className="p-1.5 rounded-lg text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-200 hover:bg-white/40 dark:hover:bg-white/[0.06] transition-all disabled:opacity-30 disabled:cursor-not-allowed"
+            className="flex h-7 w-7 items-center justify-center rounded-full text-gray-500 dark:text-gray-400 hover:text-gray-900 dark:hover:text-white hover:bg-white/40 dark:hover:bg-white/[0.05] transition-all disabled:opacity-30 disabled:cursor-not-allowed cursor-pointer"
           >
             <ChevronRight size={14} />
           </button>
         </div>
       )}
-      <ViewToggle value={chartView} onChange={changeChartView} />
+      <ViewToggle value={chartView} onChange={changeChartView} layoutId={id} />
     </div>
   )
 
-  // ── Loading ──
-  if (isLoading) {
-    const glassCard = 'rounded-2xl lg:rounded-[2rem] border border-white/50 dark:border-white/10 bg-white/30 dark:bg-black/30 backdrop-blur-3xl p-4 lg:p-6'
-    const sectionHeader = (
-      <div className="space-y-1.5">
-        <Skeleton className="h-5 w-40" />
-        <Skeleton className="h-3.5 w-56" />
-      </div>
-    )
-    return (
-      <div className="space-y-5 md:space-y-7 xl:space-y-10 pb-6 lg:pb-10">
+  // ── Datos derivados ──────────────────────────────────────────────────────────
+  const f = financieroHook.data
+  const a = alertasHook.data
+  const c = clientesHook.data
+  const fc = facturacionHook.data
 
-        {/* Header */}
-        <div className="flex flex-col sm:flex-row sm:items-end justify-between gap-4">
-          <div className="space-y-2">
-            <Skeleton className="h-9 xl:h-11 w-44" />
-            <Skeleton className="h-4 w-56" />
-          </div>
-          <div className="flex items-center gap-2">
-            <Skeleton className="h-9 w-[122px] rounded-xl" />
-            <Skeleton className="h-9 w-[156px] rounded-xl" />
-            <Skeleton className="h-9 w-9 rounded-xl" />
-          </div>
-        </div>
+  const gananciaNeta  = f?.gananciaNeta ?? 0
+  const clientesActivos = c?.distribucion.activos ?? a?.clientesActivos ?? 0
 
-        {/* KPIs */}
-        <SkeletonKpiGrid />
-
-        {/* Alertas */}
-        <div className="space-y-3 lg:space-y-4">
-          {sectionHeader}
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-3 lg:gap-4">
-            {Array.from({ length: 3 }).map((_, i) => (
-              <div key={i} className={`${glassCard} flex items-start gap-3 lg:gap-4`}>
-                <Skeleton className="h-9 w-9 lg:h-11 lg:w-11 rounded-xl shrink-0" />
-                <div className="flex-1 space-y-2">
-                  <Skeleton className="h-8 lg:h-9 w-12" />
-                  <Skeleton className="h-3.5 w-32" />
-                  <Skeleton className="h-3 w-24" />
-                </div>
-              </div>
-            ))}
-          </div>
-        </div>
-
-        {/* Financiero */}
-        <div className="space-y-3 lg:space-y-4">
-          {sectionHeader}
-          <SkeletonDashboardCharts />
-        </div>
-
-        {/* Clientes & Planes */}
-        <div className="space-y-3 lg:space-y-4">
-          {sectionHeader}
-          <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4 lg:gap-6">
-
-            {/* Donut — Estado de clientes */}
-            <div className={`${glassCard} flex flex-col`}>
-              <div className="mb-3 lg:mb-5 space-y-1.5">
-                <Skeleton className="h-4 w-36" />
-                <Skeleton className="h-3 w-20" />
-              </div>
-              <div className="flex justify-center items-center h-[140px] lg:h-[170px] xl:h-[180px]">
-                <div className="relative h-[110px] w-[110px] lg:h-[130px] lg:w-[130px]">
-                  <Skeleton className="absolute inset-0 rounded-full" />
-                  <div className="absolute inset-[20px] rounded-full bg-white/30 dark:bg-black/30" />
-                </div>
-              </div>
-              <div className="space-y-2 mt-4">
-                {(['w-20', 'w-16', 'w-20'] as const).map((w, i) => (
-                  <div key={i} className="flex items-center justify-between gap-2">
-                    <div className="flex items-center gap-2">
-                      <Skeleton className="h-2.5 w-2.5 rounded-full shrink-0" />
-                      <Skeleton className={`h-3 ${w}`} />
-                    </div>
-                    <Skeleton className="h-3 w-6" />
-                  </div>
-                ))}
-              </div>
-            </div>
-
-            {/* Horizontal bar — Membresías por plan */}
-            <div className={`${glassCard} flex flex-col`}>
-              <div className="mb-3 lg:mb-5 space-y-1.5">
-                <Skeleton className="h-4 w-40" />
-                <Skeleton className="h-3 w-28" />
-              </div>
-              <div className="flex-1 min-h-[140px] lg:min-h-[190px] xl:min-h-[220px] flex flex-col justify-evenly gap-3">
-                {[70, 50, 85].map((pct, i) => (
-                  <div key={i} className="flex items-center gap-3">
-                    <Skeleton className="h-3 w-16 shrink-0" />
-                    <div className="flex-1 h-5 rounded-r-lg overflow-hidden bg-white/10 dark:bg-white/[0.04]">
-                      <Skeleton className="h-full rounded-r-lg" style={{ width: `${pct}%` }} />
-                    </div>
-                    <Skeleton className="h-3 w-5 shrink-0" />
-                  </div>
-                ))}
-              </div>
-            </div>
-
-            {/* Donut — Gastos por categoría */}
-            <div className={`${glassCard} flex flex-col`}>
-              <div className="mb-3 lg:mb-5 space-y-1.5">
-                <Skeleton className="h-4 w-40" />
-                <Skeleton className="h-3 w-20" />
-              </div>
-              <div className="flex justify-center items-center h-[140px] lg:h-[170px] xl:h-[180px]">
-                <div className="relative h-[110px] w-[110px] lg:h-[130px] lg:w-[130px]">
-                  <Skeleton className="absolute inset-0 rounded-full" />
-                  <div className="absolute inset-[20px] rounded-full bg-white/30 dark:bg-black/30" />
-                </div>
-              </div>
-              <div className="space-y-2 mt-4">
-                {(['w-16', 'w-12', 'w-20'] as const).map((w, i) => (
-                  <div key={i} className="flex items-center justify-between gap-2">
-                    <div className="flex items-center gap-2">
-                      <Skeleton className="h-2.5 w-2.5 rounded-full shrink-0" />
-                      <Skeleton className={`h-3 ${w}`} />
-                    </div>
-                    <Skeleton className="h-3 w-14" />
-                  </div>
-                ))}
-              </div>
-            </div>
-
-          </div>
-        </div>
-
-        {/* Facturación */}
-        <div className="space-y-3 lg:space-y-4">
-          {sectionHeader}
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-4 lg:gap-6">
-
-            {/* Progress bar card */}
-            <div className={glassCard}>
-              <Skeleton className="h-4 w-52 mb-3 lg:mb-5" />
-              <div className="space-y-3">
-                <div className="flex justify-between">
-                  <Skeleton className="h-3 w-16" />
-                  <Skeleton className="h-3 w-8" />
-                </div>
-                <Skeleton className="h-3 w-full rounded-full" />
-                <div className="grid grid-cols-2 gap-3 pt-1">
-                  <Skeleton className="h-16 rounded-2xl" />
-                  <Skeleton className="h-16 rounded-2xl" />
-                </div>
-              </div>
-            </div>
-
-            {/* Stats list card */}
-            <div className={glassCard}>
-              <Skeleton className="h-4 w-36 mb-3 lg:mb-5" />
-              <div className="space-y-3">
-                {[1, 2, 3].map(i => (
-                  <div key={i} className="flex items-center justify-between rounded-2xl px-4 py-3.5 bg-white/10 dark:bg-white/[0.04]">
-                    <Skeleton className="h-3.5 w-28" />
-                    <Skeleton className="h-4 w-24" />
-                  </div>
-                ))}
-                <div className="flex items-center gap-2 rounded-2xl border border-white/30 dark:border-white/10 px-4 py-3.5">
-                  <Skeleton className="h-3.5 w-3.5 rounded-full shrink-0" />
-                  <Skeleton className="h-3.5 w-44" />
-                </div>
-              </div>
-            </div>
-
-          </div>
-        </div>
-
-      </div>
-    )
-  }
-
-  // ── Error ──
-  if (error || !stats) {
-    return (
-      <div className="flex flex-col items-center justify-center gap-4 py-24">
-        <div className="rounded-2xl border border-red-500/20 bg-red-500/10 px-8 py-6 text-center">
-          <p className="text-sm font-medium text-red-400 mb-3">{error ?? 'Error al cargar el dashboard'}</p>
-          <button onClick={refetch} className="flex items-center gap-2 mx-auto text-xs text-red-400 underline hover:text-red-300">
-            <RefreshCw size={12} /> Reintentar
-          </button>
-        </div>
-      </div>
-    )
-  }
-
-  // ── KPIs ──
   const kpis = [
     {
       label: 'Clientes activos',
-      value: String(stats.clientes.activos),
+      value: String(clientesActivos),
       icon: Users,
       iconColor: 'text-primary',
       iconBg: 'bg-primary/10',
     },
     {
       label: 'Ingresos del mes',
-      value: formatCurrency(stats.totalIngresos),
+      value: formatCurrency(f?.ingresos.total ?? 0),
       icon: TrendingUp,
       iconColor: 'text-green-400',
       iconBg: 'bg-green-500/10',
     },
     {
       label: 'Gastos del mes',
-      value: formatCurrency(stats.totalGastos),
+      value: formatCurrency(f?.gastos.total ?? 0),
       icon: TrendingDown,
       iconColor: 'text-red-400',
       iconBg: 'bg-red-500/10',
     },
     {
       label: 'Ganancia neta',
-      value: formatCurrency(stats.gananciaNeta),
+      value: formatCurrency(gananciaNeta),
       icon: DollarSign,
-      iconColor: stats.gananciaNeta >= 0 ? 'text-green-400' : 'text-red-400',
-      iconBg:    stats.gananciaNeta >= 0 ? 'bg-green-500/10' : 'bg-red-500/10',
+      iconColor: gananciaNeta >= 0 ? 'text-green-400' : 'text-red-400',
+      iconBg:    gananciaNeta >= 0 ? 'bg-green-500/10' : 'bg-red-500/10',
     },
   ]
 
-  // ── Datos para gráficos ──
-  const pieClientesData = [
-    { name: 'Activos',    value: stats.clientes.activos,  color: C.green },
-    { name: 'En deuda',   value: stats.clientes.enDeuda,  color: C.orange },
-    { name: 'Vencidos',   value: stats.clientes.vencidos, color: C.red },
-  ].filter(d => d.value > 0)
+  const pieClientesData = c
+    ? [
+        { name: 'Activos',  value: c.distribucion.activos,  color: C.green },
+        { name: 'En deuda', value: c.distribucion.enDeuda,  color: C.orange },
+        { name: 'Vencidos', value: c.distribucion.vencidos, color: C.red },
+      ].filter(d => d.value > 0)
+    : []
 
-  const pieGastosData = stats.gastosPorCategoria.map((g, i) => ({
-    name: g.categoria, value: g.total, color: PIE_GASTOS[i % PIE_GASTOS.length],
-  }))
+  const pieGastosData = f
+    ? f.gastosPorCategoria.map((g, i) => ({
+        name: g.categoria, value: g.total, color: PIE_GASTOS[i % PIE_GASTOS.length],
+      }))
+    : []
+
+  // ── KPI loading: combina financiero + clientes ───────────────────────────────
+  const kpiLoading = financieroHook.isLoading || clientesHook.isLoading
 
   return (
     <motion.div {...pageVariants} className="space-y-5 md:space-y-7 xl:space-y-10 pb-6 lg:pb-10 relative z-10">
@@ -545,95 +398,118 @@ export default function DashboardPage() {
           </p>
         </div>
         <div className="flex items-center gap-2 flex-wrap">
-          {/* Selector período */}
-          <div className="flex items-center rounded-xl border border-saas-border dark:border-white/[0.08] bg-white/[0.6] dark:bg-white/[0.04] backdrop-blur-sm p-0.5 gap-0.5">
-            {([['month', 'Mes'], ['year', 'Año'], ['range', 'Rango']] as [PeriodMode, string][]).map(([mode, label]) => (
-              <button
-                key={mode}
-                onClick={() => { setPeriodMode(mode); if (mode !== 'range') setNavDate(today) }}
-                className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-all ${
-                  periodMode === mode
-                    ? 'bg-gray-900 dark:bg-white/[0.12] text-white'
-                    : 'text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-200'
-                }`}
+          <AnimatePresence mode="wait">
+            {periodMode !== 'range' ? (
+              <motion.div
+                key="nav-date"
+                initial={{ opacity: 0, x: -8, scale: 0.96 }}
+                animate={{ opacity: 1, x: 0, scale: 1 }}
+                exit={{ opacity: 0, x: -8, scale: 0.96 }}
+                transition={{ duration: 0.15, ease: 'easeInOut' }}
+                className="flex items-center rounded-full border border-white/50 dark:border-white/10 bg-white/30 dark:bg-black/30 backdrop-blur-xl p-1 shadow-sm gap-1"
               >
-                {label}
-              </button>
-            ))}
+                <button
+                  onClick={goBack}
+                  className="flex h-7 w-7 items-center justify-center rounded-full text-gray-500 dark:text-gray-400 hover:text-gray-900 dark:hover:text-white hover:bg-white/40 dark:hover:bg-white/[0.05] transition-all cursor-pointer"
+                >
+                  <ChevronLeft size={15} />
+                </button>
+                <span className="px-3 text-xs font-bold tracking-tight text-gray-800 dark:text-gray-200 min-w-[88px] text-center tabular-nums">
+                  {periodLabel}
+                </span>
+                <button
+                  onClick={goForward}
+                  disabled={isAtPresent}
+                  className="flex h-7 w-7 items-center justify-center rounded-full text-gray-500 dark:text-gray-400 hover:text-gray-900 dark:hover:text-white hover:bg-white/40 dark:hover:bg-white/[0.05] transition-all disabled:opacity-30 disabled:cursor-not-allowed cursor-pointer"
+                >
+                  <ChevronRight size={15} />
+                </button>
+              </motion.div>
+            ) : (
+              <motion.div
+                key="picker-range"
+                initial={{ opacity: 0, x: 8, scale: 0.96 }}
+                animate={{ opacity: 1, x: 0, scale: 1 }}
+                exit={{ opacity: 0, x: 8, scale: 0.96 }}
+                transition={{ duration: 0.15, ease: 'easeInOut' }}
+                className="flex items-center gap-1.5"
+              >
+                <div
+                  style={{ colorScheme: 'light' }}
+                  className="rounded-xl border border-white/50 dark:border-white/10 bg-white/30 dark:bg-black/30 backdrop-blur-xl px-3 py-1 text-xs font-semibold text-gray-800 dark:text-gray-200 focus-within:border-primary shadow-sm h-9 flex items-center"
+                >
+                  <input
+                    type="date"
+                    value={rangeFrom}
+                    max={rangeTo}
+                    onChange={e => setRangeFrom(e.target.value)}
+                    className="bg-transparent focus:outline-none cursor-pointer font-bold text-gray-800 dark:text-gray-200"
+                  />
+                </div>
+                <span className="text-xs font-bold text-gray-400 dark:text-[#8A8A9A]">/</span>
+                <div
+                  style={{ colorScheme: 'light' }}
+                  className="rounded-xl border border-white/50 dark:border-white/10 bg-white/30 dark:bg-black/30 backdrop-blur-xl px-3 py-1 text-xs font-semibold text-gray-800 dark:text-gray-200 focus-within:border-primary shadow-sm h-9 flex items-center"
+                >
+                  <input
+                    type="date"
+                    value={rangeTo}
+                    min={rangeFrom}
+                    max={format(today, 'yyyy-MM-dd')}
+                    onChange={e => setRangeTo(e.target.value)}
+                    className="bg-transparent focus:outline-none cursor-pointer font-bold text-gray-800 dark:text-gray-200"
+                  />
+                </div>
+              </motion.div>
+            )}
+          </AnimatePresence>
+
+          {/* Selector período */}
+          <div className="flex items-center rounded-full border border-white/50 dark:border-white/10 bg-white/30 dark:bg-black/30 backdrop-blur-xl p-1 shadow-sm gap-1 shrink-0">
+            {([['month', 'Mes'], ['year', 'Año'], ['range', 'Rango']] as [PeriodMode, string][]).map(([mode, label]) => {
+              const isActive = periodMode === mode
+              return (
+                <button
+                  key={mode}
+                  onClick={() => { setPeriodMode(mode); if (mode !== 'range') setNavDate(today) }}
+                  className={`relative inline-flex items-center justify-center rounded-full px-4 py-1.5 text-xs font-bold transition-all duration-300 cursor-pointer ${
+                    isActive
+                      ? 'text-white dark:text-gray-900'
+                      : 'text-gray-500 dark:text-[#8A8A9A] hover:text-gray-900 dark:hover:text-white'
+                  }`}
+                >
+                  {isActive && (
+                    <motion.div
+                      layoutId="period-mode-toggle"
+                      className="absolute inset-0 rounded-full bg-gray-900 dark:bg-white shadow-[0_2px_8px_rgba(0,0,0,0.15)]"
+                      transition={{ type: 'spring', stiffness: 380, damping: 30 }}
+                      style={{ zIndex: 0 }}
+                    />
+                  )}
+                  <span className="relative z-10">{label}</span>
+                </button>
+              )
+            })}
           </div>
 
-          {/* Navegador mes/año */}
-          {periodMode !== 'range' && (
-            <div className="flex items-center rounded-xl border border-saas-border dark:border-white/[0.08] bg-white/[0.6] dark:bg-white/[0.04] backdrop-blur-sm p-0.5">
-              <button
-                onClick={goBack}
-                className="p-1.5 rounded-lg text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-200 hover:bg-white/40 dark:hover:bg-white/[0.06] transition-all"
-              >
-                <ChevronLeft size={15} />
-              </button>
-              <span className="px-2 text-xs font-black text-gray-700 dark:text-gray-200 min-w-[88px] text-center tabular-nums">
-                {periodLabel}
-              </span>
-              <button
-                onClick={goForward}
-                disabled={isAtPresent}
-                className="p-1.5 rounded-lg text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-200 hover:bg-white/40 dark:hover:bg-white/[0.06] transition-all disabled:opacity-30 disabled:cursor-not-allowed"
-              >
-                <ChevronRight size={15} />
-              </button>
-            </div>
-          )}
-
-          {/* Date pickers rango */}
-          {periodMode === 'range' && (
-            <div className="flex items-center gap-1.5">
-              <div
-                style={{ colorScheme: 'light' }}
-                className="rounded-xl border border-saas-border dark:border-white/[0.08] bg-white/[0.6] dark:bg-white/[0.04] backdrop-blur-sm"
-              >
-                <input
-                  type="date"
-                  value={rangeFrom}
-                  max={rangeTo}
-                  onChange={e => setRangeFrom(e.target.value)}
-                  className="px-3 py-1.5 text-xs font-bold text-gray-700 focus:outline-none !bg-transparent"
-                />
-              </div>
-              <span className="text-xs font-bold text-gray-400 dark:text-gray-500">,</span>
-              <div
-                style={{ colorScheme: 'light' }}
-                className="rounded-xl border border-saas-border dark:border-white/[0.08] bg-white/[0.6] dark:bg-white/[0.04] backdrop-blur-sm"
-              >
-                <input
-                  type="date"
-                  value={rangeTo}
-                  min={rangeFrom}
-                  max={format(today, 'yyyy-MM-dd')}
-                  onChange={e => setRangeTo(e.target.value)}
-                  className="px-3 py-1.5 text-xs font-bold text-gray-700 focus:outline-none !bg-transparent"
-                />
-              </div>
-            </div>
-          )}
-
-          {/* Refresh */}
+          {/* Refresh global */}
           <button
-            onClick={refetch}
-            className="flex h-9 w-9 items-center justify-center rounded-xl border border-saas-border dark:border-white/[0.08] bg-white/[0.6] dark:bg-white/[0.04] backdrop-blur-sm text-gray-600 dark:text-gray-300 transition-all hover:scale-105"
+            onClick={refetchAll}
+            className="flex h-9 w-9 items-center justify-center rounded-xl border border-white/50 dark:border-white/10 bg-white/30 dark:bg-black/30 backdrop-blur-xl text-gray-600 dark:text-gray-300 transition-all hover:scale-105 hover:bg-white/50 dark:hover:bg-black/50 shadow-sm cursor-pointer"
           >
             <RefreshCw size={16} />
           </button>
         </div>
       </div>
 
-      {/* ══ SECCIÓN 1: KPIs ══ */}
+      {/* ══ SECCIÓN 1: KPIs — carga con financiero + clientes ══ */}
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-2 md:gap-4 xl:gap-6">
         {kpis.map(k => (
-          <KpiCard key={k.label} label={k.label} value={k.value} icon={k.icon} iconColor={k.iconColor} iconBg={k.iconBg} />
+          <KpiCard key={k.label} label={k.label} value={k.value} icon={k.icon} iconColor={k.iconColor} iconBg={k.iconBg} isLoading={kpiLoading} />
         ))}
       </div>
 
-      {/* ══ SECCIÓN 2: ALERTAS OPERATIVAS ══ */}
+      {/* ══ SECCIÓN 2: ALERTAS — carga independientemente ══ */}
       <Section title="Alertas operativas" subtitle="Accionables, requieren atención hoy">
         <div className="grid grid-cols-1 md:grid-cols-3 gap-3 lg:gap-4">
 
@@ -642,55 +518,82 @@ export default function DashboardPage() {
             whileHover={{ scale: 1.01 }} whileTap={{ scale: 0.99 }}
             onClick={() => navigate(ROUTES.CLIENTS)}
             className={`rounded-2xl lg:rounded-[2rem] border p-4 lg:p-6 text-left transition-all backdrop-blur-3xl flex items-start gap-3 lg:gap-4 ${
-              stats.clientes.enDeuda > 0
+              a && a.clientesEnDeuda > 0
                 ? 'border-red-500/30 bg-red-500/10 hover:bg-red-500/15'
                 : 'border-white/50 dark:border-white/10 bg-white/30 dark:bg-black/30'
             }`}
           >
-            <div className={`flex h-9 w-9 lg:h-11 lg:w-11 shrink-0 items-center justify-center rounded-xl lg:rounded-2xl ${stats.clientes.enDeuda > 0 ? 'bg-red-500/20' : 'bg-white/20 dark:bg-white/10'}`}>
-              <AlertCircle size={20} className={stats.clientes.enDeuda > 0 ? 'text-red-400' : 'text-gray-400'} />
+            <div className={`flex h-9 w-9 lg:h-11 lg:w-11 shrink-0 items-center justify-center rounded-xl lg:rounded-2xl ${a && a.clientesEnDeuda > 0 ? 'bg-red-500/20' : 'bg-white/20 dark:bg-white/10'}`}>
+              <AlertCircle size={20} className={a && a.clientesEnDeuda > 0 ? 'text-red-400' : 'text-gray-400'} />
             </div>
             <div>
-              <p className="text-2xl lg:text-3xl font-black tabular-nums text-gray-900 dark:text-white">{stats.clientes.enDeuda}</p>
-              <p className={`text-sm font-bold mt-0.5 ${stats.clientes.enDeuda > 0 ? 'text-red-400' : 'text-gray-500 dark:text-gray-400'}`}>
-                {stats.clientes.enDeuda === 1 ? 'cliente en deuda' : 'clientes en deuda'}
-              </p>
+              {alertasHook.isLoading ? (
+                <div className="space-y-1.5 mt-0.5">
+                  <Skeleton className="h-8 lg:h-9 w-12" />
+                  <Skeleton className="h-4 w-32" />
+                </div>
+              ) : (
+                <>
+                  <p className="text-2xl lg:text-3xl font-black tabular-nums text-gray-900 dark:text-white">{a?.clientesEnDeuda ?? 0}</p>
+                  <p className={`text-sm font-bold mt-0.5 ${a && a.clientesEnDeuda > 0 ? 'text-red-400' : 'text-gray-500 dark:text-gray-400'}`}>
+                    {a && a.clientesEnDeuda === 1 ? 'cliente en deuda' : 'clientes en deuda'}
+                  </p>
+                </>
+              )}
               <p className="text-xs text-gray-400 dark:text-[#8A8A9A] mt-1">Tocá para ver el listado →</p>
             </div>
           </motion.button>
 
           {/* Membresías vencen en 7 días */}
           <div className={`rounded-2xl lg:rounded-[2rem] border p-4 lg:p-6 backdrop-blur-3xl flex items-start gap-3 lg:gap-4 ${
-            stats.membresiasPorVencer.en7dias > 0
+            a && a.membresiasPorVencer.en7dias > 0
               ? 'border-orange-500/30 bg-orange-500/10'
               : 'border-white/50 dark:border-white/10 bg-white/30 dark:bg-black/30'
           }`}>
-            <div className={`flex h-9 w-9 lg:h-11 lg:w-11 shrink-0 items-center justify-center rounded-xl lg:rounded-2xl ${stats.membresiasPorVencer.en7dias > 0 ? 'bg-orange-500/20' : 'bg-white/20 dark:bg-white/10'}`}>
-              <AlertTriangle size={20} className={stats.membresiasPorVencer.en7dias > 0 ? 'text-orange-400' : 'text-gray-400'} />
+            <div className={`flex h-9 w-9 lg:h-11 lg:w-11 shrink-0 items-center justify-center rounded-xl lg:rounded-2xl ${a && a.membresiasPorVencer.en7dias > 0 ? 'bg-orange-500/20' : 'bg-white/20 dark:bg-white/10'}`}>
+              <AlertTriangle size={20} className={a && a.membresiasPorVencer.en7dias > 0 ? 'text-orange-400' : 'text-gray-400'} />
             </div>
             <div>
-              <p className="text-2xl lg:text-3xl font-black tabular-nums text-gray-900 dark:text-white">{stats.membresiasPorVencer.en7dias}</p>
-              <p className={`text-sm font-bold mt-0.5 ${stats.membresiasPorVencer.en7dias > 0 ? 'text-orange-400' : 'text-gray-500 dark:text-gray-400'}`}>
-                {stats.membresiasPorVencer.en7dias === 1 ? 'membresía vence' : 'membresías vencen'} en 7 días
-              </p>
+              {alertasHook.isLoading ? (
+                <div className="space-y-1.5 mt-0.5">
+                  <Skeleton className="h-8 lg:h-9 w-12" />
+                  <Skeleton className="h-4 w-36" />
+                </div>
+              ) : (
+                <>
+                  <p className="text-2xl lg:text-3xl font-black tabular-nums text-gray-900 dark:text-white">{a?.membresiasPorVencer.en7dias ?? 0}</p>
+                  <p className={`text-sm font-bold mt-0.5 ${a && a.membresiasPorVencer.en7dias > 0 ? 'text-orange-400' : 'text-gray-500 dark:text-gray-400'}`}>
+                    {a && a.membresiasPorVencer.en7dias === 1 ? 'membresía vence' : 'membresías vencen'} en 7 días
+                  </p>
+                </>
+              )}
               <p className="text-xs text-gray-400 dark:text-[#8A8A9A] mt-1">Contactar para renovar</p>
             </div>
           </div>
 
           {/* Membresías vencen en 30 días */}
           <div className={`rounded-2xl lg:rounded-[2rem] border p-4 lg:p-6 backdrop-blur-3xl flex items-start gap-3 lg:gap-4 ${
-            stats.membresiasPorVencer.en30dias > 0
+            a && a.membresiasPorVencer.en30dias > 0
               ? 'border-yellow-500/30 bg-yellow-500/10'
               : 'border-white/50 dark:border-white/10 bg-white/30 dark:bg-black/30'
           }`}>
-            <div className={`flex h-9 w-9 lg:h-11 lg:w-11 shrink-0 items-center justify-center rounded-xl lg:rounded-2xl ${stats.membresiasPorVencer.en30dias > 0 ? 'bg-yellow-500/20' : 'bg-white/20 dark:bg-white/10'}`}>
-              <Clock size={20} className={stats.membresiasPorVencer.en30dias > 0 ? 'text-yellow-400' : 'text-gray-400'} />
+            <div className={`flex h-9 w-9 lg:h-11 lg:w-11 shrink-0 items-center justify-center rounded-xl lg:rounded-2xl ${a && a.membresiasPorVencer.en30dias > 0 ? 'bg-yellow-500/20' : 'bg-white/20 dark:bg-white/10'}`}>
+              <Clock size={20} className={a && a.membresiasPorVencer.en30dias > 0 ? 'text-yellow-400' : 'text-gray-400'} />
             </div>
             <div>
-              <p className="text-2xl lg:text-3xl font-black tabular-nums text-gray-900 dark:text-white">{stats.membresiasPorVencer.en30dias}</p>
-              <p className={`text-sm font-bold mt-0.5 ${stats.membresiasPorVencer.en30dias > 0 ? 'text-yellow-500 dark:text-yellow-400' : 'text-gray-500 dark:text-gray-400'}`}>
-                {stats.membresiasPorVencer.en30dias === 1 ? 'membresía vence' : 'membresías vencen'} en 30 días
-              </p>
+              {alertasHook.isLoading ? (
+                <div className="space-y-1.5 mt-0.5">
+                  <Skeleton className="h-8 lg:h-9 w-12" />
+                  <Skeleton className="h-4 w-36" />
+                </div>
+              ) : (
+                <>
+                  <p className="text-2xl lg:text-3xl font-black tabular-nums text-gray-900 dark:text-white">{a?.membresiasPorVencer.en30dias ?? 0}</p>
+                  <p className={`text-sm font-bold mt-0.5 ${a && a.membresiasPorVencer.en30dias > 0 ? 'text-yellow-500 dark:text-yellow-400' : 'text-gray-500 dark:text-gray-400'}`}>
+                    {a && a.membresiasPorVencer.en30dias === 1 ? 'membresía vence' : 'membresías vencen'} en 30 días
+                  </p>
+                </>
+              )}
               <p className="text-xs text-gray-400 dark:text-[#8A8A9A] mt-1">En el próximo mes</p>
             </div>
           </div>
@@ -698,11 +601,11 @@ export default function DashboardPage() {
         </div>
       </Section>
 
-      {/* ══ SECCIÓN 3: FINANCIERO ══ */}
+      {/* ══ SECCIÓN 3: FINANCIERO — carga con financiero + histórico ══ */}
       <Section
         title="Financiero"
         subtitle="Evolución de ingresos y gastos"
-        headerAction={chartHeaderAction}
+        headerAction={makeChartHeaderAction('view-toggle-financiero')}
       >
         <div className="grid grid-cols-1 xl:grid-cols-12 gap-4 lg:gap-6">
 
@@ -720,45 +623,55 @@ export default function DashboardPage() {
                 </span>
               ))}
             </div>
-            <div className="flex-1 min-h-[260px]">
-              <ResponsiveContainer width="100%" height="100%">
-                <AreaChart data={activeChartData} margin={{ top: 10, right: 8, left: 0, bottom: 0 }}>
-                  <defs>
-                    {[['ing', C.primary], ['gas', C.red], ['gan', C.green]].map(([id, color]) => (
-                      <linearGradient key={id} id={`grad-${id}`} x1="0" y1="0" x2="0" y2="1">
-                        <stop offset="5%"  stopColor={color as string} stopOpacity={0.3} />
-                        <stop offset="95%" stopColor={color as string} stopOpacity={0} />
-                      </linearGradient>
-                    ))}
-                  </defs>
-                  <CartesianGrid strokeDasharray="3 3" stroke="currentColor" opacity={0.05} vertical={false} />
-                  <XAxis dataKey="label" tick={{ fill: '#9CA3AF', fontSize: 12, fontWeight: 700 }} axisLine={false} tickLine={false} dy={8} />
-                  <YAxis tick={{ fill: '#9CA3AF', fontSize: 11, fontWeight: 700 }} axisLine={false} tickLine={false} width={58} tickFormatter={v => `$${(v / 1000).toFixed(0)}k`} />
-                  <Tooltip {...TooltipStyle} formatter={(v: number) => formatCurrency(v)} />
-                  <Area type="monotone" dataKey="ingresos"    name="Ingresos" stroke={C.primary} strokeWidth={2.5} fill="url(#grad-ing)" activeDot={{ r: 6, fill: C.primary, strokeWidth: 0 }} />
-                  <Area type="monotone" dataKey="gastos"      name="Gastos"   stroke={C.red}     strokeWidth={2}   fill="url(#grad-gas)" activeDot={{ r: 5, fill: C.red, strokeWidth: 0 }} />
-                  <Area type="monotone" dataKey="gananciaNeta" name="Ganancia" stroke={C.green}  strokeWidth={2}   fill="url(#grad-gan)" activeDot={{ r: 5, fill: C.green, strokeWidth: 0 }} />
-                </AreaChart>
-              </ResponsiveContainer>
-            </div>
+            {historicoHook.isLoading ? (
+              <div className="flex-1 min-h-[260px] flex items-center justify-center">
+                <Skeleton className="h-full w-full rounded-2xl min-h-[220px]" />
+              </div>
+            ) : (
+              <div className="flex-1 min-h-[260px]">
+                <ResponsiveContainer width="100%" height="100%">
+                  <AreaChart data={activeChartData} margin={{ top: 10, right: 8, left: 0, bottom: 0 }}>
+                    <defs>
+                      {[['ing', C.primary], ['gas', C.red], ['gan', C.green]].map(([id, color]) => (
+                        <linearGradient key={id} id={`grad-${id}`} x1="0" y1="0" x2="0" y2="1">
+                          <stop offset="5%"  stopColor={color as string} stopOpacity={0.3} />
+                          <stop offset="95%" stopColor={color as string} stopOpacity={0} />
+                        </linearGradient>
+                      ))}
+                    </defs>
+                    <CartesianGrid strokeDasharray="3 3" stroke="currentColor" opacity={0.05} vertical={false} />
+                    <XAxis dataKey="label" tick={{ fill: '#9CA3AF', fontSize: 12, fontWeight: 700 }} axisLine={false} tickLine={false} dy={8} />
+                    <YAxis tick={{ fill: '#9CA3AF', fontSize: 11, fontWeight: 700 }} axisLine={false} tickLine={false} width={58} tickFormatter={v => `$${(v / 1000).toFixed(0)}k`} />
+                    <Tooltip {...TooltipStyle} formatter={(v: number) => formatCurrency(v)} />
+                    <Area type="monotone" dataKey="ingresos"     name="Ingresos" stroke={C.primary} strokeWidth={2.5} fill="url(#grad-ing)" activeDot={{ r: 6, fill: C.primary, strokeWidth: 0 }} />
+                    <Area type="monotone" dataKey="gastos"       name="Gastos"   stroke={C.red}     strokeWidth={2}   fill="url(#grad-gas)" activeDot={{ r: 5, fill: C.red, strokeWidth: 0 }} />
+                    <Area type="monotone" dataKey="gananciaNeta" name="Ganancia" stroke={C.green}   strokeWidth={2}   fill="url(#grad-gan)" activeDot={{ r: 5, fill: C.green, strokeWidth: 0 }} />
+                  </AreaChart>
+                </ResponsiveContainer>
+              </div>
+            )}
           </ChartCard>
 
           {/* BarChart por método */}
           <ChartCard title="Por método de cobro" subtitle={periodLabel} className="xl:col-span-4 min-h-[240px] lg:min-h-[300px] xl:min-h-[340px]">
-            {stats.ingresosPorMetodo.length === 0 ? (
+            {financieroHook.isLoading ? (
+              <div className="flex-1 min-h-[160px] lg:min-h-[220px] xl:min-h-[260px] flex items-center justify-center">
+                <Skeleton className="h-full w-full rounded-2xl min-h-[200px]" />
+              </div>
+            ) : !f || f.ingresosPorMetodo.length === 0 ? (
               <div className="flex-1 flex items-center justify-center">
                 <p className="text-sm text-gray-400 dark:text-[#8A8A9A]">Sin pagos en este período</p>
               </div>
             ) : (
               <div className="flex-1 min-h-[160px] lg:min-h-[220px] xl:min-h-[260px]">
                 <ResponsiveContainer width="100%" height="100%">
-                  <BarChart data={stats.ingresosPorMetodo} margin={{ top: 5, right: 8, left: 0, bottom: 20 }} barSize={28}>
+                  <BarChart data={f.ingresosPorMetodo} margin={{ top: 5, right: 8, left: 0, bottom: 20 }} barSize={28}>
                     <CartesianGrid strokeDasharray="3 3" stroke="currentColor" opacity={0.05} vertical={false} horizontal={false} />
                     <XAxis dataKey="metodo" axisLine={false} tickLine={false} tick={{ fill: '#9CA3AF', fontSize: 11, fontWeight: 700 }} interval={0} angle={-15} textAnchor="end" dy={6} />
                     <YAxis tick={{ fill: '#9CA3AF', fontSize: 11, fontWeight: 700 }} axisLine={false} tickLine={false} width={52} tickFormatter={v => `$${(v / 1000).toFixed(0)}k`} />
                     <Tooltip {...TooltipStyle} formatter={(v: number) => [formatCurrency(v), 'Total']} />
                     <Bar dataKey="total" radius={[8, 8, 8, 8]}>
-                      {stats.ingresosPorMetodo.map((_, i) => (
+                      {f.ingresosPorMetodo.map((_, i) => (
                         <Cell key={i} fill={BAR_METODOS[i % BAR_METODOS.length]} />
                       ))}
                     </Bar>
@@ -771,13 +684,30 @@ export default function DashboardPage() {
         </div>
       </Section>
 
-      {/* ══ SECCIÓN 4: CLIENTES & PLANES ══ */}
+      {/* ══ SECCIÓN 4: CLIENTES & PLANES — carga independientemente ══ */}
       <Section title="Clientes y planes" subtitle="Distribución actual del gimnasio">
         <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4 lg:gap-6">
 
           {/* Donut clientes por estado */}
           <ChartCard title="Estado de clientes" subtitle="Total actual">
-            {pieClientesData.length === 0 ? (
+            {clientesHook.isLoading ? (
+              <div className="flex-1 flex flex-col justify-between py-2">
+                <div className="flex justify-center items-center h-[140px] lg:h-[170px] xl:h-[180px]">
+                  <div className="relative h-[110px] w-[110px] lg:h-[130px] lg:w-[130px]">
+                    <Skeleton className="absolute inset-0 rounded-full animate-pulse" />
+                    <div className="absolute inset-[20px] rounded-full bg-white/30 dark:bg-black/30" />
+                  </div>
+                </div>
+                <div className="space-y-2 mt-4">
+                  {[1, 2, 3].map(i => (
+                    <div key={i} className="flex justify-between items-center">
+                      <Skeleton className="h-3 w-16" />
+                      <Skeleton className="h-3 w-8" />
+                    </div>
+                  ))}
+                </div>
+              </div>
+            ) : pieClientesData.length === 0 ? (
               <p className="text-sm text-gray-400 flex-1 flex items-center">Sin clientes registrados</p>
             ) : (<>
               <div className="h-[140px] lg:h-[170px] xl:h-[180px]">
@@ -796,13 +726,23 @@ export default function DashboardPage() {
 
           {/* BarChart por plan */}
           <ChartCard title="Membresías por plan" subtitle="Clientes activos">
-            {stats.clientesPorPlan.length === 0 ? (
+            {clientesHook.isLoading ? (
+              <div className="flex-1 min-h-[140px] lg:min-h-[190px] xl:min-h-[220px] flex flex-col justify-evenly gap-3">
+                {[1, 2, 3].map(i => (
+                  <div key={i} className="flex items-center gap-3">
+                    <Skeleton className="h-3 w-16 shrink-0" />
+                    <Skeleton className="flex-1 h-5 rounded-lg" />
+                    <Skeleton className="h-3 w-5 shrink-0" />
+                  </div>
+                ))}
+              </div>
+            ) : !c || c.clientesPorPlan.length === 0 ? (
               <p className="text-sm text-gray-400 flex-1 flex items-center">Sin membresías activas</p>
             ) : (
               <div className="flex-1 min-h-[140px] lg:min-h-[190px] xl:min-h-[220px]">
                 <ResponsiveContainer width="100%" height="100%">
                   <BarChart
-                    data={stats.clientesPorPlan}
+                    data={c.clientesPorPlan}
                     layout="vertical"
                     margin={{ top: 0, right: 20, left: 0, bottom: 0 }}
                     barSize={20}
@@ -828,7 +768,24 @@ export default function DashboardPage() {
 
           {/* Donut gastos por categoría */}
           <ChartCard title="Gastos por categoría" subtitle={periodLabel}>
-            {pieGastosData.length === 0 ? (
+            {financieroHook.isLoading ? (
+              <div className="flex-1 flex flex-col justify-between py-2">
+                <div className="flex justify-center items-center h-[140px] lg:h-[170px] xl:h-[180px]">
+                  <div className="relative h-[110px] w-[110px] lg:h-[130px] lg:w-[130px]">
+                    <Skeleton className="absolute inset-0 rounded-full animate-pulse" />
+                    <div className="absolute inset-[20px] rounded-full bg-white/30 dark:bg-black/30" />
+                  </div>
+                </div>
+                <div className="space-y-2 mt-4">
+                  {[1, 2, 3].map(i => (
+                    <div key={i} className="flex justify-between items-center">
+                      <Skeleton className="h-3 w-16" />
+                      <Skeleton className="h-3 w-8" />
+                    </div>
+                  ))}
+                </div>
+              </div>
+            ) : pieGastosData.length === 0 ? (
               <p className="text-sm text-gray-400 flex-1 flex items-center">Sin gastos en este período</p>
             ) : (<>
               <div className="h-[140px] lg:h-[170px] xl:h-[180px]">
@@ -848,25 +805,43 @@ export default function DashboardPage() {
         </div>
       </Section>
 
-      {/* ══ SECCIÓN 5: FACTURACIÓN ══ */}
+      {/* ══ SECCIÓN 5: FACTURACIÓN — carga independientemente ══ */}
       <Section
         title="Facturación"
         subtitle={chartView === 'meses' ? `Estado de los ingresos, ${periodLabel}` : chartView === 'años' ? 'Totales por año' : 'Totales históricos'}
-        headerAction={chartHeaderAction}
+        headerAction={makeChartHeaderAction('view-toggle-facturacion')}
       >
         <div className="grid grid-cols-1 md:grid-cols-2 gap-4 lg:gap-6">
 
           {chartView === 'meses' ? (
             <ChartCard title="Ingresos facturados vs sin facturar">
-              <FacturacionBar
-                facturado={stats.facturacion.facturado}
-                sinFacturar={stats.facturacion.sinFacturar}
-                total={stats.facturacion.total}
-              />
+              {facturacionHook.isLoading ? (
+                <div className="space-y-3">
+                  <div className="flex justify-between">
+                    <Skeleton className="h-3 w-16" />
+                    <Skeleton className="h-3 w-8" />
+                  </div>
+                  <Skeleton className="h-3 w-full rounded-full" />
+                  <div className="grid grid-cols-2 gap-3 pt-1">
+                    <Skeleton className="h-16 rounded-2xl" />
+                    <Skeleton className="h-16 rounded-2xl" />
+                  </div>
+                </div>
+              ) : (
+                <FacturacionBar
+                  facturado={fc?.facturacion.facturado ?? 0}
+                  sinFacturar={fc?.facturacion.sinFacturar ?? 0}
+                  total={fc?.facturacion.total ?? 0}
+                />
+              )}
             </ChartCard>
           ) : (
             <ChartCard title="Ingresos vs Gastos" subtitle={chartSubtitle} className="min-h-[220px]">
-              {chartData.length === 0 ? (
+              {historicoHook.isLoading ? (
+                <div className="flex-1 min-h-[160px] flex items-center justify-center">
+                  <Skeleton className="h-full w-full rounded-2xl min-h-[130px]" />
+                </div>
+              ) : chartData.length === 0 ? (
                 <div className="flex-1 flex items-center justify-center">
                   <p className="text-sm text-gray-400 dark:text-[#8A8A9A]">Sin datos en este período</p>
                 </div>
@@ -887,39 +862,47 @@ export default function DashboardPage() {
             </ChartCard>
           )}
 
-          {/* Resumen */}
+          {/* Resumen del período */}
           <ChartCard title="Resumen del período">
-            <div className="space-y-3 flex-1">
-              {[
-                {
-                  label: 'Ingresos totales',
-                  value: formatCurrency(facturAgg ? facturAgg.totalIngresos : stats.totalIngresos),
-                  color: 'text-green-500 dark:text-green-400', bg: 'bg-green-500/10',
-                },
-                {
-                  label: 'Gastos totales',
-                  value: formatCurrency(facturAgg ? facturAgg.totalGastos : stats.totalGastos),
-                  color: 'text-red-500 dark:text-red-400', bg: 'bg-red-500/10',
-                },
-                {
-                  label: 'Ganancia neta',
-                  value: formatCurrency(facturAgg ? facturAgg.gananciaNeta : stats.gananciaNeta),
-                  color: (facturAgg ? facturAgg.gananciaNeta : stats.gananciaNeta) >= 0 ? 'text-green-500 dark:text-green-400' : 'text-red-500 dark:text-red-400',
-                  bg:    (facturAgg ? facturAgg.gananciaNeta : stats.gananciaNeta) >= 0 ? 'bg-green-500/10' : 'bg-red-500/10',
-                },
-              ].map(row => (
-                <div key={row.label} className={`flex items-center justify-between rounded-2xl px-4 py-3.5 ${row.bg}`}>
-                  <span className="text-sm font-semibold text-gray-700 dark:text-gray-200">{row.label}</span>
-                  <span className={`text-base font-black tabular-nums ${row.color}`}>{row.value}</span>
-                </div>
-              ))}
-              <div className="flex items-center gap-2 rounded-2xl border border-white/30 dark:border-white/10 px-4 py-3.5">
-                <CheckCircle2 size={15} className="text-primary shrink-0" />
-                <span className="text-sm font-semibold text-gray-600 dark:text-gray-300">
-                  {stats.clientes.activos} clientes activos al día de hoy
-                </span>
+            {(financieroHook.isLoading || clientesHook.isLoading) ? (
+              <div className="space-y-3 flex-1">
+                {[1, 2, 3, 4].map(i => (
+                  <Skeleton key={i} className="h-[52px] rounded-2xl" />
+                ))}
               </div>
-            </div>
+            ) : (
+              <div className="space-y-3 flex-1">
+                {[
+                  {
+                    label: 'Ingresos totales',
+                    value: formatCurrency(facturAgg ? facturAgg.totalIngresos : f?.ingresos.total ?? 0),
+                    color: 'text-green-500 dark:text-green-400', bg: 'bg-green-500/10',
+                  },
+                  {
+                    label: 'Gastos totales',
+                    value: formatCurrency(facturAgg ? facturAgg.totalGastos : f?.gastos.total ?? 0),
+                    color: 'text-red-500 dark:text-red-400', bg: 'bg-red-500/10',
+                  },
+                  {
+                    label: 'Ganancia neta',
+                    value: formatCurrency(facturAgg ? facturAgg.gananciaNeta : gananciaNeta),
+                    color: (facturAgg ? facturAgg.gananciaNeta : gananciaNeta) >= 0 ? 'text-green-500 dark:text-green-400' : 'text-red-500 dark:text-red-400',
+                    bg:    (facturAgg ? facturAgg.gananciaNeta : gananciaNeta) >= 0 ? 'bg-green-500/10' : 'bg-red-500/10',
+                  },
+                ].map(row => (
+                  <div key={row.label} className={`flex items-center justify-between rounded-2xl px-4 py-3.5 ${row.bg}`}>
+                    <span className="text-sm font-semibold text-gray-700 dark:text-gray-200">{row.label}</span>
+                    <span className={`text-base font-black tabular-nums ${row.color}`}>{row.value}</span>
+                  </div>
+                ))}
+                <div className="flex items-center gap-2 rounded-2xl border border-white/30 dark:border-white/10 px-4 py-3.5">
+                  <CheckCircle2 size={15} className="text-primary shrink-0" />
+                  <span className="text-sm font-semibold text-gray-600 dark:text-gray-300">
+                    {clientesActivos} clientes activos al día de hoy
+                  </span>
+                </div>
+              </div>
+            )}
           </ChartCard>
 
         </div>

@@ -14,6 +14,7 @@ import { ROUTES } from '../constants/routes'
 import { formatCurrency } from '../utils/formatCurrency'
 import { formatDate } from '../utils/formatDate'
 import Skeleton from '../components/ui/Skeleton'
+import ConfirmDialog from '../components/ui/ConfirmDialog'
 import type { Payment } from '../types/payment.types'
 
 const METHOD_CONFIG: Record<string, {
@@ -49,6 +50,7 @@ export default function PaymentDetailPage() {
   const [error, setError] = useState<string | null>(null)
   const [togglingInvoiced, setTogglingInvoiced] = useState(false)
   const [deleting, setDeleting] = useState(false)
+  const [isConfirmOpen, setIsConfirmOpen] = useState(false)
 
   useEffect(() => {
     if (!id) return
@@ -76,7 +78,7 @@ export default function PaymentDetailPage() {
   }
 
   async function handleDelete() {
-    if (!payment || !confirm('¿Eliminar este pago? Esta acción no se puede deshacer.')) return
+    if (!payment) return
     setDeleting(true)
     try {
       await paymentsApi.remove(payment.id)
@@ -282,17 +284,26 @@ export default function PaymentDetailPage() {
           {isAdmin && (
             <div className="flex justify-end pt-1">
               <button
-                onClick={handleDelete}
+                onClick={() => setIsConfirmOpen(true)}
                 disabled={deleting}
                 className="flex items-center gap-2 rounded-2xl border border-red-500/20 bg-red-500/10 px-4 py-2.5 text-sm font-semibold text-red-600 dark:text-red-400 hover:bg-red-500/20 transition-all disabled:opacity-50"
               >
                 <Trash2 size={15} />
-                {deleting ? 'Eliminando…' : 'Eliminar pago'}
+                Eliminar pago
               </button>
             </div>
           )}
         </>
       )}
+      <ConfirmDialog
+        isOpen={isConfirmOpen}
+        title="Eliminar pago"
+        message="Esta acción no se puede deshacer. El registro quedará eliminado permanentemente."
+        confirmLabel="Eliminar"
+        isLoading={deleting}
+        onConfirm={handleDelete}
+        onClose={() => setIsConfirmOpen(false)}
+      />
     </motion.div>
   )
 }

@@ -17,5 +17,11 @@ export const ROUTES = {
   USERS: '/usuarios',
   SETTINGS: '/settings',
   EXERCISES: '/exercises',
+  EXERCISE_NEW: '/exercises/new',
+  EXERCISE_DETAIL: '/exercises/:id',
+  PLANTILLAS: '/plantillas',
+  PLANTILLA_NEW: '/plantillas/new',
+  PLANTILLA_DETAIL: '/plantillas/:id',
   EJECUCION: '/ejecucion',
+  RUTINA_CREAR: '/rutinas/crear',
 } as const

@@ -23,8 +23,9 @@ export const authApi = {
       role: (
         usuario.rol === 'ADMINISTRADOR' ? 'admin'
         : usuario.rol === 'PROFESOR'    ? 'profesor'
-        :                                 'staff'
-      ) as 'admin' | 'staff' | 'profesor',
+        : usuario.rol === 'CLIENTE_COMUN' ? 'cliente_comun'
+        :                                   'staff'
+      ) as 'admin' | 'staff' | 'profesor' | 'cliente_comun',
     }
 
     // Cargar permisos y configuración usando el token recién obtenido

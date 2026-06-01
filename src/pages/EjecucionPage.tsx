@@ -279,8 +279,9 @@ export default function EjecucionPage() {
     const t = setTimeout(async () => {
       setSearching(true)
       try {
-        const r = await api.get('/clientes', { params: { search, limit: 8 } })
-        setResults(r.data.data ?? r.data)
+        const r = await api.get('/clientes/buscar', { params: { q: search, limit: 8 } })
+        const items: Array<{ id: string; nombre: string; apellido: string }> = r.data ?? []
+        setResults(items.map(c => ({ id: c.id, name: c.nombre, lastName: c.apellido } as unknown as Client)))
       } catch { setResults([]) }
       finally { setSearching(false) }
     }, 280)

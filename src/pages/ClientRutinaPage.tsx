@@ -19,6 +19,7 @@ import type { Rutina, EjercicioPlan } from '../types/rutina.types'
 import type { EjercicioCatalogo } from '../types/ejercicio-catalogo.types'
 import { ROUTES } from '../constants/routes'
 import { useUiStore } from '../store/uiStore'
+import Skeleton, { SkeletonRutinaPanel } from '../components/ui/Skeleton'
 
 // ─── Constantes ───────────────────────────────────────────────────────────────
 
@@ -333,8 +334,13 @@ function AddEjercicioPanel({ bloqueId, onAdd, onClose }: AddEjercicioPanelProps)
         </div>
         <div className="max-h-48 overflow-y-auto">
           {loading ? (
-            <div className="py-5 text-center">
-              <div className="w-4 h-4 border-2 border-white/20 border-t-primary/60 rounded-full animate-spin mx-auto" />
+            <div className="p-3 space-y-2.5">
+              {[1, 2, 3].map(i => (
+                <div key={i} className="flex flex-col gap-1.5">
+                  <Skeleton className="h-4 w-32 rounded-lg" />
+                  <Skeleton className="h-3 w-20 rounded-md" />
+                </div>
+              ))}
             </div>
           ) : noResults ? (
             <div className="p-3 space-y-1.5">
@@ -548,79 +554,6 @@ function DraftBloqueCard({ bloque, sesionId, addingBloqueId, onSetAdding, onDele
   )
 }
 
-// ─── NuevaRutinaPanel ─────────────────────────────────────────────────────────
-
-interface NuevaRutinaPanelProps {
-  clienteId: string
-  onCreated: (rutinaId: string) => Promise<void>
-  onClose: () => void
-}
-
-function NuevaRutinaPanel({ clienteId, onCreated, onClose }: NuevaRutinaPanelProps) {
-  const user = useAuthStore(s => s.user)
-  const addToast = useUiStore(s => s.addToast)
-  const [nombre, setNombre] = useState('')
-  const [descripcion, setDescripcion] = useState('')
-  const [profesores, setProfesores] = useState<{ profesorId: string; nombre: string }[]>([])
-  const [profesorId, setProfesorId] = useState('')
-  const [saving, setSaving] = useState(false)
-
-  useEffect(() => {
-    if (user?.role === 'admin') {
-      import('../api/shifts.api').then(m =>
-        m.professorsApi.getAll().then((data: { id: string; name: string }[]) => {
-          const mapped = data.map(p => ({ profesorId: p.id, nombre: p.name }))
-          setProfesores(mapped)
-          if (mapped.length > 0) setProfesorId(mapped[0].profesorId)
-        }),
-      )
-    }
-  }, [user?.role])
-
-  const handleCreate = async () => {
-    if (!nombre.trim() || !profesorId) return
-    setSaving(true)
-    try {
-      const rutina = await rutinasApi.create({ clienteId, profesorId, nombre: nombre.trim(), descripcion: descripcion.trim() || undefined })
-      await onCreated(rutina.id)
-    } catch {
-      addToast({ type: 'error', message: 'Error al crear rutina' })
-    } finally {
-      setSaving(false)
-    }
-  }
-
-  return (
-    <motion.div
-      initial={{ opacity: 0, height: 0 }}
-      animate={{ opacity: 1, height: 'auto' }}
-      exit={{ opacity: 0, height: 0 }}
-      className="overflow-hidden"
-    >
-      <div className="mt-2 p-4 bg-white/[0.04] border border-white/[0.08] rounded-2xl space-y-3">
-        <div className="flex items-center justify-between">
-          <span className="text-xs font-medium text-white/60">Nueva rutina</span>
-          <button onClick={onClose} className="text-white/30 hover:text-white transition-colors"><X className="w-3.5 h-3.5" /></button>
-        </div>
-        <input value={nombre} onChange={e => setNombre(e.target.value)} placeholder="Nombre (ej: Push/Pull)"
-          className="w-full bg-white/[0.06] border border-white/[0.08] rounded-xl px-3 py-2 text-sm text-white placeholder-white/30 focus:outline-none focus:border-primary/50" />
-        <input value={descripcion} onChange={e => setDescripcion(e.target.value)} placeholder="Descripción (opcional)"
-          className="w-full bg-white/[0.06] border border-white/[0.08] rounded-xl px-3 py-2 text-sm text-white placeholder-white/30 focus:outline-none focus:border-primary/50" />
-        {user?.role === 'admin' && profesores.length > 0 && (
-          <select value={profesorId} onChange={e => setProfesorId(e.target.value)}
-            className="w-full bg-white/[0.06] border border-white/[0.08] rounded-xl px-3 py-2 text-sm text-white focus:outline-none focus:border-primary/50">
-            {profesores.map(p => <option key={p.profesorId} value={p.profesorId}>{p.nombre}</option>)}
-          </select>
-        )}
-        <button onClick={handleCreate} disabled={saving || !nombre.trim() || !profesorId}
-          className="w-full py-2 rounded-xl bg-primary text-black text-sm font-medium disabled:opacity-40 transition-opacity">
-          {saving ? 'Creando...' : 'Crear rutina'}
-        </button>
-      </div>
-    </motion.div>
-  )
-}
-
 // ─── SesionDayDropdown ────────────────────────────────────────────────────────
 
 function SesionDayDropdown({ existentes, semanaId, onSelect, onClose }: {
@@ -828,8 +761,30 @@ function EditCard({ clienteId: _clienteId, rutina, onCancel, onSaved }: EditCard
 
   if (!draft) {
     return (
-      <div className={`${glassCard} p-8 flex items-center justify-center`}>
-        <div className="w-5 h-5 border-2 border-white/20 border-t-primary/60 rounded-full animate-spin" />
+      <div className={`${glassCard} p-6 space-y-6`}>
+        <div className="flex items-center justify-between">
+          <div className="flex items-center gap-3">
+            <Skeleton className="h-8 w-8 rounded-xl shrink-0" />
+            <div>
+              <Skeleton className="h-4 w-28 mb-1" />
+              <Skeleton className="h-3 w-40" />
+            </div>
+          </div>
+          <Skeleton className="h-9 w-24 rounded-xl" />
+        </div>
+        <div className="grid gap-6 lg:grid-cols-[240px_1fr]">
+          <div className="space-y-4">
+            <Skeleton className="h-4 w-20" />
+            <div className="space-y-2">
+              <Skeleton className="h-10 w-full rounded-xl" />
+              <Skeleton className="h-10 w-full rounded-xl" />
+            </div>
+          </div>
+          <div className="space-y-4">
+            <Skeleton className="h-5 w-32" />
+            <Skeleton className="h-36 w-full rounded-2xl" />
+          </div>
+        </div>
       </div>
     )
   }
@@ -1082,7 +1037,6 @@ export default function ClientRutinaPage() {
   const [selectedSemanaNumero, setSelectedSemanaNumero] = useState(1)
   const [selectedSesionId, setSelectedSesionId] = useState<string | null>(null)
   const [editMode, setEditMode] = useState(false)
-  const [showNuevaRutina, setShowNuevaRutina] = useState(false)
   const [confirmDeleteSemana, setConfirmDeleteSemana] = useState(false)
   const [navFormat, setNavFormat] = useState<'tree' | 'table'>('tree')
 
@@ -1146,17 +1100,8 @@ export default function ClientRutinaPage() {
   if (isLoading) {
     return (
       <div className="p-4 lg:p-6 xl:p-8 space-y-4">
-        <div className="h-5 w-32 bg-white/[0.04] animate-pulse rounded-xl" />
-        <div className="flex flex-col lg:flex-row gap-5">
-          <div className="w-full lg:w-64 space-y-2">
-            <div className="h-48 bg-white/[0.04] animate-pulse rounded-3xl" />
-          </div>
-          <div className="flex-1 space-y-4">
-            <div className="h-44 bg-white/[0.04] animate-pulse rounded-3xl" />
-            <div className="h-36 bg-white/[0.04] animate-pulse rounded-2xl" />
-            <div className="h-36 bg-white/[0.04] animate-pulse rounded-2xl" />
-          </div>
-        </div>
+        <Skeleton className="h-5 w-32" />
+        <SkeletonRutinaPanel />
       </div>
     )
   }
@@ -1193,7 +1138,7 @@ export default function ClientRutinaPage() {
                   {rutinas.length > 0 && <span className="ml-auto text-xs text-white/25">{rutinas.length}</span>}
                 </div>
 
-                {rutinas.length === 0 && !showNuevaRutina && (
+                {rutinas.length === 0 && (
                   <div className="py-8 text-center">
                     <Dumbbell className="w-8 h-8 text-white/15 mx-auto mb-2" />
                     <p className="text-xs text-white/35">Sin rutinas asignadas</p>
@@ -1228,24 +1173,10 @@ export default function ClientRutinaPage() {
                   ))}
                 </div>
 
-                <AnimatePresence>
-                  {showNuevaRutina && (
-                    <NuevaRutinaPanel
-                      clienteId={clienteId!}
-                      onCreated={async (rutinaId) => {
-                        await refetch()
-                        setSelectedRutinaId(rutinaId)
-                        setShowNuevaRutina(false)
-                      }}
-                      onClose={() => setShowNuevaRutina(false)}
-                    />
-                  )}
-                </AnimatePresence>
-
-                {canEdit && !showNuevaRutina && (
+                {canEdit && (
                   <button
-                    onClick={() => setShowNuevaRutina(true)}
-                    className="mt-3 w-full flex items-center justify-center gap-1.5 py-2.5 rounded-2xl border border-dashed border-white/[0.1] text-xs text-white/30 hover:text-primary hover:border-primary/30 transition-colors"
+                    onClick={() => navigate(`${ROUTES.RUTINA_CREAR}?clienteId=${clienteId}`)}
+                    className="mt-3 flex items-center gap-2 rounded-xl btn-action px-4 py-2.5 text-sm"
                   >
                     <Plus className="w-3.5 h-3.5" /> Nueva rutina
                   </button>

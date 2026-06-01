@@ -1,26 +1,18 @@
-import { useState, useEffect, useCallback } from 'react'
+import { useQuery } from '@tanstack/react-query'
 import { clientsApi } from '../api/clients.api'
-import type { Client } from '../types/client.types'
+import { QK } from '../lib/queryKeys'
 
 export function useClients() {
-  const [clients, setClients] = useState<Client[]>([])
-  const [isLoading, setIsLoading] = useState(true)
-  const [error, setError] = useState<string | null>(null)
+  const { data, isPending, error, refetch } = useQuery({
+    queryKey: QK.clients.all(),
+    queryFn:  () => clientsApi.getAll(),
+    staleTime: 30_000,
+  })
 
-  const fetch = useCallback(async () => {
-    setIsLoading(true)
-    setError(null)
-    try {
-      const data = await clientsApi.getAll()
-      setClients(data)
-    } catch {
-      setError('No se pudieron cargar los clientes')
-    } finally {
-      setIsLoading(false)
-    }
-  }, [])
-
-  useEffect(() => { fetch() }, [fetch])
-
-  return { clients, isLoading, error, refetch: fetch }
+  return {
+    clients:  data ?? [],
+    isLoading: isPending,
+    error:    error ? (error as Error).message : null,
+    refetch:  () => { refetch() },
+  }
 }

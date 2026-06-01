@@ -1,10 +1,10 @@
-﻿import { useState, useMemo } from 'react'
+import { useState, useMemo } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
 import { useNavigate } from 'react-router-dom'
 import { pageVariants, cardVariants } from '../lib/motion'
 import {
   Plus, CreditCard, Banknote, ArrowLeftRight, Building2, RefreshCw,
-  CheckCircle2, XCircle, Trash2, Search, Filter, ChevronDown,
+  CheckCircle2, XCircle, Trash2, Search, Filter, ChevronDown, ChevronLeft, ChevronRight,
   Layers, LayoutList, LayoutGrid, Edit2, X, Save, Pencil,
 } from 'lucide-react'
 import { useForm } from 'react-hook-form'
@@ -28,6 +28,7 @@ import Input from '../components/ui/Input'
 import KpiCard from '../components/ui/KpiCard'
 import Select from '../components/ui/Select'
 import Skeleton from '../components/ui/Skeleton'
+import ConfirmDialog from '../components/ui/ConfirmDialog'
 import { formatCurrency } from '../utils/formatCurrency'
 import { formatDate } from '../utils/formatDate'
 import type { Payment, PaymentMethod } from '../types/payment.types'
@@ -476,9 +477,13 @@ export default function PaymentsPage() {
   // ── Estado planes ──
   const [planModalOpen, setPlanModalOpen] = useState(false)
   const [planSubmitting, setPlanSubmitting] = useState(false)
+  const [deletePaymentTarget, setDeletePaymentTarget] = useState<number | null>(null)
+  const [deletePlanTarget, setDeletePlanTarget] = useState<Plan | null>(null)
+  const [isDeletingPayment, setIsDeletingPayment] = useState(false)
+  const [isDeletingPlan, setIsDeletingPlan] = useState(false)
 
   const { memberships: plans, isLoading: plansLoading, error: plansError, refetch: refetchPlans } = useMemberships()
-  const { payments, isLoading, error, refetch } = usePayments({
+  const { payments, total: serverTotal, totalPages, currentPage, goToPage, isLoading, error, refetch } = usePayments({
     desde: dateFrom || undefined,
     hasta: dateTo || undefined,
     anio: (!dateFrom && !dateTo && yearFilter !== 'all') ? yearFilter : undefined,
@@ -552,9 +557,10 @@ export default function PaymentsPage() {
   }
 
   async function deletePayment(id: number) {
-    if (!confirm('¿Eliminar este pago?')) return
+    setIsDeletingPayment(true)
     try { await paymentsApi.remove(id); addToast('Pago eliminado', 'success'); refetch() }
     catch { addToast('Error al eliminar', 'error') }
+    finally { setIsDeletingPayment(false); setDeletePaymentTarget(null) }
   }
 
   // ── Handlers planes ──
@@ -578,9 +584,15 @@ export default function PaymentsPage() {
       addToast(`El plan tiene ${plan.membresiaCount} membresía(s) activa(s) — no se puede eliminar`, 'error')
       return
     }
-    if (!confirm(`¿Eliminar el plan "${plan.name}"?`)) return
-    try { await membershipsApi.remove(plan.id); addToast('Plan eliminado', 'success'); refetchPlans() }
+    setDeletePlanTarget(plan)
+  }
+
+  async function confirmDeletePlan() {
+    if (!deletePlanTarget) return
+    setIsDeletingPlan(true)
+    try { await membershipsApi.remove(deletePlanTarget.id); addToast('Plan eliminado', 'success'); refetchPlans() }
     catch { addToast('Error al eliminar', 'error') }
+    finally { setIsDeletingPlan(false); setDeletePlanTarget(null) }
   }
 
   // ── Clases compartidas ──
@@ -610,15 +622,6 @@ export default function PaymentsPage() {
           >
             <RefreshCw size={18} />
           </button>
-          {can('memberships', 'create') && (
-            <button
-              onClick={openCreatePlan}
-              className="flex items-center gap-2 rounded-xl border border-white/50 dark:border-white/10 bg-white/30 dark:bg-black/30 backdrop-blur-xl px-4 py-2.5 text-sm font-semibold text-gray-700 dark:text-gray-200 hover:bg-white/50 dark:hover:bg-black/50 transition-all shadow-sm"
-            >
-              <Plus size={13} strokeWidth={2.5} />
-              Nuevo plan
-            </button>
-          )}
           {can('payments', 'create') && (
             <button
               onClick={() => { setModalOpen(true); loadClients('') }}
@@ -661,13 +664,34 @@ export default function PaymentsPage() {
               </span>
             )}
           </div>
-          <div className="flex gap-1 p-1 rounded-xl bg-white/40 dark:bg-white/[0.04] border border-gray-200/60 dark:border-white/[0.07] shrink-0">
-            {(['list', 'grid'] as const).map((mode) => (
-              <button key={mode} onClick={() => setViewMode(mode)}
-                className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold transition-all ${viewMode === mode ? 'bg-white dark:bg-white/[0.09] text-gray-900 dark:text-white shadow-sm' : 'text-gray-500 dark:text-[#8A8A9A] hover:text-gray-800 dark:hover:text-gray-200'}`}>
-                {mode === 'list' ? <><LayoutList size={14} /> Lista</> : <><LayoutGrid size={14} /> Cards</>}
-              </button>
-            ))}
+          <div className="flex items-center rounded-full border border-white/50 dark:border-white/10 bg-white/30 dark:bg-black/30 backdrop-blur-xl p-1 shadow-sm gap-1 shrink-0">
+            {(['list', 'grid'] as const).map((mode) => {
+              const isActive = viewMode === mode
+              return (
+                <button
+                  key={mode}
+                  onClick={() => setViewMode(mode)}
+                  className={`relative inline-flex items-center justify-center rounded-full px-4 py-1.5 text-xs font-bold transition-all duration-300 cursor-pointer ${
+                    isActive
+                      ? 'text-white dark:text-gray-900'
+                      : 'text-gray-500 dark:text-[#8A8A9A] hover:text-gray-900 dark:hover:text-white'
+                  }`}
+                >
+                  {isActive && (
+                    <motion.div
+                      layoutId="view-mode-payments"
+                      className="absolute inset-0 rounded-full bg-gray-900 dark:bg-white shadow-[0_2px_8px_rgba(0,0,0,0.15)]"
+                      transition={{ type: 'spring', stiffness: 380, damping: 30 }}
+                      style={{ zIndex: 0 }}
+                    />
+                  )}
+                  <span className="relative z-10 flex items-center gap-1.5">
+                    {mode === 'list' ? <LayoutList size={13} /> : <LayoutGrid size={13} />}
+                    <span>{mode === 'list' ? 'Lista' : 'Cards'}</span>
+                  </span>
+                </button>
+              )
+            })}
           </div>
         </div>
 
@@ -679,74 +703,74 @@ export default function PaymentsPage() {
                 <div className="flex flex-col md:flex-row gap-4 flex-wrap">
                   {/* Buscar cliente */}
                   <div className="flex-1 min-w-[180px] relative">
-                    <label className="block text-xs font-semibold uppercase tracking-wider text-gray-500 dark:text-gray-400 mb-2">Buscar Cliente</label>
+                    <span className="text-[10px] font-bold uppercase tracking-wider text-gray-400 dark:text-[#8A8A9A] ml-1 mb-1.5 block">Buscar Cliente</span>
                     <div className="relative">
-                      <Search size={16} className="absolute left-4 top-1/2 -translate-y-1/2 text-gray-400 pointer-events-none" />
+                      <Search size={14} className="absolute left-3.5 top-1/2 -translate-y-1/2 text-gray-400 pointer-events-none" />
                       <input type="text" placeholder="Nombre o apellido..." value={searchFilter} onChange={e => setSearchFilter(e.target.value)}
-                        className="w-full rounded-xl bg-white/50 dark:bg-black/40 backdrop-blur-xl border border-white/50 dark:border-white/10 pl-11 pr-4 py-2.5 text-sm font-semibold text-gray-800 dark:text-gray-200 placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-primary/50 transition-all shadow-sm" />
+                        className="w-full rounded-xl border border-white/50 dark:border-white/10 bg-white/30 dark:bg-black/30 backdrop-blur-xl pl-10 pr-4 py-2 text-xs font-semibold text-gray-800 dark:text-gray-200 focus:outline-none h-10" />
                     </div>
                   </div>
                   {/* Método */}
                   <div className="w-full md:w-44">
-                    <label className="block text-xs font-semibold uppercase tracking-wider text-gray-500 dark:text-gray-400 mb-2">Método</label>
+                    <span className="text-[10px] font-bold uppercase tracking-wider text-gray-400 dark:text-[#8A8A9A] ml-1 mb-1.5 block">Método</span>
                     <select value={methodFilter} onChange={e => setMethodFilter(e.target.value as MethodFilter)}
-                      className="w-full rounded-xl bg-white/50 dark:bg-black/40 backdrop-blur-xl border border-white/50 dark:border-white/10 px-4 py-2.5 text-sm font-semibold text-gray-800 dark:text-gray-200 focus:outline-none focus:ring-2 focus:ring-primary/50 transition-all shadow-sm cursor-pointer">
-                      <option value="all">Todos</option>
-                      <option value="cash">Efectivo</option>
-                      <option value="transfer">Transferencia</option>
-                      <option value="card">Débito</option>
+                      className="w-full rounded-xl border border-white/50 dark:border-white/10 bg-white/30 dark:bg-black/30 backdrop-blur-xl px-3.5 py-2 text-xs font-semibold text-gray-800 dark:text-gray-200 focus:outline-none cursor-pointer h-10">
+                      <option value="all" className="bg-white dark:bg-[#1a1a24] text-gray-900 dark:text-white">Todos</option>
+                      <option value="cash" className="bg-white dark:bg-[#1a1a24] text-gray-900 dark:text-white">Efectivo</option>
+                      <option value="transfer" className="bg-white dark:bg-[#1a1a24] text-gray-900 dark:text-white">Transferencia</option>
+                      <option value="card" className="bg-white dark:bg-[#1a1a24] text-gray-900 dark:text-white">Débito</option>
                     </select>
                   </div>
                   {/* Facturado */}
                   <div className="w-full md:w-40">
-                    <label className="block text-xs font-semibold uppercase tracking-wider text-gray-500 dark:text-gray-400 mb-2">Facturado</label>
+                    <span className="text-[10px] font-bold uppercase tracking-wider text-gray-400 dark:text-[#8A8A9A] ml-1 mb-1.5 block">Facturado</span>
                     <select value={invoicedFilter} onChange={e => setInvoicedFilter(e.target.value as 'all' | 'yes' | 'no')}
-                      className="w-full rounded-xl bg-white/50 dark:bg-black/40 backdrop-blur-xl border border-white/50 dark:border-white/10 px-4 py-2.5 text-sm font-semibold text-gray-800 dark:text-gray-200 focus:outline-none focus:ring-2 focus:ring-primary/50 transition-all shadow-sm cursor-pointer">
-                      <option value="all">Todos</option>
-                      <option value="yes">Sí</option>
-                      <option value="no">No</option>
+                      className="w-full rounded-xl border border-white/50 dark:border-white/10 bg-white/30 dark:bg-black/30 backdrop-blur-xl px-3.5 py-2 text-xs font-semibold text-gray-800 dark:text-gray-200 focus:outline-none cursor-pointer h-10">
+                      <option value="all" className="bg-white dark:bg-[#1a1a24] text-gray-900 dark:text-white">Todos</option>
+                      <option value="yes" className="bg-white dark:bg-[#1a1a24] text-gray-900 dark:text-white">Sí</option>
+                      <option value="no" className="bg-white dark:bg-[#1a1a24] text-gray-900 dark:text-white">No</option>
                     </select>
                   </div>
                   {/* Período */}
                   <div className="w-full md:w-40">
-                    <label className="block text-xs font-semibold uppercase tracking-wider text-gray-500 dark:text-gray-400 mb-2">Período</label>
+                    <span className="text-[10px] font-bold uppercase tracking-wider text-gray-400 dark:text-[#8A8A9A] ml-1 mb-1.5 block">Período</span>
                     <select value={dateMode} onChange={e => { const m = e.target.value as 'year' | 'range'; setDateMode(m); if (m === 'year') { setDateFrom(''); setDateTo('') } else setYearFilter('all') }}
-                      className="w-full rounded-xl bg-white/50 dark:bg-black/40 backdrop-blur-xl border border-white/50 dark:border-white/10 px-4 py-2.5 text-sm font-semibold text-gray-800 dark:text-gray-200 focus:outline-none focus:ring-2 focus:ring-primary/50 transition-all shadow-sm cursor-pointer">
-                      <option value="year">Por año</option>
-                      <option value="range">Por rango</option>
+                      className="w-full rounded-xl border border-white/50 dark:border-white/10 bg-white/30 dark:bg-black/30 backdrop-blur-xl px-3.5 py-2 text-xs font-semibold text-gray-800 dark:text-gray-200 focus:outline-none cursor-pointer h-10">
+                      <option value="year" className="bg-white dark:bg-[#1a1a24] text-gray-900 dark:text-white">Por año</option>
+                      <option value="range" className="bg-white dark:bg-[#1a1a24] text-gray-900 dark:text-white">Por rango</option>
                     </select>
                   </div>
                   {dateMode === 'year' && (
                     <div className="w-full md:w-36">
-                      <label className="block text-xs font-semibold uppercase tracking-wider text-gray-500 dark:text-gray-400 mb-2">Año</label>
+                      <span className="text-[10px] font-bold uppercase tracking-wider text-gray-400 dark:text-[#8A8A9A] ml-1 mb-1.5 block">Año</span>
                       <select value={yearFilter} onChange={e => setYearFilter(e.target.value)}
-                        className="w-full rounded-xl bg-white/50 dark:bg-black/40 backdrop-blur-xl border border-white/50 dark:border-white/10 px-4 py-2.5 text-sm font-semibold text-gray-800 dark:text-gray-200 focus:outline-none focus:ring-2 focus:ring-primary/50 transition-all shadow-sm cursor-pointer">
-                        <option value="all">Todos</option>
-                        {YEARS.map(y => <option key={y} value={y}>{y}</option>)}
+                        className="w-full rounded-xl border border-white/50 dark:border-white/10 bg-white/30 dark:bg-black/30 backdrop-blur-xl px-3.5 py-2 text-xs font-semibold text-gray-800 dark:text-gray-200 focus:outline-none cursor-pointer h-10">
+                        <option value="all" className="bg-white dark:bg-[#1a1a24] text-gray-900 dark:text-white">Todos</option>
+                        {YEARS.map(y => <option key={y} value={y} className="bg-white dark:bg-[#1a1a24] text-gray-900 dark:text-white">{y}</option>)}
                       </select>
                     </div>
                   )}
                   {dateMode === 'range' && (<>
                     <div className="w-full md:w-44">
-                      <label className="block text-xs font-semibold uppercase tracking-wider text-gray-500 dark:text-gray-400 mb-2">Desde</label>
+                      <span className="text-[10px] font-bold uppercase tracking-wider text-gray-400 dark:text-[#8A8A9A] ml-1 mb-1.5 block">Desde</span>
                       <input type="date" value={dateFrom} onChange={e => setDateFrom(e.target.value)}
-                        className="w-full rounded-xl bg-white/50 dark:bg-black/40 backdrop-blur-xl border border-white/50 dark:border-white/10 px-4 py-2.5 text-sm font-semibold text-gray-800 dark:text-gray-200 focus:outline-none focus:ring-2 focus:ring-primary/50 transition-all shadow-sm" />
+                        className="w-full rounded-xl border border-white/50 dark:border-white/10 bg-white/30 dark:bg-black/30 backdrop-blur-xl px-3.5 py-2 text-xs font-semibold text-gray-800 dark:text-gray-200 focus:outline-none h-10" />
                     </div>
                     <div className="w-full md:w-44">
-                      <label className="block text-xs font-semibold uppercase tracking-wider text-gray-500 dark:text-gray-400 mb-2">Hasta</label>
+                      <span className="text-[10px] font-bold uppercase tracking-wider text-gray-400 dark:text-[#8A8A9A] ml-1 mb-1.5 block">Hasta</span>
                       <input type="date" value={dateTo} onChange={e => setDateTo(e.target.value)}
-                        className="w-full rounded-xl bg-white/50 dark:bg-black/40 backdrop-blur-xl border border-white/50 dark:border-white/10 px-4 py-2.5 text-sm font-semibold text-gray-800 dark:text-gray-200 focus:outline-none focus:ring-2 focus:ring-primary/50 transition-all shadow-sm" />
+                        className="w-full rounded-xl border border-white/50 dark:border-white/10 bg-white/30 dark:bg-black/30 backdrop-blur-xl px-3.5 py-2 text-xs font-semibold text-gray-800 dark:text-gray-200 focus:outline-none h-10" />
                     </div>
                   </>)}
                   <div className="w-full md:w-36">
-                    <label className="block text-xs font-semibold uppercase tracking-wider text-gray-500 dark:text-gray-400 mb-2">Monto mín.</label>
+                    <span className="text-[10px] font-bold uppercase tracking-wider text-gray-400 dark:text-[#8A8A9A] ml-1 mb-1.5 block">Monto mín.</span>
                     <input type="number" min="0" placeholder="0" value={amountMin} onChange={e => setAmountMin(e.target.value)}
-                      className="w-full rounded-xl bg-white/50 dark:bg-black/40 backdrop-blur-xl border border-white/50 dark:border-white/10 px-4 py-2.5 text-sm font-semibold text-gray-800 dark:text-gray-200 placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-primary/50 transition-all shadow-sm" />
+                      className="w-full rounded-xl border border-white/50 dark:border-white/10 bg-white/30 dark:bg-black/30 backdrop-blur-xl px-3.5 py-2 text-xs font-semibold text-gray-800 dark:text-gray-200 placeholder-gray-400 focus:outline-none h-10" />
                   </div>
                   <div className="w-full md:w-36">
-                    <label className="block text-xs font-semibold uppercase tracking-wider text-gray-500 dark:text-gray-400 mb-2">Monto máx.</label>
+                    <span className="text-[10px] font-bold uppercase tracking-wider text-gray-400 dark:text-[#8A8A9A] ml-1 mb-1.5 block">Monto máx.</span>
                     <input type="number" min="0" placeholder="∞" value={amountMax} onChange={e => setAmountMax(e.target.value)}
-                      className="w-full rounded-xl bg-white/50 dark:bg-black/40 backdrop-blur-xl border border-white/50 dark:border-white/10 px-4 py-2.5 text-sm font-semibold text-gray-800 dark:text-gray-200 placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-primary/50 transition-all shadow-sm" />
+                      className="w-full rounded-xl border border-white/50 dark:border-white/10 bg-white/30 dark:bg-black/30 backdrop-blur-xl px-3.5 py-2 text-xs font-semibold text-gray-800 dark:text-gray-200 placeholder-gray-400 focus:outline-none h-10" />
                   </div>
                 </div>
               </div>
@@ -792,7 +816,7 @@ export default function PaymentsPage() {
                       {p.invoiced ? 'Facturado' : 'Sin factura'}
                     </button>
                   </div>
-                  {can('payments', 'delete') && (<button onClick={e => { e.stopPropagation(); deletePayment(p.id) }}
+                  {can('payments', 'delete') && (<button onClick={e => { e.stopPropagation(); setDeletePaymentTarget(p.id) }}
                     className="rounded-xl p-2 text-gray-400 dark:text-gray-600 opacity-0 group-hover:opacity-100 hover:bg-red-50 dark:hover:bg-red-500/10 hover:text-red-600 dark:hover:text-red-400 transition-all">
                     <Trash2 size={14} />
                   </button>)}
@@ -857,7 +881,7 @@ export default function PaymentsPage() {
                         </button>
                       </td>
                       <td className="px-4 py-4 text-right">
-                        {can('payments', 'delete') && (<button onClick={e => { e.stopPropagation(); deletePayment(p.id) }}
+                        {can('payments', 'delete') && (<button onClick={e => { e.stopPropagation(); setDeletePaymentTarget(p.id) }}
                           className="rounded-xl p-2 text-gray-400 dark:text-gray-600 opacity-0 group-hover:opacity-100 hover:bg-red-50 dark:hover:bg-red-500/10 hover:text-red-600 dark:hover:text-red-400 transition-all duration-200">
                           <Trash2 size={15} />
                         </button>)}
@@ -903,7 +927,7 @@ export default function PaymentsPage() {
                           <p className="text-xs text-gray-400 dark:text-gray-500 mt-0.5">{formatDate(p.paidAt)}</p>
                         </div>
                       </div>
-                      {can('payments', 'delete') && (<button onClick={e => { e.stopPropagation(); deletePayment(p.id) }}
+                      {can('payments', 'delete') && (<button onClick={e => { e.stopPropagation(); setDeletePaymentTarget(p.id) }}
                         className="rounded-lg p-1.5 text-gray-300 dark:text-gray-600 opacity-0 group-hover:opacity-100 hover:bg-red-50 dark:hover:bg-red-500/10 hover:text-red-600 dark:hover:text-red-400 transition-all">
                         <Trash2 size={13} />
                       </button>)}
@@ -927,6 +951,50 @@ export default function PaymentsPage() {
         </div>
       )}
 
+      {/* ── Paginación (solo si hay más de una página) ── */}
+      {totalPages > 1 && (
+        <div className="flex items-center justify-between gap-4 pt-2">
+          <span className="text-xs font-semibold text-gray-500 dark:text-gray-400 tabular-nums">
+            Página {currentPage} de {totalPages} · {serverTotal} pagos en total
+          </span>
+          <div className="flex items-center rounded-full border border-white/50 dark:border-white/10 bg-white/30 dark:bg-black/30 backdrop-blur-xl p-1 gap-1">
+            <button
+              onClick={() => goToPage(currentPage - 1)}
+              disabled={currentPage <= 1}
+              className="flex h-7 w-7 items-center justify-center rounded-full text-gray-500 dark:text-gray-400 hover:text-gray-900 dark:hover:text-white hover:bg-white/40 dark:hover:bg-white/[0.05] transition-all disabled:opacity-30 disabled:cursor-not-allowed cursor-pointer"
+            >
+              <ChevronLeft size={14} />
+            </button>
+            {Array.from({ length: Math.min(totalPages, 5) }, (_, i) => {
+              const pg = totalPages <= 5 ? i + 1 : currentPage <= 3 ? i + 1 : currentPage >= totalPages - 2 ? totalPages - 4 + i : currentPage - 2 + i
+              return (
+                <button
+                  key={pg}
+                  onClick={() => goToPage(pg)}
+                  className={`relative flex h-7 w-7 items-center justify-center rounded-full text-xs font-bold transition-all cursor-pointer ${
+                    pg === currentPage
+                      ? 'text-white dark:text-gray-900'
+                      : 'text-gray-500 dark:text-gray-400 hover:text-gray-900 dark:hover:text-white hover:bg-white/40 dark:hover:bg-white/[0.05]'
+                  }`}
+                >
+                  {pg === currentPage && (
+                    <motion.div layoutId="payments-page-pill" className="absolute inset-0 rounded-full bg-gray-900 dark:bg-white" style={{ zIndex: 0 }} />
+                  )}
+                  <span className="relative z-10">{pg}</span>
+                </button>
+              )
+            })}
+            <button
+              onClick={() => goToPage(currentPage + 1)}
+              disabled={currentPage >= totalPages}
+              className="flex h-7 w-7 items-center justify-center rounded-full text-gray-500 dark:text-gray-400 hover:text-gray-900 dark:hover:text-white hover:bg-white/40 dark:hover:bg-white/[0.05] transition-all disabled:opacity-30 disabled:cursor-not-allowed cursor-pointer"
+            >
+              <ChevronRight size={14} />
+            </button>
+          </div>
+        </div>
+      )}
+
       {/* ── Spacer ── */}
       <div className="min-h-[8vh] lg:min-h-[14vh] xl:min-h-[20vh]" />
 
@@ -938,6 +1006,15 @@ export default function PaymentsPage() {
               Planes y precios
             </h2>
           </div>
+          {can('memberships', 'create') && (
+            <button
+              onClick={openCreatePlan}
+              className="flex items-center gap-2 rounded-xl btn-action px-4 py-2.5 text-sm"
+            >
+              <Plus size={13} strokeWidth={2.5} />
+              Nuevo plan
+            </button>
+          )}
         </div>
 
         {plansError && (
@@ -1028,6 +1105,25 @@ export default function PaymentsPage() {
           </div>
         </form>
       </Modal>
+
+      <ConfirmDialog
+        isOpen={deletePaymentTarget !== null}
+        title="Eliminar pago"
+        message="Esta acción no se puede deshacer. El registro quedará eliminado permanentemente."
+        confirmLabel="Eliminar"
+        isLoading={isDeletingPayment}
+        onConfirm={() => deletePaymentTarget !== null && deletePayment(deletePaymentTarget)}
+        onClose={() => setDeletePaymentTarget(null)}
+      />
+      <ConfirmDialog
+        isOpen={deletePlanTarget !== null}
+        title={`Eliminar plan "${deletePlanTarget?.name ?? ''}"`}
+        message="Los clientes con este plan asignado quedarán sin plan. Esta acción no se puede deshacer."
+        confirmLabel="Eliminar"
+        isLoading={isDeletingPlan}
+        onConfirm={confirmDeletePlan}
+        onClose={() => setDeletePlanTarget(null)}
+      />
     </motion.div>
   )
 }

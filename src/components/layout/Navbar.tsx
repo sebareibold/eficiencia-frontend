@@ -8,7 +8,9 @@ import {
 import { useAuthStore } from '../../store/authStore'
 import { useUiStore } from '../../store/uiStore'
 import { usePermissions, type PermModule } from '../../hooks/usePermissions'
+import { useSolicitudesStore } from '../../store/solicitudesStore'
 import { authApi } from '../../api/auth.api'
+import { solicitudesApi } from '../../api/solicitudes.api'
 import { ROUTES } from '../../constants/routes'
 import { useState, useRef, useLayoutEffect, useEffect, useCallback } from 'react'
 
@@ -18,14 +20,15 @@ const NAV_TABS: { label: string; to: string; module: PermModule | null; icon: Re
   { label: 'Clientes',   to: ROUTES.CLIENTS,   module: 'clients',    icon: Users },
   { label: 'Pagos',      to: ROUTES.PAYMENTS,  module: 'payments',   icon: CreditCard },
   { label: 'Gastos',     to: ROUTES.EXPENSES,  module: 'expenses',   icon: Wallet },
-  { label: 'Ejercicios', to: ROUTES.EXERCISES, module: null,         icon: BookOpen },
-  { label: 'Usuarios',   to: ROUTES.USERS,     module: 'users',      icon: UserCog },
+  { label: 'Biblioteca', to: ROUTES.EXERCISES, module: null,    icon: BookOpen },
+  { label: 'Usuarios',   to: ROUTES.USERS,     module: 'users', icon: UserCog },
 ]
 
 export default function Navbar() {
   const { user, logout } = useAuthStore()
   const { openSettings } = useUiStore()
   const { canUI } = usePermissions()
+  const { pendingCount, setPendingCount } = useSolicitudesStore()
   const navigate = useNavigate()
   const location = useLocation()
 
@@ -40,7 +43,15 @@ export default function Navbar() {
 
   const visibleTabs = NAV_TABS.filter(t => t.module === null || canUI(t.module, 'read'))
 
-  const isAdmin = user?.role === 'admin'
+  const isAdmin        = user?.role === 'admin'
+  const isClienteComun = user?.role === 'cliente_comun'
+
+  useEffect(() => {
+    if (!isAdmin) return
+    solicitudesApi.getAll()
+      .then(list => setPendingCount(list.filter(s => s.estado === 'PENDIENTE').length))
+      .catch(() => {})
+  }, [isAdmin, setPendingCount])
 
   const initials = user
     ? `${user.name.charAt(0)}${user.lastName?.charAt(0) ?? ''}`.toUpperCase()
@@ -109,6 +120,53 @@ export default function Navbar() {
   const hiddenItems      = visibleTabs.slice(visibleCount)
   const isHiddenItemActive = hiddenItems.some(t => location.pathname.startsWith(t.to))
 
+  if (isClienteComun) {
+    return (
+      <header className="flex items-center justify-between gap-4 px-4 sm:px-5 md:px-8 lg:px-12 xl:px-16 py-4 w-full max-w-[1600px] mx-auto relative z-20">
+        <div className="flex items-center shrink-0">
+          <img src="/logo.png" alt="Eficiencia Logo" className="h-10 sm:h-12 w-auto object-contain drop-shadow-sm" />
+        </div>
+        <nav className="flex items-center gap-2 p-1.5">
+          <NavLink
+            to={ROUTES.EJECUCION}
+            className={({ isActive }) =>
+              `relative flex items-center gap-2 rounded-full px-5 py-2.5 text-xs font-semibold transition-colors duration-300 whitespace-nowrap outline-none ${
+                isActive ? 'text-gray-900 dark:text-white' : 'text-gray-600 hover:text-gray-900 hover:bg-black/[0.05] dark:hover:bg-white/[0.06]'
+              }`
+            }
+          >
+            {({ isActive }) => (
+              <>
+                {isActive && (
+                  <motion.div
+                    layoutId="active-nav-pill"
+                    className="absolute inset-0 rounded-full bg-white/30 dark:bg-black/30 backdrop-blur-3xl border border-white/50 dark:border-white/10 shadow-[0_8px_32px_rgba(0,0,0,0.04),0_0_16px_rgba(251,198,8,0.18)] dark:shadow-[0_8px_32px_rgba(0,0,0,0.3),0_0_20px_rgba(251,198,8,0.22)]"
+                    transition={{ type: 'spring', stiffness: 380, damping: 30 }}
+                    style={{ zIndex: -1 }}
+                  />
+                )}
+                <BookOpen size={16} strokeWidth={2.5} className={`relative z-10 ${isActive ? 'opacity-100' : 'opacity-80'}`} />
+                <span className="relative z-10">Mi rutina</span>
+              </>
+            )}
+          </NavLink>
+        </nav>
+        <div className="flex items-center gap-2">
+          <button
+            onClick={handleLogout}
+            className="flex items-center justify-center h-10 w-10 text-gray-400 hover:text-red-500 transition-colors"
+            title="Cerrar sesión"
+          >
+            <LogOut size={16} strokeWidth={2.5} />
+          </button>
+          <div className="h-9 w-9 rounded-full border-2 border-white bg-white flex items-center justify-center text-xs font-bold text-gray-700 shadow-sm">
+            {initials}
+          </div>
+        </div>
+      </header>
+    )
+  }
+
   return (
     <>
       <header className="flex items-center justify-between gap-4 px-4 sm:px-5 md:px-8 lg:px-12 xl:px-16 py-4 w-full max-w-[1600px] mx-auto relative z-20">
@@ -162,6 +220,11 @@ export default function Navbar() {
                       )}
                       <Icon size={16} strokeWidth={2.5} className={`relative z-10 transition-colors ${isActive ? 'opacity-100' : 'opacity-80'}`} />
                       <span className="relative z-10">{tab.label}</span>
+                      {tab.to === ROUTES.USERS && pendingCount > 0 && (
+                        <span className="relative z-10 flex h-4 min-w-4 items-center justify-center rounded-full bg-amber-500 px-1 text-[10px] font-black text-white leading-none">
+                          {pendingCount}
+                        </span>
+                      )}
                     </>
                   )}
                 </NavLink>
@@ -209,7 +272,12 @@ export default function Navbar() {
                             }
                           >
                             <Icon size={18} strokeWidth={2.5} />
-                            <span>{tab.label}</span>
+                            <span className="flex-1">{tab.label}</span>
+                            {tab.to === ROUTES.USERS && pendingCount > 0 && (
+                              <span className="flex h-4 min-w-4 items-center justify-center rounded-full bg-amber-500 px-1 text-[10px] font-black text-white leading-none">
+                                {pendingCount}
+                              </span>
+                            )}
                           </NavLink>
                         )
                       })}
@@ -358,7 +426,12 @@ export default function Navbar() {
                               strokeWidth={2}
                               className={`shrink-0 transition-colors ${isActive ? 'text-primary' : ''}`}
                             />
-                            <span>{tab.label}</span>
+                            <span className="flex-1">{tab.label}</span>
+                            {tab.to === ROUTES.USERS && pendingCount > 0 && (
+                              <span className="flex h-5 min-w-5 items-center justify-center rounded-full bg-amber-500 px-1.5 text-[11px] font-black text-white leading-none">
+                                {pendingCount}
+                              </span>
+                            )}
                           </>
                         )}
                       </NavLink>

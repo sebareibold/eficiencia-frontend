@@ -1,10 +1,11 @@
-﻿import { useState, useEffect, useMemo } from 'react'
-import { motion } from 'framer-motion'
-import { ClipboardCheck, CheckCircle2, AlertTriangle } from 'lucide-react'
+import { useState, useEffect, useMemo } from 'react'
+import { motion, AnimatePresence } from 'framer-motion'
+import { ClipboardCheck, CheckCircle2, AlertTriangle, XCircle, Clock } from 'lucide-react'
 import { format } from 'date-fns'
 import { useShifts } from '../hooks/useShifts'
 import { useAttendance } from '../hooks/useAttendance'
 import { attendanceApi } from '../api/attendance.api'
+import type { VerificacionFecha } from '../api/attendance.api'
 import { inscripcionesApi } from '../api/inscripciones.api'
 import { useUiStore } from '../store/uiStore'
 import Skeleton from '../components/ui/Skeleton'
@@ -31,6 +32,62 @@ const WEEKDAY_TO_JS: Record<WeekDay, number> = {
   saturday: 6,
 }
 
+// ─── Banner de alerta según tipo de restricción ───────────────────────────────
+
+interface AlertaBannerProps {
+  verificacion: VerificacionFecha
+}
+
+function AlertaBanner({ verificacion }: AlertaBannerProps) {
+  if (!verificacion.tipo) return null
+
+  const configs = {
+    CIERRE_TOTAL: {
+      bg: 'bg-red-500/10 border-red-500/20',
+      text: 'text-red-400',
+      icon: <XCircle size={16} className="shrink-0 text-red-400" />,
+      titulo: 'Gimnasio cerrado',
+    },
+    CANCELACION_TURNO: {
+      bg: 'bg-red-500/10 border-red-500/20',
+      text: 'text-red-400',
+      icon: <XCircle size={16} className="shrink-0 text-red-400" />,
+      titulo: 'Turno cancelado',
+    },
+    HORARIO_REDUCIDO: {
+      bg: 'bg-amber-500/10 border-amber-500/20',
+      text: 'text-amber-400',
+      icon: <Clock size={16} className="shrink-0 text-amber-400" />,
+      titulo: 'Horario reducido',
+    },
+  }
+
+  const { bg, text, icon, titulo } = configs[verificacion.tipo]
+
+  return (
+    <motion.div
+      initial={{ opacity: 0, y: -6 }}
+      animate={{ opacity: 1, y: 0 }}
+      exit={{ opacity: 0, y: -6 }}
+      className={`flex items-start gap-2.5 rounded-xl border px-4 py-3 text-sm ${bg}`}
+    >
+      {icon}
+      <div className={text}>
+        <span className="font-semibold">{titulo}:</span>{' '}
+        {verificacion.motivo}
+        {verificacion.tipo === 'HORARIO_REDUCIDO' && verificacion.horaDesde && verificacion.horaHasta && (
+          <span className="ml-1 opacity-80">({verificacion.horaDesde}–{verificacion.horaHasta})</span>
+        )}
+        {verificacion.bloqueado && (
+          <p className="mt-0.5 opacity-75">No se puede registrar asistencia en este día.</p>
+        )}
+      </div>
+    </motion.div>
+  )
+}
+
+// ─── Página principal ─────────────────────────────────────────────────────────
+
 export default function AttendancePage() {
   const { shifts, isLoading: loadingShifts } = useShifts()
   const { records, isLoading: loadingAttendance, fetchByShiftAndDate } = useAttendance()
@@ -43,9 +100,13 @@ export default function AttendancePage() {
   const [isSaving, setIsSaving] = useState(false)
   const [loadingClients, setLoadingClients] = useState(false)
 
+  // Estado de verificación de días especiales
+  const [verificacion, setVerificacion] = useState<VerificacionFecha | null>(null)
+  const [loadingVerificacion, setLoadingVerificacion] = useState(false)
+
   const selectedShiftData = shifts.find(s => String(s.id) === selectedShift)
 
-  // Validación: la fecha seleccionada debe coincidir con un día del turno
+  // Validación: día de semana vs días del turno
   const dateError = useMemo(() => {
     if (!selectedShiftData || !selectedDate) return null
     const jsDay = new Date(selectedDate + 'T12:00:00').getDay()
@@ -57,7 +118,20 @@ export default function AttendancePage() {
     return null
   }, [selectedShiftData, selectedDate])
 
-  // Cuando cambia el turno, cargar los clientes inscriptos activos
+  // Verificar días especiales y cancelaciones cuando cambia turno o fecha
+  useEffect(() => {
+    if (!selectedShift || !selectedDate || dateError) {
+      setVerificacion(null)
+      return
+    }
+    setLoadingVerificacion(true)
+    attendanceApi.verificar(selectedShift, selectedDate)
+      .then(setVerificacion)
+      .catch(() => setVerificacion(null))
+      .finally(() => setLoadingVerificacion(false))
+  }, [selectedShift, selectedDate, dateError])
+
+  // Cargar clientes inscriptos cuando cambia el turno
   useEffect(() => {
     if (!selectedShift) return
     setLoadingClients(true)
@@ -73,13 +147,13 @@ export default function AttendancePage() {
       .finally(() => setLoadingClients(false))
   }, [selectedShift])
 
-  // Cuando cambia turno + fecha, cargar asistencia existente
+  // Cargar asistencia existente cuando cambia turno + fecha
   useEffect(() => {
     if (!selectedShift || !selectedDate) return
     fetchByShiftAndDate(selectedShift, selectedDate)
   }, [selectedShift, selectedDate])
 
-  // Sincronizar checkboxes con los registros cargados del backend
+  // Sincronizar checkboxes con registros del backend
   useEffect(() => {
     const presentIds = new Set(records.filter(r => r.present).map(r => r.clientId))
     setPresent(presentIds)
@@ -94,16 +168,26 @@ export default function AttendancePage() {
     })
   }
 
+  // El botón guardar está bloqueado si hay error de día, verificación bloqueada, o cargando
+  const guardadoBloqueado = !!dateError || loadingVerificacion || (verificacion?.bloqueado ?? false)
+
   async function saveAttendance() {
-    if (!selectedShift || dateError) return
+    if (!selectedShift || guardadoBloqueado) return
     setIsSaving(true)
     try {
       const presentIds = clients.filter(c => present.has(c.id)).map(c => c.id)
       await attendanceApi.bulk(selectedShift, selectedDate, presentIds)
       await fetchByShiftAndDate(selectedShift, selectedDate)
-      addToast('Asistencia guardada correctamente', 'success')
-    } catch {
-      addToast('Error al guardar la asistencia', 'error')
+      if (verificacion?.tipo === 'HORARIO_REDUCIDO') {
+        addToast('Asistencia guardada (horario reducido)', 'success')
+      } else {
+        addToast('Asistencia guardada correctamente', 'success')
+      }
+    } catch (err) {
+      // El backend devuelve el motivo en el mensaje del error 409
+      const axiosData = (err as { response?: { data?: { message?: string } } })?.response?.data
+      const msg = axiosData?.message ?? 'Error al guardar la asistencia'
+      addToast(msg, 'error')
     } finally {
       setIsSaving(false)
     }
@@ -113,6 +197,9 @@ export default function AttendancePage() {
     value: String(s.id),
     label: `${s.startTime}–${s.endTime} Sala ${s.room} (${s.days.map(d => DAY_LABELS[d].slice(0, 3)).join('/')})`,
   }))
+
+  // Mostrar la lista de asistencia solo si no hay bloqueo duro (CIERRE_TOTAL o CANCELACION)
+  const mostrarLista = selectedShift && !dateError && !verificacion?.bloqueado
 
   return (
     <motion.div
@@ -131,10 +218,9 @@ export default function AttendancePage() {
         </h1>
       </div>
 
-      {/* Selectors */}
+      {/* Selectores */}
       <div
-        className="rounded-2xl border border-white/[0.08] p-5 space-y-4"
-        style={{ background: 'rgba(255,255,255,0.04)', backdropFilter: 'blur(12px)' }}
+        className="rounded-[2rem] border border-white/50 dark:border-white/10 bg-white/30 dark:bg-black/30 backdrop-blur-3xl shadow-[0_8px_32px_rgba(0,0,0,0.04)] dark:shadow-[0_8px_32px_rgba(0,0,0,0.3)] p-6 space-y-4"
       >
         <div className="grid gap-4 sm:grid-cols-2">
           {loadingShifts ? (
@@ -146,15 +232,17 @@ export default function AttendancePage() {
               options={shiftOptions}
               value={selectedShift}
               onChange={e => setSelectedShift(e.target.value)}
+              labelClassName="text-[10px] font-bold uppercase tracking-wider text-gray-400 dark:text-[#8A8A9A] ml-1 mb-1.5 block"
+              className="!h-10 !py-2 !rounded-xl !text-xs !font-semibold border-white/50 dark:border-white/10 bg-white/30 dark:bg-black/30 backdrop-blur-xl text-gray-800 dark:text-gray-200 focus:border-primary"
             />
           )}
           <div className="flex flex-col gap-1">
-            <label className="text-sm text-[#9CA3AF]">Fecha</label>
+            <label className="text-[10px] font-bold uppercase tracking-wider text-gray-400 dark:text-[#8A8A9A] ml-1 mb-1.5 block">Fecha</label>
             <input
               type="date"
               value={selectedDate}
               onChange={e => setSelectedDate(e.target.value)}
-              className="rounded-lg border border-white/[0.08] bg-white/[0.04] px-3 py-2 text-sm text-white focus:border-primary focus:outline-none"
+              className="w-full rounded-xl border border-white/50 dark:border-white/10 bg-white/30 dark:bg-black/30 backdrop-blur-xl px-3.5 py-2 text-xs font-semibold text-gray-800 dark:text-gray-200 focus:outline-none h-10"
             />
           </div>
         </div>
@@ -171,20 +259,44 @@ export default function AttendancePage() {
           </div>
         )}
 
-        {/* Aviso de fecha inválida */}
-        {dateError && (
-          <div className="flex items-center gap-2.5 rounded-xl bg-amber-500/10 border border-amber-500/20 px-4 py-3 text-sm text-amber-400">
-            <AlertTriangle size={16} className="shrink-0" />
-            <span>{dateError}</span>
-          </div>
-        )}
+        {/* Banners de alerta — en orden de prioridad */}
+        <AnimatePresence mode="wait">
+          {dateError && (
+            <motion.div
+              key="date-error"
+              initial={{ opacity: 0, y: -6 }}
+              animate={{ opacity: 1, y: 0 }}
+              exit={{ opacity: 0, y: -6 }}
+              className="flex items-center gap-2.5 rounded-xl bg-amber-500/10 border border-amber-500/20 px-4 py-3 text-sm text-amber-400"
+            >
+              <AlertTriangle size={16} className="shrink-0" />
+              <span>{dateError}</span>
+            </motion.div>
+          )}
+
+          {!dateError && loadingVerificacion && (
+            <motion.div
+              key="loading-verif"
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              exit={{ opacity: 0 }}
+              className="flex items-center gap-2 text-xs text-[#8A8A9A]"
+            >
+              <span className="h-3 w-3 animate-spin rounded-full border border-gray-600 border-t-gray-300" />
+              Verificando disponibilidad...
+            </motion.div>
+          )}
+
+          {!dateError && !loadingVerificacion && verificacion && verificacion.tipo && (
+            <AlertaBanner key="verif-banner" verificacion={verificacion} />
+          )}
+        </AnimatePresence>
       </div>
 
-      {/* Lista de asistencia — solo si la fecha es válida */}
-      {selectedShift && !dateError && (
+      {/* Lista de asistencia */}
+      {mostrarLista && (
         <div
-          className="rounded-2xl border border-white/[0.08] overflow-hidden"
-          style={{ background: 'rgba(255,255,255,0.04)', backdropFilter: 'blur(12px)' }}
+          className="rounded-[2rem] border border-white/50 dark:border-white/10 bg-white/30 dark:bg-black/30 backdrop-blur-3xl shadow-[0_8px_32px_rgba(0,0,0,0.04)] dark:shadow-[0_8px_32px_rgba(0,0,0,0.3)] overflow-hidden"
         >
           <div className="flex items-center justify-between border-b border-white/[0.06] px-5 py-4">
             <div>
@@ -197,8 +309,8 @@ export default function AttendancePage() {
             </div>
             <button
               onClick={saveAttendance}
-              disabled={isSaving}
-              className="flex items-center gap-2 rounded-xl btn-action px-4 py-2.5 text-sm disabled:opacity-50"
+              disabled={isSaving || guardadoBloqueado}
+              className="flex items-center gap-2 rounded-xl btn-action px-4 py-2.5 text-sm disabled:opacity-50 disabled:cursor-not-allowed"
             >
               {isSaving
                 ? <span className="h-4 w-4 animate-spin rounded-full border-2 border-gray-900/30 border-t-gray-900" />
@@ -258,6 +370,17 @@ export default function AttendancePage() {
         </div>
       )}
 
+      {/* Estado vacío: bloqueo duro activo */}
+      {selectedShift && !dateError && verificacion?.bloqueado && (
+        <div className="flex flex-col items-center justify-center gap-3 py-16 text-[#8A8A9A]">
+          <XCircle size={36} className="text-red-500/50" />
+          <p className="text-sm text-center max-w-xs">
+            No es posible registrar asistencia para esta combinación de turno y fecha.
+          </p>
+        </div>
+      )}
+
+      {/* Estado vacío: sin turno seleccionado */}
       {!selectedShift && (
         <div className="flex flex-col items-center justify-center gap-3 py-16 text-[#8A8A9A]">
           <ClipboardCheck size={36} />

@@ -1,6 +1,6 @@
 import api from './axiosInstance'
 
-export type UserRole = 'ADMINISTRADOR' | 'STAFF' | 'PROFESOR'
+export type UserRole = 'ADMINISTRADOR' | 'STAFF' | 'PROFESOR' | 'CLIENTE_COMUN'
 
 export interface AppUser {
   id: string

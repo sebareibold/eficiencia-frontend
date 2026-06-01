@@ -16,6 +16,7 @@ import Button from '../components/ui/Button'
 import Modal from '../components/ui/Modal'
 import Input from '../components/ui/Input'
 import Skeleton from '../components/ui/Skeleton'
+import ConfirmDialog from '../components/ui/ConfirmDialog'
 import { formatCurrency } from '../utils/formatCurrency'
 import type { Plan, Modalidad, TarifaVigente } from '../types/membership.types'
 import { MODALIDAD_LABELS, MODALIDAD_DURACION, MODALIDADES } from '../types/membership.types'
@@ -306,6 +307,8 @@ export default function MembershipsPage() {
   const [createOpen, setCreateOpen] = useState(false)
   const [editingPlan, setEditingPlan] = useState<Plan | null>(null)
   const [isSubmitting, setIsSubmitting] = useState(false)
+  const [deletePlanTarget, setDeletePlanTarget] = useState<Plan | null>(null)
+  const [isDeletingPlan, setIsDeletingPlan] = useState(false)
 
   const { memberships, isLoading, error, refetch } = useMemberships()
   const addToast = useUiStore((s) => s.addToast)
@@ -366,18 +369,26 @@ export default function MembershipsPage() {
     }
   }
 
-  async function deletePlan(plan: Plan) {
+  function deletePlan(plan: Plan) {
     if ((plan.membresiaCount ?? 0) > 0) {
       addToast(`No se puede eliminar: el plan tiene ${plan.membresiaCount} membresía(s) activa(s)`, 'error')
       return
     }
-    if (!confirm(`¿Eliminar el plan "${plan.name}"?`)) return
+    setDeletePlanTarget(plan)
+  }
+
+  async function confirmDeletePlan() {
+    if (!deletePlanTarget) return
+    setIsDeletingPlan(true)
     try {
-      await membershipsApi.remove(plan.id)
+      await membershipsApi.remove(deletePlanTarget.id)
       addToast('Plan eliminado', 'success')
       refetch()
     } catch {
       addToast('Error al eliminar el plan', 'error')
+    } finally {
+      setIsDeletingPlan(false)
+      setDeletePlanTarget(null)
     }
   }
 
@@ -527,6 +538,16 @@ export default function MembershipsPage() {
           </div>
         </form>
       </Modal>
+
+      <ConfirmDialog
+        isOpen={deletePlanTarget !== null}
+        title={`Eliminar plan "${deletePlanTarget?.name ?? ''}"`}
+        message="Los clientes con este plan asignado quedarán sin plan. Esta acción no se puede deshacer."
+        confirmLabel="Eliminar"
+        isLoading={isDeletingPlan}
+        onConfirm={confirmDeletePlan}
+        onClose={() => setDeletePlanTarget(null)}
+      />
     </motion.div>
   )
 }
