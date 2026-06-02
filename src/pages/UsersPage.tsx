@@ -361,6 +361,9 @@ function UsuariosTab() {
         isOpen={!!deleteTarget}
         title="Eliminar usuario"
         message={`¿Eliminar a ${deleteTarget?.nombre ?? 'este usuario'}? Esta acción no se puede deshacer.`}
+        warning={deleteTarget?.profesor
+          ? `Este usuario tiene un perfil de profesor vinculado${deleteTarget.profesor.especialidad ? ` (${deleteTarget.profesor.especialidad})` : ''}. Si tiene turnos o rutinas asignadas, la eliminación será bloqueada hasta que los reasignes.`
+          : undefined}
         confirmLabel="Eliminar"
         isLoading={deletingId !== null}
         onConfirm={() => deleteTarget && onDelete(deleteTarget)}
@@ -640,6 +643,24 @@ const MODULES_MATRIX = [
       { id: 'delete', name: 'Eliminar rutinas' },
     ],
   },
+  {
+    id: 'exercises', name: 'Biblioteca de Ejercicios',
+    actions: [
+      { id: 'read',   name: 'Ver catálogo y plantillas' },
+      { id: 'create', name: 'Agregar ejercicios' },
+      { id: 'update', name: 'Editar ejercicios' },
+      { id: 'delete', name: 'Eliminar ejercicios' },
+    ],
+  },
+  {
+    id: 'plantillas', name: 'Plantillas de Rutinas',
+    actions: [
+      { id: 'read',   name: 'Ver plantillas' },
+      { id: 'create', name: 'Crear plantillas' },
+      { id: 'update', name: 'Editar plantillas' },
+      { id: 'delete', name: 'Eliminar plantillas' },
+    ],
+  },
 ]
 
 function PermisosTab() {
@@ -830,6 +851,132 @@ function PermisosTab() {
   )
 }
 
+// ─── Solicitud Card (forma de hoja/pedido) ────────────────────────────────────
+
+interface SolicitudCardProps {
+  s: SolicitudEntry
+  actioningId: string | null
+  onAprobar:  (id: string) => void
+  onRechazar: (id: string) => void
+  onEliminar: (id: string) => void
+}
+
+function SolicitudCard({ s, actioningId, onAprobar, onRechazar, onEliminar }: SolicitudCardProps) {
+  const isPending   = s.estado === 'PENDIENTE'
+  const isActioning = actioningId === s.id
+
+  const strip = isPending
+    ? 'bg-amber-400'
+    : s.estado === 'APROBADO'
+      ? 'bg-emerald-500'
+      : 'bg-red-500'
+
+  const avatarCls = isPending
+    ? 'bg-amber-500/15 text-amber-600 dark:text-amber-400'
+    : 'bg-gray-100 dark:bg-white/[0.06] text-gray-500 dark:text-gray-400'
+
+  return (
+    <div className={`flex flex-col rounded-2xl border border-white/50 dark:border-white/[0.08] bg-white/30 dark:bg-white/[0.04] backdrop-blur-xl shadow-[0_8px_32px_rgba(0,0,0,0.04)] dark:shadow-[0_8px_32px_rgba(0,0,0,0.25)] overflow-hidden transition-opacity ${!isPending ? 'opacity-65 hover:opacity-100' : ''}`}>
+
+      {/* Tira de color superior — da el efecto de "pedido/hoja" */}
+      <div className={`h-1.5 w-full ${strip}`} />
+
+      {/* Cuerpo */}
+      <div className="flex-1 p-5 space-y-3.5">
+
+        {/* Avatar + nombre + badge de estado (procesadas) */}
+        <div className="flex items-start justify-between gap-2">
+          <div className="flex items-center gap-3 min-w-0">
+            <div className={`h-10 w-10 rounded-xl flex items-center justify-center shrink-0 text-sm font-black ${avatarCls}`}>
+              {s.nombre.charAt(0).toUpperCase()}
+            </div>
+            <div className="min-w-0">
+              <p className="font-bold text-sm text-gray-900 dark:text-white leading-tight truncate">{s.nombre}</p>
+              <p className="text-xs text-[#8A8A9A] mt-0.5 truncate">{s.email}</p>
+            </div>
+          </div>
+          {!isPending && (
+            <span className={`inline-flex items-center rounded-full px-2 py-0.5 text-[11px] font-bold shrink-0 ${SOLICITUD_ESTADO_BADGE[s.estado]}`}>
+              {SOLICITUD_ESTADO_LABEL[s.estado]}
+            </span>
+          )}
+        </div>
+
+        {/* Separador punteado — refuerza la estética de documento */}
+        <div className="border-t border-dashed border-white/40 dark:border-white/[0.08]" />
+
+        {/* Datos del pedido */}
+        <div className="space-y-2">
+          <div className="flex items-center gap-2">
+            <span className="text-[11px] text-[#8A8A9A] w-16 shrink-0">Rol</span>
+            <span className={`inline-flex items-center rounded-full px-2.5 py-0.5 text-[11px] font-bold ${ROL_COLORS[s.rolSolicitado] ?? 'bg-gray-100 text-gray-600'}`}>
+              {ROL_LABELS[s.rolSolicitado] ?? s.rolSolicitado}
+            </span>
+          </div>
+          <div className="flex items-center gap-2">
+            <span className="text-[11px] text-[#8A8A9A] w-16 shrink-0">Fecha</span>
+            <span className="text-[11px] text-gray-600 dark:text-gray-400">
+              {format(new Date(s.createdAt), "d MMM yyyy · HH:mm", { locale: es })}
+            </span>
+          </div>
+          {s.revisadaAt && (
+            <div className="flex items-center gap-2">
+              <span className="text-[11px] text-[#8A8A9A] w-16 shrink-0">Revisada</span>
+              <span className="text-[11px] text-gray-500 dark:text-gray-500">
+                {format(new Date(s.revisadaAt), "d MMM yyyy", { locale: es })}
+              </span>
+            </div>
+          )}
+        </div>
+      </div>
+
+      {/* Pie de hoja — acciones */}
+      <div className="border-t border-white/40 dark:border-white/[0.06] px-4 py-3 bg-white/20 dark:bg-white/[0.02]">
+        {isPending ? (
+          <div className="flex items-center gap-2">
+            <button
+              onClick={() => onAprobar(s.id)}
+              disabled={isActioning}
+              className="flex-1 flex items-center justify-center gap-1.5 rounded-xl bg-emerald-500/10 px-3 py-2 text-xs font-semibold text-emerald-700 dark:text-emerald-400 hover:bg-emerald-500/20 transition-all disabled:opacity-50"
+            >
+              {isActioning
+                ? <span className="h-3.5 w-3.5 animate-spin rounded-full border-2 border-emerald-400/30 border-t-emerald-400" />
+                : <CheckCircle2 size={13} />}
+              Aprobar
+            </button>
+            <button
+              onClick={() => onRechazar(s.id)}
+              disabled={isActioning}
+              className="flex-1 flex items-center justify-center gap-1.5 rounded-xl bg-red-500/10 px-3 py-2 text-xs font-semibold text-red-600 dark:text-red-400 hover:bg-red-500/20 transition-all disabled:opacity-50"
+            >
+              <Ban size={13} /> Rechazar
+            </button>
+            <button
+              onClick={() => onEliminar(s.id)}
+              disabled={isActioning}
+              title="Eliminar"
+              className="flex h-9 w-9 items-center justify-center rounded-xl text-gray-400 hover:text-red-500 hover:bg-red-500/10 transition-all disabled:opacity-50 shrink-0"
+            >
+              <Trash2 size={14} />
+            </button>
+          </div>
+        ) : (
+          <div className="flex justify-end">
+            <button
+              onClick={() => onEliminar(s.id)}
+              disabled={isActioning}
+              title="Eliminar"
+              className="flex h-8 w-8 items-center justify-center rounded-xl text-gray-400 hover:text-red-500 hover:bg-red-500/10 transition-all disabled:opacity-50"
+            >
+              <Trash2 size={14} />
+            </button>
+          </div>
+        )}
+      </div>
+    </div>
+  )
+}
+
 // ─── Tab: Solicitudes de Acceso ────────────────────────────────────────────────
 
 function SolicitudesTab() {
@@ -901,7 +1048,7 @@ function SolicitudesTab() {
   const procesadas = solicitudes.filter(s => s.estado !== 'PENDIENTE')
 
   return (
-    <div className="space-y-5">
+    <div className="space-y-6">
       <div className="flex items-center justify-between">
         <div>
           <p className="text-sm font-semibold text-gray-900 dark:text-white">
@@ -915,8 +1062,8 @@ function SolicitudesTab() {
       </div>
 
       {loading ? (
-        <div className="space-y-3">
-          {Array.from({ length: 4 }).map((_, i) => <Skeleton key={i} className="h-16 rounded-2xl" />)}
+        <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-3 gap-4">
+          {Array.from({ length: 4 }).map((_, i) => <Skeleton key={i} className="h-52 rounded-2xl" />)}
         </div>
       ) : solicitudes.length === 0 ? (
         <div className={`${glassCard} py-16 text-center`}>
@@ -924,110 +1071,38 @@ function SolicitudesTab() {
           <p className="text-sm text-[#8A8A9A]">No hay solicitudes de acceso registradas</p>
         </div>
       ) : (<>
-        {/* Pendientes */}
         {pendientes.length > 0 && (
           <div className="space-y-3">
             <h3 className="text-xs font-bold uppercase tracking-wider text-[#8A8A9A]">Pendientes de revisión</h3>
-            <div className={`${glassCard} overflow-hidden`}>
-              <div className="divide-y divide-gray-100/60 dark:divide-white/[0.04]">
-                {pendientes.map(s => (
-                  <div key={s.id} className="flex items-start gap-4 px-5 py-4">
-                    <div className="h-10 w-10 rounded-xl bg-amber-500/10 flex items-center justify-center shrink-0 text-sm font-black text-amber-600 dark:text-amber-400 mt-0.5">
-                      {s.nombre.charAt(0).toUpperCase()}
-                    </div>
-                    <div className="flex-1 min-w-0">
-                      <div className="flex items-center gap-2 flex-wrap">
-                        <p className="font-semibold text-gray-900 dark:text-white">{s.nombre}</p>
-                      </div>
-                      <p className="text-xs text-[#8A8A9A] mt-0.5">{s.email}</p>
-                      <div className="flex items-center gap-2 mt-2 flex-wrap">
-                        <span className={`inline-flex items-center rounded-full px-2.5 py-0.5 text-xs font-bold ${ROL_COLORS[s.rolSolicitado] ?? 'bg-gray-100 text-gray-600'}`}>
-                          {ROL_LABELS[s.rolSolicitado] ?? s.rolSolicitado}
-                        </span>
-                        <span className="text-xs text-[#8A8A9A]">
-                          {ROL_DESC[s.rolSolicitado] ?? ''}
-                        </span>
-                      </div>
-                      <p className="text-[11px] text-[#8A8A9A] mt-1.5">
-                        Solicitado el {format(new Date(s.createdAt), "d 'de' MMMM yyyy 'a las' HH:mm", { locale: es })}
-                      </p>
-                    </div>
-                    <div className="flex items-center gap-2 shrink-0">
-                      <button
-                        onClick={() => aprobar(s.id)}
-                        disabled={actioningId === s.id}
-                        className="flex items-center gap-1.5 rounded-xl bg-green-500/10 px-3 py-2 text-xs font-semibold text-green-700 dark:text-green-400 hover:bg-green-500/20 transition-all disabled:opacity-50"
-                      >
-                        {actioningId === s.id
-                          ? <span className="h-3.5 w-3.5 animate-spin rounded-full border-2 border-green-400/30 border-t-green-400" />
-                          : <CheckCircle2 size={13} />
-                        }
-                        Aprobar
-                      </button>
-                      <button
-                        onClick={() => setRechazarTarget(s.id)}
-                        disabled={actioningId === s.id}
-                        className="flex items-center gap-1.5 rounded-xl bg-red-500/10 px-3 py-2 text-xs font-semibold text-red-600 dark:text-red-400 hover:bg-red-500/20 transition-all disabled:opacity-50"
-                      >
-                        <Ban size={13} /> Rechazar
-                      </button>
-                      <button
-                        onClick={() => setEliminarTarget(s.id)}
-                        disabled={actioningId === s.id}
-                        className="flex h-8 w-8 items-center justify-center rounded-xl text-gray-400 hover:text-red-500 hover:bg-red-500/10 transition-all disabled:opacity-50"
-                        title="Eliminar solicitud"
-                      >
-                        <Trash2 size={14} />
-                      </button>
-                    </div>
-                  </div>
-                ))}
-              </div>
+            <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-3 gap-4">
+              {pendientes.map(s => (
+                <SolicitudCard
+                  key={s.id}
+                  s={s}
+                  actioningId={actioningId}
+                  onAprobar={aprobar}
+                  onRechazar={(id) => setRechazarTarget(id)}
+                  onEliminar={(id) => setEliminarTarget(id)}
+                />
+              ))}
             </div>
           </div>
         )}
 
-        {/* Procesadas */}
         {procesadas.length > 0 && (
           <div className="space-y-3">
             <h3 className="text-xs font-bold uppercase tracking-wider text-[#8A8A9A]">Historial</h3>
-            <div className={`${glassCard} overflow-hidden`}>
-              <div className="divide-y divide-gray-100/60 dark:divide-white/[0.04]">
-                {procesadas.map(s => (
-                  <div key={s.id} className="flex items-start gap-4 px-5 py-3.5 opacity-70 hover:opacity-100 transition-opacity">
-                    <div className="h-9 w-9 rounded-xl bg-gray-100 dark:bg-white/[0.06] flex items-center justify-center shrink-0 text-xs font-black text-gray-500 dark:text-gray-400 mt-0.5">
-                      {s.nombre.charAt(0).toUpperCase()}
-                    </div>
-                    <div className="flex-1 min-w-0">
-                      <div className="flex items-center gap-2 flex-wrap">
-                        <p className="font-semibold text-sm text-gray-700 dark:text-gray-300">{s.nombre}</p>
-                        <span className={`inline-flex items-center rounded-full px-2 py-0.5 text-[11px] font-bold ${SOLICITUD_ESTADO_BADGE[s.estado]}`}>
-                          {SOLICITUD_ESTADO_LABEL[s.estado]}
-                        </span>
-                      </div>
-                      <p className="text-xs text-[#8A8A9A] mt-0.5">{s.email}</p>
-                      <div className="flex items-center gap-2 mt-1.5 flex-wrap">
-                        <span className={`inline-flex items-center rounded-full px-2 py-0.5 text-[11px] font-bold ${ROL_COLORS[s.rolSolicitado] ?? 'bg-gray-100 text-gray-600'}`}>
-                          {ROL_LABELS[s.rolSolicitado] ?? s.rolSolicitado}
-                        </span>
-                        {s.revisadaAt && (
-                          <span className="text-[11px] text-[#8A8A9A]">
-                            · Revisada el {format(new Date(s.revisadaAt), "d MMM yyyy", { locale: es })}
-                          </span>
-                        )}
-                      </div>
-                    </div>
-                    <button
-                      onClick={() => setEliminarTarget(s.id)}
-                      disabled={actioningId === s.id}
-                      className="flex h-8 w-8 items-center justify-center rounded-xl text-gray-400 hover:text-red-500 hover:bg-red-500/10 transition-all disabled:opacity-50 shrink-0"
-                      title="Eliminar solicitud"
-                    >
-                      <Trash2 size={14} />
-                    </button>
-                  </div>
-                ))}
-              </div>
+            <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-3 gap-4">
+              {procesadas.map(s => (
+                <SolicitudCard
+                  key={s.id}
+                  s={s}
+                  actioningId={actioningId}
+                  onAprobar={aprobar}
+                  onRechazar={(id) => setRechazarTarget(id)}
+                  onEliminar={(id) => setEliminarTarget(id)}
+                />
+              ))}
             </div>
           </div>
         )}

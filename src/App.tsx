@@ -3,15 +3,12 @@ import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom'
 import { ROUTES } from './constants/routes'
 import { useThemeApplier } from './hooks/useThemeApplier'
 import { useAuthStore } from './store/authStore'
-import AppSkeleton from './components/ui/AppSkeleton'
 
-// ── Eager: guards y layout base ───────────────────────────────────────────────
+// ── Eager: guards, layout y navegación ────────────────────────────────────────
 import PrivateRoute from './guards/PrivateRoute'
 import PermissionGuard from './guards/PermissionGuard'
-
-// ── Lazy: layout y páginas autenticadas (framer-motion + lucide fuera del bundle inicial)
-const Layout      = lazy(() => import('./components/layout/Layout'))
-const ScrollToTop = lazy(() => import('./components/layout/ScrollToTop'))
+import Layout from './components/layout/Layout'
+import ScrollToTop from './components/layout/ScrollToTop'
 
 // ── Eager: páginas críticas del path inicial ──────────────────────────────────
 import LoginPage from './pages/LoginPage'
@@ -36,6 +33,7 @@ const PlantillasPage     = lazy(() => import('./pages/PlantillasPage'))
 const EjercicioDetailPage = lazy(() => import('./pages/EjercicioDetailPage'))
 const PlantillaDetailPage = lazy(() => import('./pages/PlantillaDetailPage'))
 const EjecucionPage      = lazy(() => import('./pages/EjecucionPage'))
+const EjecucionRutinaPage = lazy(() => import('./pages/EjecucionRutinaPage'))
 const CreateRutinaPage   = lazy(() => import('./pages/CreateRutinaPage'))
 
 function DefaultRedirect() {
@@ -51,9 +49,9 @@ export default function App() {
   useThemeApplier()
 
   return (
-    <BrowserRouter>
+    <BrowserRouter future={{ v7_relativeSplatPath: true }}>
       <ScrollToTop />
-      <Suspense fallback={<AppSkeleton />}>
+      <Suspense fallback={null}>
         <Routes>
           <Route path={ROUTES.LOGIN} element={<LoginPage />} />
 
@@ -62,10 +60,9 @@ export default function App() {
               <Route index element={<DefaultRedirect />} />
 
               <Route element={<PermissionGuard module="clients" />}>
-                <Route path={ROUTES.CLIENTS}       element={<ClientsPage />} />
-                <Route path={ROUTES.CLIENT_NEW}    element={<CreateClientPage />} />
+                <Route path={ROUTES.CLIENTS}        element={<ClientsPage />} />
+                <Route path={ROUTES.CLIENT_NEW}     element={<CreateClientPage />} />
                 <Route path={ROUTES.CLIENT_PROFILE} element={<ClientProfilePage />} />
-                <Route path={ROUTES.CLIENT_RUTINA} element={<ClientRutinaPage />} />
               </Route>
 
               <Route element={<PermissionGuard module="payments" />}>
@@ -83,14 +80,23 @@ export default function App() {
                 <Route path={ROUTES.ATTENDANCE} element={<AttendancePage />} />
               </Route>
 
-              <Route path={ROUTES.EXERCISES}       element={<ExercisesPage />} />
-              <Route path={ROUTES.EXERCISE_NEW}    element={<EjercicioDetailPage />} />
-              <Route path={ROUTES.EXERCISE_DETAIL} element={<EjercicioDetailPage />} />
-              <Route path={ROUTES.PLANTILLA_NEW}   element={<PlantillaDetailPage />} />
-              <Route path={ROUTES.PLANTILLA_DETAIL} element={<PlantillaDetailPage />} />
+              <Route element={<PermissionGuard module="exercises" />}>
+                <Route path={ROUTES.EXERCISES}       element={<ExercisesPage />} />
+                <Route path={ROUTES.EXERCISE_NEW}    element={<EjercicioDetailPage />} />
+                <Route path={ROUTES.EXERCISE_DETAIL} element={<EjercicioDetailPage />} />
+              </Route>
 
-              <Route path={ROUTES.RUTINA_CREAR}    element={<CreateRutinaPage />} />
-              <Route path={ROUTES.EJECUCION}       element={<EjecucionPage />} />
+              <Route element={<PermissionGuard module="plantillas" />}>
+                <Route path={ROUTES.PLANTILLA_NEW}    element={<PlantillaDetailPage />} />
+                <Route path={ROUTES.PLANTILLA_DETAIL} element={<PlantillaDetailPage />} />
+              </Route>
+
+              <Route element={<PermissionGuard module="rutinas" />}>
+                <Route path={ROUTES.CLIENT_RUTINA}    element={<ClientRutinaPage />} />
+                <Route path={ROUTES.RUTINA_CREAR}     element={<CreateRutinaPage />} />
+                <Route path={ROUTES.EJECUCION}        element={<EjecucionPage />} />
+                <Route path={ROUTES.EJECUCION_RUTINA} element={<EjecucionRutinaPage />} />
+              </Route>
 
               <Route element={<PermissionGuard module="expenses" />}>
                 <Route path={ROUTES.EXPENSES} element={<ExpensesPage />} />

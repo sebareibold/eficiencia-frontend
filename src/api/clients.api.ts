@@ -1,5 +1,6 @@
 import api from './axiosInstance'
 import type { Client, CreateClientDto, UpdateClientDto } from '../types/client.types'
+import type { FichaEntrenamiento, EventoDeportivo } from '../types/rutina.types'
 import type { ClientStatus } from '../constants/clientStatus'
 
 function mapEstado(estado: string): ClientStatus {
@@ -30,8 +31,29 @@ function mapCliente(c: any): Client {
     membershipModalidad: membership?.modalidad ?? null,
     membershipPrecio: membership?.precio != null ? Number(membership.precio) : null,
     diasUsados: c.diasUsados ?? 0,
+    sede: c.sede ?? null,
     createdAt: c.createdAt,
     updatedAt: c.updatedAt ?? c.createdAt,
+  }
+}
+
+function mapFicha(f: any): FichaEntrenamiento {
+  return {
+    id: f.id,
+    peso: f.peso ?? undefined,
+    altura: f.altura ?? undefined,
+    actividadDiaria: f.actividadDiaria ?? undefined,
+    patologiasBase: f.patologiasBase ?? undefined,
+    lesiones: f.lesiones ?? undefined,
+    objetivos: f.objetivos ?? undefined,
+    experiencia: f.experiencia ?? undefined,
+    deportePractica: f.deportePractica ?? undefined,
+    eventos: (f.eventos ?? []).map((e: any) => ({
+      id: e.id,
+      nombre: e.nombre,
+      fecha: e.fecha,
+      observacion: e.observacion ?? undefined,
+    })),
   }
 }
 
@@ -63,7 +85,48 @@ export const clientsApi = {
       ...(dto.email !== undefined && { email: dto.email }),
       ...(dto.phone !== undefined && { telefono: dto.phone }),
       ...(dto.dni !== undefined && { dni: dto.dni }),
+      ...(dto.sedeId !== undefined && { sedeId: dto.sedeId || null }),
     }).then((r) => mapCliente(r.data)),
 
+  getSedes: (): Promise<{ id: string; nombre: string; activa: boolean }[]> =>
+    api.get('/clientes/sedes').then((r) => Array.isArray(r.data) ? r.data : (r.data?.data ?? [])),
+
   remove: (id: string | number) => api.delete(`/clientes/${id}`),
+
+  getFichaConEventos: (id: string): Promise<FichaEntrenamiento | null> =>
+    api.get(`/clientes/${id}`).then((r) => {
+      const ficha = r.data?.ficha
+      return ficha ? mapFicha(ficha) : null
+    }),
+
+  updateFicha: (id: string, dto: {
+    peso?: number | null
+    altura?: number | null
+    actividadDiaria?: string | null
+    objetivos?: string | null
+    deportePractica?: string | null
+    experiencia?: string | null
+    patologiasBase?: string | null
+    lesiones?: string | null
+  }): Promise<FichaEntrenamiento> =>
+    api.patch(`/clientes/${id}/ficha`, dto).then((r) => mapFicha(r.data)),
+
+  createEvento: (clienteId: string, dto: { nombre: string; fecha: string; observacion?: string }): Promise<EventoDeportivo> =>
+    api.post(`/clientes/${clienteId}/ficha/eventos`, dto).then((r) => ({
+      id: r.data.id,
+      nombre: r.data.nombre,
+      fecha: r.data.fecha,
+      observacion: r.data.observacion ?? undefined,
+    })),
+
+  updateEvento: (clienteId: string, eventoId: string, dto: { nombre?: string; fecha?: string; observacion?: string }): Promise<EventoDeportivo> =>
+    api.patch(`/clientes/${clienteId}/ficha/eventos/${eventoId}`, dto).then((r) => ({
+      id: r.data.id,
+      nombre: r.data.nombre,
+      fecha: r.data.fecha,
+      observacion: r.data.observacion ?? undefined,
+    })),
+
+  deleteEvento: (clienteId: string, eventoId: string): Promise<void> =>
+    api.delete(`/clientes/${clienteId}/ficha/eventos/${eventoId}`).then(() => undefined),
 }

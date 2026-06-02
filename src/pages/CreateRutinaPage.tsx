@@ -1,4 +1,4 @@
-import { useReducer, useState, useEffect, useCallback, useRef } from 'react'
+import { Fragment, useReducer, useState, useEffect, useCallback, useRef } from 'react'
 import { useNavigate, useSearchParams } from 'react-router-dom'
 import { motion, AnimatePresence } from 'framer-motion'
 import { useForm } from 'react-hook-form'
@@ -7,7 +7,8 @@ import { z } from 'zod'
 import {
   ArrowLeft, Check, Search, User, Plus, X, Wrench,
   ChevronDown, ExternalLink, AlertCircle, Layers,
-  ClipboardList, Dumbbell, Settings2, Eye,
+  ClipboardList, Dumbbell, Settings2, Eye, Pencil, Trash2,
+  GripVertical, Copy,
 } from 'lucide-react'
 import { ejerciciosApi } from '../api/ejercicios.api'
 import { clientsApi } from '../api/clients.api'
@@ -18,7 +19,8 @@ import Skeleton from '../components/ui/Skeleton'
 import type {
   WizardState, WizardModo, ClienteResumen, SesionDraft, BloqueDraft,
   EjercicioDraft, PatronMovimientoEnum, PeriodoEntrenamiento,
-  PlantillaRutinaData, TipoDistribucion, CrearCompletaPayload,
+  PlantillaRutinaData, TipoDistribucion, CrearCompletaPayload, Rutina,
+  WSemanaDraft, WSesionDraft, WBloqueDraft,
 } from '../types/rutina.types'
 import type { EjercicioCatalogo } from '../types/ejercicio-catalogo.types'
 
@@ -31,6 +33,12 @@ const PATRON_LABELS: Record<PatronMovimientoEnum, string> = {
   TRACCION:          'Tracción',
   HIBRIDO:           'Híbrido',
   HOMBROS:           'Hombros',
+  CORE:              'Core',
+  POTENCIA:          'Potencia',
+  PLIO_MI:           'Pliometría MI',
+  PLIO_MS:           'Pliometría MS',
+  ISO_MI:            'Isometría MI',
+  ISO_MS:            'Isometría MS',
   ACCESORIO:         'Accesorio',
   OTROS:             'Otros',
 }
@@ -42,6 +50,12 @@ const PATRON_SHORT: Record<PatronMovimientoEnum, string> = {
   TRACCION:          'Tracción',
   HIBRIDO:           'Híbrido',
   HOMBROS:           'Hombros',
+  CORE:              'Core',
+  POTENCIA:          'Potencia',
+  PLIO_MI:           'Plio MI',
+  PLIO_MS:           'Plio MS',
+  ISO_MI:            'Iso MI',
+  ISO_MS:            'Iso MS',
   ACCESORIO:         'Accesorio',
   OTROS:             'Otros',
 }
@@ -70,6 +84,8 @@ const PERIODO_LABELS: Record<PeriodoEntrenamiento, string> = {
 const STEP_LABELS = ['Cliente', 'Sesiones', 'Plantilla', 'Estructura', 'Ejercicios', 'Config', 'Confirmar']
 
 const LETRAS = ['A', 'B', 'C', 'D', 'E', 'F', 'G', 'H']
+
+const DIAS_DEFAULT = ['Lunes', 'Martes', 'Miércoles', 'Jueves', 'Viernes', 'Sábado', 'Domingo']
 
 function uid(): string {
   return Math.random().toString(36).slice(2, 11)
@@ -119,6 +135,32 @@ function generarEstructuraVacia(cantidadSesiones: number): SesionDraft[] {
   return Array.from({ length: cantidadSesiones }, (_, i) => crearSesionVacia(i + 1))
 }
 
+function rutinaToSesionesDraft(rutina: Rutina): SesionDraft[] {
+  const primera = rutina.semanas[0]
+  if (!primera) return []
+  return primera.sesiones.map((s, si) => ({
+    _id: uid(),
+    numero: si + 1,
+    bloques: s.bloques.map((b, bi) => ({
+      _id: uid(),
+      letra: LETRAS[bi] ?? String.fromCharCode(65 + bi),
+      orden: bi,
+      patronMovimiento: null,
+      cantidadEjercicios: b.ejerciciosPlan.length,
+      ejercicios: b.ejerciciosPlan.map(e => ({
+        _id: uid(),
+        catalogoId: e.catalogoId,
+        nombre: e.nombre,
+        series: e.series,
+        repeticiones: e.repeticiones ?? undefined,
+        peso: e.peso ?? undefined,
+        rir: e.rir ?? undefined,
+        rpe: e.rpe ?? undefined,
+      })),
+    })),
+  }))
+}
+
 // ─── Estado inicial y reducer ─────────────────────────────────────────────────
 
 const initialState: WizardState = {
@@ -129,6 +171,7 @@ const initialState: WizardState = {
   plantillaId: null,
   sinPlantilla: false,
   sesiones: [],
+  semanasWizard: [],
   nombre: '',
   cantidadSemanas: 4,
   fechaInicio: new Date().toISOString().split('T')[0],
@@ -149,8 +192,25 @@ type WizardAction =
   | { type: 'DELETE_BLOQUE'; sesionId: string; bloqueId: string }
   | { type: 'UPDATE_EJERCICIO'; sesionId: string; bloqueId: string; ejercicioId: string; changes: Partial<EjercicioDraft> }
   | { type: 'ADD_EJERCICIO_EXTRA'; sesionId: string; bloqueId: string }
+  | { type: 'DELETE_EJERCICIO'; sesionId: string; bloqueId: string; ejercicioId: string }
   | { type: 'SET_CONFIG'; nombre: string; cantidadSemanas: number; fechaInicio: string; periodo: PeriodoEntrenamiento | null; descripcion: string }
   | { type: 'INIT_MESOCICLO'; sesiones: SesionDraft[]; rutinaBaseId: string }
+  | { type: 'SET_BASE_RUTINA'; sesiones: SesionDraft[]; rutinaBaseId: string; sesionesSemanales: number }
+  | { type: 'RESET_PASO1' }
+  // ── Acciones semanas wizard (Paso 5) ─────────────────────────────────────────
+  | { type: 'INIT_WIZARD_SEMANAS' }
+  | { type: 'ADD_SEMANA_W' }
+  | { type: 'CLONE_SEMANA_W'; semanaId: string }
+  | { type: 'DELETE_SEMANA_W'; semanaId: string }
+  | { type: 'RENAME_SEMANA_W'; semanaId: string; nombre: string }
+  | { type: 'ADD_SESION_W'; semanaId: string; dia: string }
+  | { type: 'DELETE_SESION_W'; semanaId: string; sesionId: string }
+  | { type: 'ADD_BLOQUE_W'; sesionId: string }
+  | { type: 'DELETE_BLOQUE_W'; sesionId: string; bloqueId: string }
+  | { type: 'ADD_EJ_W'; bloqueId: string; nombre: string; catalogoId?: string }
+  | { type: 'UPDATE_EJ_W'; sesionId: string; bloqueId: string; ejId: string; changes: Partial<EjercicioDraft> }
+  | { type: 'DELETE_EJ_W'; sesionId: string; bloqueId: string; ejId: string }
+  | { type: 'REORDER_SEMANAS_W'; fromId: string; toId: string }
 
 function wizardReducer(state: WizardState, action: WizardAction): WizardState {
   switch (action.type) {
@@ -251,6 +311,22 @@ function wizardReducer(state: WizardState, action: WizardAction): WizardState {
         ),
       }
 
+    case 'DELETE_EJERCICIO':
+      return {
+        ...state,
+        sesiones: state.sesiones.map(s =>
+          s._id !== action.sesionId ? s : {
+            ...s,
+            bloques: s.bloques.map(b =>
+              b._id !== action.bloqueId ? b : {
+                ...b,
+                ejercicios: b.ejercicios.filter(e => e._id !== action.ejercicioId),
+              }
+            ),
+          }
+        ),
+      }
+
     case 'SET_CONFIG':
       return {
         ...state,
@@ -268,6 +344,214 @@ function wizardReducer(state: WizardState, action: WizardAction): WizardState {
         rutinaBaseId: action.rutinaBaseId,
         rutinaBaseSesiones: action.sesiones,
       }
+
+    case 'SET_BASE_RUTINA':
+      return {
+        ...state,
+        sesiones: action.sesiones,
+        rutinaBaseId: action.rutinaBaseId,
+        rutinaBaseSesiones: action.sesiones,
+        sesionesSemanales: action.sesionesSemanales,
+        sinPlantilla: true,
+        plantillaId: null,
+      }
+
+    case 'RESET_PASO1':
+      return {
+        ...state,
+        cliente: null,
+        rutinaBaseId: null,
+        sesiones: [],
+        sesionesSemanales: null,
+        sinPlantilla: false,
+        plantillaId: null,
+      }
+
+    // ── Semanas wizard (Paso 5 tabla inline) ──────────────────────────────────
+
+    case 'INIT_WIZARD_SEMANAS': {
+      // Si ya hay semanas inicializadas, no hacemos nada (preservar datos)
+      if (state.semanasWizard.length > 0) return state
+      // Convertir state.sesiones en 1 semana inicial
+      const semana: WSemanaDraft = {
+        _id: uid(),
+        numero: 1,
+        sesiones: state.sesiones.map((ses, idx) => ({
+          _id: uid(),
+          dia: DIAS_DEFAULT[idx] ?? `Día ${idx + 1}`,
+          bloques: ses.bloques.map(b => ({
+            _id: uid(),
+            letra: b.letra,
+            patronMovimiento: b.patronMovimiento,
+            ejercicios: b.ejercicios.map(e => ({ ...e, _id: uid() })),
+          })),
+        })),
+      }
+      return { ...state, semanasWizard: [semana] }
+    }
+
+    case 'ADD_SEMANA_W': {
+      const numero = (state.semanasWizard.at(-1)?.numero ?? 0) + 1
+      const nueva: WSemanaDraft = { _id: uid(), numero, sesiones: [] }
+      return { ...state, semanasWizard: [...state.semanasWizard, nueva] }
+    }
+
+    case 'CLONE_SEMANA_W': {
+      const src = state.semanasWizard.find(s => s._id === action.semanaId)
+      if (!src) return state
+      const numero = (state.semanasWizard.at(-1)?.numero ?? 0) + 1
+      const clon: WSemanaDraft = {
+        _id: uid(),
+        numero,
+        nombre: src.nombre,
+        sesiones: src.sesiones.map(ses => ({
+          _id: uid(),
+          dia: ses.dia,
+          bloques: ses.bloques.map(b => ({
+            _id: uid(),
+            letra: b.letra,
+            patronMovimiento: b.patronMovimiento,
+            ejercicios: b.ejercicios.map(e => ({ ...e, _id: uid() })),
+          })),
+        })),
+      }
+      return { ...state, semanasWizard: [...state.semanasWizard, clon] }
+    }
+
+    case 'DELETE_SEMANA_W':
+      return { ...state, semanasWizard: state.semanasWizard.filter(s => s._id !== action.semanaId) }
+
+    case 'RENAME_SEMANA_W':
+      return {
+        ...state,
+        semanasWizard: state.semanasWizard.map(s =>
+          s._id !== action.semanaId ? s : { ...s, nombre: action.nombre }
+        ),
+      }
+
+    case 'ADD_SESION_W':
+      return {
+        ...state,
+        semanasWizard: state.semanasWizard.map(s =>
+          s._id !== action.semanaId ? s : {
+            ...s,
+            sesiones: [...s.sesiones, { _id: uid(), dia: action.dia, bloques: [] }],
+          }
+        ),
+      }
+
+    case 'DELETE_SESION_W':
+      return {
+        ...state,
+        semanasWizard: state.semanasWizard.map(s =>
+          s._id !== action.semanaId ? s : {
+            ...s,
+            sesiones: s.sesiones.filter(ses => ses._id !== action.sesionId),
+          }
+        ),
+      }
+
+    case 'ADD_BLOQUE_W': {
+      return {
+        ...state,
+        semanasWizard: state.semanasWizard.map(sem => ({
+          ...sem,
+          sesiones: sem.sesiones.map(ses => {
+            if (ses._id !== action.sesionId) return ses
+            const letra = LETRAS[ses.bloques.length] ?? String.fromCharCode(65 + ses.bloques.length)
+            return {
+              ...ses,
+              bloques: [...ses.bloques, { _id: uid(), letra, patronMovimiento: null, ejercicios: [crearEjercicioVacio()] }],
+            }
+          }),
+        })),
+      }
+    }
+
+    case 'DELETE_BLOQUE_W':
+      return {
+        ...state,
+        semanasWizard: state.semanasWizard.map(sem => ({
+          ...sem,
+          sesiones: sem.sesiones.map(ses =>
+            ses._id !== action.sesionId ? ses : {
+              ...ses,
+              bloques: ses.bloques.filter(b => b._id !== action.bloqueId),
+            }
+          ),
+        })),
+      }
+
+    case 'ADD_EJ_W':
+      return {
+        ...state,
+        semanasWizard: state.semanasWizard.map(sem => ({
+          ...sem,
+          sesiones: sem.sesiones.map(ses => ({
+            ...ses,
+            bloques: ses.bloques.map(b =>
+              b._id !== action.bloqueId ? b : {
+                ...b,
+                ejercicios: [...b.ejercicios, {
+                  _id: uid(),
+                  nombre: action.nombre,
+                  catalogoId: action.catalogoId,
+                }],
+              }
+            ),
+          })),
+        })),
+      }
+
+    case 'UPDATE_EJ_W':
+      return {
+        ...state,
+        semanasWizard: state.semanasWizard.map(sem => ({
+          ...sem,
+          sesiones: sem.sesiones.map(ses =>
+            ses._id !== action.sesionId ? ses : {
+              ...ses,
+              bloques: ses.bloques.map(b =>
+                b._id !== action.bloqueId ? b : {
+                  ...b,
+                  ejercicios: b.ejercicios.map(e =>
+                    e._id !== action.ejId ? e : { ...e, ...action.changes }
+                  ),
+                }
+              ),
+            }
+          ),
+        })),
+      }
+
+    case 'DELETE_EJ_W':
+      return {
+        ...state,
+        semanasWizard: state.semanasWizard.map(sem => ({
+          ...sem,
+          sesiones: sem.sesiones.map(ses =>
+            ses._id !== action.sesionId ? ses : {
+              ...ses,
+              bloques: ses.bloques.map(b =>
+                b._id !== action.bloqueId ? b : {
+                  ...b,
+                  ejercicios: b.ejercicios.filter(e => e._id !== action.ejId),
+                }
+              ),
+            }
+          ),
+        })),
+      }
+
+    case 'REORDER_SEMANAS_W': {
+      const from = state.semanasWizard.findIndex(s => s._id === action.fromId)
+      const to   = state.semanasWizard.findIndex(s => s._id === action.toId)
+      if (from === -1 || to === -1 || from === to) return state
+      const semanas = [...state.semanasWizard]
+      const [moved] = semanas.splice(from, 1)
+      semanas.splice(to, 0, moved)
+      return { ...state, semanasWizard: semanas }
+    }
 
     default:
       return state
@@ -739,6 +1023,141 @@ function EjercicioSlot({
   )
 }
 
+// ─── EjWizardInlineCells ─────────────────────────────────────────────────────
+// Returns a Fragment of <td> elements — must be rendered inside a <tr>.
+
+function EjWizardInlineCells({
+  ej,
+  onUpdate,
+  onCancel,
+  onAssign,
+}: {
+  ej: EjercicioDraft
+  onUpdate: (changes: Partial<EjercicioDraft>) => void
+  onCancel: () => void
+  onAssign: () => void
+}) {
+  const [draft, setDraft] = useState({
+    nombre:       ej.nombre,
+    series:       ej.series?.toString()    ?? '',
+    repeticiones: ej.repeticiones          ?? '',
+    peso:         ej.peso                  ?? '',
+    rir:          ej.rir?.toString()        ?? '',
+    rpe:          ej.rpe?.toString()        ?? '',
+  })
+
+  const inp = 'w-full bg-gray-50 dark:bg-white/[0.07] border border-gray-200 dark:border-white/[0.12] rounded-lg px-1.5 py-1 text-xs text-saas-text dark:text-white placeholder-gray-300 dark:placeholder-white/20 focus:outline-none focus:border-primary/50 transition-colors'
+
+  function commit() {
+    onUpdate({
+      nombre:       draft.nombre,
+      series:       draft.series       ? Number(draft.series)  : undefined,
+      repeticiones: draft.repeticiones || undefined,
+      peso:         draft.peso         || undefined,
+      rir:          draft.rir          ? Number(draft.rir)     : undefined,
+      rpe:          draft.rpe          ? Number(draft.rpe)     : undefined,
+    })
+  }
+
+  return (
+    <>
+      <td className="px-2 py-1.5 min-w-[180px]">
+        <div className="flex items-center gap-1.5">
+          <input
+            autoFocus
+            value={draft.nombre}
+            onChange={e => setDraft(d => ({ ...d, nombre: e.target.value }))}
+            onKeyDown={e => { if (e.key === 'Enter') commit(); if (e.key === 'Escape') onCancel() }}
+            placeholder="Nombre del ejercicio..."
+            className={`${inp} flex-1`}
+          />
+          <button type="button" onClick={onAssign}
+            className="shrink-0 text-[10px] text-primary hover:text-primary/80 transition-colors whitespace-nowrap">
+            buscar
+          </button>
+        </div>
+      </td>
+      <td className="px-1.5 py-1.5 w-14">
+        <input type="number" min={1} value={draft.series}
+          onChange={e => setDraft(d => ({ ...d, series: e.target.value }))}
+          onKeyDown={e => { if (e.key === 'Escape') onCancel() }}
+          placeholder="4" className={`${inp} text-center`} />
+      </td>
+      <td className="px-1.5 py-1.5 w-16">
+        <input value={draft.repeticiones}
+          onChange={e => setDraft(d => ({ ...d, repeticiones: e.target.value }))}
+          onKeyDown={e => { if (e.key === 'Escape') onCancel() }}
+          placeholder="8-12" className={`${inp} text-center`} />
+      </td>
+      <td className="px-1.5 py-1.5 w-16">
+        <input value={draft.peso}
+          onChange={e => setDraft(d => ({ ...d, peso: e.target.value }))}
+          onKeyDown={e => { if (e.key === 'Escape') onCancel() }}
+          placeholder="kg" className={`${inp} text-center`} />
+      </td>
+      <td className="px-1.5 py-1.5 w-20">
+        <div className="flex gap-1">
+          <input type="number" min={0} max={5} value={draft.rir}
+            onChange={e => setDraft(d => ({ ...d, rir: e.target.value }))}
+            onKeyDown={e => { if (e.key === 'Escape') onCancel() }}
+            placeholder="RIR" className={`${inp} text-center`} />
+          <input type="number" min={1} max={10} value={draft.rpe}
+            onChange={e => setDraft(d => ({ ...d, rpe: e.target.value }))}
+            onKeyDown={e => { if (e.key === 'Escape') onCancel() }}
+            placeholder="RPE" className={`${inp} text-center`} />
+        </div>
+      </td>
+      <td className="px-1.5 py-1.5 w-16">
+        <div className="flex items-center justify-center gap-0.5">
+          <button type="button" onClick={commit}
+            className="p-1.5 rounded-lg bg-primary/10 text-primary hover:bg-primary/20 transition-colors" title="Guardar (Enter)">
+            <Check size={12} />
+          </button>
+          <button type="button" onClick={onCancel}
+            className="p-1.5 rounded-lg text-gray-400 dark:text-white/45 hover:bg-white/[0.06] transition-colors" title="Cancelar (Esc)">
+            <X size={12} />
+          </button>
+        </div>
+      </td>
+    </>
+  )
+}
+
+// ─── SesionDayDropdownW ───────────────────────────────────────────────────────
+// Versión wizard del SesionDayDropdown de ClientRutinaPage (sin API calls)
+
+function SesionDayDropdownW({ existentes, semanaId, onSelect, onClose }: {
+  existentes: string[]
+  semanaId: string
+  onSelect: (semanaId: string, dia: string) => void
+  onClose: () => void
+}) {
+  return (
+    <motion.div
+      initial={{ opacity: 0, scale: 0.95, y: -8 }}
+      animate={{ opacity: 1, scale: 1, y: 0 }}
+      exit={{ opacity: 0, scale: 0.95, y: -8 }}
+      className="absolute top-full left-0 mt-1.5 z-30 bg-white dark:bg-[#1A1A1A] border border-gray-200 dark:border-white/[0.08] rounded-2xl p-3 shadow-xl min-w-[160px]"
+    >
+      <div className="flex items-center justify-between mb-2 px-1">
+        <span className="text-xs text-gray-500 dark:text-white/50 font-medium">Agregar día</span>
+        <button onClick={onClose} className="text-gray-400 dark:text-white/30 hover:text-gray-900 dark:hover:text-white transition-colors">
+          <X className="w-3.5 h-3.5" />
+        </button>
+      </div>
+      <div className="grid grid-cols-2 gap-1.5">
+        {DIAS_DEFAULT.map(dia => (
+          <button key={dia} onClick={() => { onSelect(semanaId, dia); onClose() }}
+            disabled={existentes.includes(dia)}
+            className="px-2 py-1.5 rounded-lg border border-gray-200 dark:border-white/[0.08] text-xs text-gray-700 dark:text-white hover:bg-primary hover:text-black hover:border-primary transition-colors disabled:opacity-30 disabled:cursor-not-allowed">
+            {dia}
+          </button>
+        ))}
+      </div>
+    </motion.div>
+  )
+}
+
 // ─── Página principal ─────────────────────────────────────────────────────────
 
 export default function CreateRutinaPage() {
@@ -749,8 +1168,13 @@ export default function CreateRutinaPage() {
   const [state, dispatch] = useReducer(wizardReducer, initialState)
   const [isSaving, setIsSaving] = useState(false)
   const [loadingClienteInit, setLoadingClienteInit] = useState(!!clienteIdFromUrl)
+  const [clienteRutinas, setClienteRutinas] = useState<Rutina[]>([])
+  const [showBasePhase, setShowBasePhase] = useState(false)
+  const [baseDecidida, setBaseDecidida] = useState(false)
+  const [editingEjId,   setEditingEjId]   = useState<string | null>(null)
+  const [assigningEjId, setAssigningEjId] = useState<string | null>(null)
 
-  // Si viene desde ClientRutinaPage con ?clienteId=xxx, pre-carga el cliente y salta al paso 2
+  // Si viene desde ClientRutinaPage con ?clienteId=xxx, pre-carga el cliente
   useEffect(() => {
     if (!clienteIdFromUrl) return
     let cancelled = false
@@ -767,17 +1191,23 @@ export default function CreateRutinaPage() {
           rutinaActivaId: null,
           rutinaActivaNombre: null,
         }
+        let fetchedRutinas: Rutina[] = []
         try {
-          const rutinas = await rutinasApi.getByCliente(clienteIdFromUrl!)
-          const activa = rutinas.find(r => r.activa)
+          fetchedRutinas = await rutinasApi.getByCliente(clienteIdFromUrl!)
+          const activa = fetchedRutinas.find(r => r.activa)
           if (activa) {
             resumen.rutinaActivaId = activa.id
             resumen.rutinaActivaNombre = activa.nombre
           }
-        } catch { /* sin rutinas activas */ }
+        } catch { /* sin rutinas */ }
         if (!cancelled) {
           dispatch({ type: 'SET_CLIENTE', cliente: resumen })
-          dispatch({ type: 'SET_PASO', paso: 2 })
+          if (fetchedRutinas.length > 0) {
+            setClienteRutinas(fetchedRutinas)
+            setShowBasePhase(true)
+          } else {
+            dispatch({ type: 'SET_PASO', paso: 2 })
+          }
         }
       } catch {
         if (!cancelled) addToast('Error al cargar el cliente', 'error')
@@ -794,12 +1224,12 @@ export default function CreateRutinaPage() {
 
   function Paso1() {
     const [search, setSearch] = useState('')
-    const [results, setResults] = useState<ReturnType<typeof Array.prototype.map> extends (infer T)[] ? T[] : never[]>([])
     const [loadingSearch, setLoadingSearch] = useState(false)
     const [loadingCliente, setLoadingCliente] = useState(false)
-    const [clienteSeleccionadoRaw, setClienteSeleccionadoRaw] = useState<ClienteResumen | null>(state.cliente)
+    const [clienteSeleccionadoRaw, setClienteSeleccionadoRaw] = useState<ClienteResumen | null>(null)
     type ResultItem = { id: number; nombre: string; apellido: string }
     const [rawResults, setRawResults] = useState<ResultItem[]>([])
+    const [localRutinas, setLocalRutinas] = useState<Rutina[]>([])
     const timerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
 
     useEffect(() => {
@@ -827,27 +1257,26 @@ export default function CreateRutinaPage() {
       setLoadingCliente(true)
       try {
         const full = await clientsApi.getById(String(id))
-        const membresiaActiva = full.membershipStatus === 'ACTIVA'
         const resumen: ClienteResumen = {
           id: String(full.id),
           nombre: full.name,
           apellido: full.lastName,
           planActivo: full.planName ?? null,
           frecuenciaSemanal: full.planFrequency ?? null,
-          membresiaVigente: membresiaActiva,
+          membresiaVigente: full.membershipStatus === 'ACTIVA',
           rutinaActivaId: null,
           rutinaActivaNombre: null,
         }
-        // Intentar cargar rutinas activas
+        let rutinas: Rutina[] = []
         try {
-          const rutinas = await rutinasApi.getByCliente(String(id))
+          rutinas = await rutinasApi.getByCliente(String(id))
           const activa = rutinas.find(r => r.activa)
           if (activa) {
             resumen.rutinaActivaId = activa.id
             resumen.rutinaActivaNombre = activa.nombre
           }
-        } catch { /* sin rutinas activas */ }
-
+        } catch { /* sin rutinas */ }
+        setLocalRutinas(rutinas)
         setClienteSeleccionadoRaw(resumen)
       } catch {
         addToast('Error al cargar el cliente', 'error')
@@ -856,7 +1285,15 @@ export default function CreateRutinaPage() {
       }
     }
 
-    function confirmarCliente() {
+    function irAFaseBase() {
+      if (!clienteSeleccionadoRaw) return
+      dispatch({ type: 'SET_CLIENTE', cliente: clienteSeleccionadoRaw })
+      dispatch({ type: 'SET_MODO', modo: 'nueva' })
+      setClienteRutinas(localRutinas)
+      setShowBasePhase(true)
+    }
+
+    function confirmarClienteDirecto() {
       if (!clienteSeleccionadoRaw) return
       dispatch({ type: 'SET_CLIENTE', cliente: clienteSeleccionadoRaw })
       dispatch({ type: 'SET_MODO', modo: 'nueva' })
@@ -870,6 +1307,107 @@ export default function CreateRutinaPage() {
       dispatch({ type: 'SET_PASO', paso: 2 })
     }
 
+    // ── Phase B: base rutina selection ────────────────────────────────────────
+    if (showBasePhase && state.cliente) {
+      return (
+        <div className="space-y-4">
+          {/* Client banner */}
+          <div className="flex items-center gap-3 rounded-2xl border border-white/[0.08] bg-white/[0.03] px-4 py-3">
+            <div className="h-8 w-8 rounded-xl bg-primary/10 flex items-center justify-center shrink-0">
+              <User size={14} className="text-primary" />
+            </div>
+            <div className="flex-1 min-w-0">
+              <p className="text-sm font-semibold text-white">{state.cliente.nombre} {state.cliente.apellido}</p>
+              {state.cliente.planActivo && (
+                <p className="text-[10px] text-gray-500">{state.cliente.planActivo}</p>
+              )}
+            </div>
+            <button
+              type="button"
+              onClick={() => {
+                setShowBasePhase(false)
+                setBaseDecidida(false)
+                setClienteRutinas([])
+                dispatch({ type: 'RESET_PASO1' })
+              }}
+              className="text-xs text-gray-500 hover:text-white transition-colors shrink-0"
+            >
+              Cambiar
+            </button>
+          </div>
+
+          <p className="text-xs text-gray-500">¿Querés crear la rutina en base a alguna existente?</p>
+
+          <div className="space-y-2">
+            {/* Desde cero */}
+            <OptionCard
+              selected={baseDecidida && !state.rutinaBaseId}
+              onClick={() => {
+                if (state.rutinaBaseId) {
+                  dispatch({ type: 'RESET_PASO1' })
+                  dispatch({ type: 'SET_CLIENTE', cliente: state.cliente! })
+                }
+                setBaseDecidida(true)
+              }}
+            >
+              <div className="flex items-center gap-3">
+                <div className="h-9 w-9 rounded-xl bg-white/[0.06] border border-white/[0.08] flex items-center justify-center shrink-0">
+                  <Plus size={15} className="text-gray-400" />
+                </div>
+                <div className="min-w-0">
+                  <p className="text-sm font-black text-white">Desde cero</p>
+                  <p className="text-xs text-gray-500 mt-0.5">Crear una rutina nueva sin tomar ninguna como referencia</p>
+                </div>
+              </div>
+            </OptionCard>
+
+            {/* Existing rutinas */}
+            {clienteRutinas.map(rutina => {
+              const ejCount = rutina.semanas[0]?.sesiones.reduce(
+                (sum, s) => sum + s.bloques.reduce((bs, b) => bs + b.ejerciciosPlan.length, 0), 0
+              ) ?? 0
+              return (
+                <OptionCard
+                  key={rutina.id}
+                  selected={baseDecidida && state.rutinaBaseId === rutina.id}
+                  onClick={() => {
+                    const sesionesDraft = rutinaToSesionesDraft(rutina)
+                    const sesionesSemanales = rutina.semanas[0]?.sesiones.length ?? 3
+                    dispatch({ type: 'SET_BASE_RUTINA', sesiones: sesionesDraft, rutinaBaseId: rutina.id, sesionesSemanales })
+                    setBaseDecidida(true)
+                  }}
+                >
+                  <div>
+                    <div className="flex items-start justify-between gap-2">
+                      <p className="text-sm font-black text-white leading-tight">{rutina.nombre}</p>
+                      {rutina.activa && (
+                        <span className="text-[9px] font-bold uppercase tracking-wider px-1.5 py-0.5 rounded-md bg-emerald-500/10 text-emerald-400 border border-emerald-500/15 shrink-0">
+                          Activa
+                        </span>
+                      )}
+                    </div>
+                    <div className="flex flex-wrap gap-x-3 mt-1.5 text-[10px] text-gray-500">
+                      <span>{rutina.semanas.length} semana{rutina.semanas.length !== 1 ? 's' : ''}</span>
+                      {rutina.semanas[0] && (
+                        <span>{rutina.semanas[0].sesiones.length} sesiones/sem</span>
+                      )}
+                      {ejCount > 0 && (
+                        <span>{ejCount} ejercicio{ejCount !== 1 ? 's' : ''}</span>
+                      )}
+                    </div>
+                    {rutina.descripcion && (
+                      <p className="text-[10px] text-gray-600 mt-1 truncate">{rutina.descripcion}</p>
+                    )}
+                  </div>
+                </OptionCard>
+              )
+            })}
+          </div>
+        </div>
+      )
+    }
+
+    // ── Phase A: client search ────────────────────────────────────────────────
     return (
       <div className="space-y-5">
         <div>
@@ -923,10 +1461,6 @@ export default function CreateRutinaPage() {
                 <Skeleton className="h-3.5 w-24 rounded-md" />
               </div>
             </div>
-            <div className="space-y-2 pt-2 border-t border-white/[0.05]">
-              <Skeleton className="h-4 w-full rounded-md" />
-              <Skeleton className="h-4 w-5/6 rounded-md" />
-            </div>
           </div>
         )}
 
@@ -964,33 +1498,37 @@ export default function CreateRutinaPage() {
               </span>
             </div>
 
-            {clienteSeleccionadoRaw.rutinaActivaNombre ? (
+            {localRutinas.length > 0 ? (
               <div className="space-y-2">
-                <div className="rounded-xl border border-amber-500/20 bg-amber-500/[0.06] px-3 py-2.5">
-                  <p className="text-[10px] font-bold uppercase tracking-wider text-amber-500/70 mb-0.5">Rutina activa</p>
-                  <p className="text-sm text-amber-300 font-semibold">{clienteSeleccionadoRaw.rutinaActivaNombre}</p>
-                </div>
-                <div className="grid grid-cols-2 gap-2">
+                {clienteSeleccionadoRaw.rutinaActivaNombre && (
+                  <div className="rounded-xl border border-amber-500/20 bg-amber-500/[0.06] px-3 py-2.5">
+                    <p className="text-[10px] font-bold uppercase tracking-wider text-amber-500/70 mb-0.5">Rutina activa</p>
+                    <p className="text-sm text-amber-300 font-semibold">{clienteSeleccionadoRaw.rutinaActivaNombre}</p>
+                  </div>
+                )}
+                <div className={clienteSeleccionadoRaw.rutinaActivaNombre ? 'grid grid-cols-2 gap-2' : ''}>
                   <button
                     type="button"
-                    onClick={confirmarCliente}
-                    className="rounded-xl border border-white/[0.1] bg-white/[0.04] px-3 py-2.5 text-xs font-semibold text-white hover:bg-white/[0.08] transition-colors"
+                    onClick={irAFaseBase}
+                    className="w-full rounded-xl bg-primary text-black text-sm font-black py-2.5 hover:bg-primary/90 transition-colors"
                   >
-                    Nueva desde cero
+                    Continuar
                   </button>
-                  <button
-                    type="button"
-                    onClick={elegirMesociclo}
-                    className="rounded-xl border border-primary/40 bg-primary/10 px-3 py-2.5 text-xs font-semibold text-primary hover:bg-primary/15 transition-colors"
-                  >
-                    Nuevo mesociclo
-                  </button>
+                  {clienteSeleccionadoRaw.rutinaActivaNombre && (
+                    <button
+                      type="button"
+                      onClick={elegirMesociclo}
+                      className="rounded-xl border border-primary/40 bg-primary/10 px-3 py-2.5 text-xs font-semibold text-primary hover:bg-primary/15 transition-colors"
+                    >
+                      Nuevo mesociclo
+                    </button>
+                  )}
                 </div>
               </div>
             ) : (
               <button
                 type="button"
-                onClick={confirmarCliente}
+                onClick={confirmarClienteDirecto}
                 className="w-full rounded-xl bg-primary text-black text-sm font-black py-2.5 hover:bg-primary/90 transition-colors"
               >
                 Continuar con este cliente
@@ -1087,9 +1625,17 @@ export default function CreateRutinaPage() {
     }
 
     function elegirManual() {
-      const sesiones = generarEstructuraVacia(state.sesionesSemanales ?? 3)
+      const alreadyFilled = state.sesiones.length > 0
+      const sesiones = alreadyFilled
+        ? state.sesiones
+        : generarEstructuraVacia(state.sesionesSemanales ?? 3)
       dispatch({ type: 'SET_PLANTILLA', plantillaId: null, sinPlantilla: true, sesiones })
-      dispatch({ type: 'SET_PASO', paso: 5 })
+      if (!alreadyFilled) {
+        // Salto directo a Paso 5 — inicializar semanasWizard después de que las sesiones estén en el state
+        // El dispatch es síncrono en el mismo render, así que INIT_WIZARD_SEMANAS lo tomará del nuevo state
+        dispatch({ type: 'INIT_WIZARD_SEMANAS' })
+      }
+      dispatch({ type: 'SET_PASO', paso: alreadyFilled ? 4 : 5 })
     }
 
     if (loading) {
@@ -1267,64 +1813,428 @@ export default function CreateRutinaPage() {
     )
   }
 
-  // ── Paso 5 — Asignar ejercicios ────────────────────────────────────────────
+  // ── Paso 5 — Asignar ejercicios (tabla inline idéntica a InlineEditRutinaTable) ──
 
   function Paso5() {
+    const C = 'px-3 py-0 align-middle'
+    const [showDiaPicker, setShowDiaPicker] = useState<string | null>(null)
+    const [renamingSemanaId, setRenamingSemanaId] = useState<string | null>(null)
+    const [renameSemanaVal, setRenameSemanaVal] = useState('')
+    const [dragSemanaId, setDragSemanaId] = useState<string | null>(null)
+    const [dragOverSemanaId, setDragOverSemanaId] = useState<string | null>(null)
+
     return (
-      <div className="space-y-8">
-        {state.sesiones.map(sesion => (
-          <div key={sesion._id}>
-            <p className="text-xs font-black uppercase tracking-wider text-primary mb-3">
-              Sesión {sesion.numero}{sesion.nombre ? ` — ${sesion.nombre}` : ''}
-            </p>
+      <div className="rounded-2xl border border-white/40 dark:border-white/[0.08] overflow-hidden">
+        <div
+          className="overflow-x-auto overflow-y-auto"
+          style={{ maxHeight: 'calc(100vh - 420px)' }}
+        >
+          <table className="w-full border-collapse text-sm">
+            <thead className="sticky top-0 z-10">
+              <tr className="border-b border-white/40 dark:border-white/[0.08] bg-white/50 dark:bg-black/20 backdrop-blur-sm">
+                {(['Semana', 'Día', 'Bloque', 'Ejercicio', 'Ser.', 'Reps', 'Peso', 'RIR/RPE', ''] as const).map((h, i) => (
+                  <th key={`h${i}`} className={`py-2.5 text-[10px] font-semibold text-gray-400 dark:text-white/35 uppercase tracking-widest whitespace-nowrap ${i < 3 ? 'px-3 text-left' : i === 3 ? 'px-4 text-left' : 'px-3 text-center'}`}>{h}</th>
+                ))}
+              </tr>
+            </thead>
+            <tbody
+              onDragOver={e => {
+                e.preventDefault()
+                if (!dragSemanaId) return
+                let el: Element | null = e.target as Element
+                while (el && el.tagName !== 'TR') el = el.parentElement
+                const sid = (el as HTMLTableRowElement | null)?.dataset.semId
+                if (sid && sid !== dragSemanaId) setDragOverSemanaId(sid)
+              }}
+              onDrop={e => {
+                e.preventDefault()
+                let el: Element | null = e.target as Element
+                while (el && el.tagName !== 'TR') el = el.parentElement
+                const sid = (el as HTMLTableRowElement | null)?.dataset.semId
+                if (dragSemanaId && sid && sid !== dragSemanaId) {
+                  dispatch({ type: 'REORDER_SEMANAS_W', fromId: dragSemanaId, toId: sid })
+                }
+                setDragSemanaId(null)
+                setDragOverSemanaId(null)
+              }}
+              onDragEnd={() => { setDragSemanaId(null); setDragOverSemanaId(null) }}
+            >
+              {state.semanasWizard.flatMap((sem, semIdx): React.ReactNode[] => {
+                const semLabel = sem.nombre?.trim() ? sem.nombre : `S${sem.numero}`
+                const rows: React.ReactNode[] = []
+                let semShown = false
 
-            <div className="space-y-4">
-              {sesion.bloques.map(bloque => (
-                <div key={bloque._id} className="rounded-2xl border border-white/[0.08] bg-white/[0.03] overflow-hidden">
-                  <div className="flex items-center gap-2.5 px-4 py-3 border-b border-white/[0.05] bg-white/[0.02]">
-                    <span className="flex h-6 w-6 items-center justify-center rounded-md bg-primary/15 text-xs font-black text-primary">
-                      {bloque.letra}
-                    </span>
-                    {bloque.patronMovimiento && (
-                      <span className="text-[10px] font-semibold text-gray-400 bg-white/[0.05] px-2 py-0.5 rounded-md">
-                        {PATRON_LABELS[bloque.patronMovimiento]}
-                      </span>
-                    )}
-                    <span className="ml-auto text-[10px] text-gray-600">
-                      {bloque.ejercicios.filter(e => e.nombre).length}/{bloque.ejercicios.length} asignados
-                    </span>
-                  </div>
+                const semCell = () => {
+                  const shown = semShown
+                  semShown = true
+                  if (shown) return <td key="sc" className={`w-[120px] ${C}`} />
 
-                  <div className="p-3 space-y-2">
-                    {bloque.ejercicios.map(ej => (
-                      <EjercicioSlot
-                        key={ej._id}
-                        ejercicio={ej}
-                        patronBloque={bloque.patronMovimiento}
-                        esReferencia={ej._esReferencia === true}
-                        onUpdate={changes => dispatch({
-                          type: 'UPDATE_EJERCICIO',
-                          sesionId: sesion._id,
-                          bloqueId: bloque._id,
-                          ejercicioId: ej._id,
-                          changes,
-                        })}
-                      />
-                    ))}
+                  const isRenaming = renamingSemanaId === sem._id
+                  const isDragOver = dragOverSemanaId === sem._id
 
-                    <button
-                      type="button"
-                      onClick={() => dispatch({ type: 'ADD_EJERCICIO_EXTRA', sesionId: sesion._id, bloqueId: bloque._id })}
-                      className="w-full flex items-center justify-center gap-1.5 rounded-xl border border-dashed border-white/[0.1] py-2 text-[11px] text-gray-500 hover:text-white hover:border-white/[0.2] transition-colors mt-1"
-                    >
-                      <Plus size={11} /> Ejercicio extra
-                    </button>
-                  </div>
-                </div>
-              ))}
-            </div>
-          </div>
-        ))}
+                  return (
+                    <td key="sc" className={`px-2 py-2.5 w-[120px] align-top ${isDragOver ? 'bg-primary/[0.04]' : ''}`}>
+                      <div className="flex items-center gap-0.5 group/sem">
+                        {/* Drag handle */}
+                        <div
+                          draggable
+                          onDragStart={e => { e.stopPropagation(); setDragSemanaId(sem._id); e.dataTransfer.effectAllowed = 'move' }}
+                          className="cursor-grab active:cursor-grabbing p-1 rounded text-gray-300 dark:text-white/30 hover:text-gray-500 dark:hover:text-white/60 transition-colors shrink-0"
+                          title="Arrastrar para reordenar"
+                        >
+                          <GripVertical className="w-3 h-3" />
+                        </div>
+
+                        {isRenaming ? (
+                          <form
+                            onSubmit={e => { e.preventDefault(); dispatch({ type: 'RENAME_SEMANA_W', semanaId: sem._id, nombre: renameSemanaVal.trim() || `S${sem.numero}` }); setRenamingSemanaId(null) }}
+                            className="flex items-center gap-1 flex-1 min-w-0"
+                          >
+                            <input
+                              autoFocus
+                              value={renameSemanaVal}
+                              onChange={e => setRenameSemanaVal(e.target.value)}
+                              onBlur={() => { dispatch({ type: 'RENAME_SEMANA_W', semanaId: sem._id, nombre: renameSemanaVal.trim() || `S${sem.numero}` }); setRenamingSemanaId(null) }}
+                              className="w-14 bg-white dark:bg-white/[0.08] border border-primary/40 rounded-md px-1.5 py-0.5 text-[11px] text-gray-900 dark:text-white focus:outline-none"
+                            />
+                            <button type="submit" className="p-0.5 rounded text-primary shrink-0">
+                              <Check className="w-3 h-3" />
+                            </button>
+                          </form>
+                        ) : (
+                          <span
+                            className="px-2 py-0.5 bg-primary/10 border border-primary/20 rounded-lg text-primary/90 text-[11px] font-bold whitespace-nowrap cursor-pointer hover:bg-primary/20 transition-colors"
+                            title="Click para renombrar"
+                            onClick={() => { setRenamingSemanaId(sem._id); setRenameSemanaVal(sem.nombre ?? '') }}
+                          >
+                            {semLabel}
+                          </span>
+                        )}
+
+                        {!isRenaming && (
+                          <>
+                            <button onClick={() => dispatch({ type: 'CLONE_SEMANA_W', semanaId: sem._id })} title="Duplicar" className="p-1 rounded text-gray-400 dark:text-white/45 hover:text-primary opacity-0 group-hover/sem:opacity-100 transition-all shrink-0">
+                              <Copy className="w-2.5 h-2.5" />
+                            </button>
+                            <button onClick={() => dispatch({ type: 'DELETE_SEMANA_W', semanaId: sem._id })} title="Eliminar" className="p-1 rounded text-gray-400 dark:text-white/45 hover:text-red-400 opacity-0 group-hover/sem:opacity-100 transition-all shrink-0">
+                              <Trash2 className="w-2.5 h-2.5" />
+                            </button>
+                          </>
+                        )}
+                      </div>
+                    </td>
+                  )
+                }
+
+                // Semana sin sesiones
+                if (sem.sesiones.length === 0) {
+                  rows.push(
+                    <tr key={`${sem._id}-empty`} data-sem-id={sem._id} className={semIdx > 0 ? 'border-t-2 border-gray-200 dark:border-white/[0.1]' : ''}>
+                      {semCell()}
+                      <td colSpan={7} className="px-4 py-2.5">
+                        <div className="relative flex items-center gap-3">
+                          <span className="text-xs text-gray-400 dark:text-white/30">Sin días</span>
+                          <button onClick={() => setShowDiaPicker(sem._id)} className="flex items-center gap-1 text-xs text-primary/70 hover:text-primary transition-colors">
+                            <Plus className="w-3 h-3" /> Agregar día
+                          </button>
+                          <AnimatePresence>
+                            {showDiaPicker === sem._id && (
+                              <SesionDayDropdownW existentes={[]} semanaId={sem._id} onSelect={(sId, dia) => { dispatch({ type: 'ADD_SESION_W', semanaId: sId, dia }); setShowDiaPicker(null) }} onClose={() => setShowDiaPicker(null)} />
+                            )}
+                          </AnimatePresence>
+                        </div>
+                      </td>
+                      <td className="w-[60px]" />
+                    </tr>
+                  )
+                  rows.push(
+                    <tr key={`${sem._id}-adddia`} data-sem-id={sem._id} className="border-t-2 border-gray-200 dark:border-white/[0.08]">
+                      <td className={`w-[120px] ${C}`} />
+                      <td colSpan={8} className="px-4 py-2.5" />
+                    </tr>
+                  )
+                  return rows
+                }
+
+                sem.sesiones.forEach((ses, sesIdx) => {
+                  let diaShown = false
+
+                  const diaCell = () => {
+                    const shown = diaShown
+                    diaShown = true
+                    return shown ? <td key="dc" className={`w-[90px] ${C}`} /> : (
+                      <td key="dc" className="px-3 py-2.5 w-[90px] align-top">
+                        <div className="flex items-center gap-1 group/dia">
+                          <span className="text-sm text-gray-700 dark:text-white/70 font-semibold whitespace-nowrap">{ses.dia}</span>
+                          <button onClick={() => dispatch({ type: 'DELETE_SESION_W', semanaId: sem._id, sesionId: ses._id })} className="p-1 rounded text-gray-400 dark:text-white/45 hover:text-red-400 opacity-0 group-hover/dia:opacity-100 transition-all">
+                            <X className="w-2.5 h-2.5" />
+                          </button>
+                        </div>
+                      </td>
+                    )
+                  }
+
+                  const diaBorder = sesIdx > 0 ? 'border-t border-gray-200 dark:border-white/[0.07]' : semIdx > 0 && sesIdx === 0 ? 'border-t-2 border-gray-200 dark:border-white/[0.1]' : ''
+
+                  if (ses.bloques.length === 0) {
+                    rows.push(
+                      <tr key={`${ses._id}-empty`} data-sem-id={sem._id} className={diaBorder}>
+                        {semCell()}{diaCell()}
+                        <td colSpan={6} className="px-4 py-2.5">
+                          <div className="flex items-center gap-3">
+                            <span className="text-xs text-gray-400 dark:text-white/30">Sin bloques</span>
+                            <button onClick={() => dispatch({ type: 'ADD_BLOQUE_W', sesionId: ses._id })} className="flex items-center gap-1 text-xs text-primary/70 hover:text-primary transition-colors">
+                              <Plus className="w-3 h-3" /> Agregar bloque
+                            </button>
+                          </div>
+                        </td>
+                        <td className="w-[60px]" />
+                      </tr>
+                    )
+                    semShown = true
+                    return
+                  }
+
+                  ses.bloques.forEach((bl, blqIdx) => {
+                    let blShown = false
+
+                    const blCell = () => {
+                      const shown = blShown
+                      blShown = true
+                      return shown ? <td key="bc" className={`w-[60px] ${C}`} /> : (
+                        <td key="bc" className="px-2 py-2.5 w-[60px] text-center align-top">
+                          <div className="flex items-center justify-center gap-0.5 group/bl">
+                            <span className="w-6 h-6 rounded-lg bg-primary/15 border border-primary/25 text-primary text-xs font-bold flex items-center justify-center">{bl.letra}</span>
+                            <button onClick={() => dispatch({ type: 'DELETE_BLOQUE_W', sesionId: ses._id, bloqueId: bl._id })} className="p-1 rounded text-gray-400 dark:text-white/45 hover:text-red-400 opacity-0 group-hover/bl:opacity-100 transition-all">
+                              <Trash2 className="w-2.5 h-2.5" />
+                            </button>
+                          </div>
+                        </td>
+                      )
+                    }
+
+                    const blBorder = blqIdx > 0 ? 'border-t border-gray-200 dark:border-white/[0.05]' : ''
+
+                    if (bl.ejercicios.length === 0) {
+                      const bt = sesIdx === 0 && blqIdx === 0 ? diaBorder : blBorder
+                      rows.push(
+                        <tr key={`${bl._id}-empty`} data-sem-id={sem._id} className={bt}>
+                          {semCell()}{diaCell()}{blCell()}
+                          <td colSpan={5} className="px-4 py-2">
+                            <button onClick={() => dispatch({ type: 'ADD_EJ_W', bloqueId: bl._id, nombre: '' })} className="flex items-center gap-1.5 text-xs text-gray-400 dark:text-white/40 hover:text-primary transition-colors py-0.5">
+                              <Plus className="w-3 h-3" /> Agregar ejercicio
+                            </button>
+                          </td>
+                          <td className="w-[60px]" />
+                        </tr>
+                      )
+                      semShown = true
+                      return
+                    }
+
+                    bl.ejercicios.forEach((ej, ejIdx) => {
+                      const isEditing = editingEjId === ej._id
+                      const isAssigning = assigningEjId === ej._id
+                      let bt: string
+                      if (ejIdx === 0 && blqIdx === 0 && sesIdx === 0) bt = diaBorder
+                      else if (ejIdx === 0 && blqIdx === 0) bt = diaBorder
+                      else if (ejIdx === 0) bt = blBorder
+                      else bt = 'border-t border-gray-100 dark:border-white/[0.03]'
+
+                      rows.push(
+                        <Fragment key={ej._id}>
+                          <tr data-sem-id={sem._id} className={`transition-colors ${isEditing ? 'bg-primary/[0.02] ring-1 ring-inset ring-primary/10' : 'group/ejrow hover:bg-white/[0.03]'} ${bt}`}>
+                            {semCell()}{diaCell()}{blCell()}
+
+                            {isEditing ? (
+                              <EjWizardInlineCells
+                                ej={ej}
+                                onUpdate={changes => {
+                                  dispatch({ type: 'UPDATE_EJ_W', sesionId: ses._id, bloqueId: bl._id, ejId: ej._id, changes })
+                                  setEditingEjId(null)
+                                }}
+                                onCancel={() => setEditingEjId(null)}
+                                onAssign={() => { setEditingEjId(null); setAssigningEjId(ej._id) }}
+                              />
+                            ) : (
+                              <>
+                                {/* Nombre ejercicio */}
+                                <td className="px-4 py-2.5">
+                                  {ej._esReferencia ? (
+                                    <div className="flex items-center gap-1.5 flex-wrap">
+                                      <span className="text-[9px] font-bold uppercase tracking-wider text-gray-500 bg-white/[0.06] px-1.5 py-0.5 rounded-md shrink-0">anterior</span>
+                                      <span className="text-xs text-gray-400 truncate">{ej._referenciaData?.nombre ?? ej.nombre}</span>
+                                      <button type="button" onClick={() => setAssigningEjId(ej._id)}
+                                        className="text-[10px] text-primary hover:text-primary/80 transition-colors shrink-0 ml-auto">
+                                        asignar nuevo
+                                      </button>
+                                    </div>
+                                  ) : ej.nombre ? (
+                                    <span className="text-sm text-gray-900 dark:text-white/90 font-medium block">{ej.nombre}</span>
+                                  ) : (
+                                    <button type="button" onClick={() => setAssigningEjId(ej._id)}
+                                      className="flex items-center gap-1.5 text-xs text-gray-500 dark:text-white/40 hover:text-primary transition-colors">
+                                      <Search size={11} />
+                                      Buscar ejercicio...
+                                    </button>
+                                  )}
+                                </td>
+                                {/* Series */}
+                                <td className="px-3 py-2.5 text-center">
+                                  {(() => {
+                                    const v = ej._esReferencia ? ej._referenciaData?.series : ej.series
+                                    return v != null
+                                      ? <span className="text-xs tabular-nums bg-gray-100 dark:bg-white/[0.06] px-1.5 py-0.5 rounded-md text-gray-600 dark:text-white/60 font-medium">{v}×</span>
+                                      : <span className="text-gray-300 dark:text-white/15 text-xs">—</span>
+                                  })()}
+                                </td>
+                                {/* Reps */}
+                                <td className="px-3 py-2.5 text-center">
+                                  {(() => {
+                                    const v = ej._esReferencia ? ej._referenciaData?.repeticiones : ej.repeticiones
+                                    return v
+                                      ? <span className="text-xs text-gray-500 dark:text-white/55">{v}</span>
+                                      : <span className="text-gray-300 dark:text-white/15 text-xs">—</span>
+                                  })()}
+                                </td>
+                                {/* Peso */}
+                                <td className="px-3 py-2.5 text-center">
+                                  {(() => {
+                                    const v = ej._esReferencia ? ej._referenciaData?.peso : ej.peso
+                                    return v
+                                      ? <span className="text-xs px-1.5 py-0.5 bg-primary/10 text-primary/80 rounded-md font-medium">{v}</span>
+                                      : <span className="text-gray-300 dark:text-white/15 text-xs">—</span>
+                                  })()}
+                                </td>
+                                {/* RIR/RPE */}
+                                <td className="px-3 py-2.5 text-center">
+                                  {(() => {
+                                    const rir = ej._esReferencia ? ej._referenciaData?.rir : ej.rir
+                                    const rpe = ej.rpe
+                                    return (
+                                      <div className="flex items-center justify-center gap-1 text-[11px]">
+                                        {rir != null && <span className="text-gray-400 dark:text-white/40">RIR <span className="font-semibold text-gray-600 dark:text-white/65">{rir}</span></span>}
+                                        {rpe != null && <span className="text-gray-400 dark:text-white/40">RPE <span className="font-semibold text-gray-600 dark:text-white/65">{rpe}</span></span>}
+                                        {rir == null && rpe == null && <span className="text-gray-300 dark:text-white/15 text-xs">—</span>}
+                                      </div>
+                                    )
+                                  })()}
+                                </td>
+                                {/* Acciones */}
+                                <td className="px-2 py-2.5 text-center w-[56px]">
+                                  <div className="flex items-center justify-center gap-0.5 opacity-0 group-hover/ejrow:opacity-100 transition-opacity">
+                                    <button type="button" onClick={() => setEditingEjId(ej._id)}
+                                      className="p-1.5 rounded-lg text-gray-500 dark:text-white/50 hover:text-gray-900 dark:hover:text-white hover:bg-white/[0.08] transition-colors">
+                                      <Pencil className="w-3 h-3" />
+                                    </button>
+                                    <button type="button" onClick={() => dispatch({ type: 'DELETE_EJ_W', sesionId: ses._id, bloqueId: bl._id, ejId: ej._id })}
+                                      className="p-1.5 rounded-lg text-gray-500 dark:text-white/50 hover:text-red-400 hover:bg-red-500/10 transition-colors">
+                                      <Trash2 className="w-3 h-3" />
+                                    </button>
+                                  </div>
+                                </td>
+                              </>
+                            )}
+                          </tr>
+
+                          {/* Panel de búsqueda inline */}
+                          {isAssigning && (
+                            <tr data-sem-id={sem._id}>
+                              <td colSpan={9} className="px-3 pb-3 pt-1 bg-white/[0.01]">
+                                <SearchableExerciseSelector
+                                  patronHint={bl.patronMovimiento}
+                                  onSelect={catalogo => {
+                                    dispatch({ type: 'UPDATE_EJ_W', sesionId: ses._id, bloqueId: bl._id, ejId: ej._id, changes: { catalogoId: catalogo.id, nombre: catalogo.nombre, _esReferencia: false } })
+                                    setAssigningEjId(null)
+                                  }}
+                                  onCancel={() => setAssigningEjId(null)}
+                                />
+                              </td>
+                            </tr>
+                          )}
+                        </Fragment>
+                      )
+                      semShown = true
+                    })
+
+                    // Fila agregar ejercicio al bloque
+                    rows.push(
+                      <tr key={`${bl._id}-addej`} data-sem-id={sem._id}>
+                        <td className={`w-[120px] ${C}`} /><td className={`w-[90px] ${C}`} /><td className={`w-[60px] ${C}`} />
+                        <td colSpan={5} className="px-4 py-1.5">
+                          <button onClick={() => dispatch({ type: 'ADD_EJ_W', bloqueId: bl._id, nombre: '' })}
+                            className="flex items-center gap-1.5 text-[11px] text-gray-400 dark:text-white/40 hover:text-primary transition-colors py-0.5">
+                            <Plus className="w-3 h-3" /> ej. en bloque {bl.letra}
+                          </button>
+                        </td>
+                        <td className="w-[56px]" />
+                      </tr>
+                    )
+                  })
+
+                  // Fila agregar bloque a la sesión
+                  rows.push(
+                    <tr key={`${ses._id}-addbl`} data-sem-id={sem._id} className="border-t border-gray-100 dark:border-white/[0.06]">
+                      <td className={`w-[120px] ${C}`} /><td className={`w-[90px] ${C}`} />
+                      <td colSpan={6} className="px-4 py-2">
+                        <button onClick={() => dispatch({ type: 'ADD_BLOQUE_W', sesionId: ses._id })}
+                          className="flex items-center gap-1.5 text-[11px] text-gray-400 dark:text-white/40 hover:text-primary transition-colors">
+                          <Plus className="w-3.5 h-3.5" /> bloque en {ses.dia}
+                        </button>
+                      </td>
+                      <td className="w-[56px]" />
+                    </tr>
+                  )
+                })
+
+                // Fila agregar día a la semana
+                rows.push(
+                  <tr key={`${sem._id}-adddia`} data-sem-id={sem._id} className="border-t-2 border-gray-200 dark:border-white/[0.08]">
+                    <td className={`w-[120px] ${C}`} />
+                    <td colSpan={7} className="px-4 py-2.5 relative">
+                      <button onClick={() => setShowDiaPicker(v => v === sem._id ? null : sem._id)}
+                        className="flex items-center gap-1.5 text-xs text-gray-400 dark:text-white/40 hover:text-primary transition-colors">
+                        <Plus className="w-3.5 h-3.5" /> día en {semLabel}
+                        <ChevronDown className="w-3 h-3" />
+                      </button>
+                      <AnimatePresence>
+                        {showDiaPicker === sem._id && (
+                          <SesionDayDropdownW
+                            existentes={sem.sesiones.map(s => s.dia)}
+                            semanaId={sem._id}
+                            onSelect={(sId, dia) => { dispatch({ type: 'ADD_SESION_W', semanaId: sId, dia }); setShowDiaPicker(null) }}
+                            onClose={() => setShowDiaPicker(null)}
+                          />
+                        )}
+                      </AnimatePresence>
+                    </td>
+                    <td className="w-[56px]" />
+                  </tr>
+                )
+
+                return rows
+              })}
+
+              {/* Fila agregar semana */}
+              <tr className="border-t-2 border-gray-200 dark:border-white/[0.1]">
+                <td colSpan={9} className="px-4 py-3">
+                  <button onClick={() => dispatch({ type: 'ADD_SEMANA_W' })}
+                    className="flex items-center gap-1.5 text-xs text-gray-400 dark:text-white/30 hover:text-primary transition-colors">
+                    <Plus className="w-3.5 h-3.5" /> nueva semana
+                  </button>
+                </td>
+              </tr>
+
+              {state.semanasWizard.length === 0 && (
+                <tr>
+                  <td colSpan={9} className="px-4 py-8 text-center text-sm text-gray-500 dark:text-white/30">
+                    Sin semanas. Avanzá al siguiente paso para continuar, o agregá una semana manualmente.
+                  </td>
+                </tr>
+              )}
+            </tbody>
+          </table>
+        </div>
       </div>
     )
   }
@@ -1422,9 +2332,21 @@ export default function CreateRutinaPage() {
   // ── Paso 7 — Confirmar y guardar ───────────────────────────────────────────
 
   function Paso7() {
-    const totalBloques = state.sesiones.reduce((sum, s) => sum + s.bloques.length, 0)
-    const totalEjercicios = state.sesiones.reduce((sum, s) =>
-      sum + s.bloques.reduce((bs, b) => bs + b.ejercicios.filter(e => e.nombre).length, 0), 0)
+    const totalBloques = state.semanasWizard.length > 0
+      ? state.semanasWizard.reduce((sum, sem) =>
+          sum + sem.sesiones.reduce((ss, ses) => ss + ses.bloques.length, 0), 0)
+      : state.sesiones.reduce((sum, s) => sum + s.bloques.length, 0)
+
+    const totalEjercicios = state.semanasWizard.length > 0
+      ? state.semanasWizard.reduce((sum, sem) =>
+          sum + sem.sesiones.reduce((ss, ses) =>
+            ss + ses.bloques.reduce((bs, b) => bs + b.ejercicios.filter(e => e.nombre && !e._esReferencia).length, 0), 0), 0)
+      : state.sesiones.reduce((sum, s) =>
+          sum + s.bloques.reduce((bs, b) => bs + b.ejercicios.filter(e => e.nombre).length, 0), 0)
+
+    const totalSesiones = state.semanasWizard.length > 0
+      ? state.semanasWizard.reduce((sum, sem) => sum + sem.sesiones.length, 0)
+      : state.sesiones.length
 
     const resumen = [
       {
@@ -1441,7 +2363,7 @@ export default function CreateRutinaPage() {
       {
         icon: ClipboardList,
         label: 'Estructura',
-        value: `${state.sesiones.length} sesiones · ${totalBloques} bloques en total`,
+        value: `${totalSesiones} sesiones · ${totalBloques} bloques en total`,
       },
       {
         icon: Dumbbell,
@@ -1493,7 +2415,7 @@ export default function CreateRutinaPage() {
 
   function canGoNext(): boolean {
     switch (state.paso) {
-      case 1: return state.cliente !== null
+      case 1: return state.cliente !== null && (!showBasePhase || baseDecidida)
       case 2: return state.sesionesSemanales !== null
       case 3: return state.sinPlantilla || state.plantillaId !== null
       case 4: return true
@@ -1505,6 +2427,15 @@ export default function CreateRutinaPage() {
   }
 
   async function handleNext() {
+    if (state.paso === 1) {
+      if (showBasePhase && state.rutinaBaseId) {
+        dispatch({ type: 'SET_PASO', paso: 5 })
+        dispatch({ type: 'INIT_WIZARD_SEMANAS' })
+      } else {
+        dispatch({ type: 'SET_PASO', paso: 2 })
+      }
+      return
+    }
     if (state.paso === 2 && state.modo === 'mesociclo') {
       // Cargar la rutina base para precargarse en paso 5
       if (state.rutinaBaseId) {
@@ -1542,7 +2473,12 @@ export default function CreateRutinaPage() {
         }
       }
       dispatch({ type: 'SET_PASO', paso: 5 })
+      dispatch({ type: 'INIT_WIZARD_SEMANAS' })
       return
+    }
+    // Al pasar de Paso 4 a Paso 5, inicializar semanasWizard desde state.sesiones
+    if (state.paso === 4) {
+      dispatch({ type: 'INIT_WIZARD_SEMANAS' })
     }
     if (state.paso < 7) {
       dispatch({ type: 'SET_PASO', paso: state.paso + 1 })
@@ -1550,14 +2486,27 @@ export default function CreateRutinaPage() {
   }
 
   function handleBack() {
-    if (state.paso <= 1) { navigate(-1); return }
-    // Si vino con clienteId en URL y está en el paso 2 (primero del wizard), volver a la página del cliente
+    if (state.paso <= 1) {
+      if (showBasePhase) {
+        setShowBasePhase(false)
+        setBaseDecidida(false)
+        setClienteRutinas([])
+        dispatch({ type: 'RESET_PASO1' })
+        return
+      }
+      navigate(-1)
+      return
+    }
     if (state.paso === 2 && clienteIdFromUrl) {
       navigate(`/clients/${clienteIdFromUrl}/rutina`)
       return
     }
     if (state.paso === 5 && state.modo === 'mesociclo') {
       dispatch({ type: 'SET_PASO', paso: 2 })
+      return
+    }
+    if (state.paso === 5 && state.sinPlantilla && state.rutinaBaseId && state.modo === 'nueva') {
+      dispatch({ type: 'SET_PASO', paso: 1 })
       return
     }
     if (state.paso === 5 && state.sinPlantilla) {
@@ -1571,6 +2520,57 @@ export default function CreateRutinaPage() {
     if (!state.cliente) return
     setIsSaving(true)
     try {
+      // Usar semanasWizard si está poblado, sino fallback a sesiones (compatibilidad)
+      const sesionesPayload: CrearCompletaPayload['sesiones'] = state.semanasWizard.length > 0
+        ? state.semanasWizard.flatMap(sem =>
+            sem.sesiones.map((ses, sesIdx) => ({
+              numero: sesIdx + 1,
+              nombre: ses.dia,
+              bloques: ses.bloques.map((b, bi) => ({
+                letra: b.letra,
+                orden: bi,
+                patronMovimiento: b.patronMovimiento ?? undefined,
+                ejercicios: b.ejercicios
+                  .filter(e => e.nombre && !e._esReferencia)
+                  .map((e, ei) => ({
+                    catalogoId: e.catalogoId,
+                    nombre: e.nombre,
+                    series: e.series,
+                    repeticiones: e.repeticiones,
+                    peso: e.peso,
+                    rir: e.rir,
+                    rpe: e.rpe,
+                    metodo: e.metodo,
+                    notas: e.notas,
+                    orden: ei,
+                  })),
+              })),
+            }))
+          )
+        : state.sesiones.map((s, si) => ({
+            numero: si + 1,
+            nombre: s.nombre,
+            bloques: s.bloques.map((b, bi) => ({
+              letra: b.letra,
+              orden: bi,
+              patronMovimiento: b.patronMovimiento ?? undefined,
+              ejercicios: b.ejercicios
+                .filter(e => e.nombre && !e._esReferencia)
+                .map((e, ei) => ({
+                  catalogoId: e.catalogoId,
+                  nombre: e.nombre,
+                  series: e.series,
+                  repeticiones: e.repeticiones,
+                  peso: e.peso,
+                  rir: e.rir,
+                  rpe: e.rpe,
+                  metodo: e.metodo,
+                  notas: e.notas,
+                  orden: ei,
+                })),
+            })),
+          }))
+
       const payload: CrearCompletaPayload = {
         clienteId: state.cliente.id,
         nombre: state.nombre,
@@ -1580,29 +2580,7 @@ export default function CreateRutinaPage() {
         periodo: state.periodo ?? undefined,
         plantillaId: state.plantillaId ?? undefined,
         rutinaBaseId: state.rutinaBaseId ?? undefined,
-        sesiones: state.sesiones.map((s, si) => ({
-          numero: si + 1,
-          nombre: s.nombre,
-          bloques: s.bloques.map((b, bi) => ({
-            letra: b.letra,
-            orden: bi,
-            patronMovimiento: b.patronMovimiento ?? undefined,
-            ejercicios: b.ejercicios
-              .filter(e => e.nombre && !e._esReferencia)
-              .map((e, ei) => ({
-                catalogoId: e.catalogoId,
-                nombre: e.nombre,
-                series: e.series,
-                repeticiones: e.repeticiones,
-                peso: e.peso,
-                rir: e.rir,
-                rpe: e.rpe,
-                metodo: e.metodo,
-                notas: e.notas,
-                orden: ei,
-              })),
-          })),
-        })),
+        sesiones: sesionesPayload,
       }
       await rutinasApi.crearCompleta(payload)
       addToast('Rutina creada correctamente', 'success')
@@ -1626,29 +2604,75 @@ export default function CreateRutinaPage() {
     7: { Icon: Eye,          title: 'Confirmar y guardar',     desc: 'Revisá el resumen antes de crear la rutina' },
   }
 
-  const stepMeta = STEP_META_LOCAL[state.paso]
+  const stepMeta = (state.paso === 1 && showBasePhase)
+    ? { Icon: Layers, title: 'Base de la rutina', desc: '¿Crear desde cero o usar una rutina existente como referencia?' }
+    : STEP_META_LOCAL[state.paso]
 
   // ── Render ────────────────────────────────────────────────────────────────
 
   if (loadingClienteInit) {
     return (
       <div className="space-y-6">
-        {/* Skeleton Breadcrumb */}
-        <Skeleton className="h-5 w-20 rounded-md" />
-        
-        {/* Skeleton Title Card */}
+        {/* Back button */}
+        <Skeleton className="h-4 w-16" />
+
+        {/* Título */}
         <div className="space-y-2">
-          <Skeleton className="h-9 w-48 rounded-xl" />
-          <Skeleton className="h-4 w-72 rounded-md" />
+          <Skeleton className="h-10 w-44" />
+          <Skeleton className="h-4 w-64" />
         </div>
-        
-        {/* Skeleton Body Card */}
-        <div className="rounded-[2rem] border border-white/50 dark:border-white/10 bg-white/30 dark:bg-black/30 backdrop-blur-3xl p-6 space-y-4">
-          <Skeleton className="h-8 w-1/3 rounded-lg" />
-          <div className="space-y-2">
-            <Skeleton className="h-4 w-full rounded-md" />
-            <Skeleton className="h-4 w-5/6 rounded-md" />
-            <Skeleton className="h-4 w-4/5 rounded-md" />
+
+        {/* Wizard card — misma clase glass que el real */}
+        <div className={`${glass} overflow-hidden`}>
+          <div className="h-px bg-gradient-to-r from-transparent via-primary/30 to-transparent" />
+
+          <div className="p-6 md:p-8">
+
+            {/* Stepper: 7 círculos con conectores + etiquetas */}
+            <div className="flex items-start mb-8">
+              {[1,2,3,4,5,6,7].map((step, idx) => (
+                <div key={step} className="flex-1 flex flex-col items-center gap-2 relative">
+                  {idx > 0 && (
+                    <div className="absolute h-px top-[18px] -translate-y-1/2" style={{ left: 0, right: '50%', background: 'var(--sk-fill)' }} />
+                  )}
+                  {idx < 6 && (
+                    <div className="absolute h-px top-[18px] -translate-y-1/2" style={{ left: '50%', right: 0, background: 'var(--sk-fill)' }} />
+                  )}
+                  <Skeleton className="relative z-10 h-9 w-9 rounded-xl" />
+                  <Skeleton className="h-2.5 w-10" />
+                </div>
+              ))}
+            </div>
+
+            {/* Header del paso: icono + título + descripción + badge */}
+            <div className="flex items-center gap-4 mb-6 pb-5 border-b border-gray-100 dark:border-white/[0.05]">
+              <Skeleton className="h-11 w-11 rounded-xl shrink-0" />
+              <div className="flex-1 space-y-1.5">
+                <Skeleton className="h-5 w-36" />
+                <Skeleton className="h-3 w-56" />
+              </div>
+              <Skeleton className="h-3 w-14 shrink-0" />
+            </div>
+
+            {/* Área de contenido del paso */}
+            <div className="min-h-[280px] space-y-3">
+              <Skeleton className="h-11 w-full rounded-xl" />
+              {[1, 2, 3].map(i => (
+                <div key={i} className="flex items-center gap-3 p-4 rounded-2xl border border-white/30 dark:border-white/[0.06]">
+                  <Skeleton className="h-10 w-10 rounded-xl shrink-0" />
+                  <div className="flex-1 space-y-1.5">
+                    <Skeleton className={`h-4 ${i === 1 ? 'w-40' : i === 2 ? 'w-32' : 'w-48'}`} />
+                    <Skeleton className={`h-3 ${i === 1 ? 'w-56' : i === 2 ? 'w-44' : 'w-36'}`} />
+                  </div>
+                </div>
+              ))}
+            </div>
+
+            {/* Footer de navegación */}
+            <div className="flex items-center justify-between mt-8 pt-6 border-t border-gray-100 dark:border-white/[0.05]">
+              <Skeleton className="h-9 w-20 rounded-xl" />
+              <Skeleton className="h-10 w-28 rounded-xl" />
+            </div>
           </div>
         </div>
       </div>
@@ -1668,7 +2692,7 @@ export default function CreateRutinaPage() {
         className="group flex items-center gap-2 text-sm text-gray-400 dark:text-[#5A5A6A] hover:text-gray-900 dark:hover:text-white transition-colors"
       >
         <ArrowLeft size={14} className="group-hover:-translate-x-0.5 transition-transform" />
-        {(state.paso === 1 || (state.paso === 2 && !!clienteIdFromUrl)) ? 'Volver' : 'Paso anterior'}
+        {(state.paso === 1 && !showBasePhase) || (state.paso === 2 && !!clienteIdFromUrl) ? 'Volver' : 'Paso anterior'}
       </button>
 
       {/* Título de página */}
@@ -1734,7 +2758,7 @@ export default function CreateRutinaPage() {
               className="flex items-center gap-1.5 text-sm font-semibold text-gray-400 dark:text-[#5A5A6A] hover:text-gray-700 dark:hover:text-white transition-colors px-3 py-2"
             >
               <ArrowLeft size={14} />
-              {state.paso === 1 ? 'Cancelar' : 'Atrás'}
+              {state.paso === 1 && !showBasePhase ? 'Cancelar' : 'Atrás'}
             </button>
 
             <div className="flex items-center gap-2">

@@ -1,279 +1,110 @@
 import { useState, useEffect, useRef } from 'react'
+import { useNavigate } from 'react-router-dom'
 import { AnimatePresence, motion } from 'framer-motion'
-import { Search, Dumbbell, ChevronLeft, ChevronRight, Check, X, RotateCcw } from 'lucide-react'
+import { Search, Users } from 'lucide-react'
 import api from '../api/axiosInstance'
-import { rutinasApi } from '../api/rutinas.api'
-import { useUiStore } from '../store/uiStore'
-import type { Rutina, EjercicioPlan, EjecucionCliente, CreateEjecucionPayload } from '../types/rutina.types'
+import { shiftsApi } from '../api/shifts.api'
+import { inscripcionesApi } from '../api/inscripciones.api'
 import type { Client } from '../types/client.types'
+import type { WeekDay } from '../types/shift.types'
 
-// ─── Tipos locales ────────────────────────────────────────────────────────────
+// ─── Helpers ──────────────────────────────────────────────────────────────────
 
-interface RowState {
-  series: string
-  repeticiones: string
-  peso: string
-  rir: string
-  rpe: string
+const JS_DAY_TO_WEEKDAY: WeekDay[] = [
+  'sunday', 'monday', 'tuesday', 'wednesday', 'thursday', 'friday', 'saturday',
+]
+
+function parseMinutes(t: string): number {
+  const [h, m] = t.split(':').map(Number)
+  return h * 60 + m
 }
 
-const emptyRow = (): RowState => ({ series: '', repeticiones: '', peso: '', rir: '', rpe: '' })
+// ─── Tipos ────────────────────────────────────────────────────────────────────
 
-// ─── Fila de ejercicio ────────────────────────────────────────────────────────
-
-interface ExerciseRowProps {
-  ej: EjercicioPlan
-  onSaved: (ejercicioId: string, ejecucion: EjecucionCliente) => void
+interface RecomendadoCliente {
+  clienteId: string
+  name: string
+  lastName: string
+  turnoLabel: string
 }
 
-function ExerciseRow({ ej, onSaved }: ExerciseRowProps) {
-  const addToast = useUiStore(s => s.addToast)
-  const [form, setForm] = useState<RowState>(emptyRow)
-  const [saving, setSaving] = useState(false)
-  const [savedFlash, setSavedFlash] = useState(false)
-
-  const lastEj = ej.ejecuciones[0]
-
-  const set = (key: keyof RowState) => (e: React.ChangeEvent<HTMLInputElement>) =>
-    setForm(f => ({ ...f, [key]: e.target.value }))
-
-  const hasAnyValue = Object.values(form).some(v => v.trim() !== '')
-
-  const handleReset = () => setForm(emptyRow())
-
-  const handleSave = async () => {
-    if (!hasAnyValue) return
-    setSaving(true)
-    try {
-      const payload: CreateEjecucionPayload = {
-        series:       form.series       ? Number(form.series)       : undefined,
-        repeticiones: form.repeticiones || undefined,
-        peso:         form.peso         || undefined,
-        rir:          form.rir          ? Number(form.rir)          : undefined,
-        rpe:          form.rpe          ? Number(form.rpe)          : undefined,
-      }
-      const created = await rutinasApi.addEjecucion(ej.id, payload)
-      onSaved(ej.id, created)
-      setForm(emptyRow())
-      setSavedFlash(true)
-      setTimeout(() => setSavedFlash(false), 1500)
-    } catch {
-      addToast({ type: 'error', message: 'Error al guardar' })
-    } finally {
-      setSaving(false)
-    }
-  }
-
-  const inputClass =
-    'w-full bg-white/[0.06] border border-white/[0.10] rounded-lg px-2 py-1.5 text-sm text-white text-center focus:outline-none focus:border-primary/60 focus:bg-white/[0.10] transition-colors placeholder:text-white/20'
-
-  return (
-    <tr className={`border-b border-white/[0.05] last:border-0 transition-colors ${savedFlash ? 'bg-green-500/5' : 'hover:bg-white/[0.02]'}`}>
-      {/* Nombre + última ejecución */}
-      <td className="px-4 py-3 align-middle">
-        <p className="text-sm font-medium text-white leading-tight">{ej.nombre}</p>
-        {lastEj ? (
-          <p className="text-xs text-primary/60 mt-0.5">
-            Últ.: {[
-              lastEj.series      && `${lastEj.series}×`,
-              lastEj.repeticiones,
-              lastEj.peso,
-              lastEj.rir  != null && `RIR ${lastEj.rir}`,
-              lastEj.rpe  != null && `RPE ${lastEj.rpe}`,
-            ].filter(Boolean).join(' ')}
-          </p>
-        ) : (
-          <p className="text-xs text-white/25 mt-0.5">Sin registros previos</p>
-        )}
-      </td>
-
-      {/* Plan — read only */}
-      <td className="px-2 py-3 text-center align-middle">
-        <span className="text-sm text-white/35 tabular-nums">{ej.series ?? '—'}</span>
-      </td>
-      <td className="px-2 py-3 text-center align-middle">
-        <span className="text-sm text-white/35">{ej.repeticiones || '—'}</span>
-      </td>
-      <td className="px-2 py-3 text-center align-middle">
-        <span className="text-sm text-white/35">{ej.peso || '—'}</span>
-      </td>
-
-      {/* Separador visual */}
-      <td className="w-px bg-white/[0.06] p-0" />
-
-      {/* Ejecución — editable */}
-      <td className="px-1.5 py-2 align-middle w-16">
-        <input
-          type="number"
-          min={1}
-          value={form.series}
-          onChange={set('series')}
-          placeholder={ej.series?.toString() ?? ''}
-          className={inputClass}
-        />
-      </td>
-      <td className="px-1.5 py-2 align-middle w-20">
-        <input
-          type="text"
-          value={form.repeticiones}
-          onChange={set('repeticiones')}
-          placeholder={ej.repeticiones ?? ''}
-          className={inputClass}
-        />
-      </td>
-      <td className="px-1.5 py-2 align-middle w-24">
-        <input
-          type="text"
-          value={form.peso}
-          onChange={set('peso')}
-          placeholder={ej.peso ?? 'kg'}
-          className={inputClass}
-        />
-      </td>
-      <td className="px-1.5 py-2 align-middle w-14">
-        <input
-          type="number"
-          min={0}
-          max={10}
-          value={form.rir}
-          onChange={set('rir')}
-          placeholder="—"
-          className={inputClass}
-        />
-      </td>
-      <td className="px-1.5 py-2 align-middle w-14">
-        <input
-          type="number"
-          min={1}
-          max={10}
-          value={form.rpe}
-          onChange={set('rpe')}
-          placeholder="—"
-          className={inputClass}
-        />
-      </td>
-
-      {/* Acciones */}
-      <td className="px-2 py-2 align-middle">
-        <div className="flex items-center gap-1 justify-center">
-          {hasAnyValue && (
-            <button
-              onClick={handleReset}
-              className="p-1.5 rounded-lg text-white/30 hover:text-white/60 hover:bg-white/[0.06] transition-colors"
-              title="Limpiar"
-            >
-              <RotateCcw className="w-3.5 h-3.5" />
-            </button>
-          )}
-          <button
-            onClick={handleSave}
-            disabled={saving || !hasAnyValue}
-            className={`flex items-center gap-1 px-3 py-1.5 rounded-lg text-xs font-semibold transition-all ${
-              savedFlash
-                ? 'bg-green-500/20 text-green-400'
-                : hasAnyValue
-                  ? 'bg-primary text-black hover:bg-primary/90 active:scale-95'
-                  : 'bg-white/[0.04] text-white/20 cursor-not-allowed'
-            }`}
-          >
-            {savedFlash ? (
-              <><Check className="w-3.5 h-3.5" /> OK</>
-            ) : saving ? (
-              '...'
-            ) : (
-              <><Check className="w-3.5 h-3.5" /> Guardar</>
-            )}
-          </button>
-        </div>
-      </td>
-    </tr>
-  )
-}
-
-// ─── Tabla por bloque ─────────────────────────────────────────────────────────
-
-interface BloqueTableProps {
-  letra: string
-  ejercicios: EjercicioPlan[]
-  onSaved: (ejercicioId: string, ejecucion: EjecucionCliente) => void
-}
-
-function BloqueTable({ letra, ejercicios, onSaved }: BloqueTableProps) {
-  return (
-    <div className="rounded-2xl border border-white/[0.08] overflow-hidden bg-white/[0.02]">
-      {/* Header del bloque */}
-      <div className="flex items-center gap-3 px-4 py-2.5 bg-white/[0.03] border-b border-white/[0.06]">
-        <span className="w-7 h-7 rounded-lg bg-primary/15 text-primary text-xs font-black flex items-center justify-center">
-          {letra}
-        </span>
-        <span className="text-xs font-semibold text-white/50 uppercase tracking-wider">Bloque {letra}</span>
-      </div>
-
-      {/* Tabla */}
-      <div className="overflow-x-auto">
-        <table className="w-full">
-          {/* Encabezado */}
-          <thead>
-            <tr className="border-b border-white/[0.06]">
-              <th className="px-4 py-2 text-left text-xs font-semibold text-white/30 uppercase tracking-wider">
-                Ejercicio
-              </th>
-              {/* Plan */}
-              <th className="px-2 py-2 text-center text-xs font-semibold text-white/20 uppercase tracking-wider whitespace-nowrap" colSpan={3}>
-                — Plan —
-              </th>
-              {/* Separador */}
-              <th className="w-px p-0" />
-              {/* Ejecución */}
-              <th className="px-1.5 py-2 text-center text-xs font-semibold text-primary/60 uppercase tracking-wider whitespace-nowrap" colSpan={5}>
-                — Hoy —
-              </th>
-              <th className="px-2 py-2" />
-            </tr>
-            <tr className="border-b border-white/[0.08] bg-white/[0.01]">
-              <th className="px-4 py-1.5" />
-              {/* Plan sub-headers */}
-              <th className="px-2 py-1.5 text-center text-xs text-white/25 font-medium">Ser.</th>
-              <th className="px-2 py-1.5 text-center text-xs text-white/25 font-medium">Reps</th>
-              <th className="px-2 py-1.5 text-center text-xs text-white/25 font-medium">Peso</th>
-              {/* Separador */}
-              <th className="w-px p-0" />
-              {/* Hoy sub-headers */}
-              <th className="px-1.5 py-1.5 text-center text-xs text-primary/50 font-medium w-16">Ser.</th>
-              <th className="px-1.5 py-1.5 text-center text-xs text-primary/50 font-medium w-20">Reps</th>
-              <th className="px-1.5 py-1.5 text-center text-xs text-primary/50 font-medium w-24">Peso</th>
-              <th className="px-1.5 py-1.5 text-center text-xs text-primary/50 font-medium w-14">RIR</th>
-              <th className="px-1.5 py-1.5 text-center text-xs text-primary/50 font-medium w-14">RPE</th>
-              <th className="px-2 py-1.5" />
-            </tr>
-          </thead>
-          <tbody>
-            {ejercicios.map(ej => (
-              <ExerciseRow key={ej.id} ej={ej} onSaved={onSaved} />
-            ))}
-          </tbody>
-        </table>
-      </div>
-    </div>
-  )
-}
-
-// ─── Página principal ─────────────────────────────────────────────────────────
+// ─── Página ───────────────────────────────────────────────────────────────────
 
 export default function EjecucionPage() {
-  const addToast = useUiStore(s => s.addToast)
+  const navigate  = useNavigate()
   const searchRef = useRef<HTMLInputElement>(null)
 
-  const [search, setSearch]               = useState('')
-  const [results, setResults]             = useState<Client[]>([])
-  const [selectedCliente, setSelected]    = useState<Client | null>(null)
-  const [rutina, setRutina]               = useState<Rutina | null>(null)
-  const [semanaNumero, setSemanaNumero]   = useState(1)
-  const [selectedSesionId, setSesionId]  = useState<string | null>(null)
-  const [searching, setSearching]         = useState(false)
-  const [loadingRutina, setLoadingRutina] = useState(false)
+  const [search, setSearch]         = useState('')
+  const [results, setResults]       = useState<Client[]>([])
+  const [searching, setSearching]   = useState(false)
+  const [activeIdx, setActiveIdx]   = useState(-1)
+  const [recomendados, setRecom]    = useState<RecomendadoCliente[]>([])
+  const [loadingRecom, setLoadingR] = useState(true)
 
-  // Búsqueda con debounce
+  // ── Clientes recomendados (turnos activos/próximos) ───────────────────────
+  useEffect(() => {
+    let cancelled = false
+
+    async function loadRecomendados() {
+      try {
+        const turnos = await shiftsApi.getAll()
+        const now    = new Date()
+        const today  = JS_DAY_TO_WEEKDAY[now.getDay()]
+        const nowMin = now.getHours() * 60 + now.getMinutes()
+
+        const activos = turnos.filter(t => {
+          if (!t.days.includes(today)) return false
+          const start = parseMinutes(t.startTime)
+          const end   = parseMinutes(t.endTime)
+          // Ventana: 60 min antes del inicio hasta 30 min después del fin
+          return nowMin >= start - 60 && nowMin <= end + 30
+        })
+
+        if (activos.length === 0) {
+          if (!cancelled) setLoadingR(false)
+          return
+        }
+
+        const resultados = await Promise.all(
+          activos.map(async t => {
+            const inscripciones = await inscripcionesApi.getByTurno(t.id as string)
+            return inscripciones
+              .filter(i => i.estado === 'ACTIVA')
+              .map(i => {
+                const parts    = i.clienteNombre.split(' ')
+                const name     = parts[0] ?? ''
+                const lastName = parts.slice(1).join(' ')
+                return {
+                  clienteId:   i.clienteId,
+                  name,
+                  lastName,
+                  turnoLabel:  `${t.startTime} – ${t.endTime}`,
+                } satisfies RecomendadoCliente
+              })
+          })
+        )
+
+        if (!cancelled) {
+          // Deduplica por clienteId
+          const seen  = new Set<string>()
+          const lista = resultados.flat().filter(c => {
+            if (seen.has(c.clienteId)) return false
+            seen.add(c.clienteId)
+            return true
+          })
+          setRecom(lista)
+          setLoadingR(false)
+        }
+      } catch {
+        if (!cancelled) setLoadingR(false)
+      }
+    }
+
+    loadRecomendados()
+    return () => { cancelled = true }
+  }, [])
+
+  // ── Buscador con debounce ─────────────────────────────────────────────────
   useEffect(() => {
     if (!search.trim()) { setResults([]); return }
     const t = setTimeout(async () => {
@@ -283,93 +114,54 @@ export default function EjecucionPage() {
         const items: Array<{ id: string; nombre: string; apellido: string }> = r.data ?? []
         setResults(items.map(c => ({ id: c.id, name: c.nombre, lastName: c.apellido } as unknown as Client)))
       } catch { setResults([]) }
-      finally { setSearching(false) }
+      finally { setSearching(false); setActiveIdx(-1) }
     }, 280)
     return () => clearTimeout(t)
   }, [search])
 
-  const handleSelect = async (cliente: Client) => {
-    setSelected(cliente)
-    setSearch('')
-    setResults([])
-    setLoadingRutina(true)
-    try {
-      const rutinas = await rutinasApi.getByCliente(cliente.id)
-      const activa = rutinas.find(r => r.activa) ?? rutinas[0] ?? null
-      setRutina(activa)
-      if (activa?.semanas[0]) {
-        setSemanaNumero(activa.semanas[0].numero)
-        setSesionId(activa.semanas[0].sesiones[0]?.id ?? null)
-      }
-    } catch {
-      addToast({ type: 'error', message: 'Error al cargar la rutina' })
-    } finally {
-      setLoadingRutina(false) }
+  const goToRutina = (clienteId: string, name: string, lastName: string) => {
+    navigate(`/ejecucion/${clienteId}`, { state: { name, lastName } })
   }
 
-  const handleChange = () => {
-    setSelected(null)
-    setRutina(null)
-    setSemanaNumero(1)
-    setSesionId(null)
-    setTimeout(() => searchRef.current?.focus(), 50)
+  const handleKeyDown = (e: React.KeyboardEvent<HTMLInputElement>) => {
+    if (results.length === 0) return
+    if (e.key === 'ArrowDown') {
+      e.preventDefault()
+      setActiveIdx(i => Math.min(i + 1, results.length - 1))
+    } else if (e.key === 'ArrowUp') {
+      e.preventDefault()
+      setActiveIdx(i => Math.max(i - 1, 0))
+    } else if (e.key === 'Enter' && activeIdx >= 0) {
+      e.preventDefault()
+      const c = results[activeIdx]
+      goToRutina(c.id, c.name, c.lastName ?? '')
+    }
   }
-
-  // Actualiza la última ejecución de un ejercicio sin re-fetch completo
-  const handleSaved = (ejercicioId: string, ejecucion: EjecucionCliente) => {
-    setRutina(prev => {
-      if (!prev) return prev
-      return {
-        ...prev,
-        semanas: prev.semanas.map(s => ({
-          ...s,
-          sesiones: s.sesiones.map(ses => ({
-            ...ses,
-            bloques: ses.bloques.map(bl => ({
-              ...bl,
-              ejerciciosPlan: bl.ejerciciosPlan.map(ej =>
-                ej.id === ejercicioId
-                  ? { ...ej, ejecuciones: [ejecucion, ...ej.ejecuciones] }
-                  : ej
-              ),
-            })),
-          })),
-        })),
-      }
-    })
-  }
-
-  const semana  = rutina?.semanas.find(s => s.numero === semanaNumero)
-  const sesion  = semana?.sesiones.find(s => s.id === selectedSesionId)
-  const maxSem  = rutina ? Math.max(0, ...rutina.semanas.map(s => s.numero)) : 0
-  const bloques = sesion?.bloques.filter(b => b.ejerciciosPlan.length > 0) ?? []
 
   return (
-    <div className="p-4 lg:p-8 space-y-6 max-w-5xl mx-auto">
+    <div className="flex flex-col items-center pt-[15vh] px-4 pb-12">
+      <div className="w-full max-w-xl space-y-6">
 
-      {/* ── Título ── */}
-      <div className="flex items-center gap-3">
-        <Dumbbell className="w-6 h-6 text-primary shrink-0" />
-        <div>
-          <h1 className="text-xl lg:text-2xl font-bold text-white leading-tight">Registrar Entrenamiento</h1>
-          <p className="text-sm text-white/40 mt-0.5">Buscá tu nombre, seleccioná el día y completá tus series</p>
+        {/* Título */}
+        <div className="text-center space-y-1">
+          <h1 className="text-2xl font-bold text-gray-900 dark:text-white">Registrar Entrenamiento</h1>
+          <p className="text-sm text-gray-500 dark:text-white/40">Buscá tu nombre para ver tu rutina</p>
         </div>
-      </div>
 
-      {/* ── Buscador ── */}
-      {!selectedCliente && (
-        <div className="relative">
-          <Search className="absolute left-4 top-1/2 -translate-y-1/2 w-4 h-4 text-white/30 pointer-events-none" />
+        {/* Buscador */}
+        <div className="relative rounded-2xl bg-white/30 dark:bg-white/[0.05] backdrop-blur-3xl border border-white/50 dark:border-white/[0.12] shadow-[0_8px_32px_rgba(0,0,0,0.04)] dark:shadow-[0_8px_32px_rgba(0,0,0,0.3)] transition-colors focus-within:border-primary/50 focus-within:bg-white/50 dark:focus-within:bg-white/[0.07]">
+          <Search className="absolute left-4 top-1/2 -translate-y-1/2 w-5 h-5 text-gray-400 dark:text-white/30 pointer-events-none" />
           <input
             ref={searchRef}
             autoFocus
             value={search}
             onChange={e => setSearch(e.target.value)}
+            onKeyDown={handleKeyDown}
             placeholder="Escribí tu nombre o apellido..."
-            className="w-full bg-white/[0.04] border border-white/[0.10] rounded-2xl pl-11 pr-4 py-4 text-base text-white placeholder-white/25 focus:outline-none focus:border-primary/50 focus:bg-white/[0.06] transition-colors"
+            className="w-full bg-transparent pl-12 pr-4 py-4 text-lg text-gray-900 dark:text-white placeholder-gray-400 dark:placeholder-white/25 focus:outline-none rounded-2xl"
           />
           {searching && (
-            <span className="absolute right-4 top-1/2 -translate-y-1/2 text-xs text-white/30">Buscando...</span>
+            <span className="absolute right-4 top-1/2 -translate-y-1/2 text-xs text-gray-400 dark:text-white/30">Buscando...</span>
           )}
 
           <AnimatePresence>
@@ -378,149 +170,76 @@ export default function EjecucionPage() {
                 initial={{ opacity: 0, y: -4 }}
                 animate={{ opacity: 1, y: 0 }}
                 exit={{ opacity: 0, y: -4 }}
-                className="absolute top-full left-0 right-0 mt-2 bg-[#1C1C1C] border border-white/[0.10] rounded-2xl overflow-hidden z-20 shadow-2xl"
+                className="absolute top-full left-0 right-0 mt-2 bg-white/50 dark:bg-black/30 backdrop-blur-3xl border border-white/60 dark:border-white/[0.10] rounded-2xl overflow-hidden z-20 shadow-2xl"
               >
-                {results.map(c => (
+                {results.map((c, i) => (
                   <button
                     key={c.id}
-                    onClick={() => handleSelect(c)}
-                    className="w-full text-left px-5 py-3.5 hover:bg-white/[0.06] transition-colors border-b border-white/[0.05] last:border-0 flex items-center gap-3"
+                    onClick={() => goToRutina(c.id, c.name, c.lastName ?? '')}
+                    onMouseEnter={() => setActiveIdx(i)}
+                    className={`w-full text-left px-5 py-4 transition-colors border-b border-white/30 dark:border-white/[0.05] last:border-0 flex items-center gap-4 ${i === activeIdx ? 'bg-white/40 dark:bg-white/[0.10]' : 'hover:bg-white/30 dark:hover:bg-white/[0.06]'}`}
                   >
-                    <span className="w-9 h-9 rounded-xl bg-primary/15 text-primary text-sm font-bold flex items-center justify-center shrink-0">
+                    <span className={`w-10 h-10 rounded-xl text-base font-bold flex items-center justify-center shrink-0 ${i === activeIdx ? 'bg-primary/25 text-primary' : 'bg-primary/15 text-primary'}`}>
                       {c.name.charAt(0).toUpperCase()}
                     </span>
-                    <div>
-                      <p className="text-sm font-semibold text-white">{c.name} {c.lastName}</p>
-                      <p className="text-xs text-white/35">{c.dni ? `DNI ${c.dni}` : c.email ?? ''}</p>
-                    </div>
+                    <p className="text-base font-semibold text-gray-900 dark:text-white">{c.name} {c.lastName}</p>
                   </button>
                 ))}
               </motion.div>
             )}
           </AnimatePresence>
         </div>
-      )}
 
-      {/* ── Cliente seleccionado ── */}
-      {selectedCliente && (
-        <div className="flex items-center justify-between bg-white/[0.04] border border-white/[0.08] rounded-2xl px-5 py-4">
-          <div className="flex items-center gap-3">
-            <span className="w-10 h-10 rounded-xl bg-primary/15 text-primary text-base font-bold flex items-center justify-center shrink-0">
-              {selectedCliente.name.charAt(0).toUpperCase()}
-            </span>
-            <div>
-              <p className="text-base font-semibold text-white">
-                {selectedCliente.name} {selectedCliente.lastName}
-              </p>
-              <p className="text-xs text-white/40">
-                {loadingRutina
-                  ? 'Cargando rutina...'
-                  : rutina
-                    ? rutina.nombre
-                    : 'Sin rutina activa'}
-              </p>
-            </div>
-          </div>
-          <button
-            onClick={handleChange}
-            className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-medium text-white/40 hover:text-white hover:bg-white/[0.06] transition-colors"
-          >
-            <X className="w-3.5 h-3.5" /> Cambiar
-          </button>
-        </div>
-      )}
-
-      {/* ── Sin rutina ── */}
-      {selectedCliente && !loadingRutina && !rutina && (
-        <div className="text-center py-12 text-white/30">
-          <Dumbbell className="w-10 h-10 mx-auto mb-3 opacity-30" />
-          <p className="text-sm">Este cliente no tiene ninguna rutina asignada.</p>
-          <p className="text-xs mt-1">Consultá con el profesor.</p>
-        </div>
-      )}
-
-      {/* ── Rutina ── */}
-      {rutina && !loadingRutina && (
-        <AnimatePresence mode="wait">
-          <motion.div
-            key={rutina.id}
-            initial={{ opacity: 0, y: 8 }}
-            animate={{ opacity: 1, y: 0 }}
-            className="space-y-5"
-          >
-            {/* Navegación de semana */}
+        {/* Recomendados */}
+        {!search && (
+          <div className="space-y-3">
             <div className="flex items-center gap-2">
-              <button
-                onClick={() => setSemanaNumero(n => Math.max(1, n - 1))}
-                disabled={semanaNumero <= 1}
-                className="p-2 rounded-xl bg-white/[0.04] border border-white/[0.08] text-white/40 hover:text-white hover:bg-white/[0.08] disabled:opacity-25 transition-colors"
-              >
-                <ChevronLeft className="w-4 h-4" />
-              </button>
-              <div className="flex-1 text-center">
-                <span className="text-sm font-semibold text-white">
-                  {semana?.nombre ? semana.nombre : `Semana ${semanaNumero}`}
-                </span>
-                {semana?.nombre && (
-                  <span className="ml-2 text-xs text-white/30">· Semana {semanaNumero}</span>
-                )}
-              </div>
-              <button
-                onClick={() => setSemanaNumero(n => Math.min(maxSem, n + 1))}
-                disabled={semanaNumero >= maxSem}
-                className="p-2 rounded-xl bg-white/[0.04] border border-white/[0.08] text-white/40 hover:text-white hover:bg-white/[0.08] disabled:opacity-25 transition-colors"
-              >
-                <ChevronRight className="w-4 h-4" />
-              </button>
+              <Users className="w-3.5 h-3.5 text-gray-400 dark:text-white/25" />
+              <span className="text-xs font-semibold text-gray-400 dark:text-white/25 uppercase tracking-wider">
+                En el gimnasio ahora
+              </span>
             </div>
 
-            {/* Tabs de días */}
-            {semana && semana.sesiones.length > 0 && (
-              <div className="flex gap-2 flex-wrap">
-                {semana.sesiones.map(s => (
-                  <button
-                    key={s.id}
-                    onClick={() => setSesionId(s.id)}
-                    className={`px-4 py-2 rounded-xl text-sm font-semibold transition-all ${
-                      selectedSesionId === s.id
-                        ? 'bg-primary text-black'
-                        : 'bg-white/[0.04] text-white/50 border border-white/[0.08] hover:text-white hover:border-white/20'
-                    }`}
-                  >
-                    {s.dia}
-                  </button>
-                ))}
-              </div>
-            )}
-
-            {/* Bloques + tablas */}
-            {sesion && bloques.length > 0 && (
-              <div className="space-y-5">
-                {bloques.map(bloque => (
-                  <BloqueTable
-                    key={bloque.id}
-                    letra={bloque.letra}
-                    ejercicios={bloque.ejerciciosPlan}
-                    onSaved={handleSaved}
+            {loadingRecom ? (
+              <div className="flex flex-wrap gap-2">
+                {[80, 110, 95, 120, 90].map((w, i) => (
+                  <div
+                    key={i}
+                    className="h-10 rounded-xl bg-white/20 dark:bg-white/[0.04] animate-pulse"
+                    style={{ width: w }}
                   />
                 ))}
               </div>
+            ) : recomendados.length === 0 ? (
+              <p className="text-sm text-gray-400 dark:text-white/20 text-center py-2">
+                No hay turnos activos en este momento
+              </p>
+            ) : (
+              <motion.div
+                initial={{ opacity: 0 }}
+                animate={{ opacity: 1 }}
+                className="flex flex-wrap gap-2"
+              >
+                {recomendados.map(c => (
+                  <button
+                    key={c.clienteId}
+                    onClick={() => goToRutina(c.clienteId, c.name, c.lastName)}
+                    className="flex items-center gap-2.5 px-4 py-2.5 rounded-xl bg-white/20 dark:bg-white/[0.05] backdrop-blur-sm border border-white/50 dark:border-white/[0.08] hover:bg-white/40 dark:hover:bg-white/[0.09] hover:border-white/70 dark:hover:border-white/[0.16] transition-all group"
+                  >
+                    <span className="w-6 h-6 rounded-lg bg-primary/15 text-primary text-xs font-bold flex items-center justify-center shrink-0 group-hover:bg-primary/25 transition-colors">
+                      {c.name.charAt(0).toUpperCase()}
+                    </span>
+                    <span className="text-sm font-medium text-gray-600 dark:text-white/70 group-hover:text-gray-900 dark:group-hover:text-white transition-colors">
+                      {c.name} {c.lastName}
+                    </span>
+                  </button>
+                ))}
+              </motion.div>
             )}
+          </div>
+        )}
 
-            {sesion && bloques.length === 0 && (
-              <div className="text-center py-10 text-white/25 text-sm">
-                No hay ejercicios cargados en este día.
-              </div>
-            )}
-
-            {semana && semana.sesiones.length === 0 && (
-              <div className="text-center py-10 text-white/25 text-sm">
-                Esta semana no tiene días de entrenamiento cargados.
-              </div>
-            )}
-          </motion.div>
-        </AnimatePresence>
-      )}
+      </div>
     </div>
   )
 }

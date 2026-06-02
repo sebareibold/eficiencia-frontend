@@ -1,8 +1,10 @@
 import axios from 'axios'
 import { useAuthStore } from '../store/authStore'
+import { useUiStore } from '../store/uiStore'
 
 const api = axios.create({
   baseURL: import.meta.env.VITE_API_URL,
+  timeout: 30_000,
 })
 
 api.interceptors.request.use((config) => {
@@ -22,8 +24,13 @@ function processQueue(error: unknown, token: string | null) {
   failedQueue = []
 }
 
+const SERVER_DOWN_STATUSES = [502, 503, 504]
+
 api.interceptors.response.use(
   (response) => {
+    // Si había un error de servidor, lo limpiamos al recibir cualquier respuesta exitosa
+    useUiStore.getState().setServerDown(false)
+
     // Desenvuelve el wrapper { data, message, statusCode } que aplica el backend globalmente
     if (
       response.data &&
@@ -38,6 +45,11 @@ api.interceptors.response.use(
   },
   async (error) => {
     const originalRequest = error.config
+
+    // Sin respuesta (ECONNREFUSED, timeout de red) o gateway errors → servidor caído
+    if (!error.response || SERVER_DOWN_STATUSES.includes(error.response.status)) {
+      useUiStore.getState().setServerDown(true)
+    }
 
     if (error.response?.status === 401 && !originalRequest._retry && !originalRequest.url?.includes('/auth/login')) {
       if (isRefreshing) {

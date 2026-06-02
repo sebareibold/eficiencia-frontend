@@ -1,7 +1,7 @@
 import { useState, useEffect, useCallback } from 'react'
 import { motion } from 'framer-motion'
 import { useNavigate } from 'react-router-dom'
-import { Dumbbell, Plus, Edit2, Trash2, ExternalLink, Search } from 'lucide-react'
+import { Dumbbell, Plus, Edit2, Trash2, ExternalLink, Search, ChevronLeft, ChevronRight } from 'lucide-react'
 import { ejerciciosApi } from '../api/ejercicios.api'
 import { useAuthStore } from '../store/authStore'
 import { useUiStore } from '../store/uiStore'
@@ -13,11 +13,13 @@ import ConfirmDialog from '../components/ui/ConfirmDialog'
 const glass = 'rounded-[2rem] border border-white/50 dark:border-white/10 bg-white/30 dark:bg-black/30 backdrop-blur-3xl shadow-[0_8px_32px_rgba(0,0,0,0.04)] dark:shadow-[0_8px_32px_rgba(0,0,0,0.3)]'
 const thCls = 'py-3 px-4 text-left text-[10px] font-bold uppercase tracking-wider text-gray-500 dark:text-[#6B7280]'
 
-const DIFICULTAD_CONFIG = {
-  FACIL:      { label: 'Fácil',      cls: 'bg-emerald-500/10 text-emerald-400 border border-emerald-500/20' },
-  INTERMEDIO: { label: 'Intermedio', cls: 'bg-amber-500/10 text-amber-400 border border-amber-500/20' },
-  AVANZADO:   { label: 'Avanzado',   cls: 'bg-red-500/10 text-red-400 border border-red-500/20' },
-} as const
+const DIFICULTAD_CONFIG: Record<string, { label: string; cls: string }> = {
+  FACIL:    { label: 'Fácil',    cls: 'bg-emerald-500/10 text-emerald-400 border border-emerald-500/20' },
+  DIFICIL:  { label: 'Difícil',  cls: 'bg-amber-500/10 text-amber-400 border border-amber-500/20' },
+  AVANZADO: { label: 'Avanzado', cls: 'bg-red-500/10 text-red-400 border border-red-500/20' },
+}
+const DIFICULTAD_FALLBACK = { label: 'Sin definir', cls: 'bg-gray-500/10 text-gray-400 border border-gray-500/20' }
+const PAGE_SIZE = 10
 
 export default function ExercisesPage() {
   const user     = useAuthStore(s => s.user)
@@ -29,8 +31,12 @@ export default function ExercisesPage() {
   const [loading, setLoading]     = useState(true)
   const [search, setSearch]       = useState('')
   const [filterDif, setFilterDif] = useState<string>('todos')
+  const [page, setPage]           = useState(1)
   const [deleteTarget, setDeleteTarget] = useState<string | null>(null)
   const [isDeleting, setIsDeleting] = useState(false)
+
+  const totalPages = Math.ceil(items.length / PAGE_SIZE)
+  const pageItems  = items.slice((page - 1) * PAGE_SIZE, page * PAGE_SIZE)
 
   const fetchItems = useCallback(async () => {
     setLoading(true)
@@ -40,6 +46,7 @@ export default function ExercisesPage() {
         dificultad: filterDif !== 'todos' ? filterDif as Dificultad : undefined,
       })
       setItems(data)
+      setPage(1)
     } catch {
       addToast('Error al cargar ejercicios', 'error')
     } finally {
@@ -112,7 +119,7 @@ export default function ExercisesPage() {
             />
           </div>
           <div className="flex flex-wrap gap-2">
-            {(['todos', 'FACIL', 'INTERMEDIO', 'AVANZADO'] as const).map(d => (
+            {(['todos', 'FACIL', 'DIFICIL', 'AVANZADO'] as const).map(d => (
               <button
                 key={d}
                 onClick={() => setFilterDif(d)}
@@ -164,6 +171,7 @@ export default function ExercisesPage() {
             )}
           </div>
         ) : (
+          <div className="flex flex-col gap-4">
           <div className="overflow-x-auto rounded-[2rem] border border-white/50 dark:border-white/10 bg-white/30 dark:bg-black/30 backdrop-blur-3xl shadow-[0_8px_32px_rgba(0,0,0,0.04)] dark:shadow-[0_8px_32px_rgba(0,0,0,0.3)]">
             <table className="w-full text-sm">
               <thead>
@@ -177,7 +185,7 @@ export default function ExercisesPage() {
                 </tr>
               </thead>
               <tbody className="divide-y divide-white/20 dark:divide-white/10">
-                {items.map((ej, i) => (
+                {pageItems.map((ej, i) => (
                   <motion.tr
                     key={ej.id}
                     layout
@@ -187,7 +195,7 @@ export default function ExercisesPage() {
                   >
                     <td className="py-3.5 px-4">
                       <span className="flex h-6 w-6 items-center justify-center rounded-md bg-primary/10 text-xs font-black text-primary">
-                        {i + 1}
+                        {(page - 1) * PAGE_SIZE + i + 1}
                       </span>
                     </td>
                     <td className="py-3.5 px-4 max-w-[240px]">
@@ -206,8 +214,8 @@ export default function ExercisesPage() {
                       )}
                     </td>
                     <td className="py-3.5 px-4 text-center">
-                      <span className={`inline-flex items-center rounded-full px-2.5 py-0.5 text-[11px] font-semibold ${DIFICULTAD_CONFIG[ej.dificultad].cls}`}>
-                        {DIFICULTAD_CONFIG[ej.dificultad].label}
+                      <span className={`inline-flex items-center rounded-full px-2.5 py-0.5 text-[11px] font-semibold ${(DIFICULTAD_CONFIG[ej.dificultad] ?? DIFICULTAD_FALLBACK).cls}`}>
+                        {(DIFICULTAD_CONFIG[ej.dificultad] ?? DIFICULTAD_FALLBACK).label}
                       </span>
                     </td>
                     <td className="py-3.5 px-4 text-center">
@@ -247,6 +255,56 @@ export default function ExercisesPage() {
                 ))}
               </tbody>
             </table>
+          </div>
+
+          {/* Paginación */}
+          {totalPages > 1 && (
+            <div className="flex items-center justify-between px-1">
+              <span className="text-xs text-gray-500 dark:text-[#8A8A9A]">
+                {(page - 1) * PAGE_SIZE + 1}–{Math.min(page * PAGE_SIZE, items.length)} de {items.length} ejercicios
+              </span>
+              <div className="flex items-center gap-1.5">
+                <button
+                  onClick={() => setPage(p => Math.max(1, p - 1))}
+                  disabled={page === 1}
+                  className="flex h-8 w-8 items-center justify-center rounded-xl border border-white/50 dark:border-white/10 bg-white/30 dark:bg-black/30 backdrop-blur-3xl text-gray-500 dark:text-gray-400 shadow-[0_4px_16px_rgba(0,0,0,0.04)] dark:shadow-[0_4px_16px_rgba(0,0,0,0.3)] transition-all duration-200 hover:-translate-y-0.5 hover:bg-white/50 dark:hover:bg-black/50 hover:shadow-[0_8px_24px_rgba(0,0,0,0.08)] dark:hover:shadow-[0_8px_24px_rgba(0,0,0,0.4)] disabled:opacity-30 disabled:cursor-not-allowed disabled:hover:translate-y-0 disabled:hover:shadow-[0_4px_16px_rgba(0,0,0,0.04)]"
+                >
+                  <ChevronLeft size={14} />
+                </button>
+                {Array.from({ length: totalPages }, (_, i) => i + 1)
+                  .filter(p => p === 1 || p === totalPages || Math.abs(p - page) <= 1)
+                  .reduce<(number | '...')[]>((acc, p, idx, arr) => {
+                    if (idx > 0 && (p as number) - (arr[idx - 1] as number) > 1) acc.push('...')
+                    acc.push(p)
+                    return acc
+                  }, [])
+                  .map((p, idx) =>
+                    p === '...' ? (
+                      <span key={`ellipsis-${idx}`} className="w-8 text-center text-xs text-gray-400 dark:text-[#4B4B5A]">…</span>
+                    ) : (
+                      <button
+                        key={p}
+                        onClick={() => setPage(p as number)}
+                        className={`h-8 min-w-[2rem] rounded-xl px-2.5 text-xs font-bold backdrop-blur-3xl transition-all duration-200 ${
+                          page === p
+                            ? 'bg-gray-900/90 dark:bg-white/90 text-white dark:text-gray-900 border border-gray-900/20 dark:border-white/20 shadow-[0_8px_24px_rgba(0,0,0,0.18)] dark:shadow-[0_8px_24px_rgba(255,255,255,0.08)] -translate-y-0.5'
+                            : 'border border-white/50 dark:border-white/10 bg-white/30 dark:bg-black/30 text-gray-600 dark:text-gray-400 shadow-[0_4px_16px_rgba(0,0,0,0.04)] dark:shadow-[0_4px_16px_rgba(0,0,0,0.3)] hover:-translate-y-0.5 hover:bg-white/50 dark:hover:bg-black/50 hover:shadow-[0_8px_24px_rgba(0,0,0,0.08)] dark:hover:shadow-[0_8px_24px_rgba(0,0,0,0.4)]'
+                        }`}
+                      >
+                        {p}
+                      </button>
+                    )
+                  )}
+                <button
+                  onClick={() => setPage(p => Math.min(totalPages, p + 1))}
+                  disabled={page === totalPages}
+                  className="flex h-8 w-8 items-center justify-center rounded-xl border border-white/50 dark:border-white/10 bg-white/30 dark:bg-black/30 backdrop-blur-3xl text-gray-500 dark:text-gray-400 shadow-[0_4px_16px_rgba(0,0,0,0.04)] dark:shadow-[0_4px_16px_rgba(0,0,0,0.3)] transition-all duration-200 hover:-translate-y-0.5 hover:bg-white/50 dark:hover:bg-black/50 hover:shadow-[0_8px_24px_rgba(0,0,0,0.08)] dark:hover:shadow-[0_8px_24px_rgba(0,0,0,0.4)] disabled:opacity-30 disabled:cursor-not-allowed disabled:hover:translate-y-0 disabled:hover:shadow-[0_4px_16px_rgba(0,0,0,0.04)]"
+                >
+                  <ChevronRight size={14} />
+                </button>
+              </div>
+            </div>
+          )}
           </div>
         )}
       </section>

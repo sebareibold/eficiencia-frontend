@@ -18,6 +18,7 @@ export interface Client {
   membershipModalidad?: 'MENSUAL' | 'TRES_MESES' | 'SEIS_MESES' | null
   membershipPrecio?: number | null
   diasUsados: number
+  sede?: { id: string; nombre: string; activa: boolean } | null
   createdAt: string
   updatedAt: string
 }
@@ -30,4 +31,6 @@ export interface CreateClientDto {
   dni: string
 }
 
-export interface UpdateClientDto extends Partial<CreateClientDto> {}
+export interface UpdateClientDto extends Partial<CreateClientDto> {
+  sedeId?: string | null
+}

@@ -44,8 +44,8 @@ export const rutinasApi = {
     return r.data
   },
 
-  updateSemana: async (rutinaId: string, semanaId: string, nombre: string): Promise<Semana> => {
-    const r = await api.patch(`/rutinas/${rutinaId}/semanas/${semanaId}`, { nombre })
+  updateSemana: async (rutinaId: string, semanaId: string, payload: { nombre?: string; observaciones?: string }): Promise<Semana> => {
+    const r = await api.patch(`/rutinas/${rutinaId}/semanas/${semanaId}`, payload)
     return r.data
   },
 

@@ -8,8 +8,16 @@ interface Props {
   action?: PermAction
 }
 
-// Guard de ruta basado en la matriz de permisos dinámica.
-// cliente_comun se redirige a /ejecucion; otros roles sin permiso van a /clients.
+// Destino de redirección según rol cuando no hay permiso para la ruta solicitada.
+function homeForRole(role: string | undefined): string {
+  switch (role) {
+    case 'admin':         return ROUTES.DASHBOARD
+    case 'profesor':      return ROUTES.SHIFTS
+    case 'cliente_comun': return ROUTES.EJECUCION
+    default:              return ROUTES.CLIENTS   // staff
+  }
+}
+
 export default function PermissionGuard({ module, action = 'read' }: Props) {
   const { can, permsLoaded } = usePermissions()
   const user = useAuthStore((s) => s.user)
@@ -18,10 +26,5 @@ export default function PermissionGuard({ module, action = 'read' }: Props) {
 
   if (can(module, action)) return <Outlet />
 
-  return (
-    <Navigate
-      to={user?.role === 'cliente_comun' ? ROUTES.EJECUCION : ROUTES.CLIENTS}
-      replace
-    />
-  )
+  return <Navigate to={homeForRole(user?.role)} replace />
 }

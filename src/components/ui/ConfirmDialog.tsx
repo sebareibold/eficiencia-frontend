@@ -6,6 +6,7 @@ interface ConfirmDialogProps {
   isOpen: boolean
   title: string
   message: string
+  warning?: string
   confirmLabel?: string
   isLoading?: boolean
   onConfirm: () => void
@@ -16,6 +17,7 @@ export default function ConfirmDialog({
   isOpen,
   title,
   message,
+  warning,
   confirmLabel = 'Eliminar',
   isLoading,
   onConfirm,
@@ -23,7 +25,7 @@ export default function ConfirmDialog({
 }: ConfirmDialogProps) {
   return (
     <Modal isOpen={isOpen} onClose={isLoading ? () => {} : onClose} size="sm">
-      <div className="space-y-5">
+      <div className="space-y-4">
         <div className="flex items-start gap-3">
           <div className="h-10 w-10 rounded-xl bg-red-500/10 flex items-center justify-center shrink-0 mt-0.5">
             <AlertTriangle size={18} className="text-red-500" />
@@ -33,6 +35,14 @@ export default function ConfirmDialog({
             <p className="text-sm text-gray-500 dark:text-[#8A8A9A] mt-1 leading-relaxed">{message}</p>
           </div>
         </div>
+
+        {warning && (
+          <div className="flex items-start gap-2.5 rounded-xl bg-amber-500/10 border border-amber-500/20 px-4 py-3">
+            <AlertTriangle size={15} className="text-amber-500 shrink-0 mt-0.5" />
+            <p className="text-xs text-amber-600 dark:text-amber-400 leading-relaxed">{warning}</p>
+          </div>
+        )}
+
         <div className="flex gap-2">
           <Button variant="ghost" className="flex-1" onClick={onClose} disabled={isLoading}>
             Cancelar

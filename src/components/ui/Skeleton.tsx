@@ -1,4 +1,6 @@
 import { type CSSProperties } from 'react'
+import { useNavigate } from 'react-router-dom'
+import { ArrowLeft } from 'lucide-react'
 import { motion, useReducedMotion } from 'framer-motion'
 
 // ── Framer Motion shimmer sweep ───────────────────────────────────────────────
@@ -178,10 +180,17 @@ export function SkeletonDashboardCharts() {
 
 // ── Client profile: hero card + KPI strip + tabs ──────────────────────────────
 export function SkeletonClientProfile() {
+  const navigate = useNavigate()
   return (
     <div className="space-y-4 md:space-y-5">
 
-      <Skeleton className="h-4 w-24" />
+      <button
+        onClick={() => navigate('/clients')}
+        className="group flex items-center gap-2 text-sm text-gray-500 dark:text-[#8A8A9A] hover:text-gray-900 dark:hover:text-white transition-colors"
+      >
+        <ArrowLeft size={14} className="group-hover:-translate-x-0.5 transition-transform" />
+        <span>Clientes</span>
+      </button>
 
       {/* Hero card — mirrors glassCard from ClientProfilePage */}
       <div className="rounded-3xl border border-white/50 dark:border-white/[0.08] bg-white/30 dark:bg-black/30 backdrop-blur-3xl overflow-hidden">
@@ -242,67 +251,97 @@ export function SkeletonClientProfile() {
   )
 }
 
-// ── Rutina page: sidebar list + main exercise panel ───────────────────────────
+// ── Rutina page: back link + sidebar + exercise table ────────────────────────
+// Mirrors the exact layout of ClientRutinaPage (glassCard, widths, table columns).
+const GLASS = 'rounded-[2rem] border border-white/50 dark:border-white/10 bg-white/30 dark:bg-black/30 backdrop-blur-3xl shadow-[0_8px_32px_rgba(0,0,0,0.04)] dark:shadow-[0_8px_32px_rgba(0,0,0,0.3)]'
+
 export function SkeletonRutinaPanel() {
   return (
-    <div className="grid gap-4 lg:grid-cols-[280px_1fr]">
+    <div className="space-y-6">
 
-      {/* Sidebar */}
-      <div className="space-y-1.5">
-        {[1, 2, 3].map(i => (
-          <div
-            key={i}
-            className="flex items-center gap-3 px-4 py-3.5 rounded-2xl border border-black/[0.06] dark:border-white/[0.06] bg-black/[0.02] dark:bg-white/[0.02]"
-          >
-            <Skeleton className="h-8 w-8 rounded-xl shrink-0" />
-            <div className="flex-1 space-y-1.5">
-              <Skeleton className="h-4 w-32" />
-              <Skeleton className="h-3 w-16" />
-            </div>
-            <Skeleton className="h-4 w-4 rounded-full shrink-0" />
-          </div>
-        ))}
-        {/* "Nueva rutina" dashed button placeholder */}
-        <Skeleton className="h-12 w-full rounded-2xl" />
-      </div>
+      {/* Back button */}
+      <Skeleton className="h-4 w-28" />
 
-      {/* Main panel — mirrors `glass` from ClientRutinaPage */}
-      <div className="rounded-2xl border border-black/[0.06] dark:border-white/[0.08] bg-white/40 dark:bg-white/[0.03] backdrop-blur-xl p-6 space-y-6">
-        {/* Rutina header */}
-        <div className="flex items-start justify-between gap-3">
-          <div className="space-y-2 flex-1">
-            <Skeleton className="h-7 w-48" />
-            <Skeleton className="h-4 w-64" />
+      {/* Layout: sidebar + main panel */}
+      <div className="flex flex-col lg:flex-row gap-5 lg:gap-6 items-start">
+
+        {/* Sidebar — matches w-full lg:w-64 xl:w-72 */}
+        <div className={`${GLASS} p-4 w-full lg:w-64 xl:w-72 shrink-0`}>
+          {/* Header "Rutinas" */}
+          <div className="flex items-center gap-2 mb-4">
+            <Skeleton className="h-3 w-3 rounded" />
+            <Skeleton className="h-3 w-16" />
           </div>
-          <div className="flex gap-2 shrink-0">
-            <Skeleton className="h-8 w-16 rounded-xl" />
-            <Skeleton className="h-8 w-16 rounded-xl" />
+          {/* Rutina items */}
+          <div className="space-y-1.5">
+            {[1, 2, 3].map(i => (
+              <div
+                key={i}
+                className="rounded-2xl border border-white/40 dark:border-white/[0.05] bg-white/20 dark:bg-white/[0.02] p-3 space-y-2"
+              >
+                <div className="flex items-start justify-between gap-2">
+                  <Skeleton className={`h-4 ${i === 1 ? 'w-28' : i === 2 ? 'w-36' : 'w-32'}`} />
+                  <Skeleton className="h-4 w-12 rounded-md shrink-0" />
+                </div>
+                <div className="flex items-center gap-2">
+                  <Skeleton className="h-3 w-10" />
+                  <Skeleton className="h-2 w-1 rounded-full" />
+                  <Skeleton className="h-3 w-8" />
+                </div>
+              </div>
+            ))}
+            {/* Nueva rutina button */}
+            <Skeleton className="h-9 w-full rounded-2xl mt-1" />
           </div>
         </div>
 
-        {/* Exercise table */}
-        <div className="rounded-2xl border border-black/[0.06] dark:border-white/[0.08] overflow-hidden">
-          {/* Header row */}
-          <div className="flex gap-4 px-4 py-3 border-b border-black/[0.05] dark:border-white/[0.06] bg-black/[0.02] dark:bg-white/[0.02]">
-            <Skeleton className="h-3 w-6" />
-            <Skeleton className="h-3 w-32" />
-            <Skeleton className="h-3 w-14 ml-auto" />
-            <Skeleton className="h-3 w-20" />
-            <Skeleton className="h-3 w-12" />
-          </div>
-          {/* Data rows */}
-          {[1, 2, 3, 4].map(i => (
-            <div
-              key={i}
-              className="flex items-center gap-4 px-4 py-3.5 border-b border-black/[0.04] dark:border-white/[0.04] last:border-0"
-            >
-              <Skeleton className="h-6 w-6 rounded-md shrink-0" />
-              <Skeleton className="h-4 flex-1 max-w-[180px]" />
-              <Skeleton className="h-4 w-10 ml-auto" />
-              <Skeleton className="h-4 w-16" />
-              <Skeleton className="h-4 w-12" />
+        {/* Main panel */}
+        <div className={`${GLASS} p-5 flex-1 space-y-5`}>
+          {/* Header: título + descripción + botones */}
+          <div className="flex items-start justify-between gap-3">
+            <div className="space-y-2 flex-1">
+              <Skeleton className="h-6 w-52" />
+              <Skeleton className="h-3.5 w-72" />
             </div>
-          ))}
+            <div className="flex gap-2 shrink-0">
+              <Skeleton className="h-8 w-20 rounded-xl" />
+              <Skeleton className="h-8 w-24 rounded-xl" />
+            </div>
+          </div>
+
+          {/* Table */}
+          <div className="rounded-2xl border border-white/40 dark:border-white/[0.06] overflow-hidden">
+            {/* Table header */}
+            <div className="flex gap-4 px-4 py-2.5 bg-gray-50/60 dark:bg-white/[0.03] border-b border-white/40 dark:border-white/[0.06]">
+              <Skeleton className="h-3 w-16" />
+              <Skeleton className="h-3 w-12" />
+              <Skeleton className="h-3 flex-1 max-w-[200px]" />
+              <Skeleton className="h-3 w-8 ml-auto" />
+              <Skeleton className="h-3 w-12" />
+              <Skeleton className="h-3 w-12" />
+            </div>
+            {/* Data rows — semana + día + bloque + ejercicios */}
+            {[
+              { w1: 'w-14', w2: 'w-10', w3: 'w-6', w4: 'w-40' },
+              { w1: '',     w2: '',     w3: 'w-6', w4: 'w-32' },
+              { w1: '',     w2: 'w-10', w3: 'w-6', w4: 'w-44' },
+              { w1: '',     w2: '',     w3: 'w-6', w4: 'w-28' },
+              { w1: 'w-14', w2: 'w-10', w3: 'w-6', w4: 'w-36' },
+            ].map((r, i) => (
+              <div
+                key={i}
+                className="flex items-center gap-4 px-4 py-3 border-b border-white/30 dark:border-white/[0.04] last:border-0"
+              >
+                {r.w1 ? <Skeleton className={`h-5 ${r.w1} rounded-lg shrink-0`} /> : <div className="h-5 w-14 shrink-0" />}
+                {r.w2 ? <Skeleton className={`h-4 ${r.w2} shrink-0`} /> : <div className="h-4 w-10 shrink-0" />}
+                <Skeleton className={`h-5 ${r.w3} rounded-md shrink-0`} />
+                <Skeleton className={`h-4 ${r.w4} flex-1`} />
+                <Skeleton className="h-3.5 w-6 ml-auto shrink-0" />
+                <Skeleton className="h-3.5 w-10 shrink-0" />
+                <Skeleton className="h-3.5 w-10 shrink-0" />
+              </div>
+            ))}
+          </div>
         </div>
       </div>
     </div>

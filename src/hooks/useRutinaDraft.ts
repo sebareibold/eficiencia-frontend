@@ -46,9 +46,11 @@ export interface DraftSemana {
   rutinaId: string
   numero: number
   nombre?: string
+  observaciones?: string
   sesiones: DraftSesion[]
   _isNew: boolean
   _renamed: boolean
+  _obsChanged: boolean
 }
 
 export interface DraftRutina extends Omit<Rutina, 'semanas'> {
@@ -71,6 +73,7 @@ type Action =
   | { type: 'CLONE_SEMANA'; semanaId: string }
   | { type: 'DELETE_SEMANA'; semanaId: string }
   | { type: 'RENAME_SEMANA'; semanaId: string; nombre: string }
+  | { type: 'UPDATE_SEMANA_OBS'; semanaId: string; observaciones: string }
   | { type: 'ADD_SESION'; semanaId: string; dia: string }
   | { type: 'DELETE_SESION'; semanaId: string; sesionId: string }
   | { type: 'ADD_BLOQUE'; sesionId: string }
@@ -78,6 +81,7 @@ type Action =
   | { type: 'ADD_EJERCICIO'; bloqueId: string; nombre: string; catalogoId?: string; catalogo?: DraftEjercicio['catalogo'] }
   | { type: 'UPDATE_EJERCICIO'; ejercicioId: string; data: UpdateEjData }
   | { type: 'DELETE_EJERCICIO'; ejercicioId: string }
+  | { type: 'REORDER_SEMANAS'; fromId: string; toId: string }
 
 // ─── Helpers de conversión ────────────────────────────────────────────────────
 
@@ -88,6 +92,7 @@ const toDraft = (r: Rutina): DraftRutina => ({
     ...s,
     _isNew: false,
     _renamed: false,
+    _obsChanged: false,
     sesiones: s.sesiones.map(ses => ({
       ...ses,
       _isNew: false,
@@ -114,8 +119,10 @@ const cloneSemana = (src: DraftSemana, nextNumero: number): DraftSemana => ({
   rutinaId: src.rutinaId,
   numero: nextNumero,
   nombre: src.nombre,
+  observaciones: src.observaciones,
   _isNew: true,
   _renamed: !!src.nombre,
+  _obsChanged: !!src.observaciones,
   sesiones: src.sesiones.map(ses => ({
     id: mkTempId(),
     semanaId: 'temp',
@@ -157,7 +164,7 @@ function reducer(state: DraftState, action: Action): DraftState {
 
     case 'ADD_SEMANA': {
       const numero = (d.semanas.at(-1)?.numero ?? 0) + 1
-      const s: DraftSemana = { id: mkTempId(), rutinaId: d.id, numero, _isNew: true, _renamed: false, sesiones: [] }
+      const s: DraftSemana = { id: mkTempId(), rutinaId: d.id, numero, _isNew: true, _renamed: false, _obsChanged: false, sesiones: [] }
       return save({ ...d, semanas: [...d.semanas, s] })
     }
 
@@ -176,6 +183,14 @@ function reducer(state: DraftState, action: Action): DraftState {
         ...d,
         semanas: d.semanas.map(s =>
           s.id === action.semanaId ? { ...s, nombre: action.nombre, _renamed: true } : s,
+        ),
+      })
+
+    case 'UPDATE_SEMANA_OBS':
+      return save({
+        ...d,
+        semanas: d.semanas.map(s =>
+          s.id === action.semanaId ? { ...s, observaciones: action.observaciones, _obsChanged: true } : s,
         ),
       })
 
@@ -273,10 +288,28 @@ function reducer(state: DraftState, action: Action): DraftState {
         })),
       })
 
+    case 'REORDER_SEMANAS': {
+      const from = d.semanas.findIndex(s => s.id === action.fromId)
+      const to   = d.semanas.findIndex(s => s.id === action.toId)
+      if (from === -1 || to === -1 || from === to) return state
+      const semanas = [...d.semanas]
+      const [moved] = semanas.splice(from, 1)
+      semanas.splice(to, 0, moved)
+      return save({ ...d, semanas })
+    }
+
     default:
       return state
   }
 }
+
+// ─── Helpers de sanitización para el payload ─────────────────────────────────
+// El backend usa @IsNumber() + @IsOptional() → null y '' son rechazados.
+// Solo `undefined` (campo ausente del JSON) pasa la validación como "no enviado".
+const toNum = (v: number | '' | null | undefined): number | undefined =>
+  typeof v === 'number' ? v : undefined
+const toStr = (v: string | null | undefined): string | undefined =>
+  v == null || v === '' ? undefined : v
 
 // ─── Lógica de guardado (diff + API calls) ────────────────────────────────────
 
@@ -304,10 +337,20 @@ async function persistDraft(original: Rutina, draft: DraftRutina): Promise<void>
       const created = await rutinasApi.createSemana(draft.id)
       idMap.set(ds.id, created.id)
       realSemanaId = created.id
-      if (ds.nombre?.trim()) await rutinasApi.updateSemana(draft.id, realSemanaId, ds.nombre.trim())
+      if (ds.nombre?.trim() || ds.observaciones !== undefined) {
+        await rutinasApi.updateSemana(draft.id, realSemanaId, {
+          ...(ds.nombre?.trim() ? { nombre: ds.nombre.trim() } : {}),
+          ...(ds.observaciones !== undefined ? { observaciones: ds.observaciones } : {}),
+        })
+      }
     } else {
       realSemanaId = ds.id
-      if (ds._renamed) await rutinasApi.updateSemana(draft.id, realSemanaId, ds.nombre?.trim() ?? '')
+      if (ds._renamed || ds._obsChanged) {
+        await rutinasApi.updateSemana(draft.id, realSemanaId, {
+          ...(ds._renamed ? { nombre: ds.nombre?.trim() ?? '' } : {}),
+          ...(ds._obsChanged ? { observaciones: ds.observaciones ?? '' } : {}),
+        })
+      }
     }
 
     const origSemana = ds._isNew ? null : (original.semanas.find(s => s.id === ds.id) ?? null)
@@ -364,21 +407,21 @@ async function persistDraft(original: Rutina, draft: DraftRutina): Promise<void>
           if (dej._isNew) {
             await rutinasApi.addEjercicio(realBloqueId, {
               nombre: dej.nombre,
-              catalogoId: dej.catalogoId,
-              series: dej.series,
-              repeticiones: dej.repeticiones,
-              peso: dej.peso,
-              rir: dej.rir,
-              rpe: dej.rpe,
+              catalogoId: dej.catalogoId || undefined,
+              series: toNum(dej.series),
+              repeticiones: toStr(dej.repeticiones),
+              peso: toStr(dej.peso),
+              rir: toNum(dej.rir),
+              rpe: toNum(dej.rpe),
             })
           } else if (dej._changed) {
             await rutinasApi.updateEjercicio(dej.id, {
               nombre: dej.nombre,
-              series: dej.series ?? undefined,
-              repeticiones: dej.repeticiones ?? undefined,
-              peso: dej.peso ?? undefined,
-              rir: dej.rir ?? undefined,
-              rpe: dej.rpe ?? undefined,
+              series: toNum(dej.series),
+              repeticiones: toStr(dej.repeticiones),
+              peso: toStr(dej.peso),
+              rir: toNum(dej.rir),
+              rpe: toNum(dej.rpe),
             })
           }
         }
@@ -430,6 +473,8 @@ export function useRutinaDraft() {
     deleteSemana: (semanaId: string) => dispatch({ type: 'DELETE_SEMANA', semanaId }),
     renameSemana: (semanaId: string, nombre: string) =>
       dispatch({ type: 'RENAME_SEMANA', semanaId, nombre }),
+    updateSemanaObs: (semanaId: string, observaciones: string) =>
+      dispatch({ type: 'UPDATE_SEMANA_OBS', semanaId, observaciones }),
     addSesion: (semanaId: string, dia: string) =>
       dispatch({ type: 'ADD_SESION', semanaId, dia }),
     deleteSesion: (semanaId: string, sesionId: string) =>
@@ -443,5 +488,7 @@ export function useRutinaDraft() {
       dispatch({ type: 'UPDATE_EJERCICIO', ejercicioId, data }),
     deleteEjercicio: (ejercicioId: string) =>
       dispatch({ type: 'DELETE_EJERCICIO', ejercicioId }),
+    reorderSemanas: (fromId: string, toId: string) =>
+      dispatch({ type: 'REORDER_SEMANAS', fromId, toId }),
   }
 }

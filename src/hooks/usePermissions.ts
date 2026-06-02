@@ -13,14 +13,16 @@ export type PermModule =
   | 'dashboard'
   | 'users'
   | 'rutinas'
+  | 'exercises'
+  | 'plantillas'
 
 export type PermAction = 'read' | 'create' | 'update' | 'delete' | 'mark'
 
 type RolePerms = Partial<Record<PermModule, Partial<Record<PermAction, boolean>>>>
 
-// Matriz local solo para UI (mostrar/ocultar elementos). NUNCA se usa como fallback
-// de autorización — si los permisos del servidor no cargan se deniega todo.
-const MATRIX: Record<UserRole, RolePerms> = {
+// Matriz local de permisos — usada como fallback si el servidor no responde.
+// La fuente de verdad real es la tabla Permiso en la BD (permisos.service.ts).
+export const MATRIX: Record<UserRole, RolePerms> = {
   admin: {
     clients:     { read: true, create: true, update: true, delete: true  },
     payments:    { read: true, create: true, update: true, delete: true  },
@@ -31,6 +33,8 @@ const MATRIX: Record<UserRole, RolePerms> = {
     dashboard:   { read: true                                             },
     users:       { read: true, create: true, update: true, delete: true  },
     rutinas:     { read: true, create: true, update: true, delete: true  },
+    exercises:   { read: true, create: true, update: true, delete: true  },
+    plantillas:  { read: true, create: true, update: true, delete: true  },
   },
   staff: {
     clients:     { read: true, create: true, update: true, delete: false },
@@ -42,9 +46,11 @@ const MATRIX: Record<UserRole, RolePerms> = {
     dashboard:   {},
     users:       {},
     rutinas:     {},
+    exercises:   { read: true                                             },
+    plantillas:  {},
   },
   profesor: {
-    clients:     { read: true                                             },
+    clients:     {},                                                        // sin acceso a lista/perfil de clientes
     payments:    {},
     shifts:      { read: true                                             },
     attendance:  { read: true, mark: true                                 },
@@ -53,15 +59,31 @@ const MATRIX: Record<UserRole, RolePerms> = {
     dashboard:   {},
     users:       {},
     rutinas:     { read: true, create: true, update: true, delete: true  },
+    exercises:   { read: true                                             }, // ve Biblioteca pero no edita
+    plantillas:  { read: true                                             }, // lee plantillas para crear rutinas
+  },
+  cliente_comun: {
+    clients:     {},
+    payments:    {},
+    shifts:      {},
+    attendance:  {},
+    expenses:    {},
+    memberships: {},
+    dashboard:   {},
+    users:       {},
+    rutinas:     { read: true                                             }, // solo ve su propia rutina (EjecucionPage)
+    exercises:   {},
+    plantillas:  {},
   },
 }
 
 // ─── Labels de rol ────────────────────────────────────────────────────────────
 
 export const ROLE_LABELS: Record<UserRole, string> = {
-  admin:    'Administrador',
-  staff:    'Staff',
-  profesor: 'Profesor',
+  admin:         'Administrador',
+  staff:         'Staff',
+  profesor:      'Profesor',
+  cliente_comun: 'Socio',
 }
 
 // ─── Hook ─────────────────────────────────────────────────────────────────────
@@ -93,9 +115,10 @@ export function usePermissions() {
     canUI,
     role,
     permsLoaded,
-    isAdmin:    role === 'admin',
-    isStaff:    role === 'staff',
-    isProfesor: role === 'profesor',
-    roleLabel:  ROLE_LABELS[role],
+    isAdmin:        role === 'admin',
+    isStaff:        role === 'staff',
+    isProfesor:     role === 'profesor',
+    isClienteComun: role === 'cliente_comun',
+    roleLabel:      ROLE_LABELS[role],
   }
 }

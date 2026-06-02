@@ -12,18 +12,21 @@ interface UiState {
   sidebarOpen: boolean
   settingsOpen: boolean
   toasts: Toast[]
+  serverDown: boolean
   toggleSidebar: () => void
   setSidebarOpen: (open: boolean) => void
   openSettings: () => void
   closeSettings: () => void
   addToast: (messageOrToast: string | { message: string; type: ToastType }, type?: ToastType) => void
   removeToast: (id: string) => void
+  setServerDown: (v: boolean) => void
 }
 
 export const useUiStore = create<UiState>((set) => ({
   sidebarOpen: true,
   settingsOpen: false,
   toasts: [],
+  serverDown: false,
   toggleSidebar: () => set((s) => ({ sidebarOpen: !s.sidebarOpen })),
   setSidebarOpen: (open) => set({ sidebarOpen: open }),
   openSettings: () => set({ settingsOpen: true }),
@@ -38,4 +41,5 @@ export const useUiStore = create<UiState>((set) => ({
     }, 4000)
   },
   removeToast: (id) => set((s) => ({ toasts: s.toasts.filter((t) => t.id !== id) })),
+  setServerDown: (v) => set({ serverDown: v }),
 }))

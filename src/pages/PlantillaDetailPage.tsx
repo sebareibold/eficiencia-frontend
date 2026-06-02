@@ -26,13 +26,21 @@ const PATRON_LABELS: Record<PatronMovimientoEnum, string> = {
   TRACCION:          'Tracción',
   HIBRIDO:           'Híbrido',
   HOMBROS:           'Hombros',
+  CORE:              'Core',
+  POTENCIA:          'Potencia',
+  PLIO_MI:           'Plio MI',
+  PLIO_MS:           'Plio MS',
+  ISO_MI:            'Iso MI',
+  ISO_MS:            'Iso MS',
   ACCESORIO:         'Accesorio',
   OTROS:             'Otros',
 }
 
 const TODOS_PATRONES: PatronMovimientoEnum[] = [
   'RODILLA_DOMINANTE', 'CADERA_DOMINANTE', 'EMPUJE', 'TRACCION',
-  'HIBRIDO', 'HOMBROS', 'ACCESORIO', 'OTROS',
+  'HIBRIDO', 'HOMBROS', 'CORE', 'POTENCIA',
+  'PLIO_MI', 'PLIO_MS', 'ISO_MI', 'ISO_MS',
+  'ACCESORIO', 'OTROS',
 ]
 
 const LETRAS = ['A', 'B', 'C', 'D', 'E', 'F', 'G', 'H']

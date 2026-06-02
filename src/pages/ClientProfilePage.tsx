@@ -4,9 +4,9 @@ import { motion } from 'framer-motion'
 import {
   ArrowLeft, Phone, Mail, CalendarDays, CheckCircle2, XCircle,
   Edit2, CreditCard, Activity, Clock, Hash, Banknote, ArrowLeftRight,
-  MessageCircle, Tag, Dumbbell, BookOpen, Plus, ChevronDown,
+  MessageCircle, Tag, Dumbbell, BookOpen, Plus, ChevronDown, ChevronRight,
   BarChart2, PieChart as PieIcon, LineChart as LineChartIcon,
-  Receipt, AlertTriangle,
+  Receipt, AlertTriangle, MapPin, User, Trophy, Trash2, Save,
 } from 'lucide-react'
 import { format, parseISO, addDays } from 'date-fns'
 import { es } from 'date-fns/locale'
@@ -34,7 +34,6 @@ import { useAuthStore } from '../store/authStore'
 import Badge from '../components/ui/Badge'
 import Button from '../components/ui/Button'
 import Modal from '../components/ui/Modal'
-import Input from '../components/ui/Input'
 import Skeleton, { SkeletonClientProfile } from '../components/ui/Skeleton'
 import EmptyState from '../components/ui/EmptyState'
 import { getStatusLabel } from '../utils/getStatusColor'
@@ -44,6 +43,14 @@ import { formatCurrency } from '../utils/formatCurrency'
 import type { Client } from '../types/client.types'
 import type { Payment } from '../types/payment.types'
 import type { AttendanceRecord } from '../types/attendance.types'
+import type { FichaEntrenamiento, EventoDeportivo } from '../types/rutina.types'
+
+const ACTIVIDAD_LABELS: Record<string, string> = {
+  SEDENTARIA: 'Sedentaria',
+  MODERADA:   'Moderada',
+  ACTIVA:     'Activa',
+  MUY_ACTIVA: 'Muy activa',
+}
 
 // ─── Configuración de métodos de pago ─────────────────────────────────────────
 const METHOD_CONFIG: Record<string, { label: string; Icon: typeof Banknote; color: string; bg: string }> = {
@@ -54,13 +61,31 @@ const METHOD_CONFIG: Record<string, { label: string; Icon: typeof Banknote; colo
 
 // ─── Schema edición ────────────────────────────────────────────────────────────
 const editSchema = z.object({
-  name: z.string().min(1, 'Requerido'),
+  name:     z.string().min(1, 'Requerido'),
   lastName: z.string().min(1, 'Requerido'),
-  email: z.string().email('Email inválido').or(z.literal('')),
-  phone: z.string().optional(),
-  dni: z.string().min(1, 'Requerido'),
+  email:    z.string().email('Email inválido').or(z.literal('')),
+  phone:    z.string().optional(),
+  dni:      z.string().min(1, 'Requerido'),
+  sedeId:   z.string().optional(),
+  // ficha
+  peso:            z.string().optional(),
+  altura:          z.string().optional(),
+  actividadDiaria: z.string().optional(),
+  objetivos:       z.string().optional(),
+  deportePractica: z.string().optional(),
+  experiencia:     z.string().optional(),
+  lesiones:        z.string().optional(),
+  patologiasBase:  z.string().optional(),
 })
 type EditValues = z.infer<typeof editSchema>
+
+const ACTIVIDAD_OPTIONS = [
+  { value: '',           label: '— Sin seleccionar —' },
+  { value: 'SEDENTARIA', label: 'Sedentaria' },
+  { value: 'MODERADA',   label: 'Moderada' },
+  { value: 'ACTIVA',     label: 'Activa' },
+  { value: 'MUY_ACTIVA', label: 'Muy activa' },
+]
 
 // ─── Helpers visuales ─────────────────────────────────────────────────────────
 function avatarColors(status: Client['status']) {
@@ -84,6 +109,53 @@ function membershipDaysLeft(expiresAt: string | null): number | null {
 
 // ─── Glassmorphism card ───────────────────────────────────────────────────────
 const glassCard = 'rounded-[2rem] border border-gray-200 dark:border-white/10 bg-white/30 dark:bg-black/30 backdrop-blur-3xl shadow-[0_8px_32px_rgba(0,0,0,0.04)] dark:shadow-[0_8px_32px_rgba(0,0,0,0.3)]'
+
+// ─── Tooltip de estado ────────────────────────────────────────────────────────
+function getStatusTooltip(client: Client): string | null {
+  if (client.status === 'active') return null
+  if (client.status === 'debt')
+    return 'El cliente fue marcado con pagos pendientes. Regularizá la deuda para volver al estado activo.'
+  if (client.status === 'expiring') {
+    if (!client.membershipExpiresAt) return 'No tiene ninguna membresía activa registrada.'
+    const exp  = new Date(client.membershipExpiresAt)
+    const days = Math.ceil((exp.getTime() - Date.now()) / 86_400_000)
+    const fecha = format(exp, "d 'de' MMMM 'de' yyyy", { locale: es })
+    if (days < 0)  return `La membresía venció el ${fecha} (hace ${Math.abs(days)} día${Math.abs(days) !== 1 ? 's' : ''}).`
+    if (days === 0) return 'La membresía vence hoy.'
+    return `La membresía vence el ${fecha} — quedan ${days} día${days !== 1 ? 's' : ''}.`
+  }
+  return null
+}
+
+function StatusBadge({ client, size = 'md' }: { client: Client; size?: 'sm' | 'md' }) {
+  const tooltip = getStatusTooltip(client)
+  const badgeCls =
+    client.status === 'active'   ? 'bg-emerald-500/10 text-emerald-600 dark:text-emerald-400'
+    : client.status === 'expiring' ? 'bg-amber-500/10  text-amber-600  dark:text-amber-400'
+    : client.status === 'debt'     ? 'bg-red-500/10    text-red-600    dark:text-red-400'
+    : 'bg-gray-500/10 text-gray-500 dark:text-gray-400'
+  const dotCls =
+    client.status === 'active'   ? 'bg-emerald-500'
+    : client.status === 'expiring' ? 'bg-amber-500'
+    : client.status === 'debt'     ? 'bg-red-500'
+    : 'bg-gray-400'
+  const paddingCls = size === 'sm' ? 'px-2 py-0.5 rounded-full font-semibold' : 'px-2.5 py-1.5 rounded-lg font-medium'
+
+  return (
+    <div className={`relative group inline-flex ${tooltip ? 'cursor-help' : ''}`}>
+      <span className={`inline-flex items-center gap-1.5 text-xs ${paddingCls} ${badgeCls}`}>
+        <span className={`h-1.5 w-1.5 rounded-full shrink-0 ${dotCls}`} />
+        {getStatusLabel(client.status)}
+      </span>
+      {tooltip && (
+        <div className="absolute bottom-full left-1/2 -translate-x-1/2 mb-2.5 w-60 px-3 py-2.5 rounded-xl bg-gray-900 dark:bg-[#0d0d0d] border border-white/[0.07] text-white text-[11px] leading-relaxed opacity-0 group-hover:opacity-100 pointer-events-none transition-opacity duration-150 z-50 shadow-2xl text-center whitespace-normal">
+          {tooltip}
+          <span className="absolute top-full left-1/2 -translate-x-1/2 border-[5px] border-transparent border-t-gray-900 dark:border-t-[#0d0d0d]" />
+        </div>
+      )}
+    </div>
+  )
+}
 
 const DIA_SHORT: Record<string, string> = {
   lunes: 'Lu', martes: 'Ma', miercoles: 'Mi', 'miércoles': 'Mi',
@@ -371,12 +443,19 @@ export default function ClientProfilePage() {
   const user = useAuthStore(s => s.user)
   const isAdmin = user?.role === 'admin'
 
+  const [navOpen, setNavOpen] = useState(false)
   const [client, setClient] = useState<Client | null>(null)
+  const [ficha, setFicha] = useState<FichaEntrenamiento | null>(null)
   const [payments, setPayments] = useState<Payment[]>([])
   const [attendance, setAttendance] = useState<AttendanceRecord[]>([])
   const [loading, setLoading] = useState(true)
-  const [editOpen, setEditOpen] = useState(false)
+  const [isEditing, setIsEditing] = useState(false)
   const [isSaving, setIsSaving] = useState(false)
+  const [sedes, setSedes] = useState<{ id: string; nombre: string }[]>([])
+  const [eventos, setEventos] = useState<EventoDeportivo[]>([])
+  const [eventoForm, setEventoForm] = useState<{ nombre: string; fecha: string; observacion: string } | null>(null)
+  const [editingEvento, setEditingEvento] = useState<EventoDeportivo | null>(null)
+  const [savingEvento, setSavingEvento] = useState(false)
   const [membershipDetailOpen, setMembershipDetailOpen] = useState(false)
   const [membershipOpen, setMembershipOpen] = useState(true)
 
@@ -404,6 +483,8 @@ export default function ClientProfilePage() {
     resolver: zodResolver(editSchema),
   })
 
+  useEffect(() => { clientsApi.getSedes().then(setSedes).catch(() => {}) }, [])
+
   useEffect(() => {
     if (!id) return
     setLoading(true)
@@ -411,16 +492,30 @@ export default function ClientProfilePage() {
       clientsApi.getById(id),
       paymentsApi.getAll({ clientId: id }),
       attendanceApi.getByClient(id),
-    ]).then(([clientRes, paymentsRes, attendanceRes]) => {
+      clientsApi.getFichaConEventos(id),
+    ]).then(([clientRes, paymentsRes, attendanceRes, fichaRes]) => {
+      const f = fichaRes.status === 'fulfilled' ? fichaRes.value : null
       if (clientRes.status === 'fulfilled') {
         const c = clientRes.value
         setClient(c)
-        reset({ name: c.name, lastName: c.lastName, email: c.email ?? '', phone: c.phone ?? '', dni: c.dni ?? '' })
+        reset({
+          name: c.name, lastName: c.lastName, email: c.email ?? '', phone: c.phone ?? '', dni: c.dni ?? '',
+          sedeId: c.sede?.id ?? '',
+          peso:            f?.peso    != null ? String(f.peso)   : '',
+          altura:          f?.altura  != null ? String(f.altura) : '',
+          actividadDiaria: f?.actividadDiaria  ?? '',
+          objetivos:       f?.objetivos        ?? '',
+          deportePractica: f?.deportePractica  ?? '',
+          experiencia:     f?.experiencia      ?? '',
+          lesiones:        f?.lesiones         ?? '',
+          patologiasBase:  f?.patologiasBase   ?? '',
+        })
       } else {
         addToast('Error al cargar el perfil', 'error')
       }
-      if (paymentsRes.status === 'fulfilled') setPayments(paymentsRes.value)
+      if (paymentsRes.status === 'fulfilled') setPayments(paymentsRes.value.data)
       if (attendanceRes.status === 'fulfilled') setAttendance(attendanceRes.value)
+      if (f !== null) { setFicha(f); setEventos(f.eventos ?? []) }
     }).finally(() => setLoading(false))
   }, [id])
 
@@ -449,18 +544,71 @@ export default function ClientProfilePage() {
     if (!client) return
     setIsSaving(true)
     try {
-      const updated = await clientsApi.update(client.id, {
-        name: data.name, lastName: data.lastName,
-        email: data.email ?? '', phone: data.phone ?? '', dni: data.dni,
-      })
-      setClient(updated)
+      const toNum = (v?: string) => { const n = parseFloat(v ?? ''); return isNaN(n) ? undefined : n }
+      const [clientRes, fichaRes] = await Promise.allSettled([
+        clientsApi.update(client.id, {
+          name: data.name, lastName: data.lastName,
+          email: data.email ?? '', phone: data.phone ?? '', dni: data.dni,
+          sedeId: data.sedeId || null,
+        }),
+        clientsApi.updateFicha(client.id, {
+          peso:            toNum(data.peso),
+          altura:          toNum(data.altura),
+          actividadDiaria: data.actividadDiaria || null,
+          objetivos:       data.objetivos       || null,
+          deportePractica: data.deportePractica  || null,
+          experiencia:     data.experiencia      || null,
+          lesiones:        data.lesiones         || null,
+          patologiasBase:  data.patologiasBase   || null,
+        }),
+      ])
+      if (clientRes.status === 'fulfilled') setClient(clientRes.value)
+      if (fichaRes.status   === 'fulfilled') setFicha(fichaRes.value)
       addToast('Cliente actualizado', 'success')
-      setEditOpen(false)
+      setIsEditing(false)
     } catch {
       addToast('Error al actualizar el cliente', 'error')
     } finally {
       setIsSaving(false)
     }
+  }
+
+  async function handleSaveEvento() {
+    if (!client || !eventoForm || !eventoForm.nombre || !eventoForm.fecha) return
+    setSavingEvento(true)
+    try {
+      if (editingEvento) {
+        const updated = await clientsApi.updateEvento(String(client.id), editingEvento.id, eventoForm)
+        setEventos(prev => prev.map(e => e.id === editingEvento.id ? updated : e))
+        addToast('Evento actualizado', 'success')
+      } else {
+        const created = await clientsApi.createEvento(String(client.id), eventoForm)
+        setEventos(prev => [...prev, created].sort((a, b) => a.fecha.localeCompare(b.fecha)))
+        addToast('Evento agregado', 'success')
+      }
+      setEventoForm(null)
+      setEditingEvento(null)
+    } catch {
+      addToast('Error al guardar el evento', 'error')
+    } finally {
+      setSavingEvento(false)
+    }
+  }
+
+  async function handleDeleteEvento(eventoId: string) {
+    if (!client) return
+    try {
+      await clientsApi.deleteEvento(String(client.id), eventoId)
+      setEventos(prev => prev.filter(e => e.id !== eventoId))
+      addToast('Evento eliminado', 'success')
+    } catch {
+      addToast('Error al eliminar el evento', 'error')
+    }
+  }
+
+  function startEditEvento(ev: EventoDeportivo) {
+    setEditingEvento(ev)
+    setEventoForm({ nombre: ev.nombre, fecha: ev.fecha.slice(0, 10), observacion: ev.observacion ?? '' })
   }
 
   async function handleDarDeBaja(inscripcionId: string) {
@@ -552,11 +700,12 @@ export default function ClientProfilePage() {
           </div>
 
           {/* Contenedor 2: Tablas */}
-          <div className="px-5 md:px-7 pt-3 md:pt-4 pb-5 md:pb-7">
+          <div className="px-5 md:px-7 pt-3 md:pt-4 pb-5 md:pb-7 space-y-6">
             <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-              <div className={`h-36 rounded-2xl ${pulse}`} />
-              <div className={`h-36 rounded-2xl ${pulse}`} />
+              <div className={`h-44 rounded-2xl ${pulse}`} />
+              <div className={`h-44 rounded-2xl ${pulse}`} />
             </div>
+            <div className={`h-36 rounded-2xl ${pulse}`} />
           </div>
         </div>
 
@@ -652,7 +801,7 @@ export default function ClientProfilePage() {
       </button>
 
       {/* ── HERO CARD ───────────────────────────────────────────────────────── */}
-      <div className={`${glassCard} overflow-hidden`}>
+      <div id="perfil" className={`${glassCard} overflow-hidden`}>
         {/* Accent bar (status color) */}
         <div className={`h-1 w-full ${statusBarColor(client.status)}`} />
 
@@ -676,31 +825,44 @@ export default function ClientProfilePage() {
                   </p>
                 </div>
                 <div className="flex items-center gap-2 shrink-0">
-                  <span className={`inline-flex items-center gap-1.5 text-xs font-medium px-2.5 py-1.5 rounded-lg ${client.status === 'active' ? 'bg-emerald-500/10 text-emerald-600 dark:text-emerald-400'
-                    : client.status === 'expiring' ? 'bg-amber-500/10 text-amber-600 dark:text-amber-400'
-                      : client.status === 'debt' ? 'bg-red-500/10 text-red-600 dark:text-red-400'
-                        : 'bg-gray-500/10 text-gray-500 dark:text-gray-400'
-                    }`}>
-                    <span className={`h-1.5 w-1.5 rounded-full ${client.status === 'active' ? 'bg-emerald-500'
-                      : client.status === 'expiring' ? 'bg-amber-500'
-                        : client.status === 'debt' ? 'bg-red-500' : 'bg-gray-400'
-                      }`} />
-                    {getStatusLabel(client.status)}
-                  </span>
+                  <StatusBadge client={client} size="md" />
                   {isAdmin && (
-                    <button
-                      onClick={() => setEditOpen(true)}
-                      className="flex items-center gap-1.5 text-xs font-semibold px-3 py-1.5 rounded-xl border border-gray-200 dark:border-white/[0.1] bg-white/70 dark:bg-white/[0.04] text-gray-700 dark:text-gray-300 hover:bg-white dark:hover:bg-white/[0.09] transition-all"
-                    >
-                      <Edit2 size={12} />
-                      Editar
-                    </button>
+                    isEditing ? (
+                      <div className="flex items-center gap-2">
+                        <button
+                          type="button"
+                          onClick={() => { reset({ name: client.name, lastName: client.lastName, email: client.email ?? '', phone: client.phone ?? '', dni: client.dni ?? '', peso: ficha?.peso != null ? String(ficha.peso) : '', altura: ficha?.altura != null ? String(ficha.altura) : '', actividadDiaria: ficha?.actividadDiaria ?? '', objetivos: ficha?.objetivos ?? '', deportePractica: ficha?.deportePractica ?? '', experiencia: ficha?.experiencia ?? '', lesiones: ficha?.lesiones ?? '', patologiasBase: ficha?.patologiasBase ?? '' }); setIsEditing(false) }}
+                          className="flex items-center gap-1.5 text-xs font-semibold px-3 py-1.5 rounded-xl border border-gray-200 dark:border-white/[0.1] bg-white/70 dark:bg-white/[0.04] text-gray-700 dark:text-gray-300 hover:bg-white dark:hover:bg-white/[0.09] transition-all"
+                        >
+                          <XCircle size={12} />
+                          Cancelar
+                        </button>
+                        <button
+                          type="button"
+                          onClick={handleSubmit(onEdit)}
+                          disabled={isSaving}
+                          className="flex items-center gap-1.5 text-xs font-semibold px-3 py-1.5 rounded-xl bg-primary text-black hover:bg-primary-dark transition-all disabled:opacity-60"
+                        >
+                          <CheckCircle2 size={12} />
+                          {isSaving ? 'Guardando…' : 'Guardar'}
+                        </button>
+                      </div>
+                    ) : (
+                      <button
+                        onClick={() => { reset({ name: client.name, lastName: client.lastName, email: client.email ?? '', phone: client.phone ?? '', dni: client.dni ?? '', peso: ficha?.peso != null ? String(ficha.peso) : '', altura: ficha?.altura != null ? String(ficha.altura) : '', actividadDiaria: ficha?.actividadDiaria ?? '', objetivos: ficha?.objetivos ?? '', deportePractica: ficha?.deportePractica ?? '', experiencia: ficha?.experiencia ?? '', lesiones: ficha?.lesiones ?? '', patologiasBase: ficha?.patologiasBase ?? '' }); setIsEditing(true) }}
+                        className="flex items-center gap-1.5 text-xs font-semibold px-3 py-1.5 rounded-xl border border-gray-200 dark:border-white/[0.1] bg-white/70 dark:bg-white/[0.04] text-gray-700 dark:text-gray-300 hover:bg-white dark:hover:bg-white/[0.09] transition-all"
+                      >
+                        <Edit2 size={12} />
+                        Editar
+                      </button>
+                    )
                   )}
                 </div>
               </div>
             </div>
           </div>
         </div>
+
 
         {/* ── Contenedor 2: Tablas de Datos ───────────────────────────────── */}
         <div className="px-5 md:px-7 pt-3 md:pt-4 pb-5 md:pb-7">
@@ -711,71 +873,79 @@ export default function ClientProfilePage() {
                     <span>Datos Personales</span>
                     <span>Valor</span>
                   </div>
-                  <div className="divide-y divide-gray-100 dark:divide-gray-100 dark:divide-white/[0.04]">
-                    {[
-                      {
-                        label: 'DNI',
-                        value: client.dni || 'Sin DNI',
-                        icon: Hash,
-                        color: 'text-gray-900 dark:text-white font-bold'
-                      },
-                      {
-                        label: 'Email',
-                        value: client.email ? (
-                          <a href={`mailto:${client.email}`} className="text-primary hover:underline transition-all">
-                            {client.email}
-                          </a>
-                        ) : 'Sin email',
-                        icon: Mail,
-                        color: client.email ? 'text-primary font-semibold truncate' : 'text-gray-400 dark:text-gray-500 font-semibold'
-                      },
-                      {
-                        label: 'Teléfono',
-                        value: client.phone ? (
-                          <a
-                            href={`https://wa.me/54${client.phone.replace(/\D/g, '')}`}
-                            target="_blank"
-                            rel="noopener noreferrer"
-                            className="text-emerald-600 dark:text-emerald-400 hover:underline inline-flex items-center gap-1 transition-all"
-                          >
-                            {client.phone}
-                          </a>
-                        ) : 'Sin teléfono',
-                        icon: Phone,
-                        color: client.phone ? 'text-emerald-600 dark:text-emerald-400 font-semibold' : 'text-gray-400 dark:text-gray-500'
-                      },
-                      {
-                        label: 'Estado',
-                        value: (
-                          <span className={`inline-flex items-center gap-1.5 text-xs font-semibold px-2 py-0.5 rounded-full ${client.status === 'active' ? 'bg-emerald-500/10 text-emerald-600 dark:text-emerald-400'
-                            : client.status === 'expiring' ? 'bg-amber-500/10 text-amber-600 dark:text-amber-400'
-                              : client.status === 'debt' ? 'bg-red-500/10 text-red-600 dark:text-red-400'
-                                : 'bg-gray-500/10 text-gray-500 dark:text-gray-400'
-                            }`}>
-                            <span className={`h-1.5 w-1.5 rounded-full ${client.status === 'active' ? 'bg-emerald-500'
-                              : client.status === 'expiring' ? 'bg-amber-500'
-                                : client.status === 'debt' ? 'bg-red-500' : 'bg-gray-400'
-                              }`} />
-                            {getStatusLabel(client.status)}
+                  <div className="divide-y divide-gray-100 dark:divide-white/[0.04]">
+
+                    {/* Filas editables */}
+                    {([
+                      { label: 'Nombre',   regKey: 'name'     as keyof EditValues, Icon: User,  placeholder: 'Sin nombre',   raw: client.name },
+                      { label: 'Apellido', regKey: 'lastName' as keyof EditValues, Icon: User,  placeholder: 'Sin apellido', raw: client.lastName },
+                      { label: 'DNI',      regKey: 'dni'      as keyof EditValues, Icon: Hash,  placeholder: 'Sin DNI',      raw: client.dni },
+                      { label: 'Email',    regKey: 'email'    as keyof EditValues, Icon: Mail,  placeholder: 'Sin email',    raw: client.email },
+                      { label: 'Teléfono', regKey: 'phone'    as keyof EditValues, Icon: Phone, placeholder: 'Sin teléfono', raw: client.phone },
+                    ]).map(({ label, regKey, Icon, placeholder, raw }) => (
+                      <div key={regKey} className="grid grid-cols-2 px-4 py-2.5 hover:bg-black/[0.02] dark:hover:bg-white/[0.01] transition-colors items-start">
+                        <span className="text-gray-500 dark:text-[#8A8A9A] flex items-center gap-1.5 font-semibold pt-1">
+                          <Icon size={12} className="opacity-60 text-gray-400 dark:text-gray-500 shrink-0" />
+                          {label}
+                        </span>
+                        {isEditing ? (
+                          <div className="flex flex-col gap-0.5">
+                            <input
+                              className="w-full bg-white/60 dark:bg-white/[0.06] border border-gray-200 dark:border-white/[0.15] rounded-lg px-2 py-1 text-xs text-gray-900 dark:text-white placeholder-gray-400 focus:outline-none focus:ring-1 focus:ring-primary/60 transition-all"
+                              {...register(regKey)}
+                            />
+                            {errors[regKey] && (
+                              <span className="text-red-400 text-[10px] leading-tight">{errors[regKey]?.message}</span>
+                            )}
+                          </div>
+                        ) : (
+                          <span className="pt-0.5 truncate">
+                            {regKey === 'email' && raw ? (
+                              <a href={`mailto:${raw}`} className="text-primary hover:underline font-semibold transition-all">{raw}</a>
+                            ) : regKey === 'phone' && raw ? (
+                              <a href={`https://wa.me/54${raw.replace(/\D/g, '')}`} target="_blank" rel="noopener noreferrer" className="text-emerald-600 dark:text-emerald-400 hover:underline font-semibold">{raw}</a>
+                            ) : raw ? (
+                              <span className="text-gray-900 dark:text-white font-semibold">{raw}</span>
+                            ) : (
+                              <span className="text-gray-400 dark:text-gray-500">{placeholder}</span>
+                            )}
                           </span>
-                        ),
-                        icon: CheckCircle2,
-                        color: ''
-                      }
-                    ].map((row, idx) => {
-                      const Icon = row.icon
-                      return (
-                        <div key={idx} className="grid grid-cols-2 px-4 py-2.5 hover:bg-black/[0.02] dark:hover:bg-white/[0.01] transition-colors items-center">
-                          <span className="text-gray-500 dark:text-[#8A8A9A] flex items-center gap-1.5 font-semibold">
-                            <Icon size={12} className="opacity-60 text-gray-400 dark:text-gray-500" />
-                            {row.label}
-                          </span>
-                          <span className={`${row.color} truncate`}>
-                            {row.value}
-                          </span>
-                        </div>
-                      )
-                    })}
+                        )}
+                      </div>
+                    ))}
+
+                    {/* Estado — solo lectura */}
+                    <div className="grid grid-cols-2 px-4 py-2.5 hover:bg-black/[0.02] dark:hover:bg-white/[0.01] transition-colors items-center">
+                      <span className="text-gray-500 dark:text-[#8A8A9A] flex items-center gap-1.5 font-semibold">
+                        <CheckCircle2 size={12} className="opacity-60 text-gray-400 dark:text-gray-500" />
+                        Estado
+                      </span>
+                      <StatusBadge client={client} size="sm" />
+                    </div>
+
+                    {/* Sede */}
+                    <div className="grid grid-cols-2 px-4 py-2.5 hover:bg-black/[0.02] dark:hover:bg-white/[0.01] transition-colors items-center">
+                      <span className="text-gray-500 dark:text-[#8A8A9A] flex items-center gap-1.5 font-semibold">
+                        <MapPin size={12} className="opacity-60 text-gray-400 dark:text-gray-500" />
+                        Sede
+                      </span>
+                      {isEditing ? (
+                        <select
+                          className="w-full bg-white/60 dark:bg-white/[0.06] border border-gray-200 dark:border-white/[0.15] rounded-lg px-2 py-1 text-xs text-gray-900 dark:text-white focus:outline-none focus:ring-1 focus:ring-primary/60 transition-all"
+                          {...register('sedeId')}
+                        >
+                          <option value="">— Sin sede —</option>
+                          {sedes.map(s => (
+                            <option key={s.id} value={s.id}>{s.nombre}</option>
+                          ))}
+                        </select>
+                      ) : (
+                        <span className={client.sede ? 'text-gray-900 dark:text-white font-semibold' : 'text-gray-400 dark:text-gray-500'}>
+                          {client.sede?.nombre ?? 'Sin sede'}
+                        </span>
+                      )}
+                    </div>
+
                   </div>
                 </div>
 
@@ -828,36 +998,278 @@ export default function ClientProfilePage() {
                   </div>
                 </div>
           </div>
+
+          {/* ── Ficha + Calendario en grid ──────────────────────────────────── */}
+          <div className="mt-6 grid grid-cols-1 lg:grid-cols-2 gap-6 items-start">
+
+            {/* Ficha de Entrenamiento */}
+            <div className="rounded-2xl border border-gray-200/60 dark:border-white/[0.08] bg-white/20 dark:bg-white/[0.01] overflow-hidden text-xs">
+              <div className="grid grid-cols-2 border-b border-gray-200/60 dark:border-white/[0.06] bg-gray-50/50 dark:bg-white/[0.02] px-4 py-2.5 font-bold text-gray-500 dark:text-[#8A8A9A]">
+                <span>Ficha de Entrenamiento</span>
+                <span>Detalle</span>
+              </div>
+              <div className="grid grid-cols-1 md:grid-cols-2 divide-y md:divide-y-0 md:divide-x divide-gray-100 dark:divide-white/[0.04]">
+                {/* Columna izquierda */}
+                <div className="divide-y divide-gray-100 dark:divide-white/[0.04]">
+                  {/* Actividad diaria */}
+                  <div className="grid grid-cols-2 px-4 py-2.5 hover:bg-black/[0.02] dark:hover:bg-white/[0.01] transition-colors items-start">
+                    <span className="text-gray-500 dark:text-[#8A8A9A] flex items-center gap-1.5 font-semibold pt-1">
+                      <Activity size={12} className="opacity-60 text-gray-400 dark:text-gray-500 shrink-0" />
+                      Actividad
+                    </span>
+                    {isEditing ? (
+                      <select
+                        className="w-full bg-white/60 dark:bg-white/[0.06] border border-gray-200 dark:border-white/[0.15] rounded-lg px-2 py-1 text-xs text-gray-900 dark:text-white focus:outline-none focus:ring-1 focus:ring-primary/60 transition-all"
+                        {...register('actividadDiaria')}
+                      >
+                        {ACTIVIDAD_OPTIONS.map(o => <option key={o.value} value={o.value}>{o.label}</option>)}
+                      </select>
+                    ) : (
+                      <span className={ficha?.actividadDiaria ? 'text-gray-900 dark:text-white font-semibold pt-0.5' : 'text-gray-400 dark:text-gray-500 pt-0.5'}>
+                        {ficha?.actividadDiaria ? (ACTIVIDAD_LABELS[ficha.actividadDiaria] ?? ficha.actividadDiaria) : '—'}
+                      </span>
+                    )}
+                  </div>
+                  {/* Objetivos */}
+                  {([
+                    { label: 'Objetivos', regKey: 'objetivos' as const, Icon: Tag,      raw: ficha?.objetivos },
+                    { label: 'Deporte',   regKey: 'deportePractica' as const, Icon: Dumbbell, raw: ficha?.deportePractica },
+                    { label: 'Experiencia', regKey: 'experiencia' as const, Icon: BookOpen, raw: ficha?.experiencia },
+                  ]).map(({ label, regKey, Icon, raw }) => (
+                    <div key={regKey} className="grid grid-cols-2 px-4 py-2.5 hover:bg-black/[0.02] dark:hover:bg-white/[0.01] transition-colors items-start">
+                      <span className="text-gray-500 dark:text-[#8A8A9A] flex items-center gap-1.5 font-semibold pt-1">
+                        <Icon size={12} className="opacity-60 text-gray-400 dark:text-gray-500 shrink-0" />
+                        {label}
+                      </span>
+                      {isEditing ? (
+                        <input
+                          className="w-full bg-white/60 dark:bg-white/[0.06] border border-gray-200 dark:border-white/[0.15] rounded-lg px-2 py-1 text-xs text-gray-900 dark:text-white placeholder-gray-400 focus:outline-none focus:ring-1 focus:ring-primary/60 transition-all"
+                          {...register(regKey)}
+                        />
+                      ) : (
+                        <span className={raw ? 'text-gray-900 dark:text-white font-semibold pt-0.5' : 'text-gray-400 dark:text-gray-500 pt-0.5'}>
+                          {raw ?? '—'}
+                        </span>
+                      )}
+                    </div>
+                  ))}
+                </div>
+                {/* Columna derecha */}
+                <div className="divide-y divide-gray-100 dark:divide-white/[0.04]">
+                  {/* Peso y Altura con unidades */}
+                  {([
+                    { label: 'Peso',   regKey: 'peso'   as const, Icon: Activity, unit: 'kg', raw: ficha?.peso   && ficha.peso   > 20 ? `${ficha.peso} kg`   : null },
+                    { label: 'Altura', regKey: 'altura' as const, Icon: Activity, unit: 'cm', raw: ficha?.altura && ficha.altura > 50 ? `${ficha.altura} cm` : null },
+                  ]).map(({ label, regKey, Icon, unit, raw }) => (
+                    <div key={regKey} className="grid grid-cols-2 px-4 py-2.5 hover:bg-black/[0.02] dark:hover:bg-white/[0.01] transition-colors items-start">
+                      <span className="text-gray-500 dark:text-[#8A8A9A] flex items-center gap-1.5 font-semibold pt-1">
+                        <Icon size={12} className="opacity-60 text-gray-400 dark:text-gray-500 shrink-0" />
+                        {label}
+                      </span>
+                      {isEditing ? (
+                        <div className="flex items-center gap-1">
+                          <input
+                            type="number"
+                            className="w-full bg-white/60 dark:bg-white/[0.06] border border-gray-200 dark:border-white/[0.15] rounded-lg px-2 py-1 text-xs text-gray-900 dark:text-white placeholder-gray-400 focus:outline-none focus:ring-1 focus:ring-primary/60 transition-all"
+                            {...register(regKey)}
+                          />
+                          <span className="text-gray-400 shrink-0">{unit}</span>
+                        </div>
+                      ) : (
+                        <span className={raw ? 'text-gray-900 dark:text-white font-semibold pt-0.5' : 'text-gray-400 dark:text-gray-500 pt-0.5'}>
+                          {raw ?? '—'}
+                        </span>
+                      )}
+                    </div>
+                  ))}
+                  {/* Lesiones y Patologías */}
+                  {([
+                    { label: 'Lesiones',   regKey: 'lesiones'  as const, Icon: AlertTriangle, raw: ficha?.lesiones },
+                    { label: 'Patologías', regKey: 'patologiasBase' as const, Icon: Receipt,  raw: ficha?.patologiasBase },
+                  ]).map(({ label, regKey, Icon, raw }) => (
+                    <div key={regKey} className="grid grid-cols-2 px-4 py-2.5 hover:bg-black/[0.02] dark:hover:bg-white/[0.01] transition-colors items-start">
+                      <span className="text-gray-500 dark:text-[#8A8A9A] flex items-center gap-1.5 font-semibold pt-1">
+                        <Icon size={12} className="opacity-60 text-gray-400 dark:text-gray-500 shrink-0" />
+                        {label}
+                      </span>
+                      {isEditing ? (
+                        <input
+                          className="w-full bg-white/60 dark:bg-white/[0.06] border border-gray-200 dark:border-white/[0.15] rounded-lg px-2 py-1 text-xs text-gray-900 dark:text-white placeholder-gray-400 focus:outline-none focus:ring-1 focus:ring-primary/60 transition-all"
+                          {...register(regKey)}
+                        />
+                      ) : (
+                        <span className={raw ? 'text-gray-900 dark:text-white font-semibold pt-0.5' : 'text-gray-400 dark:text-gray-500 pt-0.5'}>
+                          {raw ?? '—'}
+                        </span>
+                      )}
+                    </div>
+                  ))}
+                </div>
+              </div>
+            </div>
+
+            {/* Calendario Deportivo */}
+            <div className="rounded-2xl border border-gray-200/60 dark:border-white/[0.08] bg-white/20 dark:bg-white/[0.01] overflow-hidden">
+              {/* Header */}
+              <div className="flex items-center justify-between px-4 py-2.5 border-b border-gray-200/60 dark:border-white/[0.06] bg-gray-50/50 dark:bg-white/[0.02]">
+                <span className="flex items-center gap-1.5 text-xs font-bold text-gray-500 dark:text-[#8A8A9A]">
+                  <Trophy size={12} className="opacity-70" />
+                  Calendario Deportivo
+                </span>
+                {isAdmin && !eventoForm && (
+                  <button
+                    onClick={() => { setEditingEvento(null); setEventoForm({ nombre: '', fecha: '', observacion: '' }) }}
+                    className="flex items-center gap-1 text-[11px] font-semibold text-primary hover:text-primary-dark transition-colors"
+                  >
+                    <Plus size={11} /> Agregar
+                  </button>
+                )}
+              </div>
+
+              {/* Formulario nuevo/editar evento */}
+              {eventoForm && (
+                <div className="px-4 py-3 border-b border-gray-200/60 dark:border-white/[0.06] bg-primary/[0.03] flex flex-col gap-2">
+                  <div className="flex flex-col gap-1">
+                    <label className="text-[10px] font-semibold text-gray-500 dark:text-[#8A8A9A] uppercase tracking-wider">Nombre</label>
+                    <input
+                      autoFocus
+                      value={eventoForm.nombre}
+                      onChange={e => setEventoForm(f => f ? { ...f, nombre: e.target.value } : f)}
+                      placeholder="Ej: Torneo provincial"
+                      className="w-full bg-white/60 dark:bg-white/[0.06] border border-gray-200 dark:border-white/[0.15] rounded-lg px-2.5 py-1.5 text-xs text-gray-900 dark:text-white placeholder-gray-400 focus:outline-none focus:ring-1 focus:ring-primary/60 transition-all"
+                    />
+                  </div>
+                  <div className="flex flex-col gap-1">
+                    <label className="text-[10px] font-semibold text-gray-500 dark:text-[#8A8A9A] uppercase tracking-wider">Fecha</label>
+                    <input
+                      type="date"
+                      value={eventoForm.fecha}
+                      onChange={e => setEventoForm(f => f ? { ...f, fecha: e.target.value } : f)}
+                      className="w-full bg-white/60 dark:bg-white/[0.06] border border-gray-200 dark:border-white/[0.15] rounded-lg px-2.5 py-1.5 text-xs text-gray-900 dark:text-white focus:outline-none focus:ring-1 focus:ring-primary/60 transition-all"
+                    />
+                  </div>
+                  <div className="flex flex-col gap-1">
+                    <label className="text-[10px] font-semibold text-gray-500 dark:text-[#8A8A9A] uppercase tracking-wider">Observación</label>
+                    <input
+                      value={eventoForm.observacion}
+                      onChange={e => setEventoForm(f => f ? { ...f, observacion: e.target.value } : f)}
+                      placeholder="Opcional"
+                      className="w-full bg-white/60 dark:bg-white/[0.06] border border-gray-200 dark:border-white/[0.15] rounded-lg px-2.5 py-1.5 text-xs text-gray-900 dark:text-white placeholder-gray-400 focus:outline-none focus:ring-1 focus:ring-primary/60 transition-all"
+                    />
+                  </div>
+                  <div className="flex gap-1.5">
+                    <button
+                      onClick={() => { setEventoForm(null); setEditingEvento(null) }}
+                      className="flex items-center gap-1 px-2.5 py-1.5 rounded-lg text-[11px] font-semibold border border-gray-200 dark:border-white/[0.1] text-gray-500 hover:bg-gray-50 dark:hover:bg-white/[0.04] transition-all"
+                    >
+                      <XCircle size={11} /> Cancelar
+                    </button>
+                    <button
+                      onClick={handleSaveEvento}
+                      disabled={savingEvento || !eventoForm.nombre || !eventoForm.fecha}
+                      className="flex items-center gap-1 px-2.5 py-1.5 rounded-lg text-[11px] font-semibold bg-primary text-black hover:bg-primary-dark disabled:opacity-50 transition-all"
+                    >
+                      <Save size={11} /> {savingEvento ? 'Guardando…' : editingEvento ? 'Actualizar' : 'Guardar'}
+                    </button>
+                  </div>
+                </div>
+              )}
+
+              {/* Lista de eventos */}
+              {eventos.length === 0 && !eventoForm ? (
+                <div className="px-4 py-4 text-center text-xs text-gray-400 dark:text-[#4B4B5A]">
+                  Sin eventos registrados
+                </div>
+              ) : (
+                <div className="flex flex-wrap gap-2 px-4 py-3">
+                  {eventos.map(ev => {
+                    const evDate  = parseISO(ev.fecha)
+                    const isPast  = evDate < new Date()
+                    const isEditing = editingEvento?.id === ev.id
+                    return (
+                      <div
+                        key={ev.id}
+                        className={`group relative flex items-center gap-2 px-3 py-1.5 rounded-full text-xs font-semibold border transition-all ${
+                          isEditing
+                            ? 'border-primary/50 bg-primary/10 text-primary'
+                            : isPast
+                            ? 'border-gray-200 dark:border-white/[0.08] bg-gray-100/60 dark:bg-white/[0.03] text-gray-400 dark:text-[#4B4B5A]'
+                            : 'border-primary/30 bg-primary/10 dark:bg-primary/[0.08] text-gray-800 dark:text-white'
+                        }`}
+                      >
+                        <Trophy size={10} className={isPast ? 'opacity-40' : 'text-primary'} />
+                        <span>{ev.nombre}</span>
+                        <span className={`text-[10px] ${isPast ? 'opacity-50' : 'opacity-70'}`}>
+                          {format(evDate, "d MMM yyyy", { locale: es })}
+                        </span>
+                        {isAdmin && !eventoForm && (
+                          <div className="flex items-center gap-0.5 ml-1 opacity-0 group-hover:opacity-100 transition-opacity">
+                            <button onClick={() => startEditEvento(ev)} className="p-0.5 rounded hover:text-primary transition-colors">
+                              <Edit2 size={10} />
+                            </button>
+                            <button onClick={() => handleDeleteEvento(ev.id)} className="p-0.5 rounded hover:text-red-400 transition-colors">
+                              <Trash2 size={10} />
+                            </button>
+                          </div>
+                        )}
+                      </div>
+                    )
+                  })}
+                </div>
+              )}
+            </div>
+          </div>
+
         </div>
       </div>
 
       {/* ─── CONTENEDOR PRINCIPAL CON SIDEBAR INDEX FIJO PEgado a la pared izquierda ──────────────────────── */}
       <div className="relative w-full mt-6">
-        {/* Sidebar Index (Fixed on Left Viewport Wall) */}
-        <div className="hidden lg:block fixed left-4 xl:left-6 top-[32vh] z-30 w-36 xl:w-44 space-y-4">
-          <div className={`${glassCard} p-4 bg-white/20 dark:bg-black/45 backdrop-blur-2xl border border-gray-200 dark:border-white/[0.08]`}>
-            <p className="text-[10px] font-bold uppercase tracking-wider text-gray-400 dark:text-[#6A6A7A] mb-3 px-2">
-              Navegación
-            </p>
-            <div className="space-y-1">
-              {[
-                { id: 'rutinas', label: 'Rutinas', icon: BookOpen },
-                { id: 'clases', label: 'Clases', icon: Dumbbell },
-                { id: 'asistencia', label: 'Asistencia', icon: Activity },
-                { id: 'pagos', label: 'Pagos y Fact.', icon: CreditCard },
-              ].map(item => {
-                const Icon = item.icon
-                return (
-                  <button
-                    key={item.id}
-                    onClick={() => scrollToSection(item.id)}
-                    className="w-full flex items-center gap-2.5 px-3 py-2.5 rounded-xl text-xs font-semibold transition-all text-left text-gray-500 dark:text-[#8A8A9A] hover:text-gray-900 dark:hover:text-white hover:bg-white/[0.05]"
-                  >
-                    <Icon size={14} className="opacity-60 group-hover:opacity-100" />
-                    <span>{item.label}</span>
-                  </button>
-                )
-              })}
+        {/* Sidebar Index — colapsable desde la izquierda */}
+        <div
+          className="hidden lg:block fixed left-4 xl:left-6 top-[32vh] z-30 transition-transform duration-300 ease-in-out"
+          style={{ transform: navOpen ? 'translateX(0)' : 'translateX(calc(-100% + 12px))' }}
+        >
+          <div className="relative w-32 xl:w-40 rounded-2xl border border-gray-200/60 dark:border-white/[0.08] bg-white/70 dark:bg-black/50 backdrop-blur-2xl shadow-lg">
+
+            {/* Flecha — borde derecho integrado, sin separador */}
+            <button
+              onClick={() => setNavOpen(v => !v)}
+              className="absolute right-0 top-0 bottom-0 w-3 flex items-center justify-center rounded-r-2xl hover:bg-primary/10 transition-colors"
+              title={navOpen ? 'Ocultar' : 'Mostrar navegación'}
+            >
+              <ChevronRight
+                size={11}
+                className={`text-gray-400 dark:text-[#6A6A7A] transition-transform duration-300 ${navOpen ? 'rotate-180' : ''}`}
+              />
+            </button>
+
+            {/* Contenido */}
+            <div className="p-4 pr-5">
+              <p className="text-[10px] font-bold uppercase tracking-wider text-gray-400 dark:text-[#6A6A7A] mb-3 px-1">
+                Navegación
+              </p>
+              <div className="space-y-1">
+                {[
+                  { id: 'perfil',     label: 'Perfil',     icon: User       },
+                  { id: 'rutinas',    label: 'Rutinas',    icon: BookOpen   },
+                  { id: 'clases',     label: 'Clases',     icon: Dumbbell   },
+                  { id: 'asistencia', label: 'Asistencia', icon: Activity   },
+                  { id: 'pagos',      label: 'Pagos',      icon: CreditCard },
+                ].map(item => {
+                  const Icon = item.icon
+                  return (
+                    <button
+                      key={item.id}
+                      onClick={() => scrollToSection(item.id)}
+                      className="w-full flex items-center gap-2 px-2 py-2.5 rounded-xl text-xs font-semibold transition-all text-left text-gray-500 dark:text-[#8A8A9A] hover:text-gray-900 dark:hover:text-white hover:bg-black/[0.04] dark:hover:bg-white/[0.05]"
+                    >
+                      <Icon size={13} className="shrink-0 opacity-60" />
+                      <span>{item.label}</span>
+                    </button>
+                  )
+                })}
+              </div>
             </div>
           </div>
         </div>
@@ -878,7 +1290,7 @@ export default function ClientProfilePage() {
               </div>
               {(isAdmin || user?.role === 'profesor') && (
                 <button
-                  onClick={() => navigate(`/clients/${id}/rutina`)}
+                  onClick={() => navigate(`/rutinas/crear?clienteId=${id}`)}
                   className="flex items-center gap-2 rounded-xl btn-action px-4 py-2.5 text-sm"
                 >
                   <Plus size={13} /> Nueva rutina
@@ -907,7 +1319,7 @@ export default function ClientProfilePage() {
                 <p className="text-sm text-gray-500 dark:text-[#8A8A9A]">Sin rutinas registradas</p>
                 {(isAdmin || user?.role === 'profesor') && (
                   <button
-                    onClick={() => navigate(`/clients/${id}/rutina`)}
+                    onClick={() => navigate(`/rutinas/crear?clienteId=${id}`)}
                     className="text-xs text-primary hover:underline"
                   >
                     Crear la primera rutina →
@@ -924,7 +1336,7 @@ export default function ClientProfilePage() {
                     <h4 className="text-xs font-bold uppercase tracking-widest text-gray-500 dark:text-[#8A8A9A] mb-1 px-1">Rutina Activa</h4>
                     {activa ? (
                       <div
-                        onClick={() => navigate(`/clients/${id}/rutina`)}
+                        onClick={() => navigate(`/clients/${id}/rutina?rid=${activa.id}`)}
                         className="group relative flex flex-col justify-between p-5 rounded-2xl border border-primary/20 bg-primary/[0.02] hover:bg-primary/[0.04] transition-all cursor-pointer overflow-hidden min-h-[140px]"
                       >
                         <div className="absolute inset-y-0 left-0 w-[4px] bg-primary rounded-full" />
@@ -967,7 +1379,7 @@ export default function ClientProfilePage() {
                         {inactivas.map((rutina: Rutina) => (
                           <div
                             key={rutina.id}
-                            onClick={() => navigate(`/clients/${id}/rutina`)}
+                            onClick={() => navigate(`/clients/${id}/rutina?rid=${rutina.id}`)}
                             className="w-full flex items-center gap-3 px-3 py-2.5 rounded-xl border border-gray-200 dark:border-white/[0.05] bg-white/40 dark:bg-white/[0.01] hover:bg-white/70 dark:hover:bg-white/[0.04] transition-all text-left cursor-pointer group"
                           >
                             <div className="h-8 w-8 rounded-lg bg-gray-500/10 flex items-center justify-center shrink-0">
@@ -1528,22 +1940,6 @@ export default function ClientProfilePage() {
         })()}
       </Modal>
 
-      {/* ── MODAL EDICIÓN ───────────────────────────────────────────────────── */}
-      <Modal isOpen={editOpen} onClose={() => setEditOpen(false)} title="Editar cliente" size="md">
-        <form onSubmit={handleSubmit(onEdit)} className="space-y-4">
-          <div className="grid grid-cols-2 gap-4">
-            <Input label="Nombre *" error={errors.name?.message}     {...register('name')} />
-            <Input label="Apellido *" error={errors.lastName?.message}  {...register('lastName')} />
-          </div>
-          <Input label="DNI *" error={errors.dni?.message}   {...register('dni')} />
-          <Input label="Email" type="email" error={errors.email?.message}  {...register('email')} />
-          <Input label="Teléfono" error={errors.phone?.message} {...register('phone')} />
-          <div className="flex justify-end gap-2 pt-2">
-            <Button variant="ghost" type="button" onClick={() => setEditOpen(false)}>Cancelar</Button>
-            <Button type="submit" isLoading={isSaving}>Guardar cambios</Button>
-          </div>
-        </form>
-      </Modal>
     </motion.div>
   )
 }

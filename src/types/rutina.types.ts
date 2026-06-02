@@ -45,6 +45,7 @@ export interface Semana {
   rutinaId: string
   numero: number
   nombre?: string
+  observaciones?: string
   sesiones: Sesion[]
 }
 
@@ -112,8 +113,34 @@ export type PatronMovimientoEnum =
   | 'TRACCION'
   | 'HIBRIDO'
   | 'HOMBROS'
+  | 'CORE'
+  | 'POTENCIA'
+  | 'PLIO_MI'
+  | 'PLIO_MS'
+  | 'ISO_MI'
+  | 'ISO_MS'
   | 'ACCESORIO'
   | 'OTROS'
+
+export interface EventoDeportivo {
+  id: string
+  nombre: string
+  fecha: string
+  observacion?: string
+}
+
+export interface FichaEntrenamiento {
+  id: string
+  peso?: number
+  altura?: number
+  actividadDiaria?: string
+  patologiasBase?: string
+  lesiones?: string
+  objetivos?: string
+  experiencia?: string
+  deportePractica?: string
+  eventos: EventoDeportivo[]
+}
 
 export type TipoDistribucion = 'FULL_BODY' | 'ARM_LEG' | 'PUSH_PULL' | 'CUSTOM'
 
@@ -205,6 +232,28 @@ export interface ClienteResumen {
   rutinaActivaNombre: string | null
 }
 
+// ─── Tipos wizard semanas (Paso 5 tabla inline) ───────────────────────────────
+
+export interface WSemanaDraft {
+  _id: string
+  numero: number
+  nombre?: string
+  sesiones: WSesionDraft[]
+}
+
+export interface WSesionDraft {
+  _id: string
+  dia: string
+  bloques: WBloqueDraft[]
+}
+
+export interface WBloqueDraft {
+  _id: string
+  letra: string
+  patronMovimiento: PatronMovimientoEnum | null
+  ejercicios: EjercicioDraft[]
+}
+
 export interface WizardState {
   paso: number
   modo: WizardModo
@@ -221,6 +270,9 @@ export interface WizardState {
 
   // Pasos 4-5
   sesiones: SesionDraft[]
+
+  // Paso 5 — tabla inline semanas (nuevo)
+  semanasWizard: WSemanaDraft[]
 
   // Paso 6
   nombre: string

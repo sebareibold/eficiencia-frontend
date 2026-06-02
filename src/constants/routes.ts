@@ -23,5 +23,6 @@ export const ROUTES = {
   PLANTILLA_NEW: '/plantillas/new',
   PLANTILLA_DETAIL: '/plantillas/:id',
   EJECUCION: '/ejecucion',
+  EJECUCION_RUTINA: '/ejecucion/:clienteId',
   RUTINA_CREAR: '/rutinas/crear',
 } as const

@@ -1,8 +1,8 @@
-export type Dificultad = 'FACIL' | 'INTERMEDIO' | 'AVANZADO'
+export type Dificultad = 'FACIL' | 'DIFICIL' | 'AVANZADO'
 
 export const DIFICULTAD_LABELS: Record<Dificultad, string> = {
   FACIL: 'Fácil',
-  INTERMEDIO: 'Intermedio',
+  DIFICIL: 'Difícil',
   AVANZADO: 'Avanzado',
 }
 
