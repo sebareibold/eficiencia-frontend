@@ -27,6 +27,7 @@ import type { EjercicioCatalogo } from '../types/ejercicio-catalogo.types'
 // ─── Constantes y helpers ─────────────────────────────────────────────────────
 
 const PATRON_LABELS: Record<PatronMovimientoEnum, string> = {
+  MOVILIDAD:         'Movilidad',
   RODILLA_DOMINANTE: 'Rodilla dominante',
   CADERA_DOMINANTE:  'Cadera dominante',
   EMPUJE:            'Empuje',
@@ -44,6 +45,7 @@ const PATRON_LABELS: Record<PatronMovimientoEnum, string> = {
 }
 
 const PATRON_SHORT: Record<PatronMovimientoEnum, string> = {
+  MOVILIDAD:         'Movilidad',
   RODILLA_DOMINANTE: 'Rodilla',
   CADERA_DOMINANTE:  'Cadera',
   EMPUJE:            'Empuje',
@@ -81,7 +83,7 @@ const PERIODO_LABELS: Record<PeriodoEntrenamiento, string> = {
   MANTENIMIENTO:  'Mantenimiento',
 }
 
-const STEP_LABELS = ['Cliente', 'Sesiones', 'Plantilla', 'Estructura', 'Ejercicios', 'Config', 'Confirmar']
+const STEP_LABELS = ['Cliente', 'Sesiones', 'Plantilla', 'Ejercicios', 'Config', 'Confirmar']
 
 const LETRAS = ['A', 'B', 'C', 'D', 'E', 'F', 'G', 'H']
 
@@ -573,7 +575,7 @@ function StepperHeader({ currentStep, modo }: { currentStep: number; modo: Wizar
         const stepNum = idx + 1
         const done = currentStep > stepNum
         const curr = currentStep === stepNum
-        const skipped = modo === 'mesociclo' && stepNum <= 4 && currentStep > stepNum
+        const skipped = modo === 'mesociclo' && stepNum <= 3 && currentStep > stepNum
 
         return (
           <div key={stepNum} className="flex-1 flex flex-col items-center relative">
@@ -1630,12 +1632,8 @@ export default function CreateRutinaPage() {
         ? state.sesiones
         : generarEstructuraVacia(state.sesionesSemanales ?? 3)
       dispatch({ type: 'SET_PLANTILLA', plantillaId: null, sinPlantilla: true, sesiones })
-      if (!alreadyFilled) {
-        // Salto directo a Paso 5 — inicializar semanasWizard después de que las sesiones estén en el state
-        // El dispatch es síncrono en el mismo render, así que INIT_WIZARD_SEMANAS lo tomará del nuevo state
-        dispatch({ type: 'INIT_WIZARD_SEMANAS' })
-      }
-      dispatch({ type: 'SET_PASO', paso: alreadyFilled ? 4 : 5 })
+      dispatch({ type: 'INIT_WIZARD_SEMANAS' })
+      dispatch({ type: 'SET_PASO', paso: 4 })
     }
 
     if (loading) {
@@ -1682,17 +1680,22 @@ export default function CreateRutinaPage() {
                   <span className="text-[10px] text-gray-500">{p.cantidadSesiones} sesiones</span>
                 </div>
               </div>
-              {/* Preview estructura */}
-              <div className="shrink-0 flex gap-1.5">
+              {/* Preview difuso — simula la vista de rutina */}
+              <div className="shrink-0 flex gap-1 items-start pt-0.5">
                 {p.sesiones.slice(0, state.sesionesSemanales ?? p.cantidadSesiones).map((s, si) => (
-                  <div key={si} className="flex flex-col gap-1">
-                    {s.bloques.map((b, bi) => (
+                  <div key={si} className="w-8 space-y-[3px]">
+                    {/* Header de sesión — barra accent */}
+                    <div className="h-[3px] w-full rounded-full bg-primary/30" />
+                    {/* Bloques A y B fijos (movilidad/core) — leve amarillo */}
+                    <div className="h-[3px] w-4/5 rounded-full bg-primary/20" />
+                    <div className="h-[3px] w-3/5 rounded-full bg-primary/15" />
+                    {/* Bloques variables C/D/E — líneas difusas blancas */}
+                    {[0.9, 0.7, 0.85, 0.6, 0.75, 0.5].map((w, li) => (
                       <div
-                        key={bi}
-                        className="text-[8px] font-bold px-1.5 py-0.5 rounded bg-white/[0.06] text-gray-400 whitespace-nowrap"
-                      >
-                        {PATRON_SHORT[b.patronMovimiento] ?? '?'}
-                      </div>
+                        key={li}
+                        className="h-[3px] rounded-full bg-white/[0.1]"
+                        style={{ width: `${w * 100}%` }}
+                      />
                     ))}
                   </div>
                 ))}
@@ -1728,92 +1731,7 @@ export default function CreateRutinaPage() {
 
   // ── Paso 4 — Revisar y ajustar estructura ──────────────────────────────────
 
-  function Paso4() {
-    return (
-      <div className="space-y-4">
-        <div className="grid gap-4" style={{ gridTemplateColumns: `repeat(${state.sesiones.length}, minmax(0, 1fr))` }}>
-          {state.sesiones.map(sesion => (
-            <div key={sesion._id} className="space-y-2">
-              <p className="text-[10px] font-bold uppercase tracking-wider text-gray-400 text-center">
-                Sesión {sesion.numero}
-              </p>
-
-              {sesion.bloques.map(bloque => (
-                <div
-                  key={bloque._id}
-                  className="rounded-xl border border-white/[0.08] bg-white/[0.03] p-3 space-y-2"
-                >
-                  <div className="flex items-center justify-between">
-                    <span className="text-xs font-black text-primary">Bloque {bloque.letra}</span>
-                    <button
-                      type="button"
-                      onClick={() => dispatch({ type: 'DELETE_BLOQUE', sesionId: sesion._id, bloqueId: bloque._id })}
-                      className="h-5 w-5 flex items-center justify-center rounded-md text-gray-600 hover:text-red-400 hover:bg-red-500/10 transition-colors"
-                    >
-                      <X size={10} />
-                    </button>
-                  </div>
-
-                  <select
-                    value={bloque.patronMovimiento ?? ''}
-                    onChange={e => dispatch({
-                      type: 'UPDATE_BLOQUE',
-                      sesionId: sesion._id,
-                      bloqueId: bloque._id,
-                      changes: { patronMovimiento: (e.target.value as PatronMovimientoEnum) || null },
-                    })}
-                    className="w-full text-xs rounded-lg border border-white/[0.08] bg-white/[0.05] px-2 py-1.5 text-white focus:border-primary focus:outline-none transition-colors"
-                  >
-                    <option value="">Sin patrón</option>
-                    {(Object.keys(PATRON_LABELS) as PatronMovimientoEnum[]).map(p => (
-                      <option key={p} value={p}>{PATRON_LABELS[p]}</option>
-                    ))}
-                  </select>
-
-                  <div className="flex items-center gap-2">
-                    <span className="text-[10px] text-gray-500 shrink-0">Ejercicios:</span>
-                    <input
-                      type="number"
-                      min={1}
-                      max={6}
-                      value={bloque.cantidadEjercicios}
-                      onChange={e => {
-                        const n = Math.max(1, Math.min(6, Number(e.target.value)))
-                        const ejActuales = bloque.ejercicios.slice(0, n)
-                        const extra = n > ejActuales.length
-                          ? Array.from({ length: n - ejActuales.length }, crearEjercicioVacio)
-                          : []
-                        dispatch({
-                          type: 'UPDATE_BLOQUE',
-                          sesionId: sesion._id,
-                          bloqueId: bloque._id,
-                          changes: {
-                            cantidadEjercicios: n,
-                            ejercicios: [...ejActuales, ...extra],
-                          },
-                        })
-                      }}
-                      className="w-12 text-xs rounded-lg border border-white/[0.08] bg-white/[0.05] px-2 py-1 text-white text-center focus:border-primary focus:outline-none"
-                    />
-                  </div>
-                </div>
-              ))}
-
-              <button
-                type="button"
-                onClick={() => dispatch({ type: 'ADD_BLOQUE', sesionId: sesion._id })}
-                className="w-full flex items-center justify-center gap-1.5 rounded-xl border border-dashed border-white/[0.1] py-2 text-[11px] text-gray-500 hover:text-white hover:border-white/[0.2] transition-colors"
-              >
-                <Plus size={11} /> Bloque
-              </button>
-            </div>
-          ))}
-        </div>
-      </div>
-    )
-  }
-
-  // ── Paso 5 — Asignar ejercicios (tabla inline idéntica a InlineEditRutinaTable) ──
+  // ── Paso 4 — Asignar ejercicios (tabla inline idéntica a InlineEditRutinaTable) ──
 
   function Paso5() {
     const C = 'px-3 py-0 align-middle'
@@ -2001,13 +1919,42 @@ export default function CreateRutinaPage() {
                     const blCell = () => {
                       const shown = blShown
                       blShown = true
-                      return shown ? <td key="bc" className={`w-[60px] ${C}`} /> : (
-                        <td key="bc" className="px-2 py-2.5 w-[60px] text-center align-top">
-                          <div className="flex items-center justify-center gap-0.5 group/bl">
-                            <span className="w-6 h-6 rounded-lg bg-primary/15 border border-primary/25 text-primary text-xs font-bold flex items-center justify-center">{bl.letra}</span>
-                            <button onClick={() => dispatch({ type: 'DELETE_BLOQUE_W', sesionId: ses._id, bloqueId: bl._id })} className="p-1 rounded text-gray-400 dark:text-white/45 hover:text-red-400 opacity-0 group-hover/bl:opacity-100 transition-all">
-                              <Trash2 className="w-2.5 h-2.5" />
-                            </button>
+                      if (shown) return <td key="bc" className={`w-[76px] ${C}`} />
+
+                      // Total ejercicios de todos los slots de esta letra
+                      const totalEjLetra = ses.bloques
+                        .filter(b => b.letra === bl.letra)
+                        .reduce((sum, b) => sum + Math.max(b.ejercicios.length, 1), 0)
+
+                      // Patrones de cada slot de esta letra (en orden, sin filtrar duplicados para mostrar ambos si son distintos)
+                      const patronesLetra = ses.bloques
+                        .filter(b => b.letra === bl.letra)
+                        .map(b => b.patronMovimiento)
+                        .filter((p): p is NonNullable<typeof p> => p != null)
+
+                      return (
+                        <td key="bc" className="px-2 py-2 w-[76px] text-center align-top">
+                          <div className="flex flex-col items-center gap-1 group/bl">
+                            <div className="flex items-center gap-0.5">
+                              <span className="w-6 h-6 rounded-lg bg-primary/15 border border-primary/25 text-primary text-xs font-bold flex items-center justify-center">{bl.letra}</span>
+                              <button onClick={() => dispatch({ type: 'DELETE_BLOQUE_W', sesionId: ses._id, bloqueId: bl._id })} className="p-1 rounded text-gray-400 dark:text-white/45 hover:text-red-400 opacity-0 group-hover/bl:opacity-100 transition-all">
+                                <Trash2 className="w-2.5 h-2.5" />
+                              </button>
+                            </div>
+                            {/* Cantidad de ejercicios esperados */}
+                            <span className="text-[9px] font-semibold text-gray-400 dark:text-white/35 tabular-nums">
+                              {totalEjLetra} ej.
+                            </span>
+                            {/* Patrones del bloque */}
+                            {patronesLetra.length > 0 && (
+                              <div className="space-y-[2px] max-w-[72px]">
+                                {patronesLetra.map((p, pi) => (
+                                  <span key={pi} className="block text-[8px] text-gray-400 dark:text-white/25 leading-tight">
+                                    {PATRON_SHORT[p]}
+                                  </span>
+                                ))}
+                              </div>
+                            )}
                           </div>
                         </td>
                       )
@@ -2276,7 +2223,7 @@ export default function CreateRutinaPage() {
         periodo: (data.periodo as PeriodoEntrenamiento) ?? null,
         descripcion: data.descripcion ?? '',
       })
-      dispatch({ type: 'SET_PASO', paso: 7 })
+      dispatch({ type: 'SET_PASO', paso: 6 })
     }
 
     return (
@@ -2419,9 +2366,8 @@ export default function CreateRutinaPage() {
       case 2: return state.sesionesSemanales !== null
       case 3: return state.sinPlantilla || state.plantillaId !== null
       case 4: return true
-      case 5: return true
-      case 6: return false // Controlado por el form submit
-      case 7: return false // Controlado por el botón guardar
+      case 5: return false // Controlado por el form submit
+      case 6: return false // Controlado por el botón guardar
       default: return false
     }
   }
@@ -2429,15 +2375,14 @@ export default function CreateRutinaPage() {
   async function handleNext() {
     if (state.paso === 1) {
       if (showBasePhase && state.rutinaBaseId) {
-        dispatch({ type: 'SET_PASO', paso: 5 })
         dispatch({ type: 'INIT_WIZARD_SEMANAS' })
+        dispatch({ type: 'SET_PASO', paso: 4 })
       } else {
         dispatch({ type: 'SET_PASO', paso: 2 })
       }
       return
     }
     if (state.paso === 2 && state.modo === 'mesociclo') {
-      // Cargar la rutina base para precargarse en paso 5
       if (state.rutinaBaseId) {
         try {
           const rutina = await rutinasApi.getById(state.rutinaBaseId)
@@ -2472,15 +2417,15 @@ export default function CreateRutinaPage() {
           addToast('No se pudo cargar la rutina base', 'error')
         }
       }
-      dispatch({ type: 'SET_PASO', paso: 5 })
       dispatch({ type: 'INIT_WIZARD_SEMANAS' })
+      dispatch({ type: 'SET_PASO', paso: 4 })
       return
     }
-    // Al pasar de Paso 4 a Paso 5, inicializar semanasWizard desde state.sesiones
-    if (state.paso === 4) {
+    // Al pasar de Paso 3 a Paso 4 (ejercicios) inicializar semanasWizard desde state.sesiones
+    if (state.paso === 3 && !state.sinPlantilla) {
       dispatch({ type: 'INIT_WIZARD_SEMANAS' })
     }
-    if (state.paso < 7) {
+    if (state.paso < 6) {
       dispatch({ type: 'SET_PASO', paso: state.paso + 1 })
     }
   }
@@ -2501,15 +2446,15 @@ export default function CreateRutinaPage() {
       navigate(`/clients/${clienteIdFromUrl}/rutina`)
       return
     }
-    if (state.paso === 5 && state.modo === 'mesociclo') {
+    if (state.paso === 4 && state.modo === 'mesociclo') {
       dispatch({ type: 'SET_PASO', paso: 2 })
       return
     }
-    if (state.paso === 5 && state.sinPlantilla && state.rutinaBaseId && state.modo === 'nueva') {
+    if (state.paso === 4 && state.sinPlantilla && state.rutinaBaseId && state.modo === 'nueva') {
       dispatch({ type: 'SET_PASO', paso: 1 })
       return
     }
-    if (state.paso === 5 && state.sinPlantilla) {
+    if (state.paso === 4 && state.sinPlantilla) {
       dispatch({ type: 'SET_PASO', paso: 3 })
       return
     }
@@ -2598,10 +2543,9 @@ export default function CreateRutinaPage() {
     1: { Icon: User,         title: 'Seleccionar cliente',    desc: 'Buscá al cliente al que le vas a crear la rutina' },
     2: { Icon: ClipboardList,title: 'Sesiones semanales',      desc: 'Elegí cuántas veces por semana va a entrenar' },
     3: { Icon: Layers,       title: 'Plantilla',               desc: 'Elegí una estructura base o armá la rutina manualmente' },
-    4: { Icon: Settings2,    title: 'Ajustar estructura',      desc: 'Revisá y modificá bloques y patrones de movimiento' },
-    5: { Icon: Dumbbell,     title: 'Asignar ejercicios',      desc: 'Seleccioná y configurá los ejercicios de cada bloque' },
-    6: { Icon: Settings2,    title: 'Configuración',           desc: 'Nombre, duración y período de la rutina' },
-    7: { Icon: Eye,          title: 'Confirmar y guardar',     desc: 'Revisá el resumen antes de crear la rutina' },
+    4: { Icon: Dumbbell,     title: 'Asignar ejercicios',      desc: 'Seleccioná y configurá los ejercicios de cada bloque' },
+    5: { Icon: Settings2,    title: 'Configuración',           desc: 'Nombre, duración y período de la rutina' },
+    6: { Icon: Eye,          title: 'Confirmar y guardar',     desc: 'Revisá el resumen antes de crear la rutina' },
   }
 
   const stepMeta = (state.paso === 1 && showBasePhase)
@@ -2628,14 +2572,14 @@ export default function CreateRutinaPage() {
 
           <div className="p-6 md:p-8">
 
-            {/* Stepper: 7 círculos con conectores + etiquetas */}
+            {/* Stepper: 6 círculos con conectores + etiquetas */}
             <div className="flex items-start mb-8">
-              {[1,2,3,4,5,6,7].map((step, idx) => (
+              {[1,2,3,4,5,6].map((step, idx) => (
                 <div key={step} className="flex-1 flex flex-col items-center gap-2 relative">
                   {idx > 0 && (
                     <div className="absolute h-px top-[18px] -translate-y-1/2" style={{ left: 0, right: '50%', background: 'var(--sk-fill)' }} />
                   )}
-                  {idx < 6 && (
+                  {idx < 5 && (
                     <div className="absolute h-px top-[18px] -translate-y-1/2" style={{ left: '50%', right: 0, background: 'var(--sk-fill)' }} />
                   )}
                   <Skeleton className="relative z-10 h-9 w-9 rounded-xl" />
@@ -2703,7 +2647,7 @@ export default function CreateRutinaPage() {
         <p className="text-sm text-gray-500 dark:text-[#6A6A7A] mt-2">
           {state.cliente
             ? `Cliente: ${state.cliente.nombre} ${state.cliente.apellido}`
-            : 'Wizard de creación de rutinas en 7 pasos'}
+            : 'Wizard de creación de rutinas en 6 pasos'}
         </p>
       </div>
 
@@ -2725,7 +2669,7 @@ export default function CreateRutinaPage() {
                 <p className="text-xs text-gray-500 dark:text-[#6A6A7A] mt-0.5">{stepMeta.desc}</p>
               </div>
               <span className="shrink-0 text-[10px] font-bold uppercase tracking-widest text-gray-300 dark:text-[#3A3A4A]">
-                Paso {state.paso}/7
+                Paso {state.paso}/6
               </span>
             </div>
           )}
@@ -2743,10 +2687,9 @@ export default function CreateRutinaPage() {
               {state.paso === 1 && <Paso1 />}
               {state.paso === 2 && <Paso2 />}
               {state.paso === 3 && <Paso3 />}
-              {state.paso === 4 && <Paso4 />}
-              {state.paso === 5 && <Paso5 />}
-              {state.paso === 6 && <Paso6 />}
-              {state.paso === 7 && <Paso7 />}
+              {state.paso === 4 && <Paso5 />}
+              {state.paso === 5 && <Paso6 />}
+              {state.paso === 6 && <Paso7 />}
             </motion.div>
           </AnimatePresence>
 
@@ -2762,8 +2705,8 @@ export default function CreateRutinaPage() {
             </button>
 
             <div className="flex items-center gap-2">
-              {/* Pasos 1-5: botón Siguiente */}
-              {state.paso >= 1 && state.paso <= 5 && (
+              {/* Pasos 1-4: botón Siguiente */}
+              {state.paso >= 1 && state.paso <= 4 && (
                 <button
                   type="button"
                   disabled={!canGoNext()}
@@ -2775,8 +2718,8 @@ export default function CreateRutinaPage() {
                 </button>
               )}
 
-              {/* Paso 6: submit del form */}
-              {state.paso === 6 && (
+              {/* Paso 5: submit del form */}
+              {state.paso === 5 && (
                 <button
                   type="submit"
                   form="form-paso6"
@@ -2787,8 +2730,8 @@ export default function CreateRutinaPage() {
                 </button>
               )}
 
-              {/* Paso 7: guardar */}
-              {state.paso === 7 && (
+              {/* Paso 6: guardar */}
+              {state.paso === 6 && (
                 <button
                   type="button"
                   disabled={isSaving}

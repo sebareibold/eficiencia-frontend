@@ -678,12 +678,7 @@ export default function PaymentsPage() {
                   }`}
                 >
                   {isActive && (
-                    <motion.div
-                      layoutId="view-mode-payments"
-                      className="absolute inset-0 rounded-full bg-gray-900 dark:bg-white shadow-[0_2px_8px_rgba(0,0,0,0.15)]"
-                      transition={{ type: 'spring', stiffness: 380, damping: 30 }}
-                      style={{ zIndex: 0 }}
-                    />
+                    <div className="absolute inset-0 rounded-full bg-gray-900 dark:bg-white shadow-[0_2px_8px_rgba(0,0,0,0.15)]" style={{ zIndex: 0 }} />
                   )}
                   <span className="relative z-10 flex items-center gap-1.5">
                     {mode === 'list' ? <LayoutList size={13} /> : <LayoutGrid size={13} />}
@@ -978,7 +973,7 @@ export default function PaymentsPage() {
                   }`}
                 >
                   {pg === currentPage && (
-                    <motion.div layoutId="payments-page-pill" className="absolute inset-0 rounded-full bg-gray-900 dark:bg-white" style={{ zIndex: 0 }} />
+                    <div className="absolute inset-0 rounded-full bg-gray-900 dark:bg-white" style={{ zIndex: 0 }} />
                   )}
                   <span className="relative z-10">{pg}</span>
                 </button>

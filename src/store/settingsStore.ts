@@ -16,37 +16,28 @@ const DEFAULT_SETTINGS = {
     layout: 'grid' as 'grid' | 'compact',
   },
   notifications: {
-    activity: true,
-    newClients: true,
-    reports: false,
-    frequency: 'instant' as 'instant' | 'daily' | 'weekly',
-    channel: 'app' as 'app' | 'email' | 'both',
-    // Email de destino para el motor de notificaciones del admin
-    adminEmail: '' as string,
-  },
-  system: {
-    language: 'es' as 'es' | 'en',
-    timezone: 'America/Argentina/Buenos_Aires',
-    dateFormat: 'dd/MM/yyyy' as 'dd/MM/yyyy' | 'MM/dd/yyyy' | 'yyyy-MM-dd',
-    currency: 'ARS' as 'ARS' | 'USD',
+    emailDestino: '',
+    canal: 'app' as 'app' | 'email' | 'both',
+    notifVencimientos: true,
+    diasAnticipacion: 7,
+    notifDeudas: true,
+    notifNuevosClientes: false,
+    notifNuevosUsuarios: false,
   },
 }
 
 export type AppearanceSettings = typeof DEFAULT_SETTINGS.appearance
 export type DashboardSettings = typeof DEFAULT_SETTINGS.dashboard
 export type NotificationSettings = typeof DEFAULT_SETTINGS.notifications
-export type SystemSettings = typeof DEFAULT_SETTINGS.system
 
 interface SettingsState {
   appearance: AppearanceSettings
   dashboard: DashboardSettings
   notifications: NotificationSettings
-  system: SystemSettings
   hasUnsavedChanges: boolean
   updateAppearance: (updates: Partial<AppearanceSettings>) => void
   updateDashboard: (updates: Partial<DashboardSettings>) => void
   updateNotifications: (updates: Partial<NotificationSettings>) => void
-  updateSystem: (updates: Partial<SystemSettings>) => void
   saveSettings: () => void
   resetToDefaults: () => void
   applyFromServer: (config: Partial<ConfiguracionData>) => void
@@ -58,28 +49,13 @@ export const useSettingsStore = create<SettingsState>()(
       ...DEFAULT_SETTINGS,
       hasUnsavedChanges: false,
       updateAppearance: (updates) =>
-        set((s) => ({
-          appearance: { ...s.appearance, ...updates },
-          hasUnsavedChanges: true,
-        })),
+        set((s) => ({ appearance: { ...s.appearance, ...updates }, hasUnsavedChanges: true })),
       updateDashboard: (updates) =>
-        set((s) => ({
-          dashboard: { ...s.dashboard, ...updates },
-          hasUnsavedChanges: true,
-        })),
+        set((s) => ({ dashboard: { ...s.dashboard, ...updates }, hasUnsavedChanges: true })),
       updateNotifications: (updates) =>
-        set((s) => ({
-          notifications: { ...s.notifications, ...updates },
-          hasUnsavedChanges: true,
-        })),
-      updateSystem: (updates) =>
-        set((s) => ({
-          system: { ...s.system, ...updates },
-          hasUnsavedChanges: true,
-        })),
+        set((s) => ({ notifications: { ...s.notifications, ...updates }, hasUnsavedChanges: true })),
       saveSettings: () => set({ hasUnsavedChanges: false }),
       resetToDefaults: () => set({ ...DEFAULT_SETTINGS, hasUnsavedChanges: false }),
-      // Aplica la configuración guardada en el servidor sobreescribiendo el estado local
       applyFromServer: (config) =>
         set((s) => ({
           appearance: {
@@ -88,16 +64,36 @@ export const useSettingsStore = create<SettingsState>()(
             ...(config.accentColor !== undefined && { accentColor: config.accentColor }),
             ...(config.density     !== undefined && { density:     config.density as 'compact' | 'comfortable' }),
           },
+          notifications: {
+            ...s.notifications,
+            ...(config.notifEmail            !== undefined && { emailDestino:        config.notifEmail }),
+            ...(config.notifCanal            !== undefined && { canal:               config.notifCanal as 'app' | 'email' | 'both' }),
+            ...(config.notifVencimientos     !== undefined && { notifVencimientos:   config.notifVencimientos }),
+            ...(config.notifDiasAnticipacion !== undefined && { diasAnticipacion:    config.notifDiasAnticipacion }),
+            ...(config.notifDeudas           !== undefined && { notifDeudas:         config.notifDeudas }),
+            ...(config.notifNuevosClientes   !== undefined && { notifNuevosClientes: config.notifNuevosClientes }),
+            ...(config.notifNuevosUsuarios   !== undefined && { notifNuevosUsuarios: config.notifNuevosUsuarios }),
+          },
           hasUnsavedChanges: false,
         })),
     }),
     {
       name: 'eficiencia-settings',
+      version: 2,
+      migrate: (state: unknown, version: number) => {
+        const s = state as Record<string, unknown>
+        if (version < 2) {
+          return {
+            ...s,
+            notifications: { ...DEFAULT_SETTINGS.notifications },
+          }
+        }
+        return s
+      },
       partialize: (state) => ({
-        appearance: state.appearance,
+        appearance:    state.appearance,
         dashboard:     state.dashboard,
         notifications: state.notifications,
-        system:        state.system,
       }),
     },
   ),

@@ -128,12 +128,7 @@ export default function ClientsPage() {
                   }`}
                 >
                   {isActive && (
-                    <motion.div
-                      layoutId="view-mode-clients"
-                      className="absolute inset-0 rounded-full bg-gray-900 dark:bg-white shadow-[0_2px_8px_rgba(0,0,0,0.15)]"
-                      transition={{ type: 'spring', stiffness: 380, damping: 30 }}
-                      style={{ zIndex: 0 }}
-                    />
+                    <div className="absolute inset-0 rounded-full bg-gray-900 dark:bg-white shadow-[0_2px_8px_rgba(0,0,0,0.15)]" style={{ zIndex: 0 }} />
                   )}
                   <span className="relative z-10 flex items-center justify-center">
                     {mode === 'table' ? <LayoutList size={14} /> : <LayoutGrid size={14} />}
@@ -187,12 +182,7 @@ export default function ClientsPage() {
                 }`}
               >
                 {isActive && (
-                  <motion.div
-                    layoutId="filter-status"
-                    className="absolute inset-0 rounded-full bg-gray-900 dark:bg-white shadow-[0_2px_8px_rgba(0,0,0,0.15)]"
-                    transition={{ type: 'spring', stiffness: 380, damping: 30 }}
-                    style={{ zIndex: 0 }}
-                  />
+                  <div className="absolute inset-0 rounded-full bg-gray-900 dark:bg-white shadow-[0_2px_8px_rgba(0,0,0,0.15)]" style={{ zIndex: 0 }} />
                 )}
                 <span className="relative z-10">{f.label}</span>
               </button>

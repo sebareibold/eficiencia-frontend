@@ -4,8 +4,6 @@ import { motion, AnimatePresence } from 'framer-motion'
 import {
   X,
   Palette,
-  LayoutDashboard,
-  Globe,
   Sun,
   Moon,
   Check,
@@ -13,16 +11,17 @@ import {
   Save,
   Search,
   AlertCircle,
-  Laptop,
-  Smartphone,
   Eye,
   EyeOff,
-  LogOut,
+  User,
+  Bell,
+  Lock,
 } from 'lucide-react'
 import { useUiStore } from '../../store/uiStore'
 import { useSettingsStore } from '../../store/settingsStore'
 import { useAuthStore } from '../../store/authStore'
 import { configuracionApi } from '../../api/configuracion.api'
+import { authApi } from '../../api/auth.api'
 
 // ─── Sub-components ──────────────────────────────────────────────────────────
 
@@ -185,67 +184,6 @@ function AppearanceSection() {
         </div>
       </SectionCard>
 
-      <SectionHeader title="Densidad" />
-      <SectionCard>
-        <SectionRow
-          label="Espaciado de la interfaz"
-          description="Controla el padding y tamaño de los elementos"
-          last
-        >
-          <SegmentedControl
-            options={[
-              { value: 'compact', label: 'Compacta' },
-              { value: 'comfortable', label: 'Cómoda' },
-            ]}
-            value={appearance.density}
-            onChange={(v) => updateAppearance({ density: v })}
-          />
-        </SectionRow>
-      </SectionCard>
-    </div>
-  )
-}
-
-function DashboardSection() {
-  const { dashboard, updateDashboard } = useSettingsStore()
-
-  return (
-    <div className="space-y-6">
-      <div>
-        <SectionHeader title="Widgets para Administradores" />
-        <SectionCard>
-          <SectionRow label="Resumen Financiero" description="Ingresos, gastos y ganancia neta">
-            <Toggle checked={true} onChange={() => {}} disabled />
-          </SectionRow>
-          <SectionRow label="Métricas de Clientes" description="Altas y bajas del mes" last>
-            <Toggle checked={true} onChange={() => {}} disabled />
-          </SectionRow>
-        </SectionCard>
-      </div>
-
-      <div>
-        <SectionHeader title="Widgets para Profesores" />
-        <SectionCard>
-          <SectionRow label="Agenda de Turnos" description="Visualización de clases del día">
-            <Toggle checked={true} onChange={() => {}} />
-          </SectionRow>
-          <SectionRow label="Asistencia" description="Listado de alumnos por clase" last>
-            <Toggle checked={true} onChange={() => {}} />
-          </SectionRow>
-        </SectionCard>
-      </div>
-
-      <div>
-        <SectionHeader title="Widgets para Staff" />
-        <SectionCard>
-          <SectionRow label="Pagos Pendientes" description="Avisos de deudas">
-            <Toggle checked={true} onChange={() => {}} />
-          </SectionRow>
-          <SectionRow label="Control de Acceso" description="Últimos ingresos al gimnasio" last>
-            <Toggle checked={true} onChange={() => {}} />
-          </SectionRow>
-        </SectionCard>
-      </div>
     </div>
   )
 }
@@ -255,54 +193,58 @@ function NotificationsSection() {
 
   return (
     <div>
-      <SectionHeader title="Alertas" />
+      <SectionHeader title="Destino" />
       <SectionCard>
-        <SectionRow label="Actividad" description="Acciones y cambios en el sistema">
-          <Toggle
-            checked={notifications.activity}
-            onChange={(v) => updateNotifications({ activity: v })}
-          />
-        </SectionRow>
-        <SectionRow label="Nuevos clientes" description="Al registrar un cliente nuevo">
-          <Toggle
-            checked={notifications.newClients}
-            onChange={(v) => updateNotifications({ newClients: v })}
-          />
-        </SectionRow>
-        <SectionRow label="Reportes y ganancias" description="Resúmenes automáticos" last>
-          <Toggle
-            checked={notifications.reports}
-            onChange={(v) => updateNotifications({ reports: v })}
+        <SectionRow label="Email de notificaciones" description="Si lo dejás vacío, se usa el email del administrador del sistema." last>
+          <input
+            type="email"
+            value={notifications.emailDestino}
+            onChange={(e) => updateNotifications({ emailDestino: e.target.value })}
+            placeholder="admin@eficiencia.com"
+            className="w-full rounded-xl border border-gray-200/50 dark:border-white/10 bg-gray-50/80 dark:bg-black/20 px-3 py-2 text-sm font-semibold text-gray-700 dark:text-gray-200 placeholder-gray-400 dark:placeholder-gray-600 focus:outline-none focus:ring-2 focus:ring-primary/30"
           />
         </SectionRow>
       </SectionCard>
 
-      <SectionHeader title="Frecuencia" />
+      <SectionHeader title="Qué notificar" />
+      <div className="mb-3 rounded-xl border border-primary/20 bg-primary/5 px-4 py-3 text-xs text-gray-500 dark:text-gray-400 leading-relaxed">
+        Membresías y deudas → resumen diario a las <strong className="text-gray-700 dark:text-gray-300">9 AM</strong>. Nuevos clientes/usuarios → <strong className="text-gray-700 dark:text-gray-300">al instante</strong>.
+      </div>
       <SectionCard>
-        <SectionRow label="Enviar notificaciones" last>
-          <SegmentedControl
-            options={[
-              { value: 'instant', label: 'Al instante' },
-              { value: 'daily', label: 'Diario' },
-              { value: 'weekly', label: 'Semanal' },
-            ]}
-            value={notifications.frequency}
-            onChange={(v) => updateNotifications({ frequency: v })}
-          />
+        <SectionRow label="Membresías por vencer" description="Lista de membresías activas que vencen pronto, con cliente, plan y días restantes.">
+          <Toggle checked={notifications.notifVencimientos} onChange={(v) => updateNotifications({ notifVencimientos: v })} />
+        </SectionRow>
+        {notifications.notifVencimientos && (
+          <SectionRow label="Días de anticipación" description="Rango de búsqueda desde hoy.">
+            <div className="flex items-center gap-2">
+              <button type="button" onClick={() => updateNotifications({ diasAnticipacion: Math.max(1, notifications.diasAnticipacion - 1) })} className="flex h-7 w-7 items-center justify-center rounded-lg border border-gray-200/50 dark:border-white/10 bg-gray-50/80 dark:bg-black/20 text-gray-500 dark:text-gray-400 hover:text-gray-900 dark:hover:text-white transition-colors font-bold text-sm">−</button>
+              <span className="w-6 text-center text-sm font-black text-gray-900 dark:text-white tabular-nums">{notifications.diasAnticipacion}</span>
+              <button type="button" onClick={() => updateNotifications({ diasAnticipacion: Math.min(30, notifications.diasAnticipacion + 1) })} className="flex h-7 w-7 items-center justify-center rounded-lg border border-gray-200/50 dark:border-white/10 bg-gray-50/80 dark:bg-black/20 text-gray-500 dark:text-gray-400 hover:text-gray-900 dark:hover:text-white transition-colors font-bold text-sm">+</button>
+            </div>
+          </SectionRow>
+        )}
+        <SectionRow label="Clientes con deuda" description="Todos los clientes en estado DEUDA con nombre, email y teléfono.">
+          <Toggle checked={notifications.notifDeudas} onChange={(v) => updateNotifications({ notifDeudas: v })} />
+        </SectionRow>
+        <SectionRow label="Nuevos clientes" description="Al registrar un cliente: nombre, DNI y email.">
+          <Toggle checked={notifications.notifNuevosClientes} onChange={(v) => updateNotifications({ notifNuevosClientes: v })} />
+        </SectionRow>
+        <SectionRow label="Nuevos usuarios del sistema" description="Al crear un usuario o aprobar una solicitud de acceso: nombre, email y rol." last>
+          <Toggle checked={notifications.notifNuevosUsuarios} onChange={(v) => updateNotifications({ notifNuevosUsuarios: v })} />
         </SectionRow>
       </SectionCard>
 
       <SectionHeader title="Canal" />
       <SectionCard>
-        <SectionRow label="Recibir por" last>
+        <SectionRow label="Cómo recibir los avisos" description="Dashboard: alertas en el inicio. Email: en tu correo. Ambos: las dos opciones activas." last>
           <SegmentedControl
             options={[
-              { value: 'app', label: 'App' },
+              { value: 'app', label: 'Dashboard' },
               { value: 'email', label: 'Email' },
               { value: 'both', label: 'Ambos' },
             ]}
-            value={notifications.channel}
-            onChange={(v) => updateNotifications({ channel: v })}
+            value={notifications.canal}
+            onChange={(v) => updateNotifications({ canal: v as 'app' | 'email' | 'both' })}
           />
         </SectionRow>
       </SectionCard>
@@ -312,179 +254,151 @@ function NotificationsSection() {
 
 function AccountSection() {
   const { user } = useAuthStore()
-  const initials = user
-    ? `${user.name.charAt(0)}${user.lastName?.charAt(0) ?? ''}`.toUpperCase()
-    : '?'
+  const { addToast } = useUiStore()
+
+  const [showPwForm, setShowPwForm] = useState(false)
+  const [pwForm, setPwForm] = useState({ actual: '', nueva: '', confirmar: '' })
+  const [showActual, setShowActual] = useState(false)
+  const [showNueva, setShowNueva] = useState(false)
+  const [pwLoading, setPwLoading] = useState(false)
+  const [pwError, setPwError] = useState('')
+
+  async function handleChangePassword(e: React.FormEvent) {
+    e.preventDefault()
+    setPwError('')
+    if (pwForm.nueva !== pwForm.confirmar) {
+      setPwError('Las contraseñas nuevas no coinciden')
+      return
+    }
+    if (pwForm.nueva.length < 6) {
+      setPwError('La nueva contraseña debe tener al menos 6 caracteres')
+      return
+    }
+    setPwLoading(true)
+    try {
+      await authApi.changePassword({ passwordActual: pwForm.actual, passwordNueva: pwForm.nueva })
+      addToast('Contraseña actualizada correctamente', 'success')
+      setPwForm({ actual: '', nueva: '', confirmar: '' })
+      setShowPwForm(false)
+    } catch (err: unknown) {
+      const msg = (err as { response?: { data?: { message?: string } } })?.response?.data?.message
+      setPwError(msg || 'Error al actualizar la contraseña')
+    } finally {
+      setPwLoading(false)
+    }
+  }
+
+  const inputClass = "w-full bg-gray-50 dark:bg-black/20 border border-gray-200 dark:border-white/10 rounded-xl px-3.5 py-2.5 pr-10 text-sm font-semibold text-gray-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-primary/30 transition-all"
 
   return (
     <div>
       <SectionHeader title="Perfil" />
       <SectionCard>
-        <div className="px-5 py-5 flex items-center gap-4">
-          <div className="h-14 w-14 rounded-2xl bg-gray-900 flex items-center justify-center text-lg font-bold text-white shrink-0 shadow-md">
-            {initials}
-          </div>
-          <div className="min-w-0">
-            <p className="text-sm font-bold text-gray-900 leading-tight">
+        <div className="px-5 py-4 flex items-center gap-3">
+          <div className="flex-1 min-w-0">
+            <p className="text-sm font-bold text-gray-900 dark:text-white leading-tight">
               {user?.name} {user?.lastName}
             </p>
             <p className="text-xs text-gray-400 mt-0.5">{user?.email}</p>
-            <span className="inline-flex items-center mt-1.5 px-2 py-0.5 rounded-md bg-gray-100 text-[10px] font-bold uppercase tracking-wide text-gray-500">
-              {user?.role === 'admin' ? 'Administrador' : 'Staff'}
+            <span className="inline-flex items-center mt-1.5 px-2 py-0.5 rounded-md bg-primary/10 text-[10px] font-bold uppercase tracking-wide text-primary">
+              {user?.role === 'admin' ? 'Administrador' : user?.role === 'profesor' ? 'Profesor' : 'Staff'}
             </span>
           </div>
         </div>
-        <div className="border-t border-gray-50 px-5 py-4 flex items-center gap-3">
+      </SectionCard>
+
+      <SectionHeader title="Contraseña" />
+      <SectionCard>
+        <div className="px-5 py-4 flex items-center justify-between gap-3">
+          <div className="min-w-0">
+            <p className="text-sm font-semibold text-gray-800 dark:text-gray-200 leading-tight">Cambiar contraseña</p>
+            <p className="text-xs text-gray-400 mt-0.5">Actualizá tu contraseña de acceso.</p>
+          </div>
           <button
             type="button"
-            className="flex-1 rounded-xl border border-gray-200 bg-white py-2 text-xs font-semibold text-gray-700 hover:bg-gray-50 transition-colors"
+            onClick={() => { setShowPwForm(!showPwForm); setPwError('') }}
+            className="shrink-0 px-4 py-2 bg-gray-100 dark:bg-white/10 hover:bg-gray-200 dark:hover:bg-white/15 text-gray-700 dark:text-gray-300 text-xs font-bold rounded-xl transition-all"
           >
-            Editar perfil
-          </button>
-          <button
-            type="button"
-            className="flex-1 rounded-xl border border-gray-200 bg-white py-2 text-xs font-semibold text-gray-700 hover:bg-gray-50 transition-colors"
-          >
-            Cambiar contraseña
+            {showPwForm ? 'Cancelar' : 'Solicitar cambio'}
           </button>
         </div>
-      </SectionCard>
-    </div>
-  )
-}
 
-function SecuritySection() {
-  const [twoFAEnabled, setTwoFAEnabled] = useState(false)
-  const [showSessions, setShowSessions] = useState(false)
-
-  const mockDevices = [
-    { name: 'Chrome — Windows', icon: Laptop, lastSeen: 'Ahora mismo', current: true },
-    { name: 'Safari — iPhone', icon: Smartphone, lastSeen: 'Hace 2 días', current: false },
-  ]
-
-  return (
-    <div>
-      <SectionHeader title="Autenticación" />
-      <SectionCard>
-        <SectionRow
-          label="Autenticación en 2 pasos"
-          description="Agrega una capa extra de seguridad al iniciar sesión"
-          last
-        >
-          <Toggle checked={twoFAEnabled} onChange={setTwoFAEnabled} />
-        </SectionRow>
-      </SectionCard>
-
-      <SectionHeader title="Dispositivos activos" />
-      <SectionCard>
-        {mockDevices.map((device, i) => {
-          const Icon = device.icon
-          return (
-            <div
-              key={device.name}
-              className={`flex items-center gap-3 px-5 py-4 ${
-                i < mockDevices.length - 1 ? 'border-b border-gray-50' : ''
-              }`}
+        <AnimatePresence initial={false}>
+          {showPwForm && (
+            <motion.div
+              key="pw-form"
+              initial={{ height: 0, opacity: 0 }}
+              animate={{ height: 'auto', opacity: 1 }}
+              exit={{ height: 0, opacity: 0 }}
+              transition={{ duration: 0.2, ease: 'easeInOut' }}
+              className="overflow-hidden"
             >
-              <div className="h-9 w-9 rounded-xl bg-gray-100 flex items-center justify-center shrink-0">
-                <Icon size={16} className="text-gray-600" />
-              </div>
-              <div className="flex-1 min-w-0">
-                <p className="text-sm font-medium text-gray-800 leading-tight">{device.name}</p>
-                <p className="text-xs text-gray-400 mt-0.5">{device.lastSeen}</p>
-              </div>
-              {device.current && (
-                <span className="text-[10px] font-bold uppercase tracking-wide text-green-600 bg-green-50 px-2 py-0.5 rounded-md">
-                  Activo
-                </span>
-              )}
-            </div>
-          )
-        })}
-      </SectionCard>
+              <form onSubmit={handleChangePassword} className="px-5 pb-5 space-y-3 border-t border-gray-50 dark:border-white/5 pt-4">
+                <div className="relative">
+                  <label className="block text-xs font-bold text-gray-500 uppercase tracking-wide mb-1.5">Contraseña actual</label>
+                  <input
+                    type={showActual ? 'text' : 'password'}
+                    value={pwForm.actual}
+                    onChange={(e) => setPwForm({ ...pwForm, actual: e.target.value })}
+                    autoComplete="current-password"
+                    className={inputClass}
+                    required
+                  />
+                  <button type="button" onClick={() => setShowActual(!showActual)} className="absolute right-3 bottom-2.5 text-gray-400 hover:text-gray-600 transition-colors">
+                    {showActual ? <EyeOff size={15} /> : <Eye size={15} />}
+                  </button>
+                </div>
+                <div className="relative">
+                  <label className="block text-xs font-bold text-gray-500 uppercase tracking-wide mb-1.5">Nueva contraseña</label>
+                  <input
+                    type={showNueva ? 'text' : 'password'}
+                    value={pwForm.nueva}
+                    onChange={(e) => setPwForm({ ...pwForm, nueva: e.target.value })}
+                    autoComplete="new-password"
+                    className={inputClass}
+                    required
+                  />
+                  <button type="button" onClick={() => setShowNueva(!showNueva)} className="absolute right-3 bottom-2.5 text-gray-400 hover:text-gray-600 transition-colors">
+                    {showNueva ? <EyeOff size={15} /> : <Eye size={15} />}
+                  </button>
+                </div>
+                <div className="relative">
+                  <label className="block text-xs font-bold text-gray-500 uppercase tracking-wide mb-1.5">Confirmar nueva contraseña</label>
+                  <input
+                    type={showNueva ? 'text' : 'password'}
+                    value={pwForm.confirmar}
+                    onChange={(e) => setPwForm({ ...pwForm, confirmar: e.target.value })}
+                    autoComplete="new-password"
+                    className={inputClass}
+                    required
+                  />
+                </div>
 
-      <SectionHeader title="Acceso" />
-      <SectionCard>
-        <div className="px-5 py-4">
-          <button
-            type="button"
-            onClick={() => setShowSessions(!showSessions)}
-            className="w-full flex items-center gap-3 rounded-xl bg-red-50 border border-red-100 px-4 py-3 text-sm font-semibold text-red-600 hover:bg-red-100 transition-colors"
-          >
-            <LogOut size={15} />
-            Cerrar todas las sesiones
-          </button>
-          <AnimatePresence>
-            {showSessions && (
-              <motion.div
-                initial={{ opacity: 0, height: 0 }}
-                animate={{ opacity: 1, height: 'auto' }}
-                exit={{ opacity: 0, height: 0 }}
-                className="overflow-hidden"
-              >
-                <p className="text-xs text-gray-400 mt-3 leading-relaxed">
-                  Esto cerrará todas las sesiones activas en todos los dispositivos. Tendrás que
-                  iniciar sesión nuevamente.
-                </p>
-              </motion.div>
-            )}
-          </AnimatePresence>
-        </div>
-      </SectionCard>
-    </div>
-  )
-}
+                {pwError && (
+                  <div className="flex items-center gap-2 rounded-xl bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800/50 px-3.5 py-2.5 text-xs font-semibold text-red-600 dark:text-red-400">
+                    <AlertCircle size={13} className="shrink-0" />
+                    {pwError}
+                  </div>
+                )}
 
-function SystemSection() {
-  const { system, updateSystem } = useSettingsStore()
-
-  return (
-    <div>
-      <SectionHeader title="Regional" />
-      <SectionCard>
-        <SectionRow label="Idioma" description="Idioma de la interfaz">
-          <SegmentedControl
-            options={[
-              { value: 'es', label: 'Español' },
-              { value: 'en', label: 'English' },
-            ]}
-            value={system.language}
-            onChange={(v) => updateSystem({ language: v })}
-          />
-        </SectionRow>
-        <SectionRow label="Zona horaria">
-          <select
-            value={system.timezone}
-            onChange={(e) => updateSystem({ timezone: e.target.value })}
-            className="text-xs rounded-xl border border-gray-200 bg-white px-3 py-2 text-gray-700 focus:outline-none focus:ring-2 focus:ring-primary/20 focus:border-primary/40"
-          >
-            <option value="America/Argentina/Buenos_Aires">Buenos Aires (ART)</option>
-            <option value="America/New_York">Nueva York (EST)</option>
-            <option value="Europe/Madrid">Madrid (CET)</option>
-            <option value="UTC">UTC</option>
-          </select>
-        </SectionRow>
-        <SectionRow label="Formato de fecha">
-          <SegmentedControl
-            options={[
-              { value: 'dd/MM/yyyy', label: 'DD/MM/AAAA' },
-              { value: 'MM/dd/yyyy', label: 'MM/DD/AAAA' },
-              { value: 'yyyy-MM-dd', label: 'ISO' },
-            ]}
-            value={system.dateFormat}
-            onChange={(v) => updateSystem({ dateFormat: v })}
-          />
-        </SectionRow>
-        <SectionRow label="Moneda" last>
-          <SegmentedControl
-            options={[
-              { value: 'ARS', label: 'ARS $' },
-              { value: 'USD', label: 'USD $' },
-            ]}
-            value={system.currency}
-            onChange={(v) => updateSystem({ currency: v })}
-          />
-        </SectionRow>
+                <div className="flex justify-end pt-1">
+                  <button
+                    type="submit"
+                    disabled={pwLoading || !pwForm.actual || !pwForm.nueva || !pwForm.confirmar}
+                    className="flex items-center gap-1.5 rounded-xl bg-gray-900 dark:bg-white/10 px-4 py-2 text-xs font-bold text-white hover:bg-gray-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                  >
+                    {pwLoading ? (
+                      <span className="h-3.5 w-3.5 rounded-full border-2 border-white/30 border-t-white animate-spin" />
+                    ) : (
+                      <Lock size={13} />
+                    )}
+                    {pwLoading ? 'Guardando...' : 'Actualizar contraseña'}
+                  </button>
+                </div>
+              </form>
+            </motion.div>
+          )}
+        </AnimatePresence>
       </SectionCard>
     </div>
   )
@@ -492,7 +406,7 @@ function SystemSection() {
 
 // ─── Category definitions ─────────────────────────────────────────────────────
 
-type CategoryId = 'appearance' | 'dashboard' | 'notifications' | 'account' | 'security' | 'system'
+type CategoryId = 'appearance' | 'notifications' | 'account'
 
 const CATEGORIES: {
   id: CategoryId
@@ -502,23 +416,23 @@ const CATEGORIES: {
   keywords: string[]
 }[] = [
   {
+    id: 'account',
+    label: 'Cuenta',
+    icon: User,
+    keywords: ['perfil', 'cuenta', 'contraseña', 'email'],
+  },
+  {
     id: 'appearance',
     label: 'Apariencia',
     icon: Palette,
-    keywords: ['tema', 'modo', 'claro', 'oscuro', 'color', 'acento', 'densidad', 'espaciado'],
+    keywords: ['tema', 'modo', 'claro', 'oscuro', 'color', 'acento'],
   },
   {
-    id: 'dashboard',
-    label: 'Dashboard',
-    icon: LayoutDashboard,
+    id: 'notifications',
+    label: 'Notificaciones',
+    icon: Bell,
     adminOnly: true,
-    keywords: ['dashboard', 'widgets', 'ingresos', 'clientes', 'gastos', 'ganancia', 'layout'],
-  },
-  {
-    id: 'system',
-    label: 'Sistema',
-    icon: Globe,
-    keywords: ['idioma', 'zona horaria', 'fecha', 'moneda', 'regional', 'español', 'ingles'],
+    keywords: ['alertas', 'notificaciones', 'email', 'app', 'frecuencia'],
   },
 ]
 
@@ -530,7 +444,7 @@ export default function SettingsDrawer() {
   const { user } = useAuthStore()
   const isAdmin = user?.role === 'admin'
 
-  const [activeCategory, setActiveCategory] = useState<CategoryId>('appearance')
+  const [activeCategory, setActiveCategory] = useState<CategoryId>('account')
   const [search, setSearch] = useState('')
   const searchRef = useRef<HTMLInputElement>(null)
 
@@ -559,12 +473,18 @@ export default function SettingsDrawer() {
 
   async function handleSave() {
     saveSettings()
-    const { appearance } = useSettingsStore.getState()
+    const { appearance, notifications } = useSettingsStore.getState()
     try {
       await configuracionApi.update({
         tema: appearance.theme,
         accentColor: appearance.accentColor,
-        density: appearance.density,
+        notifEmail: notifications.emailDestino,
+        notifCanal: notifications.canal,
+        notifVencimientos: notifications.notifVencimientos,
+        notifDiasAnticipacion: notifications.diasAnticipacion,
+        notifDeudas: notifications.notifDeudas,
+        notifNuevosClientes: notifications.notifNuevosClientes,
+        notifNuevosUsuarios: notifications.notifNuevosUsuarios,
       })
     } catch {
       // La config local ya se guardó; si falla el server no se bloquea el UX
@@ -578,9 +498,9 @@ export default function SettingsDrawer() {
   }
 
   const sectionContent: Partial<Record<CategoryId, React.ReactNode>> = {
+    account: <AccountSection />,
     appearance: <AppearanceSection />,
-    dashboard: <DashboardSection />,
-    system: <SystemSection />,
+    notifications: <NotificationsSection />,
   }
 
   const currentCategory =

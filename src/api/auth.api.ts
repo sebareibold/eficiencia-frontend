@@ -54,4 +54,7 @@ export const authApi = {
     const { refreshToken } = useAuthStore.getState()
     return api.post('/auth/logout', refreshToken ? { refreshToken } : {})
   },
+
+  changePassword: (data: { passwordActual: string; passwordNueva: string }) =>
+    api.patch('/auth/change-password', data),
 }

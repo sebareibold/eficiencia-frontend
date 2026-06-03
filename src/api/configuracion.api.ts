@@ -3,7 +3,14 @@ import api from './axiosInstance'
 export interface ConfiguracionData {
   tema: string
   accentColor: string
-  density: string
+  density?: string
+  notifEmail?: string
+  notifCanal?: string
+  notifVencimientos?: boolean
+  notifDiasAnticipacion?: number
+  notifDeudas?: boolean
+  notifNuevosClientes?: boolean
+  notifNuevosUsuarios?: boolean
 }
 
 export const configuracionApi = {

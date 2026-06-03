@@ -36,7 +36,6 @@ const C = {
   teal:     '#14B8A6',
 }
 
-const PIE_CLIENTES  = [C.green, C.orange, C.red]
 const PIE_GASTOS    = [C.blue, C.purple, C.teal]
 const BAR_METODOS   = [C.primary, C.blue, C.purple, C.teal]
 
@@ -59,9 +58,9 @@ const TooltipStyle = {
 
 type ChartView = 'meses' | 'años' | 'historico'
 
-function ViewToggle({ value, onChange, layoutId }: { value: ChartView; onChange: (v: ChartView) => void; layoutId: string }) {
+function ViewToggle({ value, onChange }: { value: ChartView; onChange: (v: ChartView) => void }) {
   return (
-    <div className="flex items-center rounded-full border border-black/[0.08] dark:border-white/10 bg-white/60 dark:bg-black/30 backdrop-blur-xl p-1 shadow-sm gap-1 shrink-0">
+    <div className="flex items-center rounded-full border border-black/[0.08] dark:border-white/10 bg-white/60 dark:!bg-black/40 backdrop-blur-xl p-1 shadow-sm gap-1 shrink-0">
       {([['meses', 'Meses'], ['años', 'Años'], ['historico', 'Histórico']] as [ChartView, string][]).map(([mode, label]) => {
         const isActive = value === mode
         return (
@@ -75,12 +74,7 @@ function ViewToggle({ value, onChange, layoutId }: { value: ChartView; onChange:
             }`}
           >
             {isActive && (
-              <motion.div
-                layoutId={layoutId}
-                className="absolute inset-0 rounded-full bg-gray-900 dark:bg-white shadow-[0_2px_8px_rgba(0,0,0,0.15)]"
-                transition={{ type: 'spring', stiffness: 380, damping: 30 }}
-                style={{ zIndex: 0 }}
-              />
+              <div className="absolute inset-0 rounded-full bg-gray-900 dark:bg-white shadow-[0_2px_8px_rgba(0,0,0,0.15)]" style={{ zIndex: 0 }} />
             )}
             <span className="relative z-10">{label}</span>
           </button>
@@ -303,7 +297,7 @@ export default function DashboardPage() {
   const makeChartHeaderAction = (id: string) => (
     <div className="flex items-center gap-2">
       {chartView === 'meses' && (
-        <div className="flex items-center rounded-full border border-black/[0.08] dark:border-white/10 bg-white/60 dark:bg-black/30 backdrop-blur-xl p-1 shadow-sm gap-1">
+        <div className="flex items-center rounded-full border border-black/[0.08] dark:border-white/10 bg-white/60 dark:!bg-black/40 backdrop-blur-xl p-1 shadow-sm gap-1">
           <button
             onClick={goChartBack}
             disabled={!canGoBack}
@@ -323,7 +317,7 @@ export default function DashboardPage() {
           </button>
         </div>
       )}
-      <ViewToggle value={chartView} onChange={changeChartView} layoutId={id} />
+      <ViewToggle value={chartView} onChange={changeChartView} />
     </div>
   )
 
@@ -479,12 +473,7 @@ export default function DashboardPage() {
                   }`}
                 >
                   {isActive && (
-                    <motion.div
-                      layoutId="period-mode-toggle"
-                      className="absolute inset-0 rounded-full bg-gray-900 dark:bg-white shadow-[0_2px_8px_rgba(0,0,0,0.15)]"
-                      transition={{ type: 'spring', stiffness: 380, damping: 30 }}
-                      style={{ zIndex: 0 }}
-                    />
+                    <div className="absolute inset-0 rounded-full bg-gray-900 dark:bg-white shadow-[0_2px_8px_rgba(0,0,0,0.15)]" style={{ zIndex: 0 }} />
                   )}
                   <span className="relative z-10">{label}</span>
                 </button>
