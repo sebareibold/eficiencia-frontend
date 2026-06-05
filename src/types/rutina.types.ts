@@ -280,6 +280,7 @@ export interface WizardState {
   fechaInicio: string
   periodo: PeriodoEntrenamiento | null
   descripcion: string
+  profesorId: string | null
 
   // Para mesociclo
   rutinaBaseId: string | null
@@ -295,6 +296,7 @@ export interface CrearCompletaPayload {
   periodo?: PeriodoEntrenamiento
   plantillaId?: string
   rutinaBaseId?: string
+  profesorId?: string
   sesiones: {
     numero: number
     nombre?: string

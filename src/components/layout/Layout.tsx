@@ -65,15 +65,17 @@ function InitDots() {
 }
 
 export default function Layout() {
-  const setPermissions = useAuthStore(s => s.setPermissions)
-  const accessToken    = useAuthStore(s => s.accessToken)
-  const refreshToken   = useAuthStore(s => s.refreshToken)
-  const logout         = useAuthStore(s => s.logout)
-  const navigate       = useNavigate()
-  const location       = useLocation()
+  const setPermissions    = useAuthStore(s => s.setPermissions)
+  const accessToken       = useAuthStore(s => s.accessToken)
+  const refreshToken      = useAuthStore(s => s.refreshToken)
+  const logout            = useAuthStore(s => s.logout)
+  const permissionsLoaded = useAuthStore(s => s.permissionsLoaded)
+  const navigate          = useNavigate()
+  const location          = useLocation()
 
-  // Durante el F5: refreshToken existe pero accessToken aún no (pendiente refresh)
-  const isInitializing = !accessToken && !!refreshToken
+  // Inicializando si: (F5 — accessToken aún no recuperado) O (permisos aún no cargados)
+  // En ambos casos mostramos InitDots en lugar de pantalla en blanco.
+  const isInitializing = (!accessToken && !!refreshToken) || !permissionsLoaded
 
   const inactivityTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
 
@@ -105,8 +107,7 @@ export default function Layout() {
   }, [accessToken, doLogout])
 
   // ── Carga y refresco de permisos ────────────────────────────────────────────
-  const permissionsLoaded = useAuthStore(s => s.permissionsLoaded)
-  const user              = useAuthStore(s => s.user)
+  const user = useAuthStore(s => s.user)
 
   useEffect(() => {
     if (!accessToken) return

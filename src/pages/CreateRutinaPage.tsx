@@ -14,6 +14,7 @@ import { ejerciciosApi } from '../api/ejercicios.api'
 import { clientsApi } from '../api/clients.api'
 import { rutinasApi } from '../api/rutinas.api'
 import { plantillasApi } from '../api/plantillas.api'
+import { usuariosApi } from '../api/usuarios.api'
 import { useUiStore } from '../store/uiStore'
 import Skeleton from '../components/ui/Skeleton'
 import type {
@@ -179,6 +180,7 @@ const initialState: WizardState = {
   fechaInicio: new Date().toISOString().split('T')[0],
   periodo: null,
   descripcion: '',
+  profesorId: null,
   rutinaBaseId: null,
   rutinaBaseSesiones: [],
 }
@@ -195,7 +197,7 @@ type WizardAction =
   | { type: 'UPDATE_EJERCICIO'; sesionId: string; bloqueId: string; ejercicioId: string; changes: Partial<EjercicioDraft> }
   | { type: 'ADD_EJERCICIO_EXTRA'; sesionId: string; bloqueId: string }
   | { type: 'DELETE_EJERCICIO'; sesionId: string; bloqueId: string; ejercicioId: string }
-  | { type: 'SET_CONFIG'; nombre: string; cantidadSemanas: number; fechaInicio: string; periodo: PeriodoEntrenamiento | null; descripcion: string }
+  | { type: 'SET_CONFIG'; nombre: string; cantidadSemanas: number; fechaInicio: string; periodo: PeriodoEntrenamiento | null; descripcion: string; profesorId: string | null }
   | { type: 'INIT_MESOCICLO'; sesiones: SesionDraft[]; rutinaBaseId: string }
   | { type: 'SET_BASE_RUTINA'; sesiones: SesionDraft[]; rutinaBaseId: string; sesionesSemanales: number }
   | { type: 'RESET_PASO1' }
@@ -337,6 +339,7 @@ function wizardReducer(state: WizardState, action: WizardAction): WizardState {
         fechaInicio: action.fechaInicio,
         periodo: action.periodo,
         descripcion: action.descripcion,
+        profesorId: action.profesorId,
       }
 
     case 'INIT_MESOCICLO':
@@ -726,34 +729,36 @@ function SearchableExerciseSelector({
 
   return (
     <div className="space-y-3">
-      <div className="flex gap-2">
-        <div className="relative flex-1">
-          <Search size={13} className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" />
-          <input
-            value={search}
-            onChange={e => setSearch(e.target.value)}
-            placeholder="Buscar ejercicio..."
-            autoFocus
-            className={inputCls + ' pl-8'}
-          />
+      <div className="space-y-2">
+        <div className="flex gap-2">
+          <div className="relative flex-1 min-w-0">
+            <Search size={13} className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" />
+            <input
+              value={search}
+              onChange={e => setSearch(e.target.value)}
+              placeholder="Buscar ejercicio..."
+              autoFocus
+              className={inputCls + ' pl-8'}
+            />
+          </div>
+          <button
+            type="button"
+            onClick={onCancel}
+            className="shrink-0 p-2.5 rounded-xl border border-white/[0.08] text-gray-400 hover:text-white hover:border-white/20 transition-colors"
+          >
+            <X size={14} />
+          </button>
         </div>
         <select
           value={patron}
           onChange={e => setPatron(e.target.value)}
-          className={inputCls + ' w-40'}
+          className={inputCls + ' cursor-pointer'}
         >
           <option value="">Todos los patrones</option>
           {(Object.keys(PATRON_LABELS) as PatronMovimientoEnum[]).map(p => (
             <option key={p} value={p}>{PATRON_SHORT[p]}</option>
           ))}
         </select>
-        <button
-          type="button"
-          onClick={onCancel}
-          className="p-2.5 rounded-xl border border-white/[0.08] text-gray-400 hover:text-white hover:border-white/20 transition-colors"
-        >
-          <X size={14} />
-        </button>
       </div>
 
       {loading ? (
@@ -890,22 +895,24 @@ function EjercicioSlot({
 
   if (showSelector) {
     return (
-      <SearchableExerciseSelector
-        patronHint={patronBloque}
-        onSelect={(ej) => {
-          onUpdate({
-            catalogoId: ej.id,
-            nombre: ej.nombre,
-            _esReferencia: false,
-          })
-          setShowSelector(false)
-          setExpanded(true)
-        }}
-        onCancel={() => {
-          if (!ejercicio.nombre) return
-          setShowSelector(false)
-        }}
-      />
+      <div className="rounded-xl border border-white/[0.08] bg-white/[0.03] overflow-hidden p-3">
+        <SearchableExerciseSelector
+          patronHint={patronBloque}
+          onSelect={(ej) => {
+            onUpdate({
+              catalogoId: ej.id,
+              nombre: ej.nombre,
+              _esReferencia: false,
+            })
+            setShowSelector(false)
+            setExpanded(true)
+          }}
+          onCancel={() => {
+            if (!ejercicio.nombre) return
+            setShowSelector(false)
+          }}
+        />
+      </div>
     )
   }
 
@@ -1175,6 +1182,26 @@ export default function CreateRutinaPage() {
   const [baseDecidida, setBaseDecidida] = useState(false)
   const [editingEjId,   setEditingEjId]   = useState<string | null>(null)
   const [assigningEjId, setAssigningEjId] = useState<string | null>(null)
+  const [plantillasOptions, setPlantillasOptions] = useState<PlantillaRutinaData[]>([])
+  const [loadingPlantillas, setLoadingPlantillas] = useState(false)
+  const plantillasFetchedRef  = useRef(false)
+  const paso4ScrollTop        = useRef(0)
+
+  // Carga plantillas una sola vez al llegar al paso 3
+  useEffect(() => {
+    if (state.paso !== 3 || plantillasFetchedRef.current) return
+    plantillasFetchedRef.current = true
+    setLoadingPlantillas(true)
+    plantillasApi.getAll()
+      .then(data => setPlantillasOptions(data.filter(p => p.activa && p.cantidadSesiones === state.sesionesSemanales)))
+      .catch(() => setPlantillasOptions([]))
+      .finally(() => setLoadingPlantillas(false))
+  }, [state.paso, state.sesionesSemanales])
+
+  // Si cambian las sesiones semanales se resetea el cache de plantillas
+  useEffect(() => {
+    plantillasFetchedRef.current = false
+  }, [state.sesionesSemanales])
 
   // Si viene desde ClientRutinaPage con ?clienteId=xxx, pre-carga el cliente
   useEffect(() => {
@@ -1602,24 +1629,8 @@ export default function CreateRutinaPage() {
   // ── Paso 3 — Elegir plantilla ──────────────────────────────────────────────
 
   function Paso3() {
-    const [plantillas, setPlantillas] = useState<PlantillaRutinaData[]>([])
-    const [loading, setLoading] = useState(true)
-
-    useEffect(() => {
-      void (async () => {
-        try {
-          const data = await plantillasApi.getAll()
-          const filtradas = data.filter(p =>
-            p.activa && p.cantidadSesiones === state.sesionesSemanales
-          )
-          setPlantillas(filtradas)
-        } catch {
-          setPlantillas([])
-        } finally {
-          setLoading(false)
-        }
-      })()
-    }, [])
+    const plantillas = plantillasOptions
+    const loading    = loadingPlantillas
 
     function seleccionarPlantilla(p: PlantillaRutinaData) {
       const sesiones = generarEstructura(p, state.sesionesSemanales ?? p.cantidadSesiones)
@@ -1745,7 +1756,9 @@ export default function CreateRutinaPage() {
       <div className="rounded-2xl border border-white/40 dark:border-white/[0.08] overflow-hidden">
         <div
           className="overflow-x-auto overflow-y-auto"
-          style={{ maxHeight: 'calc(100vh - 420px)' }}
+          style={{ maxHeight: 'calc(100vh - 180px)' }}
+          ref={(el) => { if (el) el.scrollTop = paso4ScrollTop.current }}
+          onScroll={(e) => { paso4ScrollTop.current = e.currentTarget.scrollTop }}
         >
           <table className="w-full border-collapse text-sm">
             <thead className="sticky top-0 z-10">
@@ -2003,6 +2016,17 @@ export default function CreateRutinaPage() {
                                 onCancel={() => setEditingEjId(null)}
                                 onAssign={() => { setEditingEjId(null); setAssigningEjId(ej._id) }}
                               />
+                            ) : isAssigning ? (
+                              <td colSpan={6} className="px-3 py-2">
+                                <SearchableExerciseSelector
+                                  patronHint={bl.patronMovimiento}
+                                  onSelect={catalogo => {
+                                    dispatch({ type: 'UPDATE_EJ_W', sesionId: ses._id, bloqueId: bl._id, ejId: ej._id, changes: { catalogoId: catalogo.id, nombre: catalogo.nombre, _esReferencia: false } })
+                                    setAssigningEjId(null)
+                                  }}
+                                  onCancel={() => setAssigningEjId(null)}
+                                />
+                              </td>
                             ) : (
                               <>
                                 {/* Nombre ejercicio */}
@@ -2084,21 +2108,6 @@ export default function CreateRutinaPage() {
                             )}
                           </tr>
 
-                          {/* Panel de búsqueda inline */}
-                          {isAssigning && (
-                            <tr data-sem-id={sem._id}>
-                              <td colSpan={9} className="px-3 pb-3 pt-1 bg-white/[0.01]">
-                                <SearchableExerciseSelector
-                                  patronHint={bl.patronMovimiento}
-                                  onSelect={catalogo => {
-                                    dispatch({ type: 'UPDATE_EJ_W', sesionId: ses._id, bloqueId: bl._id, ejId: ej._id, changes: { catalogoId: catalogo.id, nombre: catalogo.nombre, _esReferencia: false } })
-                                    setAssigningEjId(null)
-                                  }}
-                                  onCancel={() => setAssigningEjId(null)}
-                                />
-                              </td>
-                            </tr>
-                          )}
                         </Fragment>
                       )
                       semShown = true
@@ -2189,11 +2198,10 @@ export default function CreateRutinaPage() {
   // ── Paso 6 — Configuración ─────────────────────────────────────────────────
 
   const configSchema = z.object({
-    nombre:          z.string().min(1, 'El nombre es requerido'),
-    cantidadSemanas: z.number().min(1).max(12),
-    fechaInicio:     z.string().min(1, 'La fecha es requerida'),
-    periodo:         z.enum(['CARGA', 'IMPACTO', 'DESCARGA', 'MANTENIMIENTO']).optional(),
-    descripcion:     z.string().optional(),
+    nombre:      z.string().min(1, 'El nombre es requerido'),
+    fechaInicio: z.string().min(1, 'La fecha es requerida'),
+    periodo:     z.enum(['CARGA', 'IMPACTO', 'DESCARGA', 'MANTENIMIENTO']).optional(),
+    descripcion: z.string().optional(),
   })
   type ConfigForm = z.infer<typeof configSchema>
 
@@ -2203,13 +2211,28 @@ export default function CreateRutinaPage() {
       return ''
     })()
 
+    const semanasSugeridas = state.semanasWizard.length > 0 ? state.semanasWizard.length : 1
+
+    const [profesores, setProfesores] = useState<Array<{ id: string; nombre: string }>>([])
+    const [selectedProfesorId, setSelectedProfesorId] = useState<string>(state.profesorId ?? '')
+
+    useEffect(() => {
+      usuariosApi.getAll()
+        .then(users => {
+          const profs = users
+            .filter(u => u.rol === 'PROFESOR' && u.activo && u.profesor)
+            .map(u => ({ id: u.profesor!.id, nombre: u.nombre }))
+          setProfesores(profs)
+        })
+        .catch(() => setProfesores([]))
+    }, [])
+
     const { register, handleSubmit, formState: { errors } } = useForm<ConfigForm>({
       resolver: zodResolver(configSchema),
       defaultValues: {
-        nombre: sugerencia,
-        cantidadSemanas: state.cantidadSemanas,
+        nombre:      sugerencia,
         fechaInicio: state.fechaInicio,
-        periodo: state.periodo ?? undefined,
+        periodo:     state.periodo ?? undefined,
         descripcion: state.descripcion,
       },
     })
@@ -2218,10 +2241,11 @@ export default function CreateRutinaPage() {
       dispatch({
         type: 'SET_CONFIG',
         nombre: data.nombre,
-        cantidadSemanas: data.cantidadSemanas,
+        cantidadSemanas: semanasSugeridas,
         fechaInicio: data.fechaInicio,
         periodo: (data.periodo as PeriodoEntrenamiento) ?? null,
         descripcion: data.descripcion ?? '',
+        profesorId: selectedProfesorId || null,
       })
       dispatch({ type: 'SET_PASO', paso: 6 })
     }
@@ -2236,21 +2260,36 @@ export default function CreateRutinaPage() {
 
         <div className="grid grid-cols-2 gap-4">
           <div>
-            <label className={labelCls}>Cantidad de semanas</label>
-            <input
-              type="number"
-              min={1}
-              max={12}
-              {...register('cantidadSemanas', { valueAsNumber: true })}
-              className={inputCls}
-            />
-            {errors.cantidadSemanas && <p className="mt-1 text-xs text-red-400">Entre 1 y 12</p>}
+            <label className={labelCls}>Duración (semanas)</label>
+            <div className={inputCls + ' flex items-center gap-2 cursor-default select-none opacity-60'}>
+              <span className="font-semibold">{semanasSugeridas}</span>
+              <span className="text-xs text-gray-400 dark:text-white/30">
+                {semanasSugeridas === 1 ? 'semana' : 'semanas'} definidas en la estructura
+              </span>
+            </div>
           </div>
           <div>
             <label className={labelCls}>Fecha de inicio</label>
             <input type="date" {...register('fechaInicio')} className={inputCls} />
             {errors.fechaInicio && <p className="mt-1 text-xs text-red-400">{errors.fechaInicio.message}</p>}
           </div>
+        </div>
+
+        <div>
+          <label className={labelCls}>Profesor (opcional)</label>
+          <select
+            value={selectedProfesorId}
+            onChange={e => setSelectedProfesorId(e.target.value)}
+            className={inputCls + ' cursor-pointer'}
+          >
+            <option value="">— Sin asignar —</option>
+            {profesores.map(p => (
+              <option key={p.id} value={p.id}>{p.nombre}</option>
+            ))}
+          </select>
+          {profesores.length === 0 && (
+            <p className="mt-1 text-[10px] text-gray-400 dark:text-white/30">No hay profesores registrados en el sistema</p>
+          )}
         </div>
 
         <div>
@@ -2525,6 +2564,7 @@ export default function CreateRutinaPage() {
         periodo: state.periodo ?? undefined,
         plantillaId: state.plantillaId ?? undefined,
         rutinaBaseId: state.rutinaBaseId ?? undefined,
+        profesorId: state.profesorId ?? undefined,
         sesiones: sesionesPayload,
       }
       await rutinasApi.crearCompleta(payload)
@@ -2686,7 +2726,7 @@ export default function CreateRutinaPage() {
             >
               {state.paso === 1 && <Paso1 />}
               {state.paso === 2 && <Paso2 />}
-              {state.paso === 3 && <Paso3 />}
+              {state.paso === 3 && Paso3()}
               {state.paso === 4 && <Paso5 />}
               {state.paso === 5 && <Paso6 />}
               {state.paso === 6 && <Paso7 />}

@@ -13,12 +13,31 @@ const glass    = 'rounded-[2rem] border border-white/50 dark:border-white/10 bg-
 const inputCls = 'w-full rounded-xl border border-gray-200 dark:border-white/[0.1] bg-gray-50 dark:bg-white/[0.05] px-3 py-2 text-sm text-gray-900 dark:text-white placeholder-gray-400 dark:placeholder-white/30 focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/10 transition-colors'
 const labelCls = 'block text-[10px] font-bold text-gray-500 dark:text-[#8A8A9A] mb-1 uppercase tracking-wider'
 
+const PATRON_OPTIONS = [
+  { value: '',                  label: '— Sin especificar —' },
+  { value: 'MOVILIDAD',        label: 'Movilidad' },
+  { value: 'RODILLA_DOMINANTE', label: 'Rodilla dominante' },
+  { value: 'CADERA_DOMINANTE',  label: 'Cadera dominante' },
+  { value: 'EMPUJE',            label: 'Empuje' },
+  { value: 'TRACCION',          label: 'Tracción' },
+  { value: 'HIBRIDO',           label: 'Híbrido' },
+  { value: 'HOMBROS',           label: 'Hombros' },
+  { value: 'CORE',              label: 'Core' },
+  { value: 'POTENCIA',          label: 'Potencia' },
+  { value: 'PLIO_MI',           label: 'Pliometría MI' },
+  { value: 'PLIO_MS',           label: 'Pliometría MS' },
+  { value: 'ISO_MI',            label: 'Isométrico MI' },
+  { value: 'ISO_MS',            label: 'Isométrico MS' },
+  { value: 'ACCESORIO',         label: 'Accesorio' },
+  { value: 'OTROS',             label: 'Otros' },
+]
+
 const schema = z.object({
   nombre:           z.string().min(1, 'Requerido'),
   descripcion:      z.string().optional(),
   videoUrl:         z.string().optional(),
   patronMovimiento: z.string().optional(),
-  dificultad:       z.enum(['FACIL', 'INTERMEDIO', 'AVANZADO']),
+  dificultad:       z.enum(['FACIL', 'DIFICIL', 'AVANZADO']),
 })
 type FormValues = z.infer<typeof schema>
 
@@ -33,7 +52,7 @@ export default function EjercicioDetailPage() {
 
   const { register, handleSubmit, reset, formState: { errors } } = useForm<FormValues>({
     resolver: zodResolver(schema),
-    defaultValues: { dificultad: 'INTERMEDIO' },
+    defaultValues: { dificultad: 'DIFICIL' },
   })
 
   useEffect(() => {
@@ -123,7 +142,7 @@ export default function EjercicioDetailPage() {
                   <label className={labelCls}>Dificultad</label>
                   <select {...register('dificultad')} className={inputCls + ' cursor-pointer'}>
                     <option value="FACIL">Fácil</option>
-                    <option value="INTERMEDIO">Intermedio</option>
+                    <option value="DIFICIL">Difícil</option>
                     <option value="AVANZADO">Avanzado</option>
                   </select>
                 </div>
@@ -138,7 +157,11 @@ export default function EjercicioDetailPage() {
               </div>
               <div>
                 <label className={labelCls}>Patrón de movimiento</label>
-                <input {...register('patronMovimiento')} placeholder="ej. Empuje horizontal" className={inputCls} />
+                <select {...register('patronMovimiento')} className={inputCls + ' cursor-pointer'}>
+                  {PATRON_OPTIONS.map(o => (
+                    <option key={o.value} value={o.value}>{o.label}</option>
+                  ))}
+                </select>
               </div>
               <div className="flex gap-2 pt-2">
                 <button
