@@ -65,7 +65,7 @@ const editSchema = z.object({
   lastName: z.string().min(1, 'Requerido'),
   email:    z.string().email('Email inválido').or(z.literal('')),
   phone:    z.string().optional(),
-  dni:      z.string().min(1, 'Requerido'),
+  cuil:     z.string().min(1, 'Requerido'),
   sedeId:   z.string().optional(),
   // ficha
   peso:            z.string().optional(),
@@ -499,7 +499,7 @@ export default function ClientProfilePage() {
         const c = clientRes.value
         setClient(c)
         reset({
-          name: c.name, lastName: c.lastName, email: c.email ?? '', phone: c.phone ?? '', dni: c.dni ?? '',
+          name: c.name, lastName: c.lastName, email: c.email ?? '', phone: c.phone ?? '', cuil: c.cuil ?? '',
           sedeId: c.sede?.id ?? '',
           peso:            f?.peso    != null ? String(f.peso)   : '',
           altura:          f?.altura  != null ? String(f.altura) : '',
@@ -548,7 +548,7 @@ export default function ClientProfilePage() {
       const [clientRes, fichaRes] = await Promise.allSettled([
         clientsApi.update(client.id, {
           name: data.name, lastName: data.lastName,
-          email: data.email ?? '', phone: data.phone ?? '', dni: data.dni,
+          email: data.email ?? '', phone: data.phone ?? '', cuil: data.cuil,
           sedeId: data.sedeId || null,
         }),
         clientsApi.updateFicha(client.id, {
@@ -831,7 +831,7 @@ export default function ClientProfilePage() {
                       <div className="flex items-center gap-2">
                         <button
                           type="button"
-                          onClick={() => { reset({ name: client.name, lastName: client.lastName, email: client.email ?? '', phone: client.phone ?? '', dni: client.dni ?? '', peso: ficha?.peso != null ? String(ficha.peso) : '', altura: ficha?.altura != null ? String(ficha.altura) : '', actividadDiaria: ficha?.actividadDiaria ?? '', objetivos: ficha?.objetivos ?? '', deportePractica: ficha?.deportePractica ?? '', experiencia: ficha?.experiencia ?? '', lesiones: ficha?.lesiones ?? '', patologiasBase: ficha?.patologiasBase ?? '' }); setIsEditing(false) }}
+                          onClick={() => { reset({ name: client.name, lastName: client.lastName, email: client.email ?? '', phone: client.phone ?? '', cuil: client.cuil ?? '', peso: ficha?.peso != null ? String(ficha.peso) : '', altura: ficha?.altura != null ? String(ficha.altura) : '', actividadDiaria: ficha?.actividadDiaria ?? '', objetivos: ficha?.objetivos ?? '', deportePractica: ficha?.deportePractica ?? '', experiencia: ficha?.experiencia ?? '', lesiones: ficha?.lesiones ?? '', patologiasBase: ficha?.patologiasBase ?? '' }); setIsEditing(false) }}
                           className="flex items-center gap-1.5 text-xs font-semibold px-3 py-1.5 rounded-xl border border-gray-200 dark:border-white/[0.1] bg-white/70 dark:bg-white/[0.04] text-gray-700 dark:text-gray-300 hover:bg-white dark:hover:bg-white/[0.09] transition-all"
                         >
                           <XCircle size={12} />
@@ -849,7 +849,7 @@ export default function ClientProfilePage() {
                       </div>
                     ) : (
                       <button
-                        onClick={() => { reset({ name: client.name, lastName: client.lastName, email: client.email ?? '', phone: client.phone ?? '', dni: client.dni ?? '', peso: ficha?.peso != null ? String(ficha.peso) : '', altura: ficha?.altura != null ? String(ficha.altura) : '', actividadDiaria: ficha?.actividadDiaria ?? '', objetivos: ficha?.objetivos ?? '', deportePractica: ficha?.deportePractica ?? '', experiencia: ficha?.experiencia ?? '', lesiones: ficha?.lesiones ?? '', patologiasBase: ficha?.patologiasBase ?? '' }); setIsEditing(true) }}
+                        onClick={() => { reset({ name: client.name, lastName: client.lastName, email: client.email ?? '', phone: client.phone ?? '', cuil: client.cuil ?? '', peso: ficha?.peso != null ? String(ficha.peso) : '', altura: ficha?.altura != null ? String(ficha.altura) : '', actividadDiaria: ficha?.actividadDiaria ?? '', objetivos: ficha?.objetivos ?? '', deportePractica: ficha?.deportePractica ?? '', experiencia: ficha?.experiencia ?? '', lesiones: ficha?.lesiones ?? '', patologiasBase: ficha?.patologiasBase ?? '' }); setIsEditing(true) }}
                         className="flex items-center gap-1.5 text-xs font-semibold px-3 py-1.5 rounded-xl border border-gray-200 dark:border-white/[0.1] bg-white/70 dark:bg-white/[0.04] text-gray-700 dark:text-gray-300 hover:bg-white dark:hover:bg-white/[0.09] transition-all"
                       >
                         <Edit2 size={12} />
@@ -879,7 +879,7 @@ export default function ClientProfilePage() {
                     {([
                       { label: 'Nombre',   regKey: 'name'     as keyof EditValues, Icon: User,  placeholder: 'Sin nombre',   raw: client.name },
                       { label: 'Apellido', regKey: 'lastName' as keyof EditValues, Icon: User,  placeholder: 'Sin apellido', raw: client.lastName },
-                      { label: 'DNI',      regKey: 'dni'      as keyof EditValues, Icon: Hash,  placeholder: 'Sin DNI',      raw: client.dni },
+                      { label: 'CUIL',     regKey: 'cuil'     as keyof EditValues, Icon: Hash,  placeholder: 'Sin CUIL',     raw: client.cuil },
                       { label: 'Email',    regKey: 'email'    as keyof EditValues, Icon: Mail,  placeholder: 'Sin email',    raw: client.email },
                       { label: 'Teléfono', regKey: 'phone'    as keyof EditValues, Icon: Phone, placeholder: 'Sin teléfono', raw: client.phone },
                     ]).map(({ label, regKey, Icon, placeholder, raw }) => (

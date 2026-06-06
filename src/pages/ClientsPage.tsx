@@ -40,7 +40,7 @@ export default function ClientsPage() {
         c.name.toLowerCase().includes(q) ||
         c.lastName.toLowerCase().includes(q) ||
         c.email?.toLowerCase().includes(q) ||
-        c.dni?.includes(q)
+        c.cuil?.includes(q)
       const matchesStatus = statusFilter === 'all' || c.status === statusFilter
       return matchesSearch && matchesStatus
     })
@@ -53,7 +53,7 @@ export default function ClientsPage() {
       render: (c) => (
         <div className="flex flex-col gap-0.5">
           <span className="font-semibold text-gray-900 dark:text-white">{c.name} {c.lastName}</span>
-          <span className="text-xs text-saas-muted">DNI {c.dni}</span>
+          <span className="text-xs text-saas-muted">CUIL {c.cuil}</span>
         </div>
       ),
     },
@@ -164,7 +164,7 @@ export default function ClientsPage() {
           <input
             value={search}
             onChange={e => setSearch(e.target.value)}
-            placeholder="Buscar por nombre, email o DNI…"
+            placeholder="Buscar por nombre, email o CUIL…"
             className="w-full rounded-xl border border-white/50 dark:border-white/10 bg-white/30 dark:bg-black/30 backdrop-blur-xl pl-10 pr-4 py-2 text-xs font-semibold text-gray-800 dark:text-gray-200 placeholder-gray-400 focus:outline-none h-10"
           />
         </div>

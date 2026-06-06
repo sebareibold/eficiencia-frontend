@@ -67,7 +67,7 @@ const STEPS = [
 ]
 
 const STEP_META: Record<number, { Icon: typeof User; title: string; description: string }> = {
-  1: { Icon: User, title: 'Datos del cliente', description: 'Nombre, DNI y datos de contacto del nuevo socio' },
+  1: { Icon: User, title: 'Datos del cliente', description: 'Nombre, CUIL y datos de contacto del nuevo socio' },
   2: { Icon: CreditCard, title: 'Membresía', description: 'Plan, modalidad y precio del período' },
   3: { Icon: Banknote, title: 'Primer pago', description: 'Registrá el pago que realizó el cliente hoy' },
   4: { Icon: Calendar, title: 'Turno', description: 'Asigná el turno al que va a asistir' },
@@ -206,7 +206,7 @@ export default function CreateClientPage() {
   const navigate = useNavigate()
 
   const [step, setStep] = useState<StepId>(1)
-  const [clientData, setClientData] = useState({ nombre: '', apellido: '', dni: '', email: '', telefono: '' })
+  const [clientData, setClientData] = useState({ nombre: '', apellido: '', cuil: '', email: '', telefono: '' })
   const [membershipData, setMembershipData] = useState<{
     planId: string; modalidad: Modalidad; precio: string; fechaInicio: string
   }>({ planId: '', modalidad: 'EFECTIVO', precio: '', fechaInicio: today })
@@ -246,7 +246,7 @@ export default function CreateClientPage() {
     if (s === 1) {
       if (!clientData.nombre.trim()) e.nombre = 'Requerido'
       if (!clientData.apellido.trim()) e.apellido = 'Requerido'
-      if (!clientData.dni.trim()) e.dni = 'Requerido'
+      if (!clientData.cuil.trim()) e.cuil = 'Requerido'
       if (clientData.email.trim() && !isValidEmail(clientData.email)) e.email = 'Email inválido'
     }
     if (s === 2) {
@@ -286,7 +286,7 @@ export default function CreateClientPage() {
     try {
       const client = await clientsApi.create({
         name: clientData.nombre, lastName: clientData.apellido,
-        email: clientData.email, phone: clientData.telefono, dni: clientData.dni,
+        email: clientData.email, phone: clientData.telefono, cuil: clientData.cuil,
       })
       const membresia = await membresiasClienteApi.create({
         clienteId: String(client.id), planId: membershipData.planId,
@@ -450,10 +450,10 @@ export default function CreateClientPage() {
           </Field>
         </div>
 
-        <Field label="DNI" required error={errors.dni} icon={Hash}>
+        <Field label="CUIL" required error={errors.cuil} icon={Hash}>
           <input
-            value={clientData.dni}
-            onChange={e => setClientData(p => ({ ...p, dni: e.target.value }))}
+            value={clientData.cuil}
+            onChange={e => setClientData(p => ({ ...p, cuil: e.target.value }))}
             className={ic(true)}
           />
         </Field>
@@ -987,7 +987,7 @@ export default function CreateClientPage() {
             className="flex-1"
             onClick={() => {
               setStep(1)
-              setClientData({ nombre: '', apellido: '', dni: '', email: '', telefono: '' })
+              setClientData({ nombre: '', apellido: '', cuil: '', email: '', telefono: '' })
               setMembershipData({ planId: '', modalidad: 'EFECTIVO', precio: '', fechaInicio: today })
               setPaymentData({ monto: '', metodo: 'EFECTIVO', fecha: today, comprobante: '' })
               setSelectedTurnoId(null)

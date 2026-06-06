@@ -6,7 +6,7 @@ export interface Client {
   lastName: string
   email: string
   phone: string
-  dni: string
+  cuil: string
   status: ClientStatus
   membershipExpiresAt: string | null
   membershipStartDate?: string | null
@@ -28,7 +28,7 @@ export interface CreateClientDto {
   lastName: string
   email: string
   phone: string
-  dni: string
+  cuil: string
 }
 
 export interface UpdateClientDto extends Partial<CreateClientDto> {

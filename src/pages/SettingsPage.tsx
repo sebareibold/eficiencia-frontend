@@ -285,7 +285,7 @@ function NotificationsSection() {
         </SectionRow>
         <SectionRow
           label="Nuevos clientes"
-          description="Email inmediato al registrar un cliente. Incluye nombre, DNI y email del nuevo socio."
+          description="Email inmediato al registrar un cliente. Incluye nombre, CUIL y email del nuevo socio."
         >
           <Toggle
             checked={notifications.notifNuevosClientes}

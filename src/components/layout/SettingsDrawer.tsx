@@ -226,7 +226,7 @@ function NotificationsSection() {
         <SectionRow label="Clientes con deuda" description="Todos los clientes en estado DEUDA con nombre, email y teléfono.">
           <Toggle checked={notifications.notifDeudas} onChange={(v) => updateNotifications({ notifDeudas: v })} />
         </SectionRow>
-        <SectionRow label="Nuevos clientes" description="Al registrar un cliente: nombre, DNI y email.">
+        <SectionRow label="Nuevos clientes" description="Al registrar un cliente: nombre, CUIL y email.">
           <Toggle checked={notifications.notifNuevosClientes} onChange={(v) => updateNotifications({ notifNuevosClientes: v })} />
         </SectionRow>
         <SectionRow label="Nuevos usuarios del sistema" description="Al crear un usuario o aprobar una solicitud de acceso: nombre, email y rol." last>

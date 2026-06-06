@@ -19,7 +19,7 @@ function mapCliente(c: any): Client {
     lastName: c.apellido,
     email: c.email ?? '',
     phone: c.telefono ?? '',
-    dni: c.dni ?? '',
+    cuil: c.cuil ?? '',
     status: mapEstado(c.estado),
     membershipExpiresAt: membership?.fechaVencimiento ?? null,
     membershipStartDate: membership?.fechaInicio ?? null,
@@ -74,7 +74,7 @@ export const clientsApi = {
       apellido: dto.lastName,
       email: dto.email || undefined,
       telefono: dto.phone || undefined,
-      dni: dto.dni || undefined,
+      cuil: dto.cuil || undefined,
       fechaInicio: new Date().toISOString(),
     }).then((r) => mapCliente(r.data)),
 
@@ -84,7 +84,7 @@ export const clientsApi = {
       ...(dto.lastName !== undefined && { apellido: dto.lastName }),
       ...(dto.email !== undefined && { email: dto.email }),
       ...(dto.phone !== undefined && { telefono: dto.phone }),
-      ...(dto.dni !== undefined && { dni: dto.dni }),
+      ...(dto.cuil !== undefined && { cuil: dto.cuil }),
       ...(dto.sedeId !== undefined && { sedeId: dto.sedeId || null }),
     }).then((r) => mapCliente(r.data)),
 

@@ -1510,10 +1510,10 @@ function ResumenCard({ insc, clients, sala }: { insc: InscripcionEntry; clients:
             </span>
           </div>
           <div className="flex flex-wrap items-center gap-x-3 gap-y-1 mt-1.5">
-            {clientData?.dni && (
+            {clientData?.cuil && (
               <span className="inline-flex items-center gap-1 text-[11px] text-gray-500 dark:text-[#8A8A9A]">
                 <Hash size={10} className="shrink-0 opacity-60" />
-                DNI {clientData.dni}
+                CUIL {clientData.cuil}
               </span>
             )}
             {clientData?.planName && (
