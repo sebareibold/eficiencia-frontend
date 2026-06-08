@@ -778,11 +778,10 @@ function SearchableExerciseSelector({
       ) : (
         <div className="max-h-56 overflow-y-auto space-y-1 pr-1">
           {results.map(ej => (
-            <button
+            <div
               key={ej.id}
-              type="button"
               onClick={() => onSelect(ej)}
-              className="w-full text-left flex items-center justify-between gap-3 rounded-xl px-3 py-2.5 hover:bg-white/[0.06] transition-colors group"
+              className="w-full text-left flex items-center justify-between gap-3 rounded-xl px-3 py-2.5 hover:bg-white/[0.06] transition-colors group cursor-pointer"
             >
               <div className="min-w-0">
                 <p className="text-sm font-semibold text-white leading-tight truncate">{ej.nombre}</p>
@@ -804,7 +803,7 @@ function SearchableExerciseSelector({
                   </button>
                 )}
               </div>
-            </button>
+            </div>
           ))}
         </div>
       )}
@@ -1053,9 +1052,10 @@ function EjWizardInlineCells({
     peso:         ej.peso                  ?? '',
     rir:          ej.rir?.toString()        ?? '',
     rpe:          ej.rpe?.toString()        ?? '',
+    notas:        ej.notas                 ?? '',
   })
 
-  const inp = 'w-full bg-gray-50 dark:bg-white/[0.07] border border-gray-200 dark:border-white/[0.12] rounded-lg px-1.5 py-1 text-xs text-saas-text dark:text-white placeholder-gray-300 dark:placeholder-white/20 focus:outline-none focus:border-primary/50 transition-colors'
+  const inp = 'w-full bg-gray-50 dark:bg-white/[0.07] border border-gray-200 dark:border-white/[0.12] rounded-lg px-1.5 py-1 text-xs text-saas-text dark:text-white placeholder-gray-300 dark:placeholder-white/20 focus:outline-none focus:border-primary/50 transition-colors [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none'
 
   function commit() {
     onUpdate({
@@ -1065,6 +1065,7 @@ function EjWizardInlineCells({
       peso:         draft.peso         || undefined,
       rir:          draft.rir          ? Number(draft.rir)     : undefined,
       rpe:          draft.rpe          ? Number(draft.rpe)     : undefined,
+      notas:        draft.notas        || undefined,
     })
   }
 
@@ -1115,6 +1116,12 @@ function EjWizardInlineCells({
             onKeyDown={e => { if (e.key === 'Escape') onCancel() }}
             placeholder="RPE" className={`${inp} text-center`} />
         </div>
+      </td>
+      <td className="px-1.5 py-1.5 min-w-[120px]">
+        <input value={draft.notas}
+          onChange={e => setDraft(d => ({ ...d, notas: e.target.value }))}
+          onKeyDown={e => { if (e.key === 'Escape') onCancel() }}
+          placeholder="Nota..." className={inp} />
       </td>
       <td className="px-1.5 py-1.5 w-16">
         <div className="flex items-center justify-center gap-0.5">
@@ -1763,7 +1770,7 @@ export default function CreateRutinaPage() {
           <table className="w-full border-collapse text-sm">
             <thead className="sticky top-0 z-10">
               <tr className="border-b border-white/40 dark:border-white/[0.08] bg-white/50 dark:bg-black/20 backdrop-blur-sm">
-                {(['Semana', 'Día', 'Bloque', 'Ejercicio', 'Ser.', 'Reps', 'Peso', 'RIR/RPE', ''] as const).map((h, i) => (
+                {(['Semana', 'Día', 'Bloque', 'Ejercicio', 'Ser.', 'Reps', 'Peso', 'RIR/RPE', 'Nota', ''] as const).map((h, i) => (
                   <th key={`h${i}`} className={`py-2.5 text-[10px] font-semibold text-gray-400 dark:text-white/35 uppercase tracking-widest whitespace-nowrap ${i < 3 ? 'px-3 text-left' : i === 3 ? 'px-4 text-left' : 'px-3 text-center'}`}>{h}</th>
                 ))}
               </tr>
@@ -1862,7 +1869,7 @@ export default function CreateRutinaPage() {
                   rows.push(
                     <tr key={`${sem._id}-empty`} data-sem-id={sem._id} className={semIdx > 0 ? 'border-t-2 border-gray-200 dark:border-white/[0.1]' : ''}>
                       {semCell()}
-                      <td colSpan={7} className="px-4 py-2.5">
+                      <td colSpan={8} className="px-4 py-2.5">
                         <div className="relative flex items-center gap-3">
                           <span className="text-xs text-gray-400 dark:text-white/30">Sin días</span>
                           <button onClick={() => setShowDiaPicker(sem._id)} className="flex items-center gap-1 text-xs text-primary/70 hover:text-primary transition-colors">
@@ -1911,7 +1918,7 @@ export default function CreateRutinaPage() {
                     rows.push(
                       <tr key={`${ses._id}-empty`} data-sem-id={sem._id} className={diaBorder}>
                         {semCell()}{diaCell()}
-                        <td colSpan={6} className="px-4 py-2.5">
+                        <td colSpan={7} className="px-4 py-2.5">
                           <div className="flex items-center gap-3">
                             <span className="text-xs text-gray-400 dark:text-white/30">Sin bloques</span>
                             <button onClick={() => dispatch({ type: 'ADD_BLOQUE_W', sesionId: ses._id })} className="flex items-center gap-1 text-xs text-primary/70 hover:text-primary transition-colors">
@@ -1980,7 +1987,7 @@ export default function CreateRutinaPage() {
                       rows.push(
                         <tr key={`${bl._id}-empty`} data-sem-id={sem._id} className={bt}>
                           {semCell()}{diaCell()}{blCell()}
-                          <td colSpan={5} className="px-4 py-2">
+                          <td colSpan={6} className="px-4 py-2">
                             <button onClick={() => dispatch({ type: 'ADD_EJ_W', bloqueId: bl._id, nombre: '' })} className="flex items-center gap-1.5 text-xs text-gray-400 dark:text-white/40 hover:text-primary transition-colors py-0.5">
                               <Plus className="w-3 h-3" /> Agregar ejercicio
                             </button>
@@ -2017,7 +2024,7 @@ export default function CreateRutinaPage() {
                                 onAssign={() => { setEditingEjId(null); setAssigningEjId(ej._id) }}
                               />
                             ) : isAssigning ? (
-                              <td colSpan={6} className="px-3 py-2">
+                              <td colSpan={7} className="px-3 py-2">
                                 <SearchableExerciseSelector
                                   patronHint={bl.patronMovimiento}
                                   onSelect={catalogo => {
@@ -2091,6 +2098,12 @@ export default function CreateRutinaPage() {
                                     )
                                   })()}
                                 </td>
+                                {/* Nota */}
+                                <td className="px-3 py-2.5">
+                                  {ej.notas
+                                    ? <span className="text-xs text-gray-400 dark:text-white/35 italic">{ej.notas}</span>
+                                    : <span className="text-gray-300 dark:text-white/10 text-xs">—</span>}
+                                </td>
                                 {/* Acciones */}
                                 <td className="px-2 py-2.5 text-center w-[56px]">
                                   <div className="flex items-center justify-center gap-0.5 opacity-0 group-hover/ejrow:opacity-100 transition-opacity">
@@ -2117,7 +2130,7 @@ export default function CreateRutinaPage() {
                     rows.push(
                       <tr key={`${bl._id}-addej`} data-sem-id={sem._id}>
                         <td className={`w-[120px] ${C}`} /><td className={`w-[90px] ${C}`} /><td className={`w-[60px] ${C}`} />
-                        <td colSpan={5} className="px-4 py-1.5">
+                        <td colSpan={6} className="px-4 py-1.5">
                           <button onClick={() => dispatch({ type: 'ADD_EJ_W', bloqueId: bl._id, nombre: '' })}
                             className="flex items-center gap-1.5 text-[11px] text-gray-400 dark:text-white/40 hover:text-primary transition-colors py-0.5">
                             <Plus className="w-3 h-3" /> ej. en bloque {bl.letra}
@@ -2132,7 +2145,7 @@ export default function CreateRutinaPage() {
                   rows.push(
                     <tr key={`${ses._id}-addbl`} data-sem-id={sem._id} className="border-t border-gray-100 dark:border-white/[0.06]">
                       <td className={`w-[120px] ${C}`} /><td className={`w-[90px] ${C}`} />
-                      <td colSpan={6} className="px-4 py-2">
+                      <td colSpan={7} className="px-4 py-2">
                         <button onClick={() => dispatch({ type: 'ADD_BLOQUE_W', sesionId: ses._id })}
                           className="flex items-center gap-1.5 text-[11px] text-gray-400 dark:text-white/40 hover:text-primary transition-colors">
                           <Plus className="w-3.5 h-3.5" /> bloque en {ses.dia}
@@ -2147,7 +2160,7 @@ export default function CreateRutinaPage() {
                 rows.push(
                   <tr key={`${sem._id}-adddia`} data-sem-id={sem._id} className="border-t-2 border-gray-200 dark:border-white/[0.08]">
                     <td className={`w-[120px] ${C}`} />
-                    <td colSpan={7} className="px-4 py-2.5 relative">
+                    <td colSpan={8} className="px-4 py-2.5 relative">
                       <button onClick={() => setShowDiaPicker(v => v === sem._id ? null : sem._id)}
                         className="flex items-center gap-1.5 text-xs text-gray-400 dark:text-white/40 hover:text-primary transition-colors">
                         <Plus className="w-3.5 h-3.5" /> día en {semLabel}

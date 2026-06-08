@@ -363,6 +363,9 @@ export default function EjecucionRutinaPage() {
                                         <ExternalLink className="w-2.5 h-2.5" /> Ver video
                                       </a>
                                     )}
+                                    {ej.notas && (
+                                      <span className="text-[11px] text-gray-400 dark:text-white/40 italic block mt-0.5">{ej.notas}</span>
+                                    )}
                                   </td>
 
                                   {/* Plan comprimido */}

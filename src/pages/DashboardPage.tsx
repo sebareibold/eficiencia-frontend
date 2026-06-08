@@ -91,7 +91,7 @@ function Section({ title, subtitle, children, headerAction }: {
 }) {
   return (
     <div className="space-y-3 lg:space-y-4">
-      <div className="flex items-start justify-between gap-3">
+      <div className="flex flex-col sm:flex-row sm:items-start sm:justify-between gap-2 sm:gap-3">
         <div>
           <h2 className="text-base lg:text-xl font-black tracking-tight text-gray-900 dark:text-white">{title}</h2>
           {subtitle && <p className="text-xs lg:text-sm font-semibold text-gray-500 dark:text-gray-400 mt-0.5">{subtitle}</p>}
@@ -391,7 +391,7 @@ export default function DashboardPage() {
             {periodLabel}, vista general del negocio
           </p>
         </div>
-        <div className="flex items-center gap-2 flex-wrap">
+        <div className="flex flex-wrap items-center gap-2">
           <AnimatePresence mode="wait">
             {periodMode !== 'range' ? (
               <motion.div
@@ -699,7 +699,7 @@ export default function DashboardPage() {
             ) : pieClientesData.length === 0 ? (
               <p className="text-sm text-gray-400 flex-1 flex items-center">Sin clientes registrados</p>
             ) : (<>
-              <div className="h-[140px] lg:h-[170px] xl:h-[180px]">
+              <div className="h-[175px] lg:h-[185px] xl:h-[195px]">
                 <ResponsiveContainer width="100%" height="100%">
                   <PieChart>
                     <Pie data={pieClientesData} cx="50%" cy="50%" innerRadius={55} outerRadius={80} dataKey="value" paddingAngle={3}>
@@ -777,7 +777,7 @@ export default function DashboardPage() {
             ) : pieGastosData.length === 0 ? (
               <p className="text-sm text-gray-400 flex-1 flex items-center">Sin gastos en este período</p>
             ) : (<>
-              <div className="h-[140px] lg:h-[170px] xl:h-[180px]">
+              <div className="h-[175px] lg:h-[185px] xl:h-[195px]">
                 <ResponsiveContainer width="100%" height="100%">
                   <PieChart>
                     <Pie data={pieGastosData} cx="50%" cy="50%" innerRadius={55} outerRadius={80} dataKey="value" paddingAngle={3}>

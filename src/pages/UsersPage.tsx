@@ -215,18 +215,19 @@ function UsuariosTab() {
         ))}
       </div>
 
-      <div className="flex flex-col sm:flex-row gap-3 items-start sm:items-center justify-between">
-        <div className="flex flex-wrap gap-2 items-center">
-          <div className="relative">
-            <Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400 pointer-events-none" />
-            <input
-              value={search}
-              onChange={e => setSearch(e.target.value)}
-              placeholder="Buscar por nombre o email…"
-              className="w-64 rounded-xl border border-white/50 dark:border-white/[0.08] bg-white/60 dark:bg-white/[0.04] backdrop-blur-sm py-2 pl-9 pr-4 text-sm text-gray-900 dark:text-white placeholder:text-gray-400 focus:border-gray-300 dark:focus:border-white/20 focus:outline-none transition-all"
-            />
-          </div>
-          <div className="flex gap-1 rounded-xl border border-white/50 dark:border-white/[0.08] bg-white/40 dark:bg-white/[0.04] backdrop-blur-sm p-1">
+      <div className="flex flex-col gap-3">
+        <div className="relative w-full">
+          <Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400 pointer-events-none" />
+          <input
+            value={search}
+            onChange={e => setSearch(e.target.value)}
+            placeholder="Buscar por nombre o email…"
+            className="w-full rounded-xl border border-white/50 dark:border-white/[0.08] bg-white/60 dark:bg-white/[0.04] backdrop-blur-sm py-2 pl-9 pr-4 text-sm text-gray-900 dark:text-white placeholder:text-gray-400 focus:border-gray-300 dark:focus:border-white/20 focus:outline-none transition-all"
+          />
+        </div>
+        <div className="flex flex-wrap gap-2 items-center justify-between">
+          <div className="overflow-x-auto pb-0.5">
+          <div className="flex gap-1 rounded-xl border border-white/50 dark:border-white/[0.08] bg-white/40 dark:bg-white/[0.04] backdrop-blur-sm p-1 min-w-max">
             {(['all', 'ADMINISTRADOR', 'STAFF', 'PROFESOR'] as const).map(r => (
               <button
                 key={r}
@@ -238,20 +239,62 @@ function UsuariosTab() {
             ))}
           </div>
         </div>
-        <div className="flex gap-2">
-          <button onClick={load} className="flex h-9 w-9 items-center justify-center rounded-xl border border-white/50 dark:border-white/[0.08] bg-white/60 dark:bg-white/[0.04] backdrop-blur-sm text-gray-400 hover:text-gray-700 dark:hover:text-white transition-colors">
-            <RefreshCw size={14} />
-          </button>
-          <button
-            onClick={() => setCreateOpen(true)}
-            className="flex items-center gap-2 rounded-xl btn-action px-4 py-2 text-sm"
-          >
-            <Plus size={14} strokeWidth={2.5} /> Nuevo usuario
-          </button>
+          <div className="flex gap-2">
+            <button onClick={load} className="flex h-9 w-9 items-center justify-center rounded-xl border border-white/50 dark:border-white/[0.08] bg-white/60 dark:bg-white/[0.04] backdrop-blur-sm text-gray-400 hover:text-gray-700 dark:hover:text-white transition-colors">
+              <RefreshCw size={14} />
+            </button>
+            <button
+              onClick={() => setCreateOpen(true)}
+              className="flex items-center gap-2 rounded-xl btn-action px-4 py-2 text-sm"
+            >
+              <Plus size={14} strokeWidth={2.5} /> Nuevo usuario
+            </button>
+          </div>
         </div>
       </div>
 
-      <div className={`${glassCard} overflow-hidden`}>
+      {/* ── Mobile card grid ── */}
+      {!loading && filtered.length > 0 && (
+        <div className="sm:hidden grid grid-cols-1 gap-3">
+          {filtered.map(u => (
+            <div key={u.id} className={`${glassCard} p-4 flex flex-col gap-3`}>
+              <div className="flex items-start justify-between gap-2">
+                <div className="flex items-center gap-3 min-w-0">
+                  <div className="h-10 w-10 rounded-xl bg-gray-100 dark:bg-white/[0.08] flex items-center justify-center text-sm font-black text-gray-700 dark:text-gray-300 shrink-0">
+                    {u.nombre.charAt(0).toUpperCase()}
+                  </div>
+                  <div className="min-w-0">
+                    <p className="font-bold text-sm text-gray-900 dark:text-white truncate">{u.nombre}</p>
+                    <p className="text-xs text-[#8A8A9A] truncate">{u.email}</p>
+                  </div>
+                </div>
+                <div className="flex items-center gap-1 shrink-0">
+                  <button onClick={() => openEdit(u)} className="rounded-lg p-1.5 text-gray-400 hover:bg-gray-100 dark:hover:bg-white/[0.08] hover:text-gray-700 dark:hover:text-white transition-all">
+                    <Edit2 size={14} />
+                  </button>
+                  {u.id !== currentUser?.id && (
+                    <button onClick={() => setDeleteTarget(u)} disabled={deletingId === u.id} className="rounded-lg p-1.5 text-gray-400 hover:bg-red-50 dark:hover:bg-red-500/10 hover:text-red-500 transition-all disabled:opacity-40">
+                      <Trash2 size={14} />
+                    </button>
+                  )}
+                </div>
+              </div>
+              <div className="flex items-center gap-2 flex-wrap">
+                <RolBadge rol={u.rol} />
+                <EstadoBadge activo={u.activo} />
+                {u.profesor && (
+                  <span className="inline-flex items-center gap-1 text-xs font-medium text-emerald-600 dark:text-emerald-400">
+                    <UserCheck size={12} /> Profesor vinculado
+                  </span>
+                )}
+              </div>
+            </div>
+          ))}
+        </div>
+      )}
+
+      {/* ── Desktop table ── */}
+      <div className={`${glassCard} overflow-hidden hidden sm:block`}>
         {loading ? (
           <div className="p-6 space-y-3">
             {Array.from({ length: 5 }).map((_, i) => <Skeleton key={i} className="h-12 rounded-xl" />)}
@@ -314,6 +357,15 @@ function UsuariosTab() {
           </div>
         )}
       </div>
+      {/* Empty state mobile */}
+      {!loading && filtered.length === 0 && (
+        <div className="sm:hidden py-12 text-center text-sm text-[#8A8A9A]">No se encontraron usuarios</div>
+      )}
+      {loading && (
+        <div className="sm:hidden p-4 space-y-3">
+          {Array.from({ length: 4 }).map((_, i) => <Skeleton key={i} className="h-20 rounded-2xl" />)}
+        </div>
+      )}
 
       <Modal isOpen={createOpen} onClose={() => { setCreateOpen(false); resetCreate() }} title="Nuevo usuario" size="md">
         <form onSubmit={hsCreate(onCreate)} className="space-y-4">
@@ -1151,24 +1203,26 @@ export default function UsersPage() {
         <p className="text-sm text-[#8A8A9A] mt-1">Gestión de cuentas, profesores, permisos y solicitudes de acceso</p>
       </div>
 
-      <div className="flex gap-1 p-1 rounded-2xl bg-white/40 dark:bg-white/[0.04] border border-gray-200/60 dark:border-white/[0.07] w-fit">
-        {TABS.map(t => {
-          const Icon = t.icon
-          return (
-            <button
-              key={t.value}
-              onClick={() => setTab(t.value)}
-              className={`flex items-center gap-2 px-4 py-2 rounded-xl text-sm font-semibold transition-all duration-150 ${
-                tab === t.value
-                  ? 'bg-white dark:bg-white/[0.09] text-gray-900 dark:text-white shadow-sm'
-                  : 'text-gray-500 dark:text-[#8A8A9A] hover:text-gray-800 dark:hover:text-gray-200'
-              }`}
-            >
-              <Icon size={15} strokeWidth={2} />
-              {t.label}
-            </button>
-          )
-        })}
+      <div className="overflow-x-auto -mx-1 px-1 pb-0.5">
+        <div className="flex gap-1 p-1 rounded-2xl bg-white/40 dark:bg-white/[0.04] border border-gray-200/60 dark:border-white/[0.07] w-fit min-w-max">
+          {TABS.map(t => {
+            const Icon = t.icon
+            return (
+              <button
+                key={t.value}
+                onClick={() => setTab(t.value)}
+                className={`flex items-center gap-2 px-4 py-2 rounded-xl text-sm font-semibold transition-all duration-150 whitespace-nowrap ${
+                  tab === t.value
+                    ? 'bg-white dark:bg-white/[0.09] text-gray-900 dark:text-white shadow-sm'
+                    : 'text-gray-500 dark:text-[#8A8A9A] hover:text-gray-800 dark:hover:text-gray-200'
+                }`}
+              >
+                <Icon size={15} strokeWidth={2} />
+                {t.label}
+              </button>
+            )
+          })}
+        </div>
       </div>
 
       {tab === 'usuarios'    && <UsuariosTab />}

@@ -15,6 +15,7 @@ export interface UpdateEjData {
   peso?: string
   rir?: number | ''
   rpe?: number | ''
+  notas?: string
 }
 
 export interface DraftEjercicio extends Omit<EjercicioPlan, 'catalogo'> {

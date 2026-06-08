@@ -299,8 +299,43 @@ export default function PlantillasPage({ embedded = false }: PlantillasPageProps
               <Layers size={32} className="opacity-40" />
               <p className="text-sm">Sin plantillas. {isAdmin && 'Creá la primera con el botón de arriba.'}</p>
             </div>
-          ) : (
-            <div className="overflow-x-auto">
+          ) : (<>
+            {/* ── Mobile card grid ── */}
+            <div className="sm:hidden grid grid-cols-1 gap-3 p-3">
+              {plantillas.map(p => (
+                <div key={p.id} className="rounded-2xl border border-white/50 dark:border-white/10 bg-white/40 dark:bg-white/[0.04] backdrop-blur-xl p-4 flex flex-col gap-3">
+                  <div className="flex items-start justify-between gap-2">
+                    <div className="min-w-0">
+                      <p className="font-bold text-sm text-gray-900 dark:text-white leading-tight">{p.nombre}</p>
+                      <div className="flex items-center gap-2 mt-1.5 flex-wrap">
+                        <span className={`inline-flex items-center rounded-full border px-2 py-0.5 text-[11px] font-semibold ${TIPO_COLORS[p.tipo]}`}>
+                          {TIPO_LABELS[p.tipo]}
+                        </span>
+                        <span className="text-[11px] text-gray-500 dark:text-[#8A8A9A]">{p.sesiones?.length ?? 0} sesiones</span>
+                        <span className={`inline-flex items-center rounded-full px-2 py-0.5 text-[11px] font-semibold ${p.activa ? 'bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border border-emerald-500/20' : 'bg-gray-100 dark:bg-white/[0.05] text-gray-400 border border-gray-200 dark:border-white/10'}`}>
+                          {p.activa ? 'Activa' : 'Inactiva'}
+                        </span>
+                      </div>
+                    </div>
+                    {isAdmin && (
+                      <div className="flex items-center gap-1 shrink-0">
+                        <button onClick={() => navigate(`/plantillas/${p.id}`)} className="p-1.5 rounded-lg text-gray-400 hover:text-gray-700 dark:hover:text-white hover:bg-gray-100 dark:hover:bg-white/[0.08] transition-all">
+                          <Edit2 size={13} />
+                        </button>
+                        <button onClick={() => handleToggle(p)} disabled={loadingToggle === p.id} className="p-1.5 rounded-lg text-gray-400 hover:text-primary hover:bg-primary/10 transition-all disabled:opacity-40">
+                          <Power size={13} />
+                        </button>
+                        <button onClick={() => handleDelete(p)} disabled={loadingDelete === p.id} className="p-1.5 rounded-lg text-gray-400 hover:text-red-400 hover:bg-red-500/10 transition-all disabled:opacity-40">
+                          <Trash2 size={13} />
+                        </button>
+                      </div>
+                    )}
+                  </div>
+                </div>
+              ))}
+            </div>
+            {/* ── Desktop table ── */}
+            <div className="hidden sm:block overflow-x-auto">
               <table className="w-full">
                 <thead>
                   <tr className="border-b border-white/20 dark:border-white/10 bg-gray-50/30 dark:bg-black/10">
@@ -327,7 +362,7 @@ export default function PlantillasPage({ embedded = false }: PlantillasPageProps
                 </tbody>
               </table>
             </div>
-          )}
+          </>)}
         </div>
 
         {plantillas.length > 0 && (

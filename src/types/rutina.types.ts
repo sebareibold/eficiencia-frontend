@@ -19,6 +19,8 @@ export interface EjercicioPlan {
   peso?: string
   rir?: number
   rpe?: number
+  metodo?: string
+  notas?: string
   orden: number
   ejecuciones: EjecucionCliente[]
   catalogo?: { nombre: string; patronMovimiento?: string; videoUrl?: string }
@@ -84,6 +86,8 @@ export interface CreateEjercicioPlanPayload {
   peso?: string
   rir?: number
   rpe?: number
+  metodo?: string
+  notas?: string
   orden?: number
 }
 
@@ -94,6 +98,8 @@ export interface UpdateEjercicioPlanPayload {
   peso?: string
   rir?: number
   rpe?: number
+  metodo?: string
+  notas?: string
 }
 
 export interface CreateEjecucionPayload {
@@ -107,6 +113,7 @@ export interface CreateEjecucionPayload {
 // ─── Nuevos tipos para el módulo de rutinas con plantillas ───────────────────
 
 export type PatronMovimientoEnum =
+  | 'MOVILIDAD'
   | 'RODILLA_DOMINANTE'
   | 'CADERA_DOMINANTE'
   | 'EMPUJE'

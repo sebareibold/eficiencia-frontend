@@ -331,7 +331,7 @@ export default function Navbar() {
         {/* ── Mobile burger button ───────────────────────────────────────── */}
         <button
           onClick={() => setMobileOpen(prev => !prev)}
-          className="md:hidden flex items-center justify-center h-10 w-10 rounded-xl border border-gray-200 dark:border-white/[0.1] bg-white/80 dark:bg-white/[0.06] text-gray-700 dark:text-gray-300 backdrop-blur-sm shadow-sm transition-all hover:bg-white dark:hover:bg-white/[0.12] active:scale-95 shrink-0"
+          className="md:hidden flex items-center justify-center h-10 w-10 rounded-xl border border-white/60 dark:border-white/[0.15] bg-white/30 dark:bg-white/[0.08] text-gray-700 dark:text-gray-300 backdrop-blur-3xl shadow-sm transition-all hover:bg-white/50 dark:hover:bg-white/[0.14] active:scale-95 shrink-0"
           aria-label={mobileOpen ? 'Cerrar menú' : 'Abrir menú'}
         >
           <AnimatePresence mode="wait" initial={false}>
@@ -382,7 +382,7 @@ export default function Navbar() {
               animate={{ x: 0 }}
               exit={{ x: '100%' }}
               transition={{ type: 'spring', stiffness: 320, damping: 32, mass: 0.85 }}
-              className="fixed inset-y-0 right-0 z-[91] flex flex-col w-[82%] max-w-[340px] md:hidden bg-[#f9f8f6] dark:bg-[#171717] border-l border-white/60 dark:border-white/[0.07] shadow-2xl"
+              className="fixed inset-y-0 right-0 z-[91] flex flex-col w-[82%] max-w-[340px] md:hidden bg-white/85 dark:bg-[#0f0f0f]/92 backdrop-blur-3xl border-l border-white/60 dark:border-white/[0.10] shadow-2xl"
             >
               {/* ── Header ────────────────────────────────────────────── */}
               <div className="relative flex items-center justify-end px-5 pt-5 pb-4 border-b border-gray-200/60 dark:border-white/[0.07]">

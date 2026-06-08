@@ -172,7 +172,63 @@ export default function ExercisesPage() {
           </div>
         ) : (
           <div className="flex flex-col gap-4">
-          <div className="overflow-x-auto rounded-[2rem] border border-white/50 dark:border-white/10 bg-white/30 dark:bg-black/30 backdrop-blur-3xl shadow-[0_8px_32px_rgba(0,0,0,0.04)] dark:shadow-[0_8px_32px_rgba(0,0,0,0.3)]">
+
+          {/* ── Mobile card grid ── */}
+          <div className="sm:hidden grid grid-cols-1 gap-3">
+            {pageItems.map((ej, i) => (
+              <motion.div
+                key={ej.id}
+                layout
+                initial={{ opacity: 0, y: 6 }}
+                animate={{ opacity: 1, y: 0 }}
+                transition={{ delay: i * 0.03 }}
+                className="rounded-2xl border border-white/50 dark:border-white/10 bg-white/30 dark:bg-black/30 backdrop-blur-3xl p-4 flex flex-col gap-3"
+              >
+                <div className="flex items-start justify-between gap-2">
+                  <div className="flex items-center gap-2.5 min-w-0">
+                    <span className="flex h-6 w-6 items-center justify-center rounded-md bg-primary/10 text-xs font-black text-primary shrink-0">
+                      {(page - 1) * PAGE_SIZE + i + 1}
+                    </span>
+                    <div className="min-w-0">
+                      <p className="font-bold text-sm text-gray-900 dark:text-white leading-tight truncate">{ej.nombre}</p>
+                      {ej.descripcion && (
+                        <p className="text-xs text-gray-500 dark:text-[#6B7280] mt-0.5 line-clamp-1 italic">{ej.descripcion}</p>
+                      )}
+                    </div>
+                  </div>
+                  {isAdmin && (
+                    <div className="flex items-center gap-1 shrink-0">
+                      <button onClick={() => navigate(`/exercises/${ej.id}`)} className="p-1.5 rounded-lg text-gray-400 hover:text-gray-900 dark:hover:text-white hover:bg-gray-100 dark:hover:bg-white/[0.08] transition-colors">
+                        <Edit2 size={13} />
+                      </button>
+                      <button onClick={() => setDeleteTarget(ej.id)} className="p-1.5 rounded-lg text-gray-400 hover:text-red-400 hover:bg-red-500/10 transition-colors">
+                        <Trash2 size={13} />
+                      </button>
+                    </div>
+                  )}
+                </div>
+                <div className="flex items-center gap-2 flex-wrap">
+                  {ej.patronMovimiento && (
+                    <span className="text-[11px] px-2 py-0.5 rounded-md bg-gray-100 dark:bg-white/[0.06] text-gray-500 dark:text-[#8A8A9A]">
+                      {ej.patronMovimiento}
+                    </span>
+                  )}
+                  <span className={`inline-flex items-center rounded-full px-2.5 py-0.5 text-[11px] font-semibold ${(DIFICULTAD_CONFIG[ej.dificultad] ?? DIFICULTAD_FALLBACK).cls}`}>
+                    {(DIFICULTAD_CONFIG[ej.dificultad] ?? DIFICULTAD_FALLBACK).label}
+                  </span>
+                  {ej.videoUrl && (
+                    <a href={ej.videoUrl} target="_blank" rel="noopener noreferrer" onClick={e => e.stopPropagation()}
+                      className="inline-flex items-center gap-1 text-[11px] text-amber-600 dark:text-primary/70 hover:underline">
+                      <ExternalLink size={11} /> Video
+                    </a>
+                  )}
+                </div>
+              </motion.div>
+            ))}
+          </div>
+
+          {/* ── Desktop table ── */}
+          <div className="hidden sm:block overflow-x-auto rounded-[2rem] border border-white/50 dark:border-white/10 bg-white/30 dark:bg-black/30 backdrop-blur-3xl shadow-[0_8px_32px_rgba(0,0,0,0.04)] dark:shadow-[0_8px_32px_rgba(0,0,0,0.3)]">
             <table className="w-full text-sm">
               <thead>
                 <tr className="border-b border-white/20 dark:border-white/10 bg-gray-50/30 dark:bg-black/10">

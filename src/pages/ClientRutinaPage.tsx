@@ -72,6 +72,7 @@ const ejSchema = z.object({
   peso: z.string().optional(),
   rir: z.coerce.number().int().min(0).optional().or(z.literal('')),
   rpe: z.coerce.number().int().min(1).max(10).optional().or(z.literal('')),
+  notas: z.string().optional(),
 })
 type EjForm = z.infer<typeof ejSchema>
 
@@ -94,6 +95,7 @@ function EjercicioDraftRow({ ej, onUpdate, onDelete }: EjercicioDraftRowProps) {
       peso: ej.peso ?? '',
       rir: ej.rir ?? '',
       rpe: ej.rpe ?? '',
+      notas: ej.notas ?? '',
     },
   })
 
@@ -105,6 +107,7 @@ function EjercicioDraftRow({ ej, onUpdate, onDelete }: EjercicioDraftRowProps) {
       peso: data.peso,
       rir: data.rir,
       rpe: data.rpe,
+      notas: data.notas || undefined,
     })
     setIsEditing(false)
   }
@@ -151,6 +154,14 @@ function EjercicioDraftRow({ ej, onUpdate, onDelete }: EjercicioDraftRowProps) {
             </div>
           ))}
         </div>
+        <div>
+          <label className="text-[10px] text-gray-400 dark:text-white/35 block mb-1 font-medium uppercase tracking-wider">Nota de rutina</label>
+          <input
+            {...register('notas')}
+            placeholder="Indicaciones específicas para esta rutina..."
+            className="w-full bg-gray-100 dark:bg-white/[0.06] border border-saas-border dark:border-white/[0.08] rounded-lg px-2.5 py-1.5 text-sm text-saas-text dark:text-white placeholder-gray-400 dark:placeholder-white/25 focus:outline-none focus:border-primary/60"
+          />
+        </div>
         <div className="flex items-center gap-2 pt-1">
           <button
             type="submit"
@@ -185,7 +196,7 @@ function EjercicioDraftRow({ ej, onUpdate, onDelete }: EjercicioDraftRowProps) {
     )
   }
 
-  const hasExtra = ej.rir != null || ej.rpe != null || !!ej.catalogo?.videoUrl
+  const hasExtra = ej.rir != null || ej.rpe != null || !!ej.catalogo?.videoUrl || !!ej.notas
 
   return (
     <div>
@@ -245,7 +256,7 @@ function EjercicioDraftRow({ ej, onUpdate, onDelete }: EjercicioDraftRowProps) {
         </div>
       </div>
 
-      {/* Detalle expandido: RIR, RPE, video */}
+      {/* Detalle expandido: RIR, RPE, video, nota */}
       <AnimatePresence>
         {expanded && hasExtra && (
           <motion.div
@@ -255,7 +266,7 @@ function EjercicioDraftRow({ ej, onUpdate, onDelete }: EjercicioDraftRowProps) {
             className="overflow-hidden"
           >
             <div className="px-6 pb-2.5">
-              <div className="flex items-center gap-4 text-[11px] border-l border-primary/20 pl-3 py-1">
+              <div className="flex flex-wrap items-start gap-x-4 gap-y-1 text-[11px] border-l border-primary/20 pl-3 py-1">
                 {ej.rir != null && (
                   <span className="text-gray-400 dark:text-white/40">RIR <span className="text-gray-600 dark:text-white/65 font-semibold">{ej.rir}</span></span>
                 )}
@@ -269,6 +280,9 @@ function EjercicioDraftRow({ ej, onUpdate, onDelete }: EjercicioDraftRowProps) {
                     <ExternalLink className="w-3 h-3" />
                     <span>Ver video</span>
                   </a>
+                )}
+                {ej.notas && (
+                  <span className="w-full text-gray-500 dark:text-white/45 italic">{ej.notas}</span>
                 )}
               </div>
             </div>
@@ -409,7 +423,7 @@ function AddEjercicioPanel({ bloqueId, onAdd, onClose }: AddEjercicioPanelProps)
 
 function ExerciseViewRow({ ej }: { ej: EjercicioPlan }) {
   const [expanded, setExpanded] = useState(false)
-  const hasExtra = ej.rir != null || ej.rpe != null || !!ej.catalogo?.videoUrl
+  const hasExtra = ej.rir != null || ej.rpe != null || !!ej.catalogo?.videoUrl || !!ej.notas
 
   return (
     <div>
@@ -457,7 +471,7 @@ function ExerciseViewRow({ ej }: { ej: EjercicioPlan }) {
         </div>
       </div>
 
-      {/* Detalle expandido: RIR, RPE, video */}
+      {/* Detalle expandido: RIR, RPE, video, nota */}
       <AnimatePresence>
         {expanded && hasExtra && (
           <motion.div
@@ -467,7 +481,7 @@ function ExerciseViewRow({ ej }: { ej: EjercicioPlan }) {
             className="overflow-hidden"
           >
             <div className="px-6 pb-2.5">
-              <div className="flex items-center gap-4 text-[11px] border-l border-primary/20 pl-3 py-1">
+              <div className="flex flex-wrap items-start gap-x-4 gap-y-1 text-[11px] border-l border-primary/20 pl-3 py-1">
                 {ej.rir != null && (
                   <span className="text-gray-400 dark:text-white/40">RIR <span className="text-gray-600 dark:text-white/65 font-semibold">{ej.rir}</span></span>
                 )}
@@ -480,6 +494,9 @@ function ExerciseViewRow({ ej }: { ej: EjercicioPlan }) {
                     <ExternalLink className="w-3 h-3" />
                     <span>Ver video</span>
                   </a>
+                )}
+                {ej.notas && (
+                  <span className="w-full text-gray-500 dark:text-white/45 italic">{ej.notas}</span>
                 )}
               </div>
             </div>

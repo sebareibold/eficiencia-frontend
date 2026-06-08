@@ -389,10 +389,10 @@ export default function ExpensesPage() {
       <div className="grid grid-cols-1 xl:grid-cols-[1fr_360px] gap-4 lg:gap-6 items-start">
 
         {/* ─── LEFT: resumen + controles + tabla/grid ─── */}
-        <div className="space-y-5 min-w-0">
+        <div className="flex flex-col gap-5 min-w-0">
 
-          {/* Summary cards */}
-          <div className="grid grid-cols-2 gap-3">
+          {/* Summary cards — last on mobile, first on xl */}
+          <div className="order-last xl:order-none grid grid-cols-2 gap-3">
             {summaryCards.map(card => (
               <KpiCard
                 key={card.label}
