@@ -168,15 +168,23 @@ export default function ClientsPage() {
             className="w-full rounded-xl border border-white/50 dark:border-white/10 bg-white/30 dark:bg-black/30 backdrop-blur-xl pl-10 pr-4 py-2 text-xs font-semibold text-gray-800 dark:text-gray-200 placeholder-gray-400 focus:outline-none h-10"
           />
         </div>
-        <div className="overflow-x-auto max-w-full pb-0.5 shrink-0">
-        <div className="flex items-center rounded-full border border-white/50 dark:border-white/10 bg-white/30 dark:bg-black/30 backdrop-blur-xl p-1 shadow-sm gap-1 min-w-max">
+        {/* Mobile: select nativo */}
+        <select
+          value={statusFilter}
+          onChange={e => setStatusFilter(e.target.value as StatusFilter)}
+          className="sm:hidden w-full rounded-xl border border-white/50 dark:border-white/10 bg-white/30 dark:bg-black/30 backdrop-blur-xl px-3 py-2 text-xs font-bold text-gray-800 dark:text-gray-200 focus:outline-none h-10 cursor-pointer"
+        >
+          {STATUS_FILTERS.map(f => <option key={f.value} value={f.value}>{f.label}</option>)}
+        </select>
+        {/* Desktop: pills */}
+        <div className="hidden sm:flex items-center rounded-full border border-white/50 dark:border-white/10 bg-white/30 dark:bg-black/30 backdrop-blur-xl p-1 shadow-sm gap-1 shrink-0">
           {STATUS_FILTERS.map(f => {
             const isActive = statusFilter === f.value
             return (
               <button
                 key={f.value}
                 onClick={() => setStatusFilter(f.value)}
-                className={`relative inline-flex items-center justify-center rounded-full px-4 py-1.5 text-xs font-bold transition-all duration-300 cursor-pointer flex-none ${
+                className={`relative inline-flex items-center justify-center rounded-full px-4 py-1.5 text-xs font-bold transition-all duration-300 cursor-pointer ${
                   isActive
                     ? 'text-white dark:text-gray-900'
                     : 'text-gray-500 dark:text-[#8A8A9A] hover:text-gray-900 dark:hover:text-white'
@@ -189,7 +197,6 @@ export default function ClientsPage() {
               </button>
             )
           })}
-        </div>
         </div>
       </div>
 

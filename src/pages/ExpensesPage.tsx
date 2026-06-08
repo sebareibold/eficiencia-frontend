@@ -429,8 +429,18 @@ export default function ExpensesPage() {
 
           {/* Controls: filtros + orden + vista */}
           <div className="flex flex-wrap items-center justify-between gap-4">
-            {/* Category filter pills */}
-            <div className="flex items-center rounded-full border border-white/50 dark:border-white/10 bg-white/30 dark:bg-black/30 backdrop-blur-xl p-1 shadow-sm gap-1 flex-wrap">
+            {/* Category filter — select en mobile, pills en desktop */}
+            <select
+              value={categoryFilter}
+              onChange={e => setCategoryFilter(e.target.value as CategoryFilter)}
+              className="sm:hidden rounded-xl border border-white/50 dark:border-white/10 bg-white/30 dark:bg-black/30 backdrop-blur-xl px-3 py-2 text-xs font-bold text-gray-800 dark:text-gray-200 focus:outline-none h-10 cursor-pointer"
+            >
+              <option value="all">Todos</option>
+              {(Object.keys(CATEGORY_LABELS) as ExpenseCategory[]).map(c => (
+                <option key={c} value={c}>{CATEGORY_LABELS[c]}</option>
+              ))}
+            </select>
+            <div className="hidden sm:flex items-center rounded-full border border-white/50 dark:border-white/10 bg-white/30 dark:bg-black/30 backdrop-blur-xl p-1 shadow-sm gap-1">
               {(['all', ...(Object.keys(CATEGORY_LABELS) as ExpenseCategory[])] as CategoryFilter[]).map(c => {
                 const isActive = categoryFilter === c
                 return (

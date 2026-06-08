@@ -172,9 +172,9 @@ export default function Navbar() {
       <header className="flex items-center justify-between gap-4 px-4 sm:px-5 md:px-8 lg:px-12 xl:px-16 py-4 w-full max-w-[1600px] mx-auto relative z-20">
 
         {/* Logo */}
-        <div className="flex items-center shrink-0">
+        <button onClick={() => navigate(ROUTES.DASHBOARD)} className="flex items-center shrink-0 cursor-pointer active:scale-95 transition-transform">
           <img src="/logo.png" alt="Eficiencia Logo" className="h-10 sm:h-12 w-auto object-contain drop-shadow-sm" />
-        </div>
+        </button>
 
         {/* ── Desktop pill nav (hidden on mobile) ────────────────────────── */}
         <div className="hidden md:flex flex-1 min-w-0 justify-center" ref={containerRef}>
@@ -382,7 +382,7 @@ export default function Navbar() {
               animate={{ x: 0 }}
               exit={{ x: '100%' }}
               transition={{ type: 'spring', stiffness: 320, damping: 32, mass: 0.85 }}
-              className="fixed inset-y-0 right-0 z-[91] flex flex-col w-[82%] max-w-[340px] md:hidden bg-white/85 dark:bg-[#0f0f0f]/92 backdrop-blur-3xl border-l border-white/60 dark:border-white/[0.10] shadow-2xl"
+              className="fixed inset-y-0 right-0 z-[91] flex flex-col w-[82%] max-w-[340px] md:hidden bg-[#f5f4f2] dark:bg-[#141414] border-l border-white/60 dark:border-white/[0.08] shadow-2xl"
             >
               {/* ── Header ────────────────────────────────────────────── */}
               <div className="relative flex items-center justify-end px-5 pt-5 pb-4 border-b border-gray-200/60 dark:border-white/[0.07]">
