@@ -60,14 +60,14 @@ type ChartView = 'meses' | 'años' | 'historico'
 
 function ViewToggle({ value, onChange }: { value: ChartView; onChange: (v: ChartView) => void }) {
   return (
-    <div className="flex items-center rounded-full border border-black/[0.08] dark:border-white/10 bg-white/60 dark:!bg-black/40 backdrop-blur-xl p-1 shadow-sm gap-1 shrink-0">
+    <div className="flex items-center rounded-full border border-black/[0.08] dark:border-white/10 bg-white/60 dark:!bg-black/40 backdrop-blur-xl p-1 shadow-sm gap-1 w-full sm:w-auto">
       {([['meses', 'Meses'], ['años', 'Años'], ['historico', 'Histórico']] as [ChartView, string][]).map(([mode, label]) => {
         const isActive = value === mode
         return (
           <button
             key={mode}
             onClick={() => onChange(mode)}
-            className={`relative inline-flex items-center justify-center rounded-full px-3.5 py-1.5 text-xs font-bold transition-all duration-300 cursor-pointer ${
+            className={`relative inline-flex flex-1 sm:flex-none items-center justify-center rounded-full px-3.5 py-1.5 text-xs font-bold transition-all duration-300 cursor-pointer ${
               isActive
                 ? 'text-white dark:text-gray-900'
                 : 'text-gray-500 dark:text-[#8A8A9A] hover:text-gray-900 dark:hover:text-white'
@@ -295,9 +295,10 @@ export default function DashboardPage() {
   }, [chartView, activeChartData, chartMonthOffset])
 
   const makeChartHeaderAction = (id: string) => (
-    <div className="flex items-center gap-2">
+    <div className="flex flex-col sm:flex-row sm:items-center gap-2">
+      <ViewToggle value={chartView} onChange={changeChartView} />
       {chartView === 'meses' && (
-        <div className="flex items-center rounded-full border border-black/[0.08] dark:border-white/10 bg-white/60 dark:!bg-black/40 backdrop-blur-xl p-1 shadow-sm gap-1">
+        <div className="flex items-center rounded-full border border-black/[0.08] dark:border-white/10 bg-white/60 dark:!bg-black/40 backdrop-blur-xl p-1 shadow-sm gap-1 w-full sm:w-auto">
           <button
             onClick={goChartBack}
             disabled={!canGoBack}
@@ -305,7 +306,7 @@ export default function DashboardPage() {
           >
             <ChevronLeft size={14} />
           </button>
-          <span className="px-2 text-[10px] font-bold uppercase tracking-wider text-gray-700 dark:text-gray-200 min-w-[80px] text-center tabular-nums">
+          <span className="flex-1 px-2 text-[10px] font-bold uppercase tracking-wider text-gray-700 dark:text-gray-200 text-center tabular-nums">
             {chartSubtitle}
           </span>
           <button
@@ -317,7 +318,6 @@ export default function DashboardPage() {
           </button>
         </div>
       )}
-      <ViewToggle value={chartView} onChange={changeChartView} />
     </div>
   )
 
@@ -391,7 +391,31 @@ export default function DashboardPage() {
             {periodLabel}, vista general del negocio
           </p>
         </div>
-        <div className="flex flex-wrap items-center gap-2">
+        <div className="flex flex-col sm:flex-row sm:flex-wrap sm:items-center gap-2">
+          {/* Selector período — primero en mobile */}
+          <div className="flex items-center rounded-full border border-white/50 dark:border-white/10 bg-white/30 dark:bg-black/30 backdrop-blur-xl p-1 shadow-sm gap-1 w-full sm:w-auto">
+            {([['month', 'Mes'], ['year', 'Año'], ['range', 'Rango']] as [PeriodMode, string][]).map(([mode, label]) => {
+              const isActive = periodMode === mode
+              return (
+                <button
+                  key={mode}
+                  onClick={() => { setPeriodMode(mode); if (mode !== 'range') setNavDate(today) }}
+                  className={`relative inline-flex flex-1 sm:flex-none items-center justify-center rounded-full px-4 py-1.5 text-xs font-bold transition-all duration-300 cursor-pointer ${
+                    isActive
+                      ? 'text-white dark:text-gray-900'
+                      : 'text-gray-500 dark:text-[#8A8A9A] hover:text-gray-900 dark:hover:text-white'
+                  }`}
+                >
+                  {isActive && (
+                    <div className="absolute inset-0 rounded-full bg-gray-900 dark:bg-white shadow-[0_2px_8px_rgba(0,0,0,0.15)]" style={{ zIndex: 0 }} />
+                  )}
+                  <span className="relative z-10">{label}</span>
+                </button>
+              )
+            })}
+          </div>
+
+          {/* Navegador de fecha — segundo en mobile */}
           <AnimatePresence mode="wait">
             {periodMode !== 'range' ? (
               <motion.div
@@ -400,7 +424,7 @@ export default function DashboardPage() {
                 animate={{ opacity: 1, x: 0, scale: 1 }}
                 exit={{ opacity: 0, x: -8, scale: 0.96 }}
                 transition={{ duration: 0.15, ease: 'easeInOut' }}
-                className="flex items-center rounded-full border border-white/50 dark:border-white/10 bg-white/30 dark:bg-black/30 backdrop-blur-xl p-1 shadow-sm gap-1"
+                className="flex items-center rounded-full border border-white/50 dark:border-white/10 bg-white/30 dark:bg-black/30 backdrop-blur-xl p-1 shadow-sm gap-1 w-full sm:w-auto"
               >
                 <button
                   onClick={goBack}
@@ -408,7 +432,7 @@ export default function DashboardPage() {
                 >
                   <ChevronLeft size={15} />
                 </button>
-                <span className="px-3 text-xs font-bold tracking-tight text-gray-800 dark:text-gray-200 min-w-[88px] text-center tabular-nums">
+                <span className="flex-1 px-3 text-xs font-bold tracking-tight text-gray-800 dark:text-gray-200 text-center tabular-nums">
                   {periodLabel}
                 </span>
                 <button
@@ -457,29 +481,6 @@ export default function DashboardPage() {
               </motion.div>
             )}
           </AnimatePresence>
-
-          {/* Selector período */}
-          <div className="flex items-center rounded-full border border-white/50 dark:border-white/10 bg-white/30 dark:bg-black/30 backdrop-blur-xl p-1 shadow-sm gap-1 shrink-0">
-            {([['month', 'Mes'], ['year', 'Año'], ['range', 'Rango']] as [PeriodMode, string][]).map(([mode, label]) => {
-              const isActive = periodMode === mode
-              return (
-                <button
-                  key={mode}
-                  onClick={() => { setPeriodMode(mode); if (mode !== 'range') setNavDate(today) }}
-                  className={`relative inline-flex items-center justify-center rounded-full px-4 py-1.5 text-xs font-bold transition-all duration-300 cursor-pointer ${
-                    isActive
-                      ? 'text-white dark:text-gray-900'
-                      : 'text-gray-500 dark:text-[#8A8A9A] hover:text-gray-900 dark:hover:text-white'
-                  }`}
-                >
-                  {isActive && (
-                    <div className="absolute inset-0 rounded-full bg-gray-900 dark:bg-white shadow-[0_2px_8px_rgba(0,0,0,0.15)]" style={{ zIndex: 0 }} />
-                  )}
-                  <span className="relative z-10">{label}</span>
-                </button>
-              )
-            })}
-          </div>
 
           {/* Refresh global */}
           <button

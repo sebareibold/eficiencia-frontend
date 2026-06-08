@@ -25,7 +25,7 @@ const KpiCard = memo(function KpiCard({
   compact = false,
 }: KpiCardProps) {
   return (
-    <div className={`group relative overflow-hidden rounded-[2rem] border border-white/50 dark:border-white/10 bg-white/30 dark:bg-black/30 backdrop-blur-3xl shadow-[0_8px_32px_rgba(0,0,0,0.04)] dark:shadow-[0_8px_32px_rgba(0,0,0,0.3)] transition-all duration-500 hover:-translate-y-1 hover:bg-white/50 dark:hover:bg-black/50 hover:shadow-[0_20px_40px_rgba(0,0,0,0.08)] dark:hover:shadow-[0_20px_40px_rgba(0,0,0,0.4)] ${compact ? 'p-4' : 'p-4 sm:p-5 xl:p-6'}`}>
+    <div className={`group relative overflow-hidden rounded-[2rem] border border-white/50 dark:border-white/10 bg-white/30 dark:bg-black/30 backdrop-blur-3xl shadow-[0_8px_32px_rgba(0,0,0,0.04)] dark:shadow-[0_8px_32px_rgba(0,0,0,0.3)] transition-all duration-500 hover:-translate-y-1 hover:bg-white/50 dark:hover:bg-black/50 hover:shadow-[0_20px_40px_rgba(0,0,0,0.08)] dark:hover:shadow-[0_20px_40px_rgba(0,0,0,0.4)] ${compact ? 'p-3 sm:p-4' : 'p-3 sm:p-4 xl:p-6'}`}>
       <div className={`relative z-10 flex h-full ${compact ? 'flex-row items-center gap-3' : 'flex-col justify-between gap-3 xl:gap-4'}`}>
         {isLoading ? (
           compact ? (

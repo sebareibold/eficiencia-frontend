@@ -315,7 +315,6 @@ export default function ExpensesPage() {
         </div>
 
         <div className="flex items-center gap-2.5 flex-wrap">
-          {/* Selector de período */}
           <div className="flex items-center overflow-hidden rounded-xl border border-saas-border dark:border-white/[0.08] bg-white/60 dark:bg-white/[0.04] backdrop-blur-sm shadow-sm">
             {(['month', 'year', 'all'] as PeriodMode[]).map((m, i) => (
               <button
@@ -332,7 +331,6 @@ export default function ExpensesPage() {
             ))}
           </div>
 
-          {/* Navegador unificado */}
           <div className="flex items-center overflow-hidden rounded-xl border border-saas-border dark:border-white/[0.08] bg-white/60 dark:bg-white/[0.04] backdrop-blur-sm shadow-sm">
             <button
               onClick={() => periodMode === 'month' ? navigateMonth(-1) : navigateYear(-1)}
@@ -363,7 +361,6 @@ export default function ExpensesPage() {
             </button>
           </div>
 
-          {/* Actualizar */}
           <button
             onClick={refetch}
             title="Actualizar"
@@ -372,7 +369,6 @@ export default function ExpensesPage() {
             <RefreshCw size={14} />
           </button>
 
-          {/* Registrar gasto */}
           <button
             onClick={() => setCreateOpen(true)}
             className="flex items-center gap-2 rounded-xl btn-action px-4 py-2.5 text-sm"
