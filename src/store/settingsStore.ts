@@ -23,6 +23,7 @@ const DEFAULT_SETTINGS = {
     notifDeudas: true,
     notifNuevosClientes: false,
     notifNuevosUsuarios: false,
+    emailAlAprobarSolicitudes: false,
   },
 }
 
@@ -72,20 +73,25 @@ export const useSettingsStore = create<SettingsState>()(
             ...(config.notifDiasAnticipacion !== undefined && { diasAnticipacion:    config.notifDiasAnticipacion }),
             ...(config.notifDeudas           !== undefined && { notifDeudas:         config.notifDeudas }),
             ...(config.notifNuevosClientes   !== undefined && { notifNuevosClientes: config.notifNuevosClientes }),
-            ...(config.notifNuevosUsuarios   !== undefined && { notifNuevosUsuarios: config.notifNuevosUsuarios }),
+            ...(config.notifNuevosUsuarios          !== undefined && { notifNuevosUsuarios:          config.notifNuevosUsuarios }),
+            ...(config.emailAlAprobarSolicitudes    !== undefined && { emailAlAprobarSolicitudes:    config.emailAlAprobarSolicitudes }),
           },
           hasUnsavedChanges: false,
         })),
     }),
     {
       name: 'eficiencia-settings',
-      version: 2,
+      version: 3,
       migrate: (state: unknown, version: number) => {
         const s = state as Record<string, unknown>
         if (version < 2) {
+          return { ...s, notifications: { ...DEFAULT_SETTINGS.notifications } }
+        }
+        if (version < 3) {
+          const notif = (s.notifications as Record<string, unknown>) ?? {}
           return {
             ...s,
-            notifications: { ...DEFAULT_SETTINGS.notifications },
+            notifications: { ...notif, emailAlAprobarSolicitudes: false },
           }
         }
         return s

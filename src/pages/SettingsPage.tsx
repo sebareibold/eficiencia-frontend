@@ -1,4 +1,4 @@
-import { useState, useRef } from 'react'
+import { useState, useRef, useEffect } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
 import {
   Palette,
@@ -13,11 +13,13 @@ import {
   EyeOff,
   User,
   Bell,
+  Send,
 } from 'lucide-react'
 import { useUiStore } from '../store/uiStore'
 import { useSettingsStore } from '../store/settingsStore'
 import { useAuthStore } from '../store/authStore'
 import { configuracionApi } from '../api/configuracion.api'
+import { notificacionesApi } from '../api/notificaciones.api'
 import { authApi } from '../api/auth.api'
 
 // ─── Sub-components ──────────────────────────────────────────────────────────
@@ -83,6 +85,182 @@ function SegmentedControl<T extends string>({
         )
       })}
     </div>
+  )
+}
+
+function ProbarBtn({ tipo }: { tipo: string }) {
+  const [loading, setLoading] = useState(false)
+  const { addToast } = useUiStore()
+
+  async function handle() {
+    setLoading(true)
+    try {
+      const res = await notificacionesApi.probar(tipo)
+      addToast(`Prueba enviada a ${res.destino}`, 'success')
+    } catch {
+      addToast('Error al enviar email de prueba', 'error')
+    } finally {
+      setLoading(false)
+    }
+  }
+
+  return (
+    <button
+      type="button"
+      onClick={handle}
+      disabled={loading}
+      title="Enviar email de prueba"
+      className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold rounded-lg border border-gray-200/70 dark:border-white/10 bg-white/50 dark:bg-white/[0.04] text-gray-500 dark:text-gray-400 hover:text-gray-800 dark:hover:text-gray-200 hover:border-gray-300 dark:hover:border-white/20 transition-all disabled:opacity-40 disabled:cursor-not-allowed whitespace-nowrap"
+    >
+      {loading
+        ? <span className="h-3 w-3 rounded-full border-[1.5px] border-current border-t-transparent animate-spin" />
+        : <Send size={11} />
+      }
+      {!loading && 'Probar'}
+    </button>
+  )
+}
+
+const TIPO_LABEL: Record<string, string> = {
+  'resumen-diario': 'Resumen diario',
+  'nuevo-cliente': 'Nuevos clientes',
+  'nuevo-usuario': 'Nuevos usuarios',
+  'solicitud-aprobada': 'Solicitudes aprobadas',
+  'prueba': 'Emails de prueba',
+  'general': 'Otros',
+}
+
+function ConteoEmailsCard() {
+  const [data, setData] = useState<{
+    hoy: number
+    esteMes: number
+    limites: { diario: number; mensual: number }
+    desglose: { tipo: string; count: number }[]
+  } | null>(null)
+  const [loading, setLoading] = useState(true)
+
+  useEffect(() => {
+    notificacionesApi.conteoEmails()
+      .then(setData)
+      .catch(() => {})
+      .finally(() => setLoading(false))
+  }, [])
+
+  function ProgressBar({ value, max }: { value: number; max: number }) {
+    const pct = Math.min(100, (value / max) * 100)
+    const color = pct >= 90 ? 'bg-red-500' : pct >= 70 ? 'bg-amber-400' : 'bg-primary'
+    return (
+      <div className="h-1.5 w-full rounded-full bg-gray-100 dark:bg-white/10 overflow-hidden">
+        <div className={`h-full rounded-full transition-all duration-700 ${color}`} style={{ width: `${pct}%` }} />
+      </div>
+    )
+  }
+
+  return (
+    <SectionCard>
+      <div className="px-8 py-6 space-y-5">
+        <div className="flex items-center justify-between">
+          <p className="text-sm font-bold text-gray-900 dark:text-gray-100">Uso de emails (Resend)</p>
+          {!loading && data && (
+            <span className="text-xs text-gray-400 dark:text-gray-500">Plan gratuito</span>
+          )}
+        </div>
+
+        {loading ? (
+          <div className="space-y-3">
+            <div className="h-4 w-40 rounded-lg bg-gray-100 dark:bg-white/10 animate-pulse" />
+            <div className="h-1.5 w-full rounded-full bg-gray-100 dark:bg-white/10 animate-pulse" />
+            <div className="h-4 w-40 rounded-lg bg-gray-100 dark:bg-white/10 animate-pulse" />
+            <div className="h-1.5 w-full rounded-full bg-gray-100 dark:bg-white/10 animate-pulse" />
+          </div>
+        ) : data ? (
+          <div className="space-y-4">
+            <div className="space-y-1.5">
+              <div className="flex items-center justify-between text-xs">
+                <span className="font-semibold text-gray-600 dark:text-gray-400">Hoy</span>
+                <span className="font-black tabular-nums text-gray-900 dark:text-gray-100">
+                  {data.hoy} <span className="font-medium text-gray-400">/ {data.limites.diario}</span>
+                </span>
+              </div>
+              <ProgressBar value={data.hoy} max={data.limites.diario} />
+            </div>
+
+            <div className="space-y-1.5">
+              <div className="flex items-center justify-between text-xs">
+                <span className="font-semibold text-gray-600 dark:text-gray-400">Este mes</span>
+                <span className="font-black tabular-nums text-gray-900 dark:text-gray-100">
+                  {data.esteMes} <span className="font-medium text-gray-400">/ {data.limites.mensual}</span>
+                </span>
+              </div>
+              <ProgressBar value={data.esteMes} max={data.limites.mensual} />
+            </div>
+
+            {data.desglose.length > 0 && (
+              <div className="pt-2 border-t border-gray-100/50 dark:border-white/5">
+                <p className="text-xs font-bold text-gray-400 dark:text-gray-500 uppercase tracking-widest mb-2.5">
+                  Desglose del mes <span className="normal-case font-medium">(desde que se activó el tracking)</span>
+                </p>
+                <div className="flex flex-wrap gap-2">
+                  {data.desglose.map(d => (
+                    <span
+                      key={d.tipo}
+                      className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-gray-100/80 dark:bg-white/[0.06] text-xs font-semibold text-gray-600 dark:text-gray-400"
+                    >
+                      {TIPO_LABEL[d.tipo] ?? d.tipo}
+                      <span className="font-black text-gray-900 dark:text-gray-200">{d.count}</span>
+                    </span>
+                  ))}
+                </div>
+              </div>
+            )}
+          </div>
+        ) : (
+          <p className="text-xs text-gray-400">No se pudo cargar el conteo</p>
+        )}
+      </div>
+    </SectionCard>
+  )
+}
+
+function EnviarResumenCard() {
+  const [loading, setLoading] = useState(false)
+  const { addToast } = useUiStore()
+
+  async function handle() {
+    setLoading(true)
+    try {
+      const res = await notificacionesApi.enviarResumenAhora()
+      addToast(res.mensaje, res.enviado ? 'success' : 'info')
+    } catch {
+      addToast('Error al enviar el resumen', 'error')
+    } finally {
+      setLoading(false)
+    }
+  }
+
+  return (
+    <SectionCard>
+      <div className="flex items-center justify-between gap-6 px-8 py-6">
+        <div className="min-w-0 flex-1">
+          <p className="text-sm font-bold text-gray-900 dark:text-gray-100 leading-tight">Enviar resumen ahora</p>
+          <p className="text-xs text-gray-500 dark:text-gray-400 mt-1.5 leading-relaxed">
+            Dispara el resumen diario real en este momento — membresías por vencer y clientes con deuda — sin esperar al cron de las 9 AM. Solo se envía si hay datos para reportar.
+          </p>
+        </div>
+        <button
+          type="button"
+          onClick={handle}
+          disabled={loading}
+          className="shrink-0 flex items-center gap-2 px-5 py-2.5 rounded-xl font-bold text-sm btn-action disabled:opacity-50 disabled:cursor-not-allowed transition-all"
+        >
+          {loading
+            ? <span className="h-4 w-4 rounded-full border-2 border-white/30 border-t-white animate-spin" />
+            : <Send size={15} />
+          }
+          {loading ? 'Enviando...' : 'Enviar ahora'}
+        </button>
+      </div>
+    </SectionCard>
   )
 }
 
@@ -241,10 +419,13 @@ function NotificationsSection() {
           label="Membresías por vencer"
           description="Recibís un email con la lista de membresías activas que vencen pronto. Incluye nombre del cliente, plan, fecha de vencimiento y días restantes."
         >
-          <Toggle
-            checked={notifications.notifVencimientos}
-            onChange={(v) => updateNotifications({ notifVencimientos: v })}
-          />
+          <div className="flex items-center gap-2.5">
+            <ProbarBtn tipo="vencimientos" />
+            <Toggle
+              checked={notifications.notifVencimientos}
+              onChange={(v) => updateNotifications({ notifVencimientos: v })}
+            />
+          </div>
         </SectionRow>
         <AnimatePresence initial={false}>
           {notifications.notifVencimientos && (
@@ -278,31 +459,58 @@ function NotificationsSection() {
           label="Clientes con deuda"
           description="Email diario con todos los clientes en estado DEUDA. Incluye nombre, email y teléfono para facilitar el contacto."
         >
-          <Toggle
-            checked={notifications.notifDeudas}
-            onChange={(v) => updateNotifications({ notifDeudas: v })}
-          />
+          <div className="flex items-center gap-2.5">
+            <ProbarBtn tipo="deudas" />
+            <Toggle
+              checked={notifications.notifDeudas}
+              onChange={(v) => updateNotifications({ notifDeudas: v })}
+            />
+          </div>
         </SectionRow>
         <SectionRow
           label="Nuevos clientes"
           description="Email inmediato al registrar un cliente. Incluye nombre, CUIL y email del nuevo socio."
         >
-          <Toggle
-            checked={notifications.notifNuevosClientes}
-            onChange={(v) => updateNotifications({ notifNuevosClientes: v })}
-          />
+          <div className="flex items-center gap-2.5">
+            <ProbarBtn tipo="nuevos-clientes" />
+            <Toggle
+              checked={notifications.notifNuevosClientes}
+              onChange={(v) => updateNotifications({ notifNuevosClientes: v })}
+            />
+          </div>
         </SectionRow>
         <SectionRow
           label="Nuevos usuarios del sistema"
           description="Email inmediato al crear un usuario (staff, profesor o admin) o al aprobar una solicitud de acceso. Incluye nombre, email y rol asignado."
+        >
+          <div className="flex items-center gap-2.5">
+            <ProbarBtn tipo="nuevos-usuarios" />
+            <Toggle
+              checked={notifications.notifNuevosUsuarios}
+              onChange={(v) => updateNotifications({ notifNuevosUsuarios: v })}
+            />
+          </div>
+        </SectionRow>
+        <SectionRow
+          label="Email al aprobar solicitudes"
+          description="Cuando cualquier admin aprueba una solicitud de acceso, todos los admins con esta opción activa reciben un email con el nombre, email, rol asignado, quién aprobó y la fecha y hora exactas."
           last
         >
-          <Toggle
-            checked={notifications.notifNuevosUsuarios}
-            onChange={(v) => updateNotifications({ notifNuevosUsuarios: v })}
-          />
+          <div className="flex items-center gap-2.5">
+            <ProbarBtn tipo="solicitud-aprobada" />
+            <Toggle
+              checked={notifications.emailAlAprobarSolicitudes}
+              onChange={(v) => updateNotifications({ emailAlAprobarSolicitudes: v })}
+            />
+          </div>
         </SectionRow>
       </SectionCard>
+
+      <SectionHeader title="Uso de emails" />
+      <ConteoEmailsCard />
+
+      <SectionHeader title="Enviar ahora" />
+      <EnviarResumenCard />
 
       <SectionHeader title="Canal" />
       <SectionCard>
@@ -575,6 +783,7 @@ export default function SettingsPage() {
         notifDeudas: notifications.notifDeudas,
         notifNuevosClientes: notifications.notifNuevosClientes,
         notifNuevosUsuarios: notifications.notifNuevosUsuarios,
+        emailAlAprobarSolicitudes: notifications.emailAlAprobarSolicitudes,
       })
     } catch {
       // La config local ya se guardó; si falla el server no se bloquea el UX

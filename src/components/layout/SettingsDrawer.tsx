@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef } from 'react'
+import { useState, useEffect, useRef, useCallback } from 'react'
 import { createPortal } from 'react-dom'
 import { motion, AnimatePresence } from 'framer-motion'
 import {
@@ -16,11 +16,13 @@ import {
   User,
   Bell,
   Lock,
+  Send,
 } from 'lucide-react'
 import { useUiStore } from '../../store/uiStore'
 import { useSettingsStore } from '../../store/settingsStore'
 import { useAuthStore } from '../../store/authStore'
 import { configuracionApi } from '../../api/configuracion.api'
+import { notificacionesApi } from '../../api/notificaciones.api'
 import { authApi } from '../../api/auth.api'
 
 // ─── Sub-components ──────────────────────────────────────────────────────────
@@ -80,6 +82,180 @@ function SegmentedControl<T extends string>({
         </button>
       ))}
     </div>
+  )
+}
+
+function ProbarBtn({ tipo }: { tipo: string }) {
+  const [loading, setLoading] = useState(false)
+  const { addToast } = useUiStore()
+
+  async function handle() {
+    setLoading(true)
+    try {
+      const res = await notificacionesApi.probar(tipo)
+      addToast(`Prueba enviada a ${res.destino}`, 'success')
+    } catch {
+      addToast('Error al enviar email de prueba', 'error')
+    } finally {
+      setLoading(false)
+    }
+  }
+
+  return (
+    <button
+      type="button"
+      onClick={handle}
+      disabled={loading}
+      title="Enviar email de prueba"
+      className="flex items-center gap-1 px-2.5 py-1.5 text-xs font-semibold rounded-lg border border-gray-200 bg-gray-50 text-gray-500 hover:text-gray-800 hover:border-gray-300 transition-all disabled:opacity-40 disabled:cursor-not-allowed whitespace-nowrap"
+    >
+      {loading
+        ? <span className="h-3 w-3 rounded-full border-[1.5px] border-current border-t-transparent animate-spin" />
+        : <Send size={10} />
+      }
+      {!loading && 'Probar'}
+    </button>
+  )
+}
+
+const TIPO_LABEL: Record<string, string> = {
+  'resumen-diario': 'Resumen diario',
+  'nuevo-cliente': 'Nuevos clientes',
+  'nuevo-usuario': 'Nuevos usuarios',
+  'solicitud-aprobada': 'Solicitudes aprobadas',
+  'prueba': 'Pruebas',
+  'general': 'Otros',
+}
+
+function ConteoEmailsCard() {
+  const [data, setData] = useState<{
+    hoy: number
+    esteMes: number
+    limites: { diario: number; mensual: number }
+    desglose: { tipo: string; count: number }[]
+  } | null>(null)
+  const [loading, setLoading] = useState(true)
+
+  const load = useCallback(() => {
+    notificacionesApi.conteoEmails()
+      .then(setData)
+      .catch(() => {})
+      .finally(() => setLoading(false))
+  }, [])
+
+  useEffect(() => { load() }, [load])
+
+  function ProgressBar({ value, max }: { value: number; max: number }) {
+    const pct = Math.min(100, (value / max) * 100)
+    const color = pct >= 90 ? 'bg-red-500' : pct >= 70 ? 'bg-amber-400' : 'bg-primary'
+    return (
+      <div className="h-1.5 w-full rounded-full bg-gray-100 dark:bg-white/10 overflow-hidden">
+        <div className={`h-full rounded-full transition-all duration-700 ${color}`} style={{ width: `${pct}%` }} />
+      </div>
+    )
+  }
+
+  return (
+    <SectionCard>
+      <div className="px-5 py-4 space-y-3.5">
+        <div className="flex items-center justify-between">
+          <p className="text-sm font-semibold text-gray-800 dark:text-gray-200">Uso de emails (Resend)</p>
+          {!loading && data && <span className="text-xs text-gray-400">Plan gratuito</span>}
+        </div>
+
+        {loading ? (
+          <div className="space-y-2">
+            <div className="h-3 w-32 rounded bg-gray-100 dark:bg-white/10 animate-pulse" />
+            <div className="h-1.5 w-full rounded-full bg-gray-100 dark:bg-white/10 animate-pulse" />
+            <div className="h-3 w-32 rounded bg-gray-100 dark:bg-white/10 animate-pulse" />
+            <div className="h-1.5 w-full rounded-full bg-gray-100 dark:bg-white/10 animate-pulse" />
+          </div>
+        ) : data ? (
+          <div className="space-y-3">
+            <div className="space-y-1">
+              <div className="flex items-center justify-between text-xs">
+                <span className="font-semibold text-gray-500">Hoy</span>
+                <span className="font-black tabular-nums text-gray-800 dark:text-gray-200">
+                  {data.hoy}<span className="font-medium text-gray-400"> / {data.limites.diario}</span>
+                </span>
+              </div>
+              <ProgressBar value={data.hoy} max={data.limites.diario} />
+            </div>
+
+            <div className="space-y-1">
+              <div className="flex items-center justify-between text-xs">
+                <span className="font-semibold text-gray-500">Este mes</span>
+                <span className="font-black tabular-nums text-gray-800 dark:text-gray-200">
+                  {data.esteMes}<span className="font-medium text-gray-400"> / {data.limites.mensual}</span>
+                </span>
+              </div>
+              <ProgressBar value={data.esteMes} max={data.limites.mensual} />
+            </div>
+
+            {data.desglose.length > 0 && (
+              <div className="pt-2 border-t border-gray-100 dark:border-white/5">
+                <p className="text-[10px] text-gray-400 mb-1.5">Desglose (desde que se activó el tracking)</p>
+                <div className="flex flex-wrap gap-1.5">
+                  {data.desglose.map(d => (
+                    <span
+                      key={d.tipo}
+                      className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full bg-gray-100 dark:bg-white/[0.06] text-xs font-semibold text-gray-500 dark:text-gray-400"
+                    >
+                      {TIPO_LABEL[d.tipo] ?? d.tipo}
+                      <span className="font-black text-gray-800 dark:text-gray-200">{d.count}</span>
+                    </span>
+                  ))}
+                </div>
+              </div>
+            )}
+          </div>
+        ) : (
+          <p className="text-xs text-gray-400">No se pudo cargar el conteo</p>
+        )}
+      </div>
+    </SectionCard>
+  )
+}
+
+function EnviarResumenCard() {
+  const [loading, setLoading] = useState(false)
+  const { addToast } = useUiStore()
+
+  async function handle() {
+    setLoading(true)
+    try {
+      const res = await notificacionesApi.enviarResumenAhora()
+      addToast(res.mensaje, res.enviado ? 'success' : 'info')
+    } catch {
+      addToast('Error al enviar el resumen', 'error')
+    } finally {
+      setLoading(false)
+    }
+  }
+
+  return (
+    <SectionCard>
+      <div className="px-5 py-4 flex flex-col gap-3">
+        <div>
+          <p className="text-sm font-semibold text-gray-800 dark:text-gray-200 leading-tight">Enviar resumen ahora</p>
+          <p className="text-xs text-gray-400 mt-1 leading-tight">
+            Membresías por vencer + clientes con deuda en tiempo real, sin esperar las 9 AM.
+          </p>
+        </div>
+        <button
+          type="button"
+          onClick={handle}
+          disabled={loading}
+          className="self-start flex items-center gap-1.5 rounded-xl bg-gray-900 dark:bg-white/10 px-4 py-2 text-xs font-bold text-white hover:bg-gray-700 dark:hover:bg-white/20 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+        >
+          {loading
+            ? <span className="h-3.5 w-3.5 rounded-full border-2 border-white/30 border-t-white animate-spin" />
+            : <Send size={12} />
+          }
+          {loading ? 'Enviando...' : 'Enviar ahora'}
+        </button>
+      </div>
+    </SectionCard>
   )
 }
 
@@ -212,7 +388,10 @@ function NotificationsSection() {
       </div>
       <SectionCard>
         <SectionRow label="Membresías por vencer" description="Lista de membresías activas que vencen pronto, con cliente, plan y días restantes.">
-          <Toggle checked={notifications.notifVencimientos} onChange={(v) => updateNotifications({ notifVencimientos: v })} />
+          <div className="flex items-center gap-2">
+            <ProbarBtn tipo="vencimientos" />
+            <Toggle checked={notifications.notifVencimientos} onChange={(v) => updateNotifications({ notifVencimientos: v })} />
+          </div>
         </SectionRow>
         {notifications.notifVencimientos && (
           <SectionRow label="Días de anticipación" description="Rango de búsqueda desde hoy.">
@@ -224,15 +403,36 @@ function NotificationsSection() {
           </SectionRow>
         )}
         <SectionRow label="Clientes con deuda" description="Todos los clientes en estado DEUDA con nombre, email y teléfono.">
-          <Toggle checked={notifications.notifDeudas} onChange={(v) => updateNotifications({ notifDeudas: v })} />
+          <div className="flex items-center gap-2">
+            <ProbarBtn tipo="deudas" />
+            <Toggle checked={notifications.notifDeudas} onChange={(v) => updateNotifications({ notifDeudas: v })} />
+          </div>
         </SectionRow>
         <SectionRow label="Nuevos clientes" description="Al registrar un cliente: nombre, CUIL y email.">
-          <Toggle checked={notifications.notifNuevosClientes} onChange={(v) => updateNotifications({ notifNuevosClientes: v })} />
+          <div className="flex items-center gap-2">
+            <ProbarBtn tipo="nuevos-clientes" />
+            <Toggle checked={notifications.notifNuevosClientes} onChange={(v) => updateNotifications({ notifNuevosClientes: v })} />
+          </div>
         </SectionRow>
-        <SectionRow label="Nuevos usuarios del sistema" description="Al crear un usuario o aprobar una solicitud de acceso: nombre, email y rol." last>
-          <Toggle checked={notifications.notifNuevosUsuarios} onChange={(v) => updateNotifications({ notifNuevosUsuarios: v })} />
+        <SectionRow label="Nuevos usuarios del sistema" description="Al crear un usuario o aprobar una solicitud de acceso: nombre, email y rol.">
+          <div className="flex items-center gap-2">
+            <ProbarBtn tipo="nuevos-usuarios" />
+            <Toggle checked={notifications.notifNuevosUsuarios} onChange={(v) => updateNotifications({ notifNuevosUsuarios: v })} />
+          </div>
+        </SectionRow>
+        <SectionRow label="Email al aprobar solicitudes" description="Todos los admins con este toggle activo reciben email al aprobarse una solicitud, con quién aprobó, el nuevo usuario y la fecha exacta." last>
+          <div className="flex items-center gap-2">
+            <ProbarBtn tipo="solicitud-aprobada" />
+            <Toggle checked={notifications.emailAlAprobarSolicitudes} onChange={(v) => updateNotifications({ emailAlAprobarSolicitudes: v })} />
+          </div>
         </SectionRow>
       </SectionCard>
+
+      <SectionHeader title="Uso de emails" />
+      <ConteoEmailsCard />
+
+      <SectionHeader title="Enviar ahora" />
+      <EnviarResumenCard />
 
       <SectionHeader title="Canal" />
       <SectionCard>
@@ -485,6 +685,7 @@ export default function SettingsDrawer() {
         notifDeudas: notifications.notifDeudas,
         notifNuevosClientes: notifications.notifNuevosClientes,
         notifNuevosUsuarios: notifications.notifNuevosUsuarios,
+        emailAlAprobarSolicitudes: notifications.emailAlAprobarSolicitudes,
       })
     } catch {
       // La config local ya se guardó; si falla el server no se bloquea el UX
