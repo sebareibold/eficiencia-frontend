@@ -38,6 +38,7 @@ export interface Sesion {
   id: string
   semanaId: string
   dia: string
+  nombre?: string
   orden: number
   bloques: Bloque[]
 }
@@ -251,6 +252,7 @@ export interface WSemanaDraft {
 export interface WSesionDraft {
   _id: string
   dia: string
+  nombre?: string
   bloques: WBloqueDraft[]
 }
 

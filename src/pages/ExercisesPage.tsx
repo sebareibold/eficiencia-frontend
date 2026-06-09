@@ -33,7 +33,6 @@ export default function ExercisesPage() {
   const [filterDif, setFilterDif] = useState<string>('todos')
   const [page, setPage]           = useState(1)
   const [deleteTarget, setDeleteTarget] = useState<string | null>(null)
-  const [isDeleting, setIsDeleting] = useState(false)
 
   const totalPages = Math.ceil(items.length / PAGE_SIZE)
   const pageItems  = items.slice((page - 1) * PAGE_SIZE, page * PAGE_SIZE)
@@ -60,16 +59,15 @@ export default function ExercisesPage() {
   }, [fetchItems])
 
   async function handleDelete(id: string) {
-    setIsDeleting(true)
+    setDeleteTarget(null)
+    const backup = items.find(e => e.id === id)
+    setItems(prev => prev.filter(e => e.id !== id))
     try {
       await ejerciciosApi.remove(id)
-      fetchItems()
       addToast('Ejercicio eliminado', 'success')
     } catch {
+      if (backup) setItems(prev => [...prev, backup])
       addToast('Error al eliminar el ejercicio', 'error')
-    } finally {
-      setIsDeleting(false)
-      setDeleteTarget(null)
     }
   }
 
@@ -370,7 +368,6 @@ export default function ExercisesPage() {
         title="Eliminar ejercicio"
         message="Se eliminará del catálogo. Las rutinas que lo usan no se modifican. Esta acción no se puede deshacer."
         confirmLabel="Eliminar"
-        isLoading={isDeleting}
         onConfirm={() => deleteTarget !== null && handleDelete(deleteTarget)}
         onClose={() => setDeleteTarget(null)}
       />

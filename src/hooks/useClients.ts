@@ -6,6 +6,7 @@ import { QK } from '../lib/queryKeys'
 interface UseClientsParams {
   search?: string
   estado?: string
+  estadoPago?: string
   limit?: number
   desde?: string
   hasta?: string
@@ -17,10 +18,11 @@ export function useClients(params?: UseClientsParams) {
   const queryParams = {
     page:   currentPage,
     limit:  params?.limit ?? 10,
-    ...(params?.search && { search: params.search }),
-    ...(params?.estado && { estado: params.estado }),
-    ...(params?.desde  && { desde:  params.desde }),
-    ...(params?.hasta  && { hasta:  params.hasta }),
+    ...(params?.search     && { search:     params.search }),
+    ...(params?.estado     && { estado:     params.estado }),
+    ...(params?.estadoPago && { estadoPago: params.estadoPago }),
+    ...(params?.desde      && { desde:      params.desde }),
+    ...(params?.hasta      && { hasta:      params.hasta }),
   }
 
   const { data, isPending, error, refetch } = useQuery({

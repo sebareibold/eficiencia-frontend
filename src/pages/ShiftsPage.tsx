@@ -72,8 +72,8 @@ const schema = z.object({
   recurrente:      z.boolean().default(true),
   startTime:       z.string().min(1, 'La hora de inicio es requerida'),
   endTime:         z.string().min(1, 'La hora de fin es requerida'),
-  cupoMaximoSalaA: z.string().min(1).refine(v => Number(v) > 0, 'Cupo inválido'),
-  cupoMaximoSalaB: z.string().min(1).refine(v => Number(v) > 0, 'Cupo inválido'),
+  cupoMaximoSalaA: z.string().refine(v => v !== '' && !isNaN(Number(v)) && Number(v) >= 0, 'Cupo inválido'),
+  cupoMaximoSalaB: z.string().refine(v => v !== '' && !isNaN(Number(v)) && Number(v) >= 0, 'Cupo inválido'),
   profesorId:      z.string().min(1, 'El profesor es requerido'),
   clientIds:       z.array(z.string()),
 })
@@ -1506,12 +1506,12 @@ export default function ShiftsPage() {
             <div className="space-y-2">
               <div className="grid grid-cols-2 gap-3">
                 <div>
-                  <label className="text-xs font-semibold text-gray-500 dark:text-[#8A8A9A] mb-1.5 block">Hora desde</label>
+                  <label className="text-xs font-semibold text-gray-500 dark:text-[#8A8A9A] mb-1.5 block">Hora desde *</label>
                   <input type="time" value={diaEspHoraDesde} onChange={e => setDiaEspHoraDesde(e.target.value)}
                     className="w-full rounded-xl border border-gray-200 dark:border-white/[0.08] bg-white dark:bg-white/[0.04] px-3 py-2.5 text-sm text-gray-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-primary/30" />
                 </div>
                 <div>
-                  <label className="text-xs font-semibold text-gray-500 dark:text-[#8A8A9A] mb-1.5 block">Hora hasta</label>
+                  <label className="text-xs font-semibold text-gray-500 dark:text-[#8A8A9A] mb-1.5 block">Hora hasta *</label>
                   <input type="time" value={diaEspHoraHasta} onChange={e => setDiaEspHoraHasta(e.target.value)}
                     className="w-full rounded-xl border border-gray-200 dark:border-white/[0.08] bg-white dark:bg-white/[0.04] px-3 py-2.5 text-sm text-gray-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-primary/30" />
                 </div>
@@ -1544,7 +1544,7 @@ export default function ShiftsPage() {
               Cancelar
             </button>
             <button
-              disabled={!diaEspFecha || savingDiaEsp}
+              disabled={!diaEspFecha || (diaEspTipo === 'HORARIO_REDUCIDO' && (!diaEspHoraDesde || !diaEspHoraHasta)) || savingDiaEsp}
               onClick={async () => {
                 setSavingDiaEsp(true)
                 try {

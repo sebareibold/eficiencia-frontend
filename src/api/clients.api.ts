@@ -9,10 +9,14 @@ export interface PaginatedClients {
   totalPages: number
 }
 
-function mapEstado(estado: string): ClientStatus {
-  if (estado === 'ACTIVO') return 'active'
-  if (estado === 'EN_DEUDA') return 'debt'
+function mapEstadoPago(estadoPago: string): ClientStatus {
+  if (estadoPago === 'AL_DIA') return 'active'
+  if (estadoPago === 'EN_DEUDA') return 'debt'
   return 'expiring' // VENCIDO
+}
+
+function mapActividad(estado: string): 'active' | 'inactive' {
+  return estado === 'INACTIVO' ? 'inactive' : 'active'
 }
 
 function mapCliente(c: any): Client {
@@ -26,7 +30,8 @@ function mapCliente(c: any): Client {
     email: c.email ?? '',
     phone: c.telefono ?? '',
     cuil: c.cuil ?? '',
-    status: mapEstado(c.estado),
+    status: mapEstadoPago(c.estadoPago ?? (c.estado === 'EN_DEUDA' ? 'EN_DEUDA' : c.estado === 'VENCIDO' ? 'VENCIDO' : 'AL_DIA')),
+    activityStatus: mapActividad(c.estado),
     membershipExpiresAt: membership?.fechaVencimiento ?? null,
     membershipStartDate: membership?.fechaInicio ?? null,
     planName: plan?.nombre ?? null,
@@ -64,15 +69,16 @@ function mapFicha(f: any): FichaEntrenamiento {
 }
 
 export const clientsApi = {
-  getAll: (params?: { page?: number; limit?: number; search?: string; estado?: string; desde?: string; hasta?: string }): Promise<PaginatedClients> =>
+  getAll: (params?: { page?: number; limit?: number; search?: string; estado?: string; estadoPago?: string; desde?: string; hasta?: string }): Promise<PaginatedClients> =>
     api.get('/clientes', {
       params: {
         page:  params?.page  ?? 1,
         limit: params?.limit ?? 20,
-        ...(params?.search && { search: params.search }),
-        ...(params?.estado && { estado: params.estado }),
-        ...(params?.desde  && { desde:  params.desde }),
-        ...(params?.hasta  && { hasta:  params.hasta }),
+        ...(params?.search     && { search:     params.search }),
+        ...(params?.estado     && { estado:     params.estado }),
+        ...(params?.estadoPago && { estadoPago: params.estadoPago }),
+        ...(params?.desde      && { desde:      params.desde }),
+        ...(params?.hasta      && { hasta:      params.hasta }),
       },
     }).then((r) => {
       const raw = r.data
@@ -104,6 +110,7 @@ export const clientsApi = {
       ...(dto.phone !== undefined && { telefono: dto.phone }),
       ...(dto.cuil !== undefined && { cuil: dto.cuil }),
       ...(dto.sedeId !== undefined && { sedeId: dto.sedeId || null }),
+      ...(dto.estado !== undefined && { estado: dto.estado }),
     }).then((r) => mapCliente(r.data)),
 
   getSedes: (): Promise<{ id: string; nombre: string; activa: boolean }[]> =>

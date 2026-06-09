@@ -119,19 +119,33 @@ function crearSesionVacia(numero: number, cantBloques = 3): SesionDraft {
 
 function generarEstructura(plantilla: PlantillaRutinaData, cantidadSesiones: number): SesionDraft[] {
   const sesionesPlantilla = plantilla.sesiones.slice(0, cantidadSesiones)
-  return sesionesPlantilla.map((sp) => ({
-    _id: uid(),
-    numero: sp.numero,
-    nombre: sp.nombre,
-    bloques: sp.bloques.map((bp) => ({
-      _id: uid(),
-      letra: bp.letra,
-      orden: bp.orden,
-      patronMovimiento: bp.patronMovimiento,
-      cantidadEjercicios: bp.cantidadEjercicios,
-      ejercicios: Array.from({ length: bp.cantidadEjercicios }, crearEjercicioVacio),
-    })),
-  }))
+  return sesionesPlantilla.map((sp) => {
+    // Agrupa por letra: el seed puede crear N records por bloque (cantidadEjercicios:1 cada uno)
+    // mientras que PlantillaDetailPage crea 1 record con cantidadEjercicios:N.
+    // En ambos casos, el total de ejercicios = sum(cantidadEjercicios) por letra.
+    const byLetra = new Map<string, { patronMovimiento: PatronMovimientoEnum; count: number }>()
+    for (const bp of sp.bloques) {
+      const entry = byLetra.get(bp.letra)
+      if (entry) {
+        entry.count += bp.cantidadEjercicios
+      } else {
+        byLetra.set(bp.letra, { patronMovimiento: bp.patronMovimiento, count: bp.cantidadEjercicios })
+      }
+    }
+    const bloques: BloqueDraft[] = []
+    let idx = 0
+    for (const [letra, { patronMovimiento, count }] of byLetra) {
+      bloques.push({
+        _id: uid(),
+        letra,
+        orden: idx++,
+        patronMovimiento,
+        cantidadEjercicios: count,
+        ejercicios: Array.from({ length: count }, crearEjercicioVacio),
+      })
+    }
+    return { _id: uid(), numero: sp.numero, nombre: sp.nombre, bloques }
+  })
 }
 
 function generarEstructuraVacia(cantidadSesiones: number): SesionDraft[] {
@@ -209,6 +223,7 @@ type WizardAction =
   | { type: 'RENAME_SEMANA_W'; semanaId: string; nombre: string }
   | { type: 'ADD_SESION_W'; semanaId: string; dia: string }
   | { type: 'DELETE_SESION_W'; semanaId: string; sesionId: string }
+  | { type: 'RENAME_SESION_W'; semanaId: string; sesionId: string; nombre: string }
   | { type: 'ADD_BLOQUE_W'; sesionId: string }
   | { type: 'DELETE_BLOQUE_W'; sesionId: string; bloqueId: string }
   | { type: 'ADD_EJ_W'; bloqueId: string; nombre: string; catalogoId?: string }
@@ -412,6 +427,7 @@ function wizardReducer(state: WizardState, action: WizardAction): WizardState {
         sesiones: src.sesiones.map(ses => ({
           _id: uid(),
           dia: ses.dia,
+          nombre: ses.nombre,
           bloques: ses.bloques.map(b => ({
             _id: uid(),
             letra: b.letra,
@@ -452,6 +468,19 @@ function wizardReducer(state: WizardState, action: WizardAction): WizardState {
           s._id !== action.semanaId ? s : {
             ...s,
             sesiones: s.sesiones.filter(ses => ses._id !== action.sesionId),
+          }
+        ),
+      }
+
+    case 'RENAME_SESION_W':
+      return {
+        ...state,
+        semanasWizard: state.semanasWizard.map(s =>
+          s._id !== action.semanaId ? s : {
+            ...s,
+            sesiones: s.sesiones.map(ses =>
+              ses._id !== action.sesionId ? ses : { ...ses, nombre: action.nombre || undefined }
+            ),
           }
         ),
       }
@@ -784,7 +813,7 @@ function SearchableExerciseSelector({
               className="w-full text-left flex items-center justify-between gap-3 rounded-xl px-3 py-2.5 hover:bg-white/[0.06] transition-colors group cursor-pointer"
             >
               <div className="min-w-0">
-                <p className="text-sm font-semibold text-white leading-tight truncate">{ej.nombre}</p>
+                <p className="text-sm font-semibold text-gray-900 dark:text-white leading-tight truncate">{ej.nombre}</p>
                 {ej.patronMovimiento && (
                   <p className="text-[10px] text-gray-500 mt-0.5">{ej.patronMovimiento}</p>
                 )}
@@ -826,7 +855,7 @@ function SearchableExerciseSelector({
               onClick={e => e.stopPropagation()}
             >
               <div className="flex items-center justify-between p-3 border-b border-white/[0.08]">
-                <span className="text-sm text-white font-semibold">Video del ejercicio</span>
+                <span className="text-sm text-gray-900 dark:text-white font-semibold">Video del ejercicio</span>
                 <button onClick={() => setVideoModal(null)} className="p-1 rounded-lg text-gray-400 hover:text-white transition-colors">
                   <X size={16} />
                 </button>
@@ -924,7 +953,7 @@ function EjercicioSlot({
       >
         <div className="flex items-center gap-2 min-w-0">
           <div className="h-1.5 w-1.5 rounded-full bg-primary shrink-0" />
-          <span className="text-sm font-semibold text-white truncate">{ejercicio.nombre}</span>
+          <span className="text-sm font-semibold text-gray-900 dark:text-white truncate">{ejercicio.nombre}</span>
         </div>
         <div className="flex items-center gap-2 shrink-0">
           {ejercicio.series && <span className="text-[10px] text-gray-500">{ejercicio.series}×{ejercicio.repeticiones ?? '—'}</span>}
@@ -1349,7 +1378,7 @@ export default function CreateRutinaPage() {
               <User size={14} className="text-primary" />
             </div>
             <div className="flex-1 min-w-0">
-              <p className="text-sm font-semibold text-white">{state.cliente.nombre} {state.cliente.apellido}</p>
+              <p className="text-sm font-semibold text-gray-900 dark:text-white">{state.cliente.nombre} {state.cliente.apellido}</p>
               {state.cliente.planActivo && (
                 <p className="text-[10px] text-gray-500">{state.cliente.planActivo}</p>
               )}
@@ -1387,7 +1416,7 @@ export default function CreateRutinaPage() {
                   <Plus size={15} className="text-gray-400" />
                 </div>
                 <div className="min-w-0">
-                  <p className="text-sm font-black text-white">Desde cero</p>
+                  <p className="text-sm font-black text-gray-900 dark:text-white">Desde cero</p>
                   <p className="text-xs text-gray-500 mt-0.5">Crear una rutina nueva sin tomar ninguna como referencia</p>
                 </div>
               </div>
@@ -1411,7 +1440,7 @@ export default function CreateRutinaPage() {
                 >
                   <div>
                     <div className="flex items-start justify-between gap-2">
-                      <p className="text-sm font-black text-white leading-tight">{rutina.nombre}</p>
+                      <p className="text-sm font-black text-gray-900 dark:text-white leading-tight">{rutina.nombre}</p>
                       {rutina.activa && (
                         <span className="text-[9px] font-bold uppercase tracking-wider px-1.5 py-0.5 rounded-md bg-emerald-500/10 text-emerald-400 border border-emerald-500/15 shrink-0">
                           Activa
@@ -1478,7 +1507,7 @@ export default function CreateRutinaPage() {
                 <div className="h-8 w-8 rounded-xl bg-primary/10 flex items-center justify-center shrink-0">
                   <User size={14} className="text-primary" />
                 </div>
-                <span className="text-sm font-semibold text-white">{r.nombre} {r.apellido}</span>
+                <span className="text-sm font-semibold text-gray-900 dark:text-white">{r.nombre} {r.apellido}</span>
               </button>
             ))}
           </div>
@@ -1507,7 +1536,7 @@ export default function CreateRutinaPage() {
                 <User size={18} className="text-primary" />
               </div>
               <div>
-                <p className="text-base font-black text-white">{clienteSeleccionadoRaw.nombre} {clienteSeleccionadoRaw.apellido}</p>
+                <p className="text-base font-black text-gray-900 dark:text-white">{clienteSeleccionadoRaw.nombre} {clienteSeleccionadoRaw.apellido}</p>
                 <p className="text-xs text-gray-400">
                   {clienteSeleccionadoRaw.planActivo
                     ? `${clienteSeleccionadoRaw.planActivo} · ${clienteSeleccionadoRaw.frecuenciaSemanal ?? '?'}× / semana`
@@ -1591,7 +1620,7 @@ export default function CreateRutinaPage() {
           <div className="flex items-start gap-2.5 rounded-xl border border-white/[0.08] bg-white/[0.03] px-4 py-3">
             <AlertCircle size={14} className="text-gray-400 shrink-0 mt-0.5" />
             <p className="text-xs text-gray-400">
-              El plan del cliente permite hasta <strong className="text-white">{freq}× por semana</strong>.
+              El plan del cliente permite hasta <strong className="text-gray-900 dark:text-white">{freq}× por semana</strong>.
               Solo se habilitan las opciones compatibles.
             </p>
           </div>
@@ -1619,7 +1648,7 @@ export default function CreateRutinaPage() {
                     <Check size={9} strokeWidth={3} className="text-black" />
                   </span>
                 )}
-                <span className={`text-3xl font-black block ${state.sesionesSemanales === n ? 'text-primary' : 'text-white'}`}>{n}</span>
+                <span className={`text-3xl font-black block ${state.sesionesSemanales === n ? 'text-primary' : 'text-gray-900 dark:text-white'}`}>{n}</span>
                 <span className="text-[10px] font-semibold uppercase tracking-wider text-gray-500 mt-1 block">días/semana</span>
               </button>
             )
@@ -1686,7 +1715,7 @@ export default function CreateRutinaPage() {
           >
             <div className="flex items-start justify-between gap-3">
               <div className="min-w-0">
-                <p className="text-sm font-black text-white leading-tight">{p.nombre}</p>
+                <p className="text-sm font-black text-gray-900 dark:text-white leading-tight">{p.nombre}</p>
                 <div className="flex items-center gap-2 mt-1.5">
                   <span className={`text-[10px] px-1.5 py-0.5 rounded-md font-semibold ${TIPO_COLORS[p.tipo]}`}>
                     {TIPO_LABELS[p.tipo]}
@@ -1734,7 +1763,7 @@ export default function CreateRutinaPage() {
               <Wrench size={15} className="text-gray-400" />
             </div>
             <div>
-              <p className="text-sm font-black text-white">Sin plantilla — armar manualmente</p>
+              <p className="text-sm font-black text-gray-900 dark:text-white">Sin plantilla — armar manualmente</p>
               <p className="text-xs text-gray-500 mt-0.5">Genera {state.sesionesSemanales} sesiones con bloques vacíos para configurar libremente</p>
             </div>
           </div>
@@ -1752,22 +1781,44 @@ export default function CreateRutinaPage() {
     const [showDiaPicker, setShowDiaPicker] = useState<string | null>(null)
     const [renamingSemanaId, setRenamingSemanaId] = useState<string | null>(null)
     const [renameSemanaVal, setRenameSemanaVal] = useState('')
+    const [renamingSesionId, setRenamingSesionId] = useState<string | null>(null)
+    const [renameSesionVal, setRenameSesionVal] = useState('')
     const [dragSemanaId, setDragSemanaId] = useState<string | null>(null)
     const [dragOverSemanaId, setDragOverSemanaId] = useState<string | null>(null)
 
     return (
+      <div className="space-y-3">
+      <div className="flex items-start gap-2.5 rounded-xl border border-primary/20 bg-primary/[0.04] px-3 py-2.5">
+        <AlertCircle size={13} className="text-primary/60 shrink-0 mt-0.5" />
+        <p className="text-xs text-gray-600 dark:text-white/50 leading-relaxed">
+          <strong className="text-gray-800 dark:text-white/80">Estructura:</strong> Semana → Día → Bloque → Ejercicio.
+          Hacé click en el nombre de semana o día para renombrarlo.
+          Los campos <span className="font-semibold text-primary/80">RIR</span> y <span className="font-semibold text-primary/80">RPE</span> son opcionales (pasá el cursor sobre los encabezados para ver ayuda).
+        </p>
+      </div>
       <div className="rounded-2xl border border-white/40 dark:border-white/[0.08] overflow-hidden">
         <div
           className="overflow-x-auto overflow-y-auto"
-          style={{ maxHeight: 'calc(100vh - 180px)' }}
+          style={{ maxHeight: 'calc(100vh - 230px)' }}
           ref={(el) => { if (el) el.scrollTop = paso4ScrollTop.current }}
           onScroll={(e) => { paso4ScrollTop.current = e.currentTarget.scrollTop }}
         >
           <table className="w-full border-collapse text-sm">
             <thead className="sticky top-0 z-10">
               <tr className="border-b border-white/40 dark:border-white/[0.08] bg-white/50 dark:bg-black/20 backdrop-blur-sm">
-                {(['Semana', 'Día', 'Bloque', 'Ejercicio', 'Ser.', 'Reps', 'Peso', 'RIR/RPE', 'Nota', ''] as const).map((h, i) => (
-                  <th key={`h${i}`} className={`py-2.5 text-[10px] font-semibold text-gray-400 dark:text-white/35 uppercase tracking-widest whitespace-nowrap ${i < 3 ? 'px-3 text-left' : i === 3 ? 'px-4 text-left' : 'px-3 text-center'}`}>{h}</th>
+                {([
+                  { label: 'Semana', tip: 'Click en el nombre para renombrar. Arrastrá para reordenar.' },
+                  { label: 'Día', tip: 'Click en el nombre del día para personalizarlo (ej: Empuje, Pierna...)' },
+                  { label: 'Bloque', tip: 'Letra del bloque (A, B, C...). Los ejercicios de un mismo bloque se realizan en circuito.' },
+                  { label: 'Ejercicio', tip: '' },
+                  { label: 'Ser.', tip: 'Series a realizar' },
+                  { label: 'Reps', tip: 'Repeticiones por serie' },
+                  { label: 'Peso', tip: 'Carga o peso a utilizar' },
+                  { label: 'RIR/RPE', tip: 'RIR: repeticiones en reserva antes del fallo. RPE: esfuerzo percibido del 1 al 10.' },
+                  { label: 'Nota', tip: 'Indicaciones adicionales para el ejercicio' },
+                  { label: '', tip: '' },
+                ] as const).map(({ label, tip }, i) => (
+                  <th key={`h${i}`} title={tip || undefined} className={`py-2.5 text-[10px] font-semibold text-gray-400 dark:text-white/35 uppercase tracking-widest whitespace-nowrap cursor-default ${tip ? 'underline decoration-dotted decoration-gray-400/40' : ''} ${i < 3 ? 'px-3 text-left' : i === 3 ? 'px-4 text-left' : 'px-3 text-center'}`}>{label}</th>
                 ))}
               </tr>
             </thead>
@@ -1896,13 +1947,44 @@ export default function CreateRutinaPage() {
                   const diaCell = () => {
                     const shown = diaShown
                     diaShown = true
-                    return shown ? <td key="dc" className={`w-[90px] ${C}`} /> : (
-                      <td key="dc" className="px-3 py-2.5 w-[90px] align-top">
-                        <div className="flex items-center gap-1 group/dia">
-                          <span className="text-sm text-gray-700 dark:text-white/70 font-semibold whitespace-nowrap">{ses.dia}</span>
-                          <button onClick={() => dispatch({ type: 'DELETE_SESION_W', semanaId: sem._id, sesionId: ses._id })} className="p-1 rounded text-gray-400 dark:text-white/45 hover:text-red-400 opacity-0 group-hover/dia:opacity-100 transition-all">
-                            <X className="w-2.5 h-2.5" />
-                          </button>
+                    if (shown) return <td key="dc" className={`w-[110px] ${C}`} />
+
+                    const isRenamingSes = renamingSesionId === ses._id
+                    return (
+                      <td key="dc" className="px-3 py-2.5 w-[110px] align-top">
+                        <div className="flex flex-col gap-0.5 group/dia">
+                          <div className="flex items-center gap-1">
+                            <span className="text-[10px] text-gray-500 dark:text-white/40 font-medium whitespace-nowrap">{ses.dia}</span>
+                            <button onClick={() => dispatch({ type: 'DELETE_SESION_W', semanaId: sem._id, sesionId: ses._id })} className="p-0.5 rounded text-gray-400 dark:text-white/45 hover:text-red-400 opacity-0 group-hover/dia:opacity-100 transition-all">
+                              <X className="w-2 h-2" />
+                            </button>
+                          </div>
+                          {isRenamingSes ? (
+                            <form
+                              onSubmit={e => { e.preventDefault(); dispatch({ type: 'RENAME_SESION_W', semanaId: sem._id, sesionId: ses._id, nombre: renameSesionVal.trim() }); setRenamingSesionId(null) }}
+                              className="flex items-center gap-1"
+                            >
+                              <input
+                                autoFocus
+                                value={renameSesionVal}
+                                onChange={e => setRenameSesionVal(e.target.value)}
+                                placeholder={ses.dia}
+                                onBlur={() => { dispatch({ type: 'RENAME_SESION_W', semanaId: sem._id, sesionId: ses._id, nombre: renameSesionVal.trim() }); setRenamingSesionId(null) }}
+                                className="w-16 bg-white dark:bg-white/[0.08] border border-primary/40 rounded-md px-1.5 py-0.5 text-[11px] text-gray-900 dark:text-white focus:outline-none"
+                              />
+                              <button type="submit" className="p-0.5 rounded text-primary shrink-0">
+                                <Check className="w-3 h-3" />
+                              </button>
+                            </form>
+                          ) : (
+                            <span
+                              className="text-sm text-gray-700 dark:text-white/70 font-semibold whitespace-nowrap cursor-pointer hover:text-primary dark:hover:text-primary transition-colors"
+                              title="Click para personalizar nombre"
+                              onClick={() => { setRenamingSesionId(ses._id); setRenameSesionVal(ses.nombre ?? '') }}
+                            >
+                              {ses.nombre?.trim() ? ses.nombre : ses.dia}
+                            </span>
+                          )}
                         </div>
                       </td>
                     )
@@ -2192,14 +2274,20 @@ export default function CreateRutinaPage() {
 
               {state.semanasWizard.length === 0 && (
                 <tr>
-                  <td colSpan={9} className="px-4 py-8 text-center text-sm text-gray-500 dark:text-white/30">
-                    Sin semanas. Avanzá al siguiente paso para continuar, o agregá una semana manualmente.
+                  <td colSpan={10} className="px-6 py-10 text-center">
+                    <div className="space-y-2">
+                      <p className="text-sm font-semibold text-gray-500 dark:text-white/40">Sin semanas todavía</p>
+                      <p className="text-xs text-gray-400 dark:text-white/25">
+                        Presioná <span className="font-semibold text-primary/70">"+ nueva semana"</span> para agregar la primera, o avanzá al paso siguiente si ya configuraste la estructura antes.
+                      </p>
+                    </div>
                   </td>
                 </tr>
               )}
             </tbody>
           </table>
         </div>
+      </div>
       </div>
     )
   }
@@ -2388,7 +2476,7 @@ export default function CreateRutinaPage() {
             </div>
             <div className="min-w-0">
               <p className="text-[10px] font-bold uppercase tracking-wider text-gray-500">{item.label}</p>
-              <p className="text-sm font-semibold text-white mt-0.5">{item.value}</p>
+              <p className="text-sm font-semibold text-gray-900 dark:text-white mt-0.5">{item.value}</p>
               {item.sub && <p className="text-xs text-gray-400 mt-0.5">{item.sub}</p>}
             </div>
           </motion.div>
@@ -2518,7 +2606,7 @@ export default function CreateRutinaPage() {
         ? state.semanasWizard.flatMap(sem =>
             sem.sesiones.map((ses, sesIdx) => ({
               numero: sesIdx + 1,
-              nombre: ses.dia,
+              nombre: ses.nombre?.trim() || ses.dia,
               bloques: ses.bloques.map((b, bi) => ({
                 letra: b.letra,
                 orden: bi,

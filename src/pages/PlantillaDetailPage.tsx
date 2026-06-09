@@ -33,6 +33,7 @@ const PATRON_LABELS: Record<PatronMovimientoEnum, string> = {
   ISO_MI:            'Iso MI',
   ISO_MS:            'Iso MS',
   ACCESORIO:         'Accesorio',
+  MOVILIDAD:         'Movilidad',
   OTROS:             'Otros',
 }
 
@@ -40,7 +41,7 @@ const TODOS_PATRONES: PatronMovimientoEnum[] = [
   'RODILLA_DOMINANTE', 'CADERA_DOMINANTE', 'EMPUJE', 'TRACCION',
   'HIBRIDO', 'HOMBROS', 'CORE', 'POTENCIA',
   'PLIO_MI', 'PLIO_MS', 'ISO_MI', 'ISO_MS',
-  'ACCESORIO', 'OTROS',
+  'ACCESORIO', 'MOVILIDAD', 'OTROS',
 ]
 
 const LETRAS = ['A', 'B', 'C', 'D', 'E', 'F', 'G', 'H']
@@ -319,8 +320,9 @@ export default function PlantillaDetailPage() {
         addToast('Plantilla actualizada', 'success')
       }
       navigate(ROUTES.EXERCISES)
-    } catch {
-      addToast('Error al guardar la plantilla', 'error')
+    } catch (err: unknown) {
+      const msg = (err as { response?: { data?: { message?: string } } })?.response?.data?.message
+      addToast(msg ?? 'Error al guardar la plantilla', 'error')
     } finally {
       setSaving(false)
     }

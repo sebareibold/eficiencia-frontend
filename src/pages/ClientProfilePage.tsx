@@ -6,7 +6,7 @@ import {
   Edit2, CreditCard, Activity, Clock, Hash, Banknote, ArrowLeftRight,
   MessageCircle, Tag, Dumbbell, BookOpen, Plus, ChevronDown, ChevronRight,
   BarChart2, PieChart as PieIcon, LineChart as LineChartIcon,
-  Receipt, AlertTriangle, MapPin, User, Trophy, Trash2, Save,
+  Receipt, AlertTriangle, MapPin, User, Trophy, Trash2, Save, UserX, UserCheck,
 } from 'lucide-react'
 import { format, parseISO, addDays } from 'date-fns'
 import { es } from 'date-fns/locale'
@@ -68,7 +68,7 @@ const editSchema = z.object({
   lastName: z.string().min(1, 'Requerido'),
   email:    z.string().email('Email inválido').or(z.literal('')),
   phone:    z.string().optional(),
-  cuil:     z.string().min(1, 'Requerido'),
+  cuil:     z.string().optional(),
   sedeId:   z.string().optional(),
   // ficha
   peso:            z.string().optional(),
@@ -154,16 +154,24 @@ function StatusBadge({ client, size = 'md' }: { client: Client; size?: 'sm' | 'm
   const paddingCls = size === 'sm' ? 'px-2 py-0.5 rounded-full font-semibold' : 'px-2.5 py-1.5 rounded-lg font-medium'
 
   return (
-    <div className={`relative group inline-flex ${tooltip ? 'cursor-help' : ''}`}>
-      <span className={`inline-flex items-center gap-1.5 text-xs ${paddingCls} ${badgeCls}`}>
-        <span className={`h-1.5 w-1.5 rounded-full shrink-0 ${dotCls}`} />
-        {getStatusLabel(client.status)}
-      </span>
-      {tooltip && (
-        <div className="absolute bottom-full left-1/2 -translate-x-1/2 mb-2.5 w-60 px-3 py-2.5 rounded-xl bg-gray-900 dark:bg-[#0d0d0d] border border-white/[0.07] text-white text-[11px] leading-relaxed opacity-0 group-hover:opacity-100 pointer-events-none transition-opacity duration-150 z-50 shadow-2xl text-center whitespace-normal">
-          {tooltip}
-          <span className="absolute top-full left-1/2 -translate-x-1/2 border-[5px] border-transparent border-t-gray-900 dark:border-t-[#0d0d0d]" />
-        </div>
+    <div className="inline-flex items-center gap-1.5 flex-wrap">
+      <div className={`relative group inline-flex ${tooltip ? 'cursor-help' : ''}`}>
+        <span className={`inline-flex items-center gap-1.5 text-xs ${paddingCls} ${badgeCls}`}>
+          <span className={`h-1.5 w-1.5 rounded-full shrink-0 ${dotCls}`} />
+          {getStatusLabel(client.status)}
+        </span>
+        {tooltip && (
+          <div className="absolute bottom-full left-1/2 -translate-x-1/2 mb-2.5 w-60 px-3 py-2.5 rounded-xl bg-gray-900 dark:bg-[#0d0d0d] border border-white/[0.07] text-white text-[11px] leading-relaxed opacity-0 group-hover:opacity-100 pointer-events-none transition-opacity duration-150 z-50 shadow-2xl text-center whitespace-normal">
+            {tooltip}
+            <span className="absolute top-full left-1/2 -translate-x-1/2 border-[5px] border-transparent border-t-gray-900 dark:border-t-[#0d0d0d]" />
+          </div>
+        )}
+      </div>
+      {client.activityStatus === 'inactive' && (
+        <span className={`inline-flex items-center gap-1 text-xs ${paddingCls} bg-gray-100 dark:bg-gray-800/60 text-gray-500 dark:text-gray-400 border border-gray-200 dark:border-gray-700/50`}>
+          <span className="h-1.5 w-1.5 rounded-full bg-gray-400 shrink-0" />
+          INACTIVO
+        </span>
       )}
     </div>
   )
@@ -463,6 +471,7 @@ export default function ClientProfilePage() {
   const [loading, setLoading] = useState(true)
   const [isEditing, setIsEditing] = useState(false)
   const [isSaving, setIsSaving] = useState(false)
+  const [isTogglingActivity, setIsTogglingActivity] = useState(false)
   const [sedes, setSedes] = useState<{ id: string; nombre: string }[]>([])
   const [eventos, setEventos] = useState<EventoDeportivo[]>([])
   const [eventoForm, setEventoForm] = useState<{ nombre: string; fecha: string; observacion: string } | null>(null)
@@ -730,6 +739,21 @@ export default function ClientProfilePage() {
       addToast('Eliminado de la lista de espera', 'success')
     } catch {
       addToast('Error al cancelar', 'error')
+    }
+  }
+
+  async function handleToggleActividad() {
+    if (!client) return
+    const newEstado = client.activityStatus === 'inactive' ? 'ACTIVO' : 'INACTIVO'
+    setIsTogglingActivity(true)
+    try {
+      const updated = await clientsApi.update(client.id, { estado: newEstado })
+      setClient(updated)
+      addToast(newEstado === 'INACTIVO' ? 'Cliente marcado como inactivo' : 'Cliente marcado como activo', 'success')
+    } catch {
+      addToast('Error al actualizar estado de actividad', 'error')
+    } finally {
+      setIsTogglingActivity(false)
     }
   }
 
@@ -1017,13 +1041,30 @@ export default function ClientProfilePage() {
                       </div>
                     ))}
 
-                    {/* Estado — solo lectura */}
+                    {/* Estado — lectura + toggle actividad admin */}
                     <div className="grid grid-cols-2 px-4 py-2.5 hover:bg-black/[0.02] dark:hover:bg-white/[0.01] transition-colors items-center">
                       <span className="text-gray-500 dark:text-[#8A8A9A] flex items-center gap-1.5 font-semibold">
                         <CheckCircle2 size={12} className="opacity-60 text-gray-400 dark:text-gray-500" />
                         Estado
                       </span>
-                      <StatusBadge client={client} size="sm" />
+                      <div className="flex items-center gap-2 flex-wrap">
+                        <StatusBadge client={client} size="sm" />
+                        {isAdmin && (
+                          <button
+                            onClick={handleToggleActividad}
+                            disabled={isTogglingActivity}
+                            title={client.activityStatus === 'inactive' ? 'Marcar como activo' : 'Marcar como inactivo'}
+                            className="inline-flex items-center gap-1 text-[10px] font-semibold px-2 py-0.5 rounded-full border transition-all disabled:opacity-50
+                              border-gray-200 dark:border-gray-700/60 text-gray-400 dark:text-gray-500
+                              hover:border-gray-400 hover:text-gray-600 dark:hover:border-gray-500 dark:hover:text-gray-300"
+                          >
+                            {client.activityStatus === 'inactive'
+                              ? <><UserCheck size={10} /> Activar</>
+                              : <><UserX size={10} /> Dar de baja</>
+                            }
+                          </button>
+                        )}
+                      </div>
                     </div>
 
                     {/* Sede */}

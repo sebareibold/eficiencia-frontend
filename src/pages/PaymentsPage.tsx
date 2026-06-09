@@ -2,7 +2,7 @@ import { useState, useMemo, useEffect } from 'react'
 import { useQuery } from '@tanstack/react-query'
 import { QK } from '../lib/queryKeys'
 import { motion, AnimatePresence } from 'framer-motion'
-import { useNavigate } from 'react-router-dom'
+import { useNavigate, Link } from 'react-router-dom'
 import { pageVariants, cardVariants } from '../lib/motion'
 import {
   Plus, CreditCard, Banknote, ArrowLeftRight, Building2, RefreshCw,
@@ -22,6 +22,7 @@ import { membresiasClienteApi } from '../api/membresiasCliente.api'
 import { tarifasApi } from '../api/tarifas.api'
 import { clientsApi } from '../api/clients.api'
 import { usePermissions } from '../hooks/usePermissions'
+import { useAuthStore } from '../store/authStore'
 import { useUiStore } from '../store/uiStore'
 import { MODALIDAD_LABELS, MODALIDAD_DURACION, MODALIDADES } from '../types/membership.types'
 import type { Plan, Modalidad, TarifaVigente, MembresiaCliente } from '../types/membership.types'
@@ -482,7 +483,7 @@ export default function PaymentsPage() {
   const [planSubmitting, setPlanSubmitting] = useState(false)
   const [deletePaymentTarget, setDeletePaymentTarget] = useState<number | null>(null)
   const [deletePlanTarget, setDeletePlanTarget] = useState<Plan | null>(null)
-  const [isDeletingPayment, setIsDeletingPayment] = useState(false)
+  const [removedPaymentIds, setRemovedPaymentIds] = useState<Set<number>>(new Set())
   const [isDeletingPlan, setIsDeletingPlan] = useState(false)
 
   // ── Derivados de período ──
@@ -512,6 +513,8 @@ export default function PaymentsPage() {
   useEffect(() => { goToPage(1) }, [periodMode, navDate.getFullYear(), navDate.getMonth()]) // eslint-disable-line react-hooks/exhaustive-deps
   const { can } = usePermissions()
   const addToast = useUiStore(s => s.addToast)
+  const user = useAuthStore(s => s.user)
+  const isAdmin = user?.role === 'admin'
 
   // ── Forms ──
   const { register, handleSubmit, formState: { errors }, reset, watch } = useForm<PaymentFormValues>({
@@ -538,11 +541,12 @@ export default function PaymentsPage() {
 
   // ── Filtros y totales ──
   const filtered = useMemo(() => payments.filter(p => {
+    if (removedPaymentIds.has(p.id)) return false
     const matchMethod   = methodFilter   === 'all' || p.method === methodFilter
     const matchInvoiced = invoicedFilter === 'all' || (invoicedFilter === 'yes' && p.invoiced) || (invoicedFilter === 'no' && !p.invoiced)
     const matchSearch   = !searchFilter  || p.clientName.toLowerCase().includes(searchFilter.toLowerCase())
     return matchMethod && matchInvoiced && matchSearch
-  }), [payments, methodFilter, invoicedFilter, searchFilter])
+  }), [payments, methodFilter, invoicedFilter, searchFilter, removedPaymentIds])
 
   // ── Resumen del período completo (para KPIs) ──
   const periodMes = periodMode === 'month' ? format(navDate, 'yyyy-MM') : undefined
@@ -592,10 +596,17 @@ export default function PaymentsPage() {
   }
 
   async function deletePayment(id: number) {
-    setIsDeletingPayment(true)
-    try { await paymentsApi.remove(id); addToast('Pago eliminado', 'success'); refetch() }
-    catch { addToast('Error al eliminar', 'error') }
-    finally { setIsDeletingPayment(false); setDeletePaymentTarget(null) }
+    setDeletePaymentTarget(null)
+    setRemovedPaymentIds(prev => new Set([...prev, id]))
+    try {
+      await paymentsApi.remove(id)
+      addToast('Pago eliminado', 'success')
+      refetch()
+      setRemovedPaymentIds(prev => { const s = new Set(prev); s.delete(id); return s })
+    } catch {
+      setRemovedPaymentIds(prev => { const s = new Set(prev); s.delete(id); return s })
+      addToast('Error al eliminar', 'error')
+    }
   }
 
   // ── Handlers planes ──
@@ -671,13 +682,15 @@ export default function PaymentsPage() {
         </div>
       </div>
 
-      {/* ── KPI strip ── */}
-      <div className="grid grid-cols-2 lg:grid-cols-4 gap-2 md:gap-4 xl:gap-6">
-        {summaryCards.map(card => (
-          <KpiCard key={card.label} label={card.label} value={formatCurrency(card.value)}
-            icon={card.icon} iconColor={card.color} iconBg={card.bgColor} isLoading={isLoading} />
-        ))}
-      </div>
+      {/* ── KPI strip — solo Administrador ── */}
+      {isAdmin && (
+        <div className="grid grid-cols-2 lg:grid-cols-4 gap-2 md:gap-4 xl:gap-6">
+          {summaryCards.map(card => (
+            <KpiCard key={card.label} label={card.label} value={formatCurrency(card.value)}
+              icon={card.icon} iconColor={card.color} iconBg={card.bgColor} isLoading={isLoading} />
+          ))}
+        </div>
+      )}
 
       {/* ── Barra de filtros ── */}
       <div className="flex flex-col sm:flex-row sm:items-center gap-3 flex-wrap">
@@ -1104,6 +1117,14 @@ export default function PaymentsPage() {
             {clientOptions.length > 0 && (
               <Select options={clientOptions} placeholder="Seleccioná un cliente" error={errors.clientId?.message} {...register('clientId')} />
             )}
+            {!loadingClients && clientSearch.trim().length > 0 && clientOptions.length === 0 && (
+              <p className="text-xs text-[#9CA3AF]">
+                Sin resultados.{' '}
+                <Link to={ROUTES.CLIENT_NEW} className="text-primary hover:underline">
+                  Crear nuevo cliente →
+                </Link>
+              </p>
+            )}
           </div>
           <Input label="Monto *" type="number" error={errors.amount?.message} {...register('amount')} />
           <Select label="Método *" options={[
@@ -1151,7 +1172,6 @@ export default function PaymentsPage() {
         title="Eliminar pago"
         message="Esta acción no se puede deshacer. El registro quedará eliminado permanentemente."
         confirmLabel="Eliminar"
-        isLoading={isDeletingPayment}
         onConfirm={() => deletePaymentTarget !== null && deletePayment(deletePaymentTarget)}
         onClose={() => setDeletePaymentTarget(null)}
       />

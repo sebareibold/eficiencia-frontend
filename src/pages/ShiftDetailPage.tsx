@@ -61,8 +61,8 @@ const editSchema = z.object({
   recurrente:      z.boolean().default(true),
   startTime:       z.string().min(1, 'Requerido'),
   endTime:         z.string().min(1, 'Requerido'),
-  cupoMaximoSalaA: z.string().min(1).refine(v => Number(v) > 0, 'Inválido'),
-  cupoMaximoSalaB: z.string().min(1).refine(v => Number(v) > 0, 'Inválido'),
+  cupoMaximoSalaA: z.string().refine(v => v !== '' && !isNaN(Number(v)) && Number(v) >= 0, 'Inválido'),
+  cupoMaximoSalaB: z.string().refine(v => v !== '' && !isNaN(Number(v)) && Number(v) >= 0, 'Inválido'),
   profesorId:      z.string().min(1, 'Requerido'),
 })
 type EditValues = z.infer<typeof editSchema>

@@ -8,6 +8,7 @@ export interface Client {
   phone: string
   cuil: string
   status: ClientStatus
+  activityStatus: 'active' | 'inactive'
   membershipExpiresAt: string | null
   membershipStartDate?: string | null
   planName?: string | null
@@ -33,4 +34,5 @@ export interface CreateClientDto {
 
 export interface UpdateClientDto extends Partial<CreateClientDto> {
   sedeId?: string | null
+  estado?: 'ACTIVO' | 'INACTIVO'
 }

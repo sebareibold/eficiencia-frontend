@@ -22,8 +22,8 @@ const STATUS_FILTERS: { value: StatusFilter; label: string }[] = [
   { value: 'debt',     label: 'Deuda' },
 ]
 
-function mapStatusToEstado(s: StatusFilter): string | undefined {
-  if (s === 'active')   return 'ACTIVO'
+function mapStatusToEstadoPago(s: StatusFilter): string | undefined {
+  if (s === 'active')   return 'AL_DIA'
   if (s === 'debt')     return 'EN_DEUDA'
   if (s === 'expiring') return 'VENCIDO'
   return undefined
@@ -109,7 +109,7 @@ export default function ClientsPage() {
 
   const { clients, total, totalPages, currentPage, goToPage, isLoading, error, refetch } = useClients({
     search: debouncedSearch || undefined,
-    estado: mapStatusToEstado(statusFilter),
+    estadoPago: mapStatusToEstadoPago(statusFilter),
     desde,
     hasta,
   })
@@ -124,7 +124,7 @@ export default function ClientsPage() {
       render: (c) => (
         <div className="flex flex-col gap-0.5">
           <span className="font-semibold text-gray-900 dark:text-white">{c.name} {c.lastName}</span>
-          <span className="text-xs text-saas-muted">CUIL {c.cuil}</span>
+          {c.cuil && <span className="text-xs text-saas-muted">CUIL {c.cuil}</span>}
         </div>
       ),
     },
@@ -141,7 +141,16 @@ export default function ClientsPage() {
     {
       key: 'status',
       header: 'Estado',
-      render: (c) => <Badge status={c.status} />,
+      render: (c) => (
+        <div className="flex flex-wrap items-center gap-1.5">
+          <Badge status={c.status} />
+          {c.activityStatus === 'inactive' && (
+            <span className="inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[10px] font-semibold bg-gray-100 dark:bg-gray-800/60 text-gray-500 dark:text-gray-400 border border-gray-200 dark:border-gray-700/50">
+              INACTIVO
+            </span>
+          )}
+        </div>
+      ),
     },
     {
       key: 'planName',
@@ -417,7 +426,14 @@ export default function ClientsPage() {
 
                   {/* Footer */}
                   <div className="flex items-center justify-between gap-2 pt-3 border-t border-black/5 dark:border-white/[0.06]">
-                    <Badge status={c.status} />
+                    <div className="flex flex-wrap items-center gap-1.5">
+                      <Badge status={c.status} />
+                      {c.activityStatus === 'inactive' && (
+                        <span className="inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[10px] font-semibold bg-gray-100 dark:bg-gray-800/60 text-gray-500 dark:text-gray-400 border border-gray-200 dark:border-gray-700/50">
+                          INACTIVO
+                        </span>
+                      )}
+                    </div>
                     <div className="text-right shrink-0 min-w-0">
                       {c.planName ? (
                         <>

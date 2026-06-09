@@ -23,6 +23,7 @@ import type { EjercicioCatalogo } from '../types/ejercicio-catalogo.types'
 import { ROUTES } from '../constants/routes'
 import { useUiStore } from '../store/uiStore'
 import Skeleton, { SkeletonRutinaPanel } from '../components/ui/Skeleton'
+import ConfirmDialog from '../components/ui/ConfirmDialog'
 
 // ─── Constantes ───────────────────────────────────────────────────────────────
 
@@ -553,7 +554,17 @@ function EjInlineCells({ ej, isEditing, onEditStart, onUpdate, onCancelEdit, onD
     return (
       <>
         <td className="px-4 py-2.5">
-          <span className="text-sm text-saas-text dark:text-white/90 font-medium block">{ej.nombre}</span>
+          <div className="flex items-center gap-1.5 min-w-0">
+            <span className="text-sm text-saas-text dark:text-white/90 font-medium truncate">{ej.nombre}</span>
+            {ej.catalogo?.videoUrl && (
+              <a href={ej.catalogo.videoUrl} target="_blank" rel="noreferrer"
+                className="shrink-0 p-0.5 rounded text-gray-300 dark:text-white/25 hover:text-primary transition-colors"
+                title="Ver video del ejercicio"
+                onClick={e => e.stopPropagation()}>
+                <ExternalLink className="w-3 h-3" />
+              </a>
+            )}
+          </div>
           {ej.catalogo?.patronMovimiento && (
             <span className="text-[11px] text-gray-400 dark:text-white/35 block">
               {PATRON_LABELS[ej.catalogo.patronMovimiento as PatronMovimientoEnum] ?? ej.catalogo.patronMovimiento}
@@ -870,7 +881,7 @@ function SemanaTreeItem({
                     }`}
                   >
                     <span className="text-[10px] font-bold tracking-wider">{DIA_SHORT[ses.dia] ?? ses.dia.slice(0, 3).toUpperCase()}</span>
-                    <span className="font-normal opacity-70">{ses.dia}</span>
+                    <span className="font-normal opacity-70">{ses.nombre?.trim() ? ses.nombre : ses.dia}</span>
                     <span className={`ml-1 text-[10px] ${isSelected ? 'text-primary/70' : 'text-gray-400 dark:text-white/30'}`}>
                       {ses.bloques.reduce((a, b) => a + b.ejerciciosPlan.length, 0)} ej.
                     </span>
@@ -1116,7 +1127,7 @@ function EditCard({ clienteId: _clienteId, rutina, onCancel, onSaved }: EditCard
                   <ChevronRight className="w-3 h-3" />
                   <span>{selectedSemana?.nombre?.trim() ? selectedSemana.nombre : `Semana ${selectedSemana?.numero}`}</span>
                   <ChevronRight className="w-3 h-3" />
-                  <span className="text-gray-500 dark:text-white/50 font-medium">{selectedSesion.dia}</span>
+                  <span className="text-gray-500 dark:text-white/50 font-medium">{selectedSesion.nombre?.trim() ? selectedSesion.nombre : selectedSesion.dia}</span>
                 </div>
                 <div className="flex-1 h-px bg-white/[0.04]" />
               </div>
@@ -1620,6 +1631,8 @@ export default function ClientRutinaPage() {
   const [editMode, setEditMode] = useState(false)
   const [confirmDeleteSemana, setConfirmDeleteSemana] = useState(false)
   const [ficha, setFicha] = useState<FichaEntrenamiento | null>(null)
+  const [deleteRutinaTarget, setDeleteRutinaTarget] = useState<string | null>(null)
+  const [isDeletingRutina, setIsDeletingRutina] = useState(false)
 
   useEffect(() => {
     if (!clienteId) return
@@ -1658,6 +1671,24 @@ export default function ClientRutinaPage() {
 
   const handleEditCancel = () => {
     setEditMode(false)
+  }
+
+  const { addToast } = useUiStore()
+
+  const handleDeleteRutina = async () => {
+    if (!deleteRutinaTarget) return
+    setIsDeletingRutina(true)
+    try {
+      await rutinasApi.remove(deleteRutinaTarget)
+      addToast('Rutina eliminada', 'success')
+      if (selectedRutinaId === deleteRutinaTarget) setSelectedRutinaId(null)
+      await refetch()
+    } catch {
+      addToast('Error al eliminar la rutina', 'error')
+    } finally {
+      setIsDeletingRutina(false)
+      setDeleteRutinaTarget(null)
+    }
   }
 
   // ─── Render de carga ─────────────────────────────────────────────────────────
@@ -1711,28 +1742,39 @@ export default function ClientRutinaPage() {
 
                 <div className="space-y-1.5">
                   {rutinas.map(r => (
-                    <div key={r.id} className={`rounded-2xl border transition-all ${
+                    <div key={r.id} className={`rounded-2xl border transition-all group/rcard ${
                       selectedRutinaId === r.id
                         ? 'bg-primary/[0.08] border-primary/25'
                         : 'bg-gray-50/50 dark:bg-white/[0.02] border-saas-border dark:border-white/[0.05] hover:bg-white/[0.05] hover:border-gray-300 dark:border-white/[0.1]'
                     }`}>
-                      <button onClick={() => selectRutina(r)} className="w-full text-left p-3">
-                        <div className="flex items-start justify-between gap-2">
-                          <p className={`text-sm font-medium leading-snug ${selectedRutinaId === r.id ? 'text-saas-text dark:text-white' : 'text-gray-600 dark:text-white/65'}`}>
-                            {r.nombre}
-                          </p>
-                          <span className={`shrink-0 px-1.5 py-0.5 rounded-md text-[10px] font-semibold ${
-                            r.activa ? 'bg-primary/15 text-primary' : 'bg-gray-100 dark:bg-white/[0.05] text-gray-400 dark:text-white/30'
-                          }`}>
-                            {r.activa ? 'Activa' : 'Inactiva'}
-                          </span>
-                        </div>
-                        <div className="flex items-center gap-2 mt-1.5 text-[11px] text-gray-400 dark:text-white/35">
-                          <span>{r.semanas.length} sem.</span>
-                          <span className="text-gray-300 dark:text-white/20">·</span>
-                          <span>{countEjRutina(r)} ej.</span>
-                        </div>
-                      </button>
+                      <div className="flex items-start">
+                        <button onClick={() => selectRutina(r)} className="flex-1 text-left p-3">
+                          <div className="flex items-start justify-between gap-2">
+                            <p className={`text-sm font-medium leading-snug ${selectedRutinaId === r.id ? 'text-saas-text dark:text-white' : 'text-gray-600 dark:text-white/65'}`}>
+                              {r.nombre}
+                            </p>
+                            <span className={`shrink-0 px-1.5 py-0.5 rounded-md text-[10px] font-semibold ${
+                              r.activa ? 'bg-primary/15 text-primary' : 'bg-gray-100 dark:bg-white/[0.05] text-gray-400 dark:text-white/30'
+                            }`}>
+                              {r.activa ? 'Activa' : 'Inactiva'}
+                            </span>
+                          </div>
+                          <div className="flex items-center gap-2 mt-1.5 text-[11px] text-gray-400 dark:text-white/35">
+                            <span>{r.semanas.length} sem.</span>
+                            <span className="text-gray-300 dark:text-white/20">·</span>
+                            <span>{countEjRutina(r)} ej.</span>
+                          </div>
+                        </button>
+                        {canEdit && (
+                          <button
+                            onClick={() => setDeleteRutinaTarget(r.id)}
+                            className="p-2 m-1.5 rounded-xl text-gray-200 dark:text-white/15 hover:text-red-400 hover:bg-red-500/10 opacity-0 group-hover/rcard:opacity-100 transition-all shrink-0"
+                            title="Eliminar rutina"
+                          >
+                            <Trash2 className="w-3.5 h-3.5" />
+                          </button>
+                        )}
+                      </div>
                     </div>
                   ))}
                 </div>
@@ -1987,7 +2029,17 @@ export default function ClientRutinaPage() {
                                         {blqIdx === 0 && ejIdx === 0 && diaCell}
                                         {ejIdx === 0 && bloqueCell}
                                         <td className="px-4 py-2.5">
-                                          <span className="text-sm text-saas-text dark:text-white/90 font-medium block">{ej.nombre}</span>
+                                          <div className="flex items-center gap-1.5 min-w-0">
+                                            <span className="text-sm text-saas-text dark:text-white/90 font-medium truncate">{ej.nombre}</span>
+                                            {ej.catalogo?.videoUrl && (
+                                              <a href={ej.catalogo.videoUrl} target="_blank" rel="noreferrer"
+                                                className="shrink-0 p-0.5 rounded text-gray-300 dark:text-white/25 hover:text-primary transition-colors"
+                                                title="Ver video del ejercicio"
+                                                onClick={e => e.stopPropagation()}>
+                                                <ExternalLink className="w-3 h-3" />
+                                              </a>
+                                            )}
+                                          </div>
                                           {ej.catalogo?.patronMovimiento && (
                                             <span className="text-[11px] text-gray-400 dark:text-white/35 block">
                                               {PATRON_LABELS[ej.catalogo.patronMovimiento as PatronMovimientoEnum] ?? ej.catalogo.patronMovimiento}
@@ -2035,6 +2087,20 @@ export default function ClientRutinaPage() {
 
         </motion.div>
       </div>
+
+      <ConfirmDialog
+        isOpen={deleteRutinaTarget !== null}
+        title="Eliminar rutina"
+        message={
+          rutinas.find(r => r.id === deleteRutinaTarget)?.activa
+            ? 'Esta es la rutina activa del cliente. Al eliminarla quedará sin rutina activa. Esta acción no se puede deshacer.'
+            : 'Esta acción no se puede deshacer. Se eliminará la rutina y todos sus ejercicios.'
+        }
+        confirmLabel="Eliminar"
+        isLoading={isDeletingRutina}
+        onConfirm={handleDeleteRutina}
+        onClose={() => setDeleteRutinaTarget(null)}
+      />
     </div>
   )
 }

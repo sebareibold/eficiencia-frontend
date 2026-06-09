@@ -246,7 +246,6 @@ export default function CreateClientPage() {
     if (s === 1) {
       if (!clientData.nombre.trim()) e.nombre = 'Requerido'
       if (!clientData.apellido.trim()) e.apellido = 'Requerido'
-      if (!clientData.cuil.trim()) e.cuil = 'Requerido'
       if (clientData.email.trim() && !isValidEmail(clientData.email)) e.email = 'Email inválido'
     }
     if (s === 2) {
@@ -450,7 +449,7 @@ export default function CreateClientPage() {
           </Field>
         </div>
 
-        <Field label="CUIL" required error={errors.cuil} icon={Hash}>
+        <Field label="CUIL" error={errors.cuil} icon={Hash}>
           <input
             value={clientData.cuil}
             onChange={e => setClientData(p => ({ ...p, cuil: e.target.value }))}
