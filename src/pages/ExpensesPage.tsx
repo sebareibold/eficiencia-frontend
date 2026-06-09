@@ -2,6 +2,8 @@ import React, { useState, useMemo, useEffect } from 'react'
 import { motion } from 'framer-motion'
 import { pageVariants } from '../lib/motion'
 import { Plus, Receipt, Wallet, Building, Wrench, RefreshCw, Trash2, Edit2, LayoutGrid, List, ArrowUp, ArrowDown, ArrowUpDown, ChevronLeft, ChevronRight, Search, X } from 'lucide-react'
+
+const EXPENSES_PAGE_SIZE = 15
 import { useForm } from 'react-hook-form'
 import { zodResolver } from '@hookform/resolvers/zod'
 import { z } from 'zod'
@@ -104,7 +106,7 @@ function SortIcon({ active, dir }: { active: boolean; dir: SortDir }) {
 export default function ExpensesPage() {
   const today = new Date()
   const [periodMode, setPeriodMode] = useState<PeriodMode>('all')
-  const [chartGroupBy, setChartGroupBy] = useState<ChartGroupBy>('month')
+  const chartGroupBy: ChartGroupBy = periodMode === 'month' ? 'day' : 'month'
   const [month, setMonth] = useState(format(today, 'yyyy-MM'))
   const [year, setYear] = useState(format(today, 'yyyy'))
   const [categoryFilter, setCategoryFilter] = useState<CategoryFilter>('all')
@@ -119,6 +121,7 @@ export default function ExpensesPage() {
   const [isSubmitting, setIsSubmitting] = useState(false)
   const [deleteTarget, setDeleteTarget] = useState<number | null>(null)
   const [isDeleting, setIsDeleting] = useState(false)
+  const [expensesPage, setExpensesPage] = useState(1)
 
   const { expenses: rawExpenses, isLoading, error, refetch } = useExpenses(
     periodMode === 'month' ? { month } : {}
@@ -131,9 +134,9 @@ export default function ExpensesPage() {
   })
   const watchedCategory = watch('category')
 
-  useEffect(() => {
-    setChartGroupBy(periodMode === 'month' ? 'day' : 'month')
-  }, [periodMode])
+
+  // Resetear página de gastos al cambiar filtros
+  useEffect(() => { setExpensesPage(1) }, [categoryFilter, search, sortKey, sortDir, periodMode, month, year])
 
   const periodExpenses = useMemo(() => {
     if (periodMode === 'year') return rawExpenses.filter(e => e.date.startsWith(year))
@@ -234,6 +237,12 @@ export default function ExpensesPage() {
     })
   }, [periodExpenses, periodMode, chartGroupBy])
 
+  const expensesTotalPages = Math.max(1, Math.ceil(filteredAndSorted.length / EXPENSES_PAGE_SIZE))
+  const paginatedExpenses = filteredAndSorted.slice(
+    (expensesPage - 1) * EXPENSES_PAGE_SIZE,
+    expensesPage * EXPENSES_PAGE_SIZE,
+  )
+
   const categoryBreakdown = useMemo(() => {
     const total = totals.total || 1
     return [
@@ -308,63 +317,68 @@ export default function ExpensesPage() {
     <motion.div {...pageVariants} className="space-y-4 lg:space-y-6">
       {/* Header */}
       <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
-        <div>
+        <div className="flex flex-col gap-3">
           <h1 className="text-2xl lg:text-3xl xl:text-4xl font-black tracking-tighter text-gray-900 dark:text-white drop-shadow-sm">
             Gastos
           </h1>
+          <div className="flex items-center gap-2.5 flex-wrap">
+            {/* Selector de período — pill toggle glassmorphism */}
+            <div className="flex items-center rounded-full border border-white/50 dark:border-white/10 bg-white/30 dark:bg-black/30 backdrop-blur-xl p-1 shadow-sm gap-1 shrink-0">
+              {(['month', 'year', 'all'] as PeriodMode[]).map((m) => {
+                const isActive = periodMode === m
+                return (
+                  <button
+                    key={m}
+                    onClick={() => setPeriodMode(m)}
+                    className={`relative inline-flex items-center justify-center rounded-full px-3.5 py-1.5 text-xs font-bold transition-all duration-300 cursor-pointer ${
+                      isActive
+                        ? 'text-white dark:text-gray-900'
+                        : 'text-gray-500 dark:text-[#8A8A9A] hover:text-gray-900 dark:hover:text-white'
+                    }`}
+                  >
+                    {isActive && (
+                      <div className="absolute inset-0 rounded-full bg-gray-900 dark:bg-white shadow-[0_2px_8px_rgba(0,0,0,0.15)]" style={{ zIndex: 0 }} />
+                    )}
+                    <span className="relative z-10">
+                      {m === 'month' ? 'Mes' : m === 'year' ? 'Año' : 'Histórico'}
+                    </span>
+                  </button>
+                )
+              })}
+            </div>
+
+            {/* Navegador mes / año — glassmorphism */}
+            {periodMode !== 'all' && (
+              <div className="flex items-center rounded-full border border-white/50 dark:border-white/10 bg-white/30 dark:bg-black/30 backdrop-blur-xl p-1 shadow-sm gap-1 shrink-0">
+                <button
+                  onClick={() => periodMode === 'month' ? navigateMonth(-1) : navigateYear(-1)}
+                  className="flex h-7 w-7 items-center justify-center rounded-full text-gray-500 dark:text-gray-400 hover:text-gray-900 dark:hover:text-white hover:bg-white/40 dark:hover:bg-white/[0.05] transition-all cursor-pointer"
+                >
+                  <ChevronLeft size={14} />
+                </button>
+                <span className="px-2 text-xs font-bold text-gray-800 dark:text-gray-200 tabular-nums whitespace-nowrap">
+                  {periodMode === 'month' ? getMonthLabel(month) : year}
+                </span>
+                <button
+                  onClick={() => periodMode === 'month' ? navigateMonth(1) : navigateYear(1)}
+                  disabled={
+                    (periodMode === 'month' && month >= format(today, 'yyyy-MM')) ||
+                    (periodMode === 'year' && year >= format(today, 'yyyy'))
+                  }
+                  className="flex h-7 w-7 items-center justify-center rounded-full text-gray-500 dark:text-gray-400 hover:text-gray-900 dark:hover:text-white hover:bg-white/40 dark:hover:bg-white/[0.05] transition-all disabled:opacity-30 disabled:cursor-not-allowed cursor-pointer"
+                >
+                  <ChevronRight size={14} />
+                </button>
+              </div>
+            )}
+          </div>
         </div>
 
-        <div className="flex items-center gap-2.5 flex-wrap">
-          <div className="flex items-center overflow-hidden rounded-xl border border-saas-border dark:border-white/[0.08] bg-white/60 dark:bg-white/[0.04] backdrop-blur-sm shadow-sm">
-            {(['month', 'year', 'all'] as PeriodMode[]).map((m, i) => (
-              <button
-                key={m}
-                onClick={() => setPeriodMode(m)}
-                className={`h-9 px-3.5 text-sm font-medium transition-colors ${i > 0 ? 'border-l border-saas-border dark:border-white/[0.08]' : ''} ${
-                  periodMode === m
-                    ? 'bg-gray-900 dark:bg-white/[0.12] text-white'
-                    : 'text-gray-500 dark:text-[#8A8A9A] hover:bg-saas-bg dark:hover:bg-white/[0.06] hover:text-gray-700 dark:hover:text-white'
-                }`}
-              >
-                {m === 'month' ? 'Mes' : m === 'year' ? 'Año' : 'Histórico'}
-              </button>
-            ))}
-          </div>
-
-          <div className="flex items-center overflow-hidden rounded-xl border border-saas-border dark:border-white/[0.08] bg-white/60 dark:bg-white/[0.04] backdrop-blur-sm shadow-sm">
-            <button
-              onClick={() => periodMode === 'month' ? navigateMonth(-1) : navigateYear(-1)}
-              className={`flex h-9 w-9 items-center justify-center border-r border-saas-border dark:border-white/[0.08] text-gray-400 dark:text-[#8A8A9A] transition-all hover:bg-saas-bg dark:hover:bg-white/[0.06] hover:text-gray-700 dark:hover:text-white active:scale-[0.92] ${
-                periodMode === 'all' ? 'pointer-events-none opacity-0' : ''
-              }`}
-            >
-              <ChevronLeft size={15} />
-            </button>
-            <span className="w-[148px] text-center text-sm font-semibold text-gray-800 dark:text-white">
-              {periodMode === 'month'
-                ? getMonthLabel(month)
-                : periodMode === 'year'
-                ? year
-                : 'Todo el tiempo'}
-            </span>
-            <button
-              onClick={() => periodMode === 'month' ? navigateMonth(1) : navigateYear(1)}
-              disabled={
-                (periodMode === 'month' && month >= format(today, 'yyyy-MM')) ||
-                (periodMode === 'year' && year >= format(today, 'yyyy'))
-              }
-              className={`flex h-9 w-9 items-center justify-center border-l border-saas-border dark:border-white/[0.08] text-gray-400 dark:text-[#8A8A9A] transition-all hover:bg-saas-bg dark:hover:bg-white/[0.06] hover:text-gray-700 dark:hover:text-white active:scale-[0.92] disabled:cursor-not-allowed disabled:opacity-30 ${
-                periodMode === 'all' ? 'pointer-events-none opacity-0' : ''
-              }`}
-            >
-              <ChevronRight size={15} />
-            </button>
-          </div>
-
+        <div className="flex items-center gap-2.5">
           <button
             onClick={refetch}
             title="Actualizar"
-            className="flex h-9 w-9 items-center justify-center rounded-xl border border-saas-border dark:border-white/[0.08] bg-white/60 dark:bg-white/[0.04] backdrop-blur-sm text-gray-400 dark:text-[#8A8A9A] transition-all hover:bg-saas-bg dark:hover:bg-white/[0.08] hover:text-gray-700 dark:hover:text-white active:scale-[0.9]"
+            className="flex h-9 w-9 items-center justify-center rounded-2xl border border-white/50 dark:border-white/10 bg-white/30 dark:bg-black/30 backdrop-blur-xl text-gray-600 dark:text-gray-300 transition-all hover:scale-105 hover:bg-white/50 dark:hover:bg-black/50 shadow-sm"
           >
             <RefreshCw size={14} />
           </button>
@@ -578,13 +592,13 @@ export default function ExpensesPage() {
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-saas-divider dark:divide-white/[0.06]">
-                    {filteredAndSorted.length === 0 ? (
+                    {paginatedExpenses.length === 0 ? (
                       <tr>
                         <td colSpan={5} className="px-4 py-12 text-center text-saas-muted dark:text-[#8A8A9A]">
                           Sin gastos en este período
                         </td>
                       </tr>
-                    ) : filteredAndSorted.map(e => (
+                    ) : paginatedExpenses.map(e => (
                       <tr key={e.id} className="group transition-colors hover:bg-black/[0.03] dark:hover:bg-white/[0.04]">
                         <td className="px-4 py-3 font-medium text-gray-900 dark:text-gray-100 truncate">
                           <div className="flex items-center gap-2">
@@ -631,13 +645,13 @@ export default function ExpensesPage() {
                   <Skeleton key={i} className="h-36 w-full rounded-2xl" />
                 ))}
               </div>
-            ) : filteredAndSorted.length === 0 ? (
+            ) : paginatedExpenses.length === 0 ? (
               <div className="rounded-2xl xl:rounded-3xl border border-white/50 dark:border-white/10 bg-white/30 dark:bg-black/30 backdrop-blur-3xl py-16 text-center text-saas-muted">
                 Sin gastos en este período
               </div>
             ) : (
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                {filteredAndSorted.map((e, idx) => (
+                {paginatedExpenses.map((e, idx) => (
                   <motion.div
                     key={e.id}
                     initial={{ opacity: 0, y: 8 }}
@@ -679,6 +693,53 @@ export default function ExpensesPage() {
               </div>
             )
           )}
+          {/* Paginación de gastos */}
+          {expensesTotalPages > 1 && (
+            <div className="flex items-center justify-between gap-4">
+              <span className="text-xs font-semibold text-gray-500 dark:text-gray-400 tabular-nums">
+                Página {expensesPage} de {expensesTotalPages} · {filteredAndSorted.length} gastos
+              </span>
+              <div className="flex items-center rounded-full border border-white/50 dark:border-white/10 bg-white/30 dark:bg-black/30 backdrop-blur-xl p-1 gap-1">
+                <button
+                  onClick={() => setExpensesPage(p => Math.max(1, p - 1))}
+                  disabled={expensesPage <= 1}
+                  className="flex h-7 w-7 items-center justify-center rounded-full text-gray-500 dark:text-gray-400 hover:text-gray-900 dark:hover:text-white hover:bg-white/40 dark:hover:bg-white/[0.05] transition-all disabled:opacity-30 disabled:cursor-not-allowed cursor-pointer"
+                >
+                  <ChevronLeft size={14} />
+                </button>
+                {Array.from({ length: Math.min(expensesTotalPages, 5) }, (_, i) => {
+                  const pg = expensesTotalPages <= 5 ? i + 1
+                    : expensesPage <= 3 ? i + 1
+                    : expensesPage >= expensesTotalPages - 2 ? expensesTotalPages - 4 + i
+                    : expensesPage - 2 + i
+                  return (
+                    <button
+                      key={pg}
+                      onClick={() => setExpensesPage(pg)}
+                      className={`relative flex h-7 w-7 items-center justify-center rounded-full text-xs font-bold transition-all cursor-pointer ${
+                        pg === expensesPage
+                          ? 'text-white dark:text-gray-900'
+                          : 'text-gray-500 dark:text-gray-400 hover:text-gray-900 dark:hover:text-white hover:bg-white/40 dark:hover:bg-white/[0.05]'
+                      }`}
+                    >
+                      {pg === expensesPage && (
+                        <div className="absolute inset-0 rounded-full bg-gray-900 dark:bg-white" style={{ zIndex: 0 }} />
+                      )}
+                      <span className="relative z-10">{pg}</span>
+                    </button>
+                  )
+                })}
+                <button
+                  onClick={() => setExpensesPage(p => Math.min(expensesTotalPages, p + 1))}
+                  disabled={expensesPage >= expensesTotalPages}
+                  className="flex h-7 w-7 items-center justify-center rounded-full text-gray-500 dark:text-gray-400 hover:text-gray-900 dark:hover:text-white hover:bg-white/40 dark:hover:bg-white/[0.05] transition-all disabled:opacity-30 disabled:cursor-not-allowed cursor-pointer"
+                >
+                  <ChevronRight size={14} />
+                </button>
+              </div>
+            </div>
+          )}
+
         </div>
 
         {/* ─── RIGHT: gráfico + desglose por categoría ─── */}
@@ -686,28 +747,10 @@ export default function ExpensesPage() {
 
           {/* Area chart — evolución */}
           <div className="rounded-2xl xl:rounded-3xl border border-white/50 dark:border-white/10 bg-white/30 dark:bg-black/30 backdrop-blur-3xl shadow-[0_8px_32px_rgba(0,0,0,0.04)] dark:shadow-[0_8px_32px_rgba(0,0,0,0.3)] p-6">
-            <div className="flex items-center justify-between mb-5">
+            <div className="mb-5">
               <h3 className="text-base font-bold text-gray-900 dark:text-white">
                 {periodMode === 'month' ? 'Evolución del mes' : periodMode === 'year' ? 'Evolución del año' : 'Evolución histórica'}
               </h3>
-              <div className="flex gap-1 rounded-xl bg-gray-100 dark:bg-white/[0.06] p-1">
-                {(periodMode === 'month'
-                  ? [['day', 'Día'], ['week', 'Semana']] as const
-                  : [['week', 'Semana'], ['month', 'Mes']] as const
-                ).map(([g, label]) => (
-                  <button
-                    key={g}
-                    onClick={() => setChartGroupBy(g as ChartGroupBy)}
-                    className={`text-xs font-semibold px-3 py-1 rounded-lg transition-all ${
-                      chartGroupBy === g
-                        ? 'bg-white dark:bg-white/[0.12] text-gray-900 dark:text-white shadow-sm'
-                        : 'text-gray-500 dark:text-[#8A8A9A] hover:text-gray-700 dark:hover:text-white'
-                    }`}
-                  >
-                    {label}
-                  </button>
-                ))}
-              </div>
             </div>
             <div className="h-56 w-full">
               {isLoading ? (

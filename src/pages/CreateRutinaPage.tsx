@@ -1274,12 +1274,8 @@ export default function CreateRutinaPage() {
       timerRef.current = setTimeout(async () => {
         setLoadingSearch(true)
         try {
-          const res = await clientsApi.getAll()
-          const q = search.toLowerCase()
-          const filtered = res.filter(c =>
-            c.name.toLowerCase().includes(q) || c.lastName.toLowerCase().includes(q)
-          )
-          setRawResults(filtered.map(c => ({ id: Number(c.id), nombre: c.name, apellido: c.lastName })))
+          const res = await clientsApi.getAll({ search, limit: 20, page: 1 })
+          setRawResults(res.data.map(c => ({ id: Number(c.id), nombre: c.name, apellido: c.lastName })))
         } catch {
           setRawResults([])
         } finally {

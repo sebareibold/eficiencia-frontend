@@ -1,8 +1,10 @@
-import { useState, useMemo } from 'react'
-import { useNavigate } from 'react-router-dom'
+import { useState, useEffect } from 'react'
+import { useNavigate, useSearchParams } from 'react-router-dom'
 import { motion } from 'framer-motion'
 import { pageVariants } from '../lib/motion'
-import { Plus, Search, RefreshCw, LayoutList, LayoutGrid, ChevronRight, Phone, Mail } from 'lucide-react'
+import { Plus, Search, RefreshCw, LayoutList, LayoutGrid, ChevronRight, ChevronLeft, Phone, Mail } from 'lucide-react'
+import { format, startOfMonth, endOfMonth, addMonths, subMonths, differenceInDays } from 'date-fns'
+import { es } from 'date-fns/locale'
 import { usePermissions } from '../hooks/usePermissions'
 import { useClients } from '../hooks/useClients'
 import Badge from '../components/ui/Badge'
@@ -14,37 +16,106 @@ import type { ClientStatus } from '../constants/clientStatus'
 type StatusFilter = 'all' | ClientStatus
 
 const STATUS_FILTERS: { value: StatusFilter; label: string }[] = [
-  { value: 'all', label: 'Todos' },
-  { value: 'active', label: 'Activo' },
+  { value: 'all',      label: 'Todos' },
+  { value: 'active',   label: 'Activo' },
   { value: 'expiring', label: 'Por vencer' },
-  { value: 'debt', label: 'Deuda' },
-  { value: 'inactive', label: 'Inactivo' },
+  { value: 'debt',     label: 'Deuda' },
 ]
 
+function mapStatusToEstado(s: StatusFilter): string | undefined {
+  if (s === 'active')   return 'ACTIVO'
+  if (s === 'debt')     return 'EN_DEUDA'
+  if (s === 'expiring') return 'VENCIDO'
+  return undefined
+}
+
+type PeriodMode = 'month' | 'year' | 'historic'
+
+function fmtDate(d: string | null | undefined) {
+  if (!d) return null
+  try { return format(new Date(d), 'dd MMM yy', { locale: es }) } catch { return null }
+}
+
+function vencimientoColor(d: string | null | undefined) {
+  if (!d) return 'text-gray-400 dark:text-gray-600'
+  const diff = differenceInDays(new Date(d), new Date())
+  if (diff < 0)   return 'text-red-500 dark:text-red-400'
+  if (diff <= 7)  return 'text-red-400'
+  if (diff <= 30) return 'text-orange-400'
+  return 'text-gray-700 dark:text-gray-300'
+}
+
+const MODALIDAD_LABEL: Record<string, string> = {
+  MENSUAL: 'Mensual',
+  TRES_MESES: '3 meses',
+  SEIS_MESES: '6 meses',
+  TRANSFERENCIA_MENSUAL: 'Transf.',
+  EFECTIVO: 'Efectivo',
+  MEMBRESIA_3_MESES: '3 meses',
+  MEMBRESIA_6_MESES: '6 meses',
+}
 
 export default function ClientsPage() {
   const navigate = useNavigate()
   const { can } = usePermissions()
-  const { clients, isLoading, error, refetch } = useClients()
+  const [searchParams] = useSearchParams()
+  const today = new Date()
 
   const [viewMode, setViewMode] = useState<'table' | 'grid'>(() =>
     typeof window !== 'undefined' && window.innerWidth < 768 ? 'grid' : 'table'
   )
   const [search, setSearch] = useState('')
-  const [statusFilter, setStatusFilter] = useState<StatusFilter>('all')
+  const [debouncedSearch, setDebouncedSearch] = useState('')
+  const [statusFilter, setStatusFilter] = useState<StatusFilter>(
+    () => (searchParams.get('estado') as StatusFilter | null) ?? 'all'
+  )
+  const [periodMode, setPeriodMode] = useState<PeriodMode>('historic')
+  const [navDate, setNavDate] = useState(today)
 
-  const filtered = useMemo(() => {
-    const q = search.toLowerCase()
-    return clients.filter(c => {
-      const matchesSearch = !q ||
-        c.name.toLowerCase().includes(q) ||
-        c.lastName.toLowerCase().includes(q) ||
-        c.email?.toLowerCase().includes(q) ||
-        c.cuil?.includes(q)
-      const matchesStatus = statusFilter === 'all' || c.status === statusFilter
-      return matchesSearch && matchesStatus
-    })
-  }, [clients, search, statusFilter])
+  // Debounce search para no disparar una query por cada tecla
+  useEffect(() => {
+    const t = setTimeout(() => setDebouncedSearch(search), 350)
+    return () => clearTimeout(t)
+  }, [search])
+
+  const desde = periodMode === 'month'
+    ? format(startOfMonth(navDate), 'yyyy-MM-dd')
+    : periodMode === 'year'
+    ? `${navDate.getFullYear()}-01-01`
+    : undefined
+
+  const hasta = periodMode === 'month'
+    ? format(endOfMonth(navDate), 'yyyy-MM-dd')
+    : periodMode === 'year'
+    ? `${navDate.getFullYear()}-12-31`
+    : undefined
+
+  const periodLabel = periodMode === 'month'
+    ? format(navDate, 'MMMM yyyy', { locale: es }).replace(/^\w/, c => c.toUpperCase())
+    : periodMode === 'year'
+    ? String(navDate.getFullYear())
+    : 'Todo el tiempo'
+
+  const isAtPresent = periodMode === 'month'
+    ? navDate >= startOfMonth(today)
+    : navDate.getFullYear() >= today.getFullYear()
+
+  const goBack = () => setNavDate(prev =>
+    periodMode === 'month' ? subMonths(prev, 1) : new Date(prev.getFullYear() - 1, 0, 1)
+  )
+  const goForward = () => setNavDate(prev =>
+    periodMode === 'month' ? addMonths(prev, 1) : new Date(prev.getFullYear() + 1, 0, 1)
+  )
+
+  const { clients, total, totalPages, currentPage, goToPage, isLoading, error, refetch } = useClients({
+    search: debouncedSearch || undefined,
+    estado: mapStatusToEstado(statusFilter),
+    desde,
+    hasta,
+  })
+
+  // Resetear página al cambiar filtros
+  useEffect(() => { goToPage(1) }, [debouncedSearch, statusFilter, periodMode]) // eslint-disable-line react-hooks/exhaustive-deps
 
   const columns: Column<Client>[] = [
     {
@@ -87,6 +158,31 @@ export default function ClientsPage() {
       ),
     },
     {
+      key: 'membershipStartDate',
+      header: 'Inicio',
+      render: (c) => {
+        const d = fmtDate(c.membershipStartDate)
+        return <span className="text-sm text-gray-600 dark:text-gray-400">{d ?? '—'}</span>
+      },
+    },
+    {
+      key: 'membershipExpiresAt',
+      header: 'Vencimiento',
+      render: (c) => {
+        const d = fmtDate(c.membershipExpiresAt)
+        return <span className={`text-sm font-semibold ${vencimientoColor(c.membershipExpiresAt)}`}>{d ?? '—'}</span>
+      },
+    },
+    {
+      key: 'membershipModalidad',
+      header: 'Modalidad',
+      render: (c) => (
+        c.membershipModalidad
+          ? <span className="text-xs font-medium text-gray-600 dark:text-gray-400">{MODALIDAD_LABEL[c.membershipModalidad] ?? c.membershipModalidad}</span>
+          : <span className="text-sm text-saas-muted">—</span>
+      ),
+    },
+    {
       key: 'actions',
       header: '',
       render: () => (
@@ -107,7 +203,7 @@ export default function ClientsPage() {
           {isLoading ? (
             <Skeleton className="h-4 w-24 mt-1" />
           ) : (
-            <p className="text-sm text-saas-muted">{filtered.length} resultado{filtered.length !== 1 ? 's' : ''}</p>
+            <p className="text-sm text-saas-muted">{total} resultado{total !== 1 ? 's' : ''}</p>
           )}
         </div>
 
@@ -157,6 +253,51 @@ export default function ClientsPage() {
         </div>
       </div>
 
+      {/* Period filter */}
+      <div className="flex flex-col sm:flex-row sm:items-center gap-2 mb-4">
+        {periodMode !== 'historic' && (
+          <div className="flex items-center rounded-full border border-white/50 dark:border-white/10 bg-white/30 dark:bg-black/30 backdrop-blur-xl p-1 shadow-sm gap-1 w-full sm:w-auto">
+            <button
+              onClick={goBack}
+              className="flex h-7 w-7 items-center justify-center rounded-full text-gray-500 dark:text-gray-400 hover:text-gray-900 dark:hover:text-white hover:bg-white/40 dark:hover:bg-white/[0.05] transition-all cursor-pointer"
+            >
+              <ChevronLeft size={14} />
+            </button>
+            <span className="flex-1 px-3 text-xs font-bold tracking-tight text-gray-800 dark:text-gray-200 text-center tabular-nums">
+              {periodLabel}
+            </span>
+            <button
+              onClick={goForward}
+              disabled={isAtPresent}
+              className="flex h-7 w-7 items-center justify-center rounded-full text-gray-500 dark:text-gray-400 hover:text-gray-900 dark:hover:text-white hover:bg-white/40 dark:hover:bg-white/[0.05] transition-all disabled:opacity-30 disabled:cursor-not-allowed cursor-pointer"
+            >
+              <ChevronRight size={14} />
+            </button>
+          </div>
+        )}
+        <div className="flex items-center rounded-full border border-white/50 dark:border-white/10 bg-white/30 dark:bg-black/30 backdrop-blur-xl p-1 shadow-sm gap-1 w-full sm:w-auto">
+          {([['month', 'Mes'], ['year', 'Año'], ['historic', 'Histórico']] as [PeriodMode, string][]).map(([mode, label]) => {
+            const isActive = periodMode === mode
+            return (
+              <button
+                key={mode}
+                onClick={() => { setPeriodMode(mode); setNavDate(today) }}
+                className={`relative inline-flex flex-1 sm:flex-none items-center justify-center rounded-full px-4 py-1.5 text-xs font-bold transition-all duration-300 cursor-pointer ${
+                  isActive
+                    ? 'text-white dark:text-gray-900'
+                    : 'text-gray-500 dark:text-[#8A8A9A] hover:text-gray-900 dark:hover:text-white'
+                }`}
+              >
+                {isActive && (
+                  <div className="absolute inset-0 rounded-full bg-gray-900 dark:bg-white shadow-[0_2px_8px_rgba(0,0,0,0.15)]" style={{ zIndex: 0 }} />
+                )}
+                <span className="relative z-10">{label}</span>
+              </button>
+            )
+          })}
+        </div>
+      </div>
+
       {/* Search + filters */}
       <div className="mb-6 flex w-full flex-col items-center justify-between gap-4 sm:flex-row">
         <div className="relative w-full max-w-md">
@@ -164,7 +305,7 @@ export default function ClientsPage() {
           <input
             value={search}
             onChange={e => setSearch(e.target.value)}
-            placeholder="Buscar por nombre, email o CUIL…"
+            placeholder="Buscar por nombre o apellido…"
             className="w-full rounded-xl border border-white/50 dark:border-white/10 bg-white/30 dark:bg-black/30 backdrop-blur-xl pl-10 pr-4 py-2 text-xs font-semibold text-gray-800 dark:text-gray-200 placeholder-gray-400 focus:outline-none h-10"
           />
         </div>
@@ -214,7 +355,7 @@ export default function ClientsPage() {
       {viewMode === 'table' ? (
         <Table
           columns={columns}
-          data={filtered}
+          data={clients}
           keyExtractor={c => c.id}
           isLoading={isLoading}
           onRowClick={c => navigate(`/clients/${c.id}`)}
@@ -226,11 +367,11 @@ export default function ClientsPage() {
             <Skeleton key={i} className="h-48 rounded-2xl lg:rounded-[2rem]" />
           ))}
         </div>
-      ) : filtered.length === 0 ? (
+      ) : clients.length === 0 ? (
         <p className="py-12 text-center text-sm text-gray-400">No se encontraron clientes</p>
       ) : (
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
-          {filtered.map(c => {
+          {clients.map(c => {
             const initials = `${c.name.charAt(0)}${c.lastName.charAt(0)}`.toUpperCase()
             const avatarColor =
               c.status === 'active'   ? 'bg-emerald-500/20 text-emerald-600 dark:text-emerald-400' :
@@ -294,6 +435,53 @@ export default function ClientsPage() {
               </button>
             )
           })}
+        </div>
+      )}
+
+      {/* Paginación */}
+      {totalPages > 1 && (
+        <div className="flex items-center justify-between gap-4 pt-2">
+          <span className="text-xs font-semibold text-gray-500 dark:text-gray-400 tabular-nums">
+            Página {currentPage} de {totalPages} · {total} clientes en total
+          </span>
+          <div className="flex items-center rounded-full border border-white/50 dark:border-white/10 bg-white/30 dark:bg-black/30 backdrop-blur-xl p-1 gap-1">
+            <button
+              onClick={() => goToPage(currentPage - 1)}
+              disabled={currentPage <= 1}
+              className="flex h-7 w-7 items-center justify-center rounded-full text-gray-500 dark:text-gray-400 hover:text-gray-900 dark:hover:text-white hover:bg-white/40 dark:hover:bg-white/[0.05] transition-all disabled:opacity-30 disabled:cursor-not-allowed cursor-pointer"
+            >
+              <ChevronLeft size={14} />
+            </button>
+            {Array.from({ length: Math.min(totalPages, 5) }, (_, i) => {
+              const pg = totalPages <= 5 ? i + 1
+                : currentPage <= 3 ? i + 1
+                : currentPage >= totalPages - 2 ? totalPages - 4 + i
+                : currentPage - 2 + i
+              return (
+                <button
+                  key={pg}
+                  onClick={() => goToPage(pg)}
+                  className={`relative flex h-7 w-7 items-center justify-center rounded-full text-xs font-bold transition-all cursor-pointer ${
+                    pg === currentPage
+                      ? 'text-white dark:text-gray-900'
+                      : 'text-gray-500 dark:text-gray-400 hover:text-gray-900 dark:hover:text-white hover:bg-white/40 dark:hover:bg-white/[0.05]'
+                  }`}
+                >
+                  {pg === currentPage && (
+                    <div className="absolute inset-0 rounded-full bg-gray-900 dark:bg-white" style={{ zIndex: 0 }} />
+                  )}
+                  <span className="relative z-10">{pg}</span>
+                </button>
+              )
+            })}
+            <button
+              onClick={() => goToPage(currentPage + 1)}
+              disabled={currentPage >= totalPages}
+              className="flex h-7 w-7 items-center justify-center rounded-full text-gray-500 dark:text-gray-400 hover:text-gray-900 dark:hover:text-white hover:bg-white/40 dark:hover:bg-white/[0.05] transition-all disabled:opacity-30 disabled:cursor-not-allowed cursor-pointer"
+            >
+              <ChevronRight size={14} />
+            </button>
+          </div>
         </div>
       )}
 

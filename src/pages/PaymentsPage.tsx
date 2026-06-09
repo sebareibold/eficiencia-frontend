@@ -1,16 +1,18 @@
-import { useState, useMemo } from 'react'
+import { useState, useMemo, useEffect } from 'react'
+import { useQuery } from '@tanstack/react-query'
+import { QK } from '../lib/queryKeys'
 import { motion, AnimatePresence } from 'framer-motion'
 import { useNavigate } from 'react-router-dom'
 import { pageVariants, cardVariants } from '../lib/motion'
 import {
   Plus, CreditCard, Banknote, ArrowLeftRight, Building2, RefreshCw,
-  CheckCircle2, XCircle, Trash2, Search, Filter, ChevronDown, ChevronLeft, ChevronRight,
+  CheckCircle2, XCircle, Trash2, Search, ChevronLeft, ChevronRight,
   Layers, LayoutList, LayoutGrid, Edit2, X, Save, Pencil,
 } from 'lucide-react'
 import { useForm } from 'react-hook-form'
 import { zodResolver } from '@hookform/resolvers/zod'
 import { z } from 'zod'
-import { format } from 'date-fns'
+import { format, startOfMonth, endOfMonth, addMonths } from 'date-fns'
 import { ROUTES } from '../constants/routes'
 import { usePayments } from '../hooks/usePayments'
 import { useMemberships } from '../hooks/useMemberships'
@@ -450,21 +452,18 @@ function PlanCard({
 
 // ── Página principal ──────────────────────────────────────────────────────────
 
+type PeriodMode = 'month' | 'year' | 'all'
+
+const MONTH_NAMES_PAY = ['Enero','Febrero','Marzo','Abril','Mayo','Junio','Julio','Agosto','Septiembre','Octubre','Noviembre','Diciembre']
+
 export default function PaymentsPage() {
   const today = new Date()
-  const currentYear = today.getFullYear()
-  const YEARS = [currentYear, currentYear - 1, currentYear - 2].map(String)
   const navigate = useNavigate()
 
   // ── Estado pagos ──
   const [viewMode, setViewMode] = useState<'list' | 'grid'>('list')
-  const [isFiltersOpen, setIsFiltersOpen] = useState(false)
-  const [dateMode, setDateMode] = useState<'year' | 'range'>('year')
-  const [dateFrom, setDateFrom] = useState('')
-  const [dateTo, setDateTo] = useState('')
-  const [yearFilter, setYearFilter] = useState<string>('all')
-  const [amountMin, setAmountMin] = useState('')
-  const [amountMax, setAmountMax] = useState('')
+  const [periodMode, setPeriodMode] = useState<PeriodMode>('month')
+  const [navDate, setNavDate] = useState(today)
   const [methodFilter, setMethodFilter] = useState<MethodFilter>('all')
   const [invoicedFilter, setInvoicedFilter] = useState<'all' | 'yes' | 'no'>('all')
   const [searchFilter, setSearchFilter] = useState('')
@@ -482,12 +481,31 @@ export default function PaymentsPage() {
   const [isDeletingPayment, setIsDeletingPayment] = useState(false)
   const [isDeletingPlan, setIsDeletingPlan] = useState(false)
 
+  // ── Derivados de período ──
+  const periodDesde = periodMode === 'month' ? format(startOfMonth(navDate), 'yyyy-MM-dd') : undefined
+  const periodHasta = periodMode === 'month' ? format(endOfMonth(navDate), 'yyyy-MM-dd') : undefined
+  const periodAnio  = periodMode === 'year'  ? String(navDate.getFullYear()) : undefined
+
+  const periodLabel = periodMode === 'month'
+    ? `${MONTH_NAMES_PAY[navDate.getMonth()]} ${navDate.getFullYear()}`
+    : periodMode === 'year' ? String(navDate.getFullYear()) : 'Todo el tiempo'
+
+  const isAtPresent = periodMode === 'month'
+    ? navDate.getFullYear() === today.getFullYear() && navDate.getMonth() === today.getMonth()
+    : navDate.getFullYear() >= today.getFullYear()
+
+  const goNavBack    = () => setNavDate(d => periodMode === 'month' ? addMonths(d, -1) : new Date(d.getFullYear() - 1, 0, 1))
+  const goNavForward = () => setNavDate(d => periodMode === 'month' ? addMonths(d,  1) : new Date(d.getFullYear() + 1, 0, 1))
+
   const { memberships: plans, isLoading: plansLoading, error: plansError, refetch: refetchPlans } = useMemberships()
   const { payments, total: serverTotal, totalPages, currentPage, goToPage, isLoading, error, refetch } = usePayments({
-    desde: dateFrom || undefined,
-    hasta: dateTo || undefined,
-    anio: (!dateFrom && !dateTo && yearFilter !== 'all') ? yearFilter : undefined,
+    desde: periodDesde,
+    hasta: periodHasta,
+    anio:  periodAnio,
   })
+
+  // Resetear página al cambiar período
+  useEffect(() => { goToPage(1) }, [periodMode, navDate.getFullYear(), navDate.getMonth()]) // eslint-disable-line react-hooks/exhaustive-deps
   const { can } = usePermissions()
   const addToast = useUiStore(s => s.addToast)
 
@@ -507,30 +525,33 @@ export default function PaymentsPage() {
 
   // ── Filtros y totales ──
   const filtered = useMemo(() => payments.filter(p => {
-    const matchMethod = methodFilter === 'all' || p.method === methodFilter
+    const matchMethod   = methodFilter   === 'all' || p.method === methodFilter
     const matchInvoiced = invoicedFilter === 'all' || (invoicedFilter === 'yes' && p.invoiced) || (invoicedFilter === 'no' && !p.invoiced)
-    const matchSearch = !searchFilter || p.clientName.toLowerCase().includes(searchFilter.toLowerCase())
-    const matchMin = !amountMin || p.amount >= Number(amountMin)
-    const matchMax = !amountMax || p.amount <= Number(amountMax)
-    return matchMethod && matchInvoiced && matchSearch && matchMin && matchMax
-  }), [payments, methodFilter, invoicedFilter, searchFilter, amountMin, amountMax])
+    const matchSearch   = !searchFilter  || p.clientName.toLowerCase().includes(searchFilter.toLowerCase())
+    return matchMethod && matchInvoiced && matchSearch
+  }), [payments, methodFilter, invoicedFilter, searchFilter])
 
-  const totals = useMemo(() => ({
-    total:      payments.reduce((s, p) => s + p.amount, 0),
-    byCash:     payments.filter(p => p.method === 'cash').reduce((s, p) => s + p.amount, 0),
-    byTransfer: payments.filter(p => p.method === 'transfer').reduce((s, p) => s + p.amount, 0),
-    byCard:     payments.filter(p => p.method === 'card').reduce((s, p) => s + p.amount, 0),
-  }), [payments])
+  // ── Resumen del período completo (para KPIs) ──
+  const periodMes = periodMode === 'month' ? format(navDate, 'yyyy-MM') : undefined
+  const summaryParams = { mes: periodMes, desde: undefined as string | undefined, hasta: undefined as string | undefined, anio: periodAnio }
+  const { data: summaryData } = useQuery({
+    queryKey: QK.payments.summary(summaryParams),
+    queryFn:  () => paymentsApi.getSummary(summaryParams),
+    staleTime: 30_000,
+  })
+  const totals = {
+    total:      summaryData?.total                             ?? 0,
+    byCash:     summaryData?.porMetodo?.EFECTIVO?.total        ?? 0,
+    byTransfer: summaryData?.porMetodo?.TRANSFERENCIA?.total   ?? 0,
+    byCard:     (summaryData?.porMetodo?.DEBITO?.total ?? 0) + (summaryData?.porMetodo?.EMPRESA?.total ?? 0),
+  }
 
   // ── Handlers pagos ──
   async function loadClients(search: string) {
     setLoadingClients(true)
     try {
-      const all = await clientsApi.getAll()
-      setClientOptions(
-        all.filter(c => `${c.name} ${c.lastName}`.toLowerCase().includes(search.toLowerCase()))
-          .slice(0, 20).map(c => ({ value: String(c.id), label: `${c.name} ${c.lastName}` }))
-      )
+      const result = await clientsApi.getAll({ search: search || undefined, limit: 20, page: 1 })
+      setClientOptions(result.data.map(c => ({ value: String(c.id), label: `${c.name} ${c.lastName}` })))
     } catch { setClientOptions([]) }
     finally { setLoadingClients(false) }
   }
@@ -644,26 +665,98 @@ export default function PaymentsPage() {
         ))}
       </div>
 
-      {/* ── Barra de filtros + toggle vista ── */}
-      <div className="rounded-[2rem] border border-white/50 dark:border-white/10 bg-white/30 dark:bg-black/30 backdrop-blur-3xl shadow-[0_8px_32px_rgba(0,0,0,0.04)] dark:shadow-[0_8px_32px_rgba(0,0,0,0.3)]">
-        <div className="flex items-center justify-between px-6 py-4 gap-4">
-          <div className="flex items-center gap-3 min-w-0">
+      {/* ── Barra de filtros ── */}
+      <div className="flex flex-col sm:flex-row sm:items-center gap-3 flex-wrap">
+
+        {/* Búsqueda cliente */}
+        <div className="relative sm:w-52">
+          <Search size={14} className="absolute left-3.5 top-1/2 -translate-y-1/2 text-gray-400 pointer-events-none" />
+          <input
+            type="text"
+            placeholder="Buscar cliente..."
+            value={searchFilter}
+            onChange={e => setSearchFilter(e.target.value)}
+            className="w-full rounded-xl border border-white/50 dark:border-white/10 bg-white/30 dark:bg-black/30 backdrop-blur-xl pl-10 pr-4 py-2 text-xs font-semibold text-gray-800 dark:text-gray-200 placeholder-gray-400 focus:outline-none h-10"
+          />
+        </div>
+
+        {/* Selector de período — pill toggle glassmorphism */}
+        <div className="flex items-center rounded-full border border-white/50 dark:border-white/10 bg-white/30 dark:bg-black/30 backdrop-blur-xl p-1 shadow-sm gap-1 shrink-0">
+          {(['month', 'year', 'all'] as PeriodMode[]).map((m) => {
+            const isActive = periodMode === m
+            return (
+              <button
+                key={m}
+                onClick={() => { setPeriodMode(m); setNavDate(today) }}
+                className={`relative inline-flex items-center justify-center rounded-full px-3.5 py-1.5 text-xs font-bold transition-all duration-300 cursor-pointer ${
+                  isActive
+                    ? 'text-white dark:text-gray-900'
+                    : 'text-gray-500 dark:text-[#8A8A9A] hover:text-gray-900 dark:hover:text-white'
+                }`}
+              >
+                {isActive && (
+                  <div className="absolute inset-0 rounded-full bg-gray-900 dark:bg-white shadow-[0_2px_8px_rgba(0,0,0,0.15)]" style={{ zIndex: 0 }} />
+                )}
+                <span className="relative z-10">
+                  {m === 'month' ? 'Mes' : m === 'year' ? 'Año' : 'Todo'}
+                </span>
+              </button>
+            )
+          })}
+        </div>
+
+        {/* Navegador mes / año — glassmorphism */}
+        {periodMode !== 'all' && (
+          <div className="flex items-center rounded-full border border-white/50 dark:border-white/10 bg-white/30 dark:bg-black/30 backdrop-blur-xl p-1 shadow-sm gap-1 shrink-0">
             <button
-              onClick={() => setIsFiltersOpen(v => !v)}
-              className={`flex items-center gap-2 rounded-xl px-3 py-2 text-sm font-bold transition-all ${isFiltersOpen ? 'bg-primary/10 text-primary' : 'text-gray-800 dark:text-white hover:bg-white/40 dark:hover:bg-white/[0.05]'}`}
+              onClick={goNavBack}
+              className="flex h-7 w-7 items-center justify-center rounded-full text-gray-500 dark:text-gray-400 hover:text-gray-900 dark:hover:text-white hover:bg-white/40 dark:hover:bg-white/[0.05] transition-all cursor-pointer"
             >
-              <Filter size={15} className="text-primary" />
-              <span>Filtros Avanzados</span>
-              <motion.span animate={{ rotate: isFiltersOpen ? 180 : 0 }} transition={{ duration: 0.2 }}>
-                <ChevronDown size={15} className="text-gray-400" />
-              </motion.span>
+              <ChevronLeft size={14} />
             </button>
-            {!isLoading && (
-              <span className="text-xs font-semibold text-gray-400 dark:text-[#8A8A9A] tabular-nums whitespace-nowrap">
-                {filtered.length} {filtered.length === 1 ? 'pago' : 'pagos'}
-              </span>
-            )}
+            <span className="px-2 text-xs font-bold text-gray-800 dark:text-gray-200 tabular-nums whitespace-nowrap">
+              {periodLabel}
+            </span>
+            <button
+              onClick={goNavForward}
+              disabled={isAtPresent}
+              className="flex h-7 w-7 items-center justify-center rounded-full text-gray-500 dark:text-gray-400 hover:text-gray-900 dark:hover:text-white hover:bg-white/40 dark:hover:bg-white/[0.05] transition-all disabled:opacity-30 disabled:cursor-not-allowed cursor-pointer"
+            >
+              <ChevronRight size={14} />
+            </button>
           </div>
+        )}
+
+        {/* Método */}
+        <select
+          value={methodFilter}
+          onChange={e => setMethodFilter(e.target.value as MethodFilter)}
+          className="rounded-xl border border-white/50 dark:border-white/10 bg-white/30 dark:bg-black/30 backdrop-blur-xl px-3.5 py-2 text-xs font-semibold text-gray-800 dark:text-gray-200 focus:outline-none cursor-pointer h-10"
+        >
+          <option value="all" className="bg-white dark:bg-[#1a1a24] text-gray-900 dark:text-white">Todos los métodos</option>
+          <option value="cash" className="bg-white dark:bg-[#1a1a24] text-gray-900 dark:text-white">Efectivo</option>
+          <option value="transfer" className="bg-white dark:bg-[#1a1a24] text-gray-900 dark:text-white">Transferencia</option>
+          <option value="card" className="bg-white dark:bg-[#1a1a24] text-gray-900 dark:text-white">Débito</option>
+        </select>
+
+        {/* Facturado */}
+        <select
+          value={invoicedFilter}
+          onChange={e => setInvoicedFilter(e.target.value as 'all' | 'yes' | 'no')}
+          className="rounded-xl border border-white/50 dark:border-white/10 bg-white/30 dark:bg-black/30 backdrop-blur-xl px-3.5 py-2 text-xs font-semibold text-gray-800 dark:text-gray-200 focus:outline-none cursor-pointer h-10"
+        >
+          <option value="all" className="bg-white dark:bg-[#1a1a24] text-gray-900 dark:text-white">Facturación: todos</option>
+          <option value="yes" className="bg-white dark:bg-[#1a1a24] text-gray-900 dark:text-white">Facturado</option>
+          <option value="no" className="bg-white dark:bg-[#1a1a24] text-gray-900 dark:text-white">Sin factura</option>
+        </select>
+
+        {/* Contador + toggle vista — al final */}
+        <div className="flex items-center gap-3 sm:ml-auto">
+          {!isLoading && (
+            <span className="text-xs font-semibold text-gray-400 dark:text-[#8A8A9A] tabular-nums whitespace-nowrap">
+              {filtered.length} {filtered.length === 1 ? 'pago' : 'pagos'}
+            </span>
+          )}
           <div className="flex items-center rounded-full border border-white/50 dark:border-white/10 bg-white/30 dark:bg-black/30 backdrop-blur-xl p-1 shadow-sm gap-1 shrink-0">
             {(['list', 'grid'] as const).map((mode) => {
               const isActive = viewMode === mode
@@ -672,9 +765,7 @@ export default function PaymentsPage() {
                   key={mode}
                   onClick={() => setViewMode(mode)}
                   className={`relative inline-flex items-center justify-center rounded-full px-4 py-1.5 text-xs font-bold transition-all duration-300 cursor-pointer ${
-                    isActive
-                      ? 'text-white dark:text-gray-900'
-                      : 'text-gray-500 dark:text-[#8A8A9A] hover:text-gray-900 dark:hover:text-white'
+                    isActive ? 'text-white dark:text-gray-900' : 'text-gray-500 dark:text-[#8A8A9A] hover:text-gray-900 dark:hover:text-white'
                   }`}
                 >
                   {isActive && (
@@ -690,88 +781,6 @@ export default function PaymentsPage() {
           </div>
         </div>
 
-        <AnimatePresence initial={false}>
-          {isFiltersOpen && (
-            <motion.div key="filters" initial={{ height: 0, opacity: 0 }} animate={{ height: 'auto', opacity: 1 }}
-              exit={{ height: 0, opacity: 0 }} transition={{ duration: 0.25, ease: 'easeInOut' }} className="overflow-hidden">
-              <div className="px-6 pb-6 flex flex-col gap-4">
-                <div className="flex flex-col md:flex-row gap-4 flex-wrap">
-                  {/* Buscar cliente */}
-                  <div className="flex-1 min-w-[180px] relative">
-                    <span className="text-[10px] font-bold uppercase tracking-wider text-gray-400 dark:text-[#8A8A9A] ml-1 mb-1.5 block">Buscar Cliente</span>
-                    <div className="relative">
-                      <Search size={14} className="absolute left-3.5 top-1/2 -translate-y-1/2 text-gray-400 pointer-events-none" />
-                      <input type="text" placeholder="Nombre o apellido..." value={searchFilter} onChange={e => setSearchFilter(e.target.value)}
-                        className="w-full rounded-xl border border-white/50 dark:border-white/10 bg-white/30 dark:bg-black/30 backdrop-blur-xl pl-10 pr-4 py-2 text-xs font-semibold text-gray-800 dark:text-gray-200 focus:outline-none h-10" />
-                    </div>
-                  </div>
-                  {/* Método */}
-                  <div className="w-full md:w-44">
-                    <span className="text-[10px] font-bold uppercase tracking-wider text-gray-400 dark:text-[#8A8A9A] ml-1 mb-1.5 block">Método</span>
-                    <select value={methodFilter} onChange={e => setMethodFilter(e.target.value as MethodFilter)}
-                      className="w-full rounded-xl border border-white/50 dark:border-white/10 bg-white/30 dark:bg-black/30 backdrop-blur-xl px-3.5 py-2 text-xs font-semibold text-gray-800 dark:text-gray-200 focus:outline-none cursor-pointer h-10">
-                      <option value="all" className="bg-white dark:bg-[#1a1a24] text-gray-900 dark:text-white">Todos</option>
-                      <option value="cash" className="bg-white dark:bg-[#1a1a24] text-gray-900 dark:text-white">Efectivo</option>
-                      <option value="transfer" className="bg-white dark:bg-[#1a1a24] text-gray-900 dark:text-white">Transferencia</option>
-                      <option value="card" className="bg-white dark:bg-[#1a1a24] text-gray-900 dark:text-white">Débito</option>
-                    </select>
-                  </div>
-                  {/* Facturado */}
-                  <div className="w-full md:w-40">
-                    <span className="text-[10px] font-bold uppercase tracking-wider text-gray-400 dark:text-[#8A8A9A] ml-1 mb-1.5 block">Facturado</span>
-                    <select value={invoicedFilter} onChange={e => setInvoicedFilter(e.target.value as 'all' | 'yes' | 'no')}
-                      className="w-full rounded-xl border border-white/50 dark:border-white/10 bg-white/30 dark:bg-black/30 backdrop-blur-xl px-3.5 py-2 text-xs font-semibold text-gray-800 dark:text-gray-200 focus:outline-none cursor-pointer h-10">
-                      <option value="all" className="bg-white dark:bg-[#1a1a24] text-gray-900 dark:text-white">Todos</option>
-                      <option value="yes" className="bg-white dark:bg-[#1a1a24] text-gray-900 dark:text-white">Sí</option>
-                      <option value="no" className="bg-white dark:bg-[#1a1a24] text-gray-900 dark:text-white">No</option>
-                    </select>
-                  </div>
-                  {/* Período */}
-                  <div className="w-full md:w-40">
-                    <span className="text-[10px] font-bold uppercase tracking-wider text-gray-400 dark:text-[#8A8A9A] ml-1 mb-1.5 block">Período</span>
-                    <select value={dateMode} onChange={e => { const m = e.target.value as 'year' | 'range'; setDateMode(m); if (m === 'year') { setDateFrom(''); setDateTo('') } else setYearFilter('all') }}
-                      className="w-full rounded-xl border border-white/50 dark:border-white/10 bg-white/30 dark:bg-black/30 backdrop-blur-xl px-3.5 py-2 text-xs font-semibold text-gray-800 dark:text-gray-200 focus:outline-none cursor-pointer h-10">
-                      <option value="year" className="bg-white dark:bg-[#1a1a24] text-gray-900 dark:text-white">Por año</option>
-                      <option value="range" className="bg-white dark:bg-[#1a1a24] text-gray-900 dark:text-white">Por rango</option>
-                    </select>
-                  </div>
-                  {dateMode === 'year' && (
-                    <div className="w-full md:w-36">
-                      <span className="text-[10px] font-bold uppercase tracking-wider text-gray-400 dark:text-[#8A8A9A] ml-1 mb-1.5 block">Año</span>
-                      <select value={yearFilter} onChange={e => setYearFilter(e.target.value)}
-                        className="w-full rounded-xl border border-white/50 dark:border-white/10 bg-white/30 dark:bg-black/30 backdrop-blur-xl px-3.5 py-2 text-xs font-semibold text-gray-800 dark:text-gray-200 focus:outline-none cursor-pointer h-10">
-                        <option value="all" className="bg-white dark:bg-[#1a1a24] text-gray-900 dark:text-white">Todos</option>
-                        {YEARS.map(y => <option key={y} value={y} className="bg-white dark:bg-[#1a1a24] text-gray-900 dark:text-white">{y}</option>)}
-                      </select>
-                    </div>
-                  )}
-                  {dateMode === 'range' && (<>
-                    <div className="w-full md:w-44">
-                      <span className="text-[10px] font-bold uppercase tracking-wider text-gray-400 dark:text-[#8A8A9A] ml-1 mb-1.5 block">Desde</span>
-                      <input type="date" value={dateFrom} onChange={e => setDateFrom(e.target.value)}
-                        className="w-full rounded-xl border border-white/50 dark:border-white/10 bg-white/30 dark:bg-black/30 backdrop-blur-xl px-3.5 py-2 text-xs font-semibold text-gray-800 dark:text-gray-200 focus:outline-none h-10" />
-                    </div>
-                    <div className="w-full md:w-44">
-                      <span className="text-[10px] font-bold uppercase tracking-wider text-gray-400 dark:text-[#8A8A9A] ml-1 mb-1.5 block">Hasta</span>
-                      <input type="date" value={dateTo} onChange={e => setDateTo(e.target.value)}
-                        className="w-full rounded-xl border border-white/50 dark:border-white/10 bg-white/30 dark:bg-black/30 backdrop-blur-xl px-3.5 py-2 text-xs font-semibold text-gray-800 dark:text-gray-200 focus:outline-none h-10" />
-                    </div>
-                  </>)}
-                  <div className="w-full md:w-36">
-                    <span className="text-[10px] font-bold uppercase tracking-wider text-gray-400 dark:text-[#8A8A9A] ml-1 mb-1.5 block">Monto mín.</span>
-                    <input type="number" min="0" placeholder="0" value={amountMin} onChange={e => setAmountMin(e.target.value)}
-                      className="w-full rounded-xl border border-white/50 dark:border-white/10 bg-white/30 dark:bg-black/30 backdrop-blur-xl px-3.5 py-2 text-xs font-semibold text-gray-800 dark:text-gray-200 placeholder-gray-400 focus:outline-none h-10" />
-                  </div>
-                  <div className="w-full md:w-36">
-                    <span className="text-[10px] font-bold uppercase tracking-wider text-gray-400 dark:text-[#8A8A9A] ml-1 mb-1.5 block">Monto máx.</span>
-                    <input type="number" min="0" placeholder="∞" value={amountMax} onChange={e => setAmountMax(e.target.value)}
-                      className="w-full rounded-xl border border-white/50 dark:border-white/10 bg-white/30 dark:bg-black/30 backdrop-blur-xl px-3.5 py-2 text-xs font-semibold text-gray-800 dark:text-gray-200 placeholder-gray-400 focus:outline-none h-10" />
-                  </div>
-                </div>
-              </div>
-            </motion.div>
-          )}
-        </AnimatePresence>
       </div>
 
       {/* ── Vista Lista ── */}

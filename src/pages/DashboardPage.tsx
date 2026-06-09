@@ -8,6 +8,7 @@ import {
   ChevronLeft, ChevronRight,
 } from 'lucide-react'
 import { format, startOfMonth, endOfMonth, addMonths, subMonths, parseISO } from 'date-fns'
+import { es } from 'date-fns/locale'
 import {
   AreaChart, Area, BarChart, Bar, PieChart, Pie, Cell,
   XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer,
@@ -51,7 +52,9 @@ const TooltipStyle = {
     boxShadow: '0 20px 40px -10px rgba(0,0,0,0.5)',
     padding: '12px 16px',
   },
-  itemStyle: { fontWeight: 900, padding: '2px 0' },
+  labelStyle: { color: '#fff', fontWeight: 700, marginBottom: 4 },
+  itemStyle: { color: '#fff', fontWeight: 900, padding: '2px 0' },
+  cursor: { fill: 'rgba(255,255,255,0.04)' },
 }
 
 // ── ChartView toggle ──────────────────────────────────────────────────────────
@@ -171,7 +174,7 @@ function FacturacionBar({ facturado, sinFacturar, total }: { facturado: number; 
 
 // ── Página ────────────────────────────────────────────────────────────────────
 
-type PeriodMode = 'month' | 'year' | 'range'
+type PeriodMode = 'month' | 'year' | 'range' | 'historic'
 
 export default function DashboardPage() {
   const today = new Date()
@@ -183,14 +186,16 @@ export default function DashboardPage() {
   const [rangeTo,   setRangeTo]   = useState(format(endOfMonth(today),   'yyyy-MM-dd'))
 
   const fromDate = useMemo(() => {
-    if (periodMode === 'range')  return rangeFrom
-    if (periodMode === 'month')  return format(startOfMonth(navDate), 'yyyy-MM-dd')
+    if (periodMode === 'range')   return rangeFrom
+    if (periodMode === 'historic') return '2020-01-01'
+    if (periodMode === 'month')   return format(startOfMonth(navDate), 'yyyy-MM-dd')
     return format(new Date(navDate.getFullYear(), 0, 1), 'yyyy-MM-dd')
   }, [periodMode, navDate, rangeFrom])
 
   const toDate = useMemo(() => {
-    if (periodMode === 'range')  return rangeTo
-    if (periodMode === 'month')  return format(endOfMonth(navDate), 'yyyy-MM-dd')
+    if (periodMode === 'range')   return rangeTo
+    if (periodMode === 'historic') return format(today, 'yyyy-MM-dd')
+    if (periodMode === 'month')   return format(endOfMonth(navDate), 'yyyy-MM-dd')
     return format(new Date(navDate.getFullYear(), 11, 31), 'yyyy-MM-dd')
   }, [periodMode, navDate, rangeTo])
 
@@ -198,16 +203,17 @@ export default function DashboardPage() {
     if (periodMode === 'range') {
       const fmtDate = (iso: string, withYear = false) => {
         const d = parseISO(iso)
-        const day = format(d, 'd')
-        const mon = format(d, 'MMM').replace(/^\w/, c => c.toUpperCase())
+        const day = format(d, 'd', { locale: es })
+        const mon = format(d, 'MMM', { locale: es }).replace(/^\w/, c => c.toUpperCase())
         return withYear ? `${day} ${mon} ${format(d, 'yyyy')}` : `${day} ${mon}`
       }
       const from = rangeFrom ? fmtDate(rangeFrom) : '.'
       const to   = rangeTo   ? fmtDate(rangeTo, true) : '.'
       return `${from}, ${to}`
     }
+    if (periodMode === 'historic') return 'Todo el tiempo'
     if (periodMode === 'month')
-      return format(navDate, 'MMMM yyyy').replace(/^\w/, c => c.toUpperCase())
+      return format(navDate, 'MMMM yyyy', { locale: es }).replace(/^\w/, c => c.toUpperCase())
     return String(navDate.getFullYear())
   }, [periodMode, navDate, rangeFrom, rangeTo])
 
@@ -224,6 +230,12 @@ export default function DashboardPage() {
 
   const [chartView, setChartView] = useState<ChartView>('meses')
   const [chartMonthOffset, setChartMonthOffset] = useState(0)
+  const [activePieClienteIdx, setActivePieClienteIdx] = useState<number | null>(null)
+  const [activePieGastoIdx,   setActivePieGastoIdx]   = useState<number | null>(null)
+  const [facturacionYear, setFacturacionYear] = useState(today.getFullYear())
+  const [facturacionMonthOffset, setFacturacionMonthOffset] = useState(0)
+  const facturacionNavDate = addMonths(today, -facturacionMonthOffset)
+  const facturacionMesLabel = format(facturacionNavDate, 'MMMM yyyy', { locale: es }).replace(/^\w/, c => c.toUpperCase())
 
   const historicoMeses = chartView === 'meses' ? 24 : chartView === 'años' ? 60 : 120
 
@@ -234,29 +246,62 @@ export default function DashboardPage() {
   const facturacionHook = useDashboardFacturacion({ desde: fromDate, hasta: toDate })
   const historicoHook   = useDashboardHistorico(historicoMeses)
 
+  // Hook de facturación para la sección billing — siempre relativo a hoy, no al período del header
+  const facturacionChartParams = useMemo(() => {
+    if (chartView === 'meses') return {
+      desde: format(startOfMonth(facturacionNavDate), 'yyyy-MM-dd'),
+      hasta: format(endOfMonth(facturacionNavDate),   'yyyy-MM-dd'),
+    }
+    if (chartView === 'años') return {
+      desde: `${facturacionYear}-01-01`,
+      hasta: `${facturacionYear}-12-31`,
+    }
+    return { desde: '2020-01-01', hasta: format(today, 'yyyy-MM-dd') }
+  }, [chartView, facturacionYear, facturacionMonthOffset])  // eslint-disable-line react-hooks/exhaustive-deps
+  const facturacionChartHook = useDashboardFacturacion(facturacionChartParams)
+
   const refetchAll = () => {
     alertasHook.refetch(); financieroHook.refetch(); clientesHook.refetch()
-    facturacionHook.refetch(); historicoHook.refetch()
+    facturacionHook.refetch(); facturacionChartHook.refetch(); historicoHook.refetch()
   }
 
   // Dataset base para gráfico histórico
   const chartData = useMemo(() => {
     const hist = historicoHook.data
     if (!hist?.length) return []
-    if (chartView !== 'años') return hist
-    const byYear = new Map<string, typeof hist[0]>()
-    for (const p of hist) {
-      const year = p.mes.slice(0, 4)
-      const ex = byYear.get(year)
-      if (ex) {
-        ex.ingresos     += p.ingresos
-        ex.gastos       += p.gastos
-        ex.gananciaNeta += p.gananciaNeta
-      } else {
-        byYear.set(year, { ...p, mes: year, label: year })
+
+    if (chartView === 'años') {
+      // Agrupa por año, label = "2024"
+      const byYear = new Map<string, typeof hist[0]>()
+      for (const p of hist) {
+        const year = p.mes.slice(0, 4)
+        const ex = byYear.get(year)
+        if (ex) {
+          ex.ingresos     += p.ingresos
+          ex.gastos       += p.gastos
+          ex.gananciaNeta += p.gananciaNeta
+        } else {
+          byYear.set(year, { ...p, mes: year, label: year })
+        }
       }
+      return Array.from(byYear.values()).sort((a, b) => a.label.localeCompare(b.label))
     }
-    return Array.from(byYear.values()).sort((a, b) => a.label.localeCompare(b.label))
+
+    if (chartView === 'historico') {
+      const MESES_ABREV = ['Ene','Feb','Mar','Abr','May','Jun','Jul','Ago','Sep','Oct','Nov','Dic']
+      // Construye etiqueta "Ene '24" y descarta meses vacíos al inicio
+      const withLabel = hist.map(p => {
+        const [y, m] = p.mes.split('-').map(Number)
+        return { ...p, label: `${MESES_ABREV[m - 1]} '${String(y).slice(2)}` }
+      })
+      // Arranca un mes antes del primer punto con datos (para que el gráfico parta desde 0)
+      const firstNonZero = withLabel.findIndex(p => p.ingresos > 0 || p.gastos > 0)
+      const startIdx = firstNonZero > 0 ? firstNonZero - 1 : firstNonZero
+      return startIdx >= 0 ? withLabel.slice(startIdx) : withLabel
+    }
+
+    // 'meses' — datos crudos con label original
+    return hist
   }, [historicoHook.data, chartView])
 
   const activeChartData = useMemo(() => {
@@ -296,7 +341,6 @@ export default function DashboardPage() {
 
   const makeChartHeaderAction = (id: string) => (
     <div className="flex flex-col sm:flex-row sm:items-center gap-2">
-      <ViewToggle value={chartView} onChange={changeChartView} />
       {chartView === 'meses' && (
         <div className="flex items-center rounded-full border border-black/[0.08] dark:border-white/10 bg-white/60 dark:!bg-black/40 backdrop-blur-xl p-1 shadow-sm gap-1 w-full sm:w-auto">
           <button
@@ -318,6 +362,53 @@ export default function DashboardPage() {
           </button>
         </div>
       )}
+      <ViewToggle value={chartView} onChange={changeChartView} />
+    </div>
+  )
+
+  const makeFacturacionHeaderAction = () => (
+    <div className="flex flex-col sm:flex-row sm:items-center gap-2">
+      {chartView === 'meses' && (
+        <div className="flex items-center rounded-full border border-black/[0.08] dark:border-white/10 bg-white/60 dark:!bg-black/40 backdrop-blur-xl p-1 shadow-sm gap-1 w-full sm:w-auto">
+          <button
+            onClick={() => setFacturacionMonthOffset(v => v + 1)}
+            className="flex h-7 w-7 items-center justify-center rounded-full text-gray-500 dark:text-gray-400 hover:text-gray-900 dark:hover:text-white hover:bg-white/40 dark:hover:bg-white/[0.05] transition-all cursor-pointer"
+          >
+            <ChevronLeft size={14} />
+          </button>
+          <span className="flex-1 px-2 text-[10px] font-bold uppercase tracking-wider text-gray-700 dark:text-gray-200 text-center tabular-nums">
+            {facturacionMesLabel}
+          </span>
+          <button
+            onClick={() => setFacturacionMonthOffset(v => Math.max(0, v - 1))}
+            disabled={facturacionMonthOffset === 0}
+            className="flex h-7 w-7 items-center justify-center rounded-full text-gray-500 dark:text-gray-400 hover:text-gray-900 dark:hover:text-white hover:bg-white/40 dark:hover:bg-white/[0.05] transition-all disabled:opacity-30 disabled:cursor-not-allowed cursor-pointer"
+          >
+            <ChevronRight size={14} />
+          </button>
+        </div>
+      )}
+      {chartView === 'años' && (
+        <div className="flex items-center rounded-full border border-black/[0.08] dark:border-white/10 bg-white/60 dark:!bg-black/40 backdrop-blur-xl p-1 shadow-sm gap-1">
+          <button
+            onClick={() => setFacturacionYear(y => y - 1)}
+            className="flex h-7 w-7 items-center justify-center rounded-full text-gray-500 dark:text-gray-400 hover:text-gray-900 dark:hover:text-white hover:bg-white/40 dark:hover:bg-white/[0.05] transition-all cursor-pointer"
+          >
+            <ChevronLeft size={14} />
+          </button>
+          <span className="px-2 text-xs font-bold text-gray-800 dark:text-gray-200 tabular-nums">
+            {facturacionYear}
+          </span>
+          <button
+            onClick={() => setFacturacionYear(y => y + 1)}
+            disabled={facturacionYear >= today.getFullYear()}
+            className="flex h-7 w-7 items-center justify-center rounded-full text-gray-500 dark:text-gray-400 hover:text-gray-900 dark:hover:text-white hover:bg-white/40 dark:hover:bg-white/[0.05] transition-all disabled:opacity-30 disabled:cursor-not-allowed cursor-pointer"
+          >
+            <ChevronRight size={14} />
+          </button>
+        </div>
+      )}
+      <ViewToggle value={chartView} onChange={changeChartView} />
     </div>
   )
 
@@ -392,32 +483,9 @@ export default function DashboardPage() {
           </p>
         </div>
         <div className="flex flex-col sm:flex-row sm:flex-wrap sm:items-center gap-2">
-          {/* Selector período — primero en mobile */}
-          <div className="flex items-center rounded-full border border-white/50 dark:border-white/10 bg-white/30 dark:bg-black/30 backdrop-blur-xl p-1 shadow-sm gap-1 w-full sm:w-auto">
-            {([['month', 'Mes'], ['year', 'Año'], ['range', 'Rango']] as [PeriodMode, string][]).map(([mode, label]) => {
-              const isActive = periodMode === mode
-              return (
-                <button
-                  key={mode}
-                  onClick={() => { setPeriodMode(mode); if (mode !== 'range') setNavDate(today) }}
-                  className={`relative inline-flex flex-1 sm:flex-none items-center justify-center rounded-full px-4 py-1.5 text-xs font-bold transition-all duration-300 cursor-pointer ${
-                    isActive
-                      ? 'text-white dark:text-gray-900'
-                      : 'text-gray-500 dark:text-[#8A8A9A] hover:text-gray-900 dark:hover:text-white'
-                  }`}
-                >
-                  {isActive && (
-                    <div className="absolute inset-0 rounded-full bg-gray-900 dark:bg-white shadow-[0_2px_8px_rgba(0,0,0,0.15)]" style={{ zIndex: 0 }} />
-                  )}
-                  <span className="relative z-10">{label}</span>
-                </button>
-              )
-            })}
-          </div>
-
-          {/* Navegador de fecha — segundo en mobile */}
+          {/* Navegador de fecha — primero (izquierda) */}
           <AnimatePresence mode="wait">
-            {periodMode !== 'range' ? (
+            {periodMode === 'month' || periodMode === 'year' ? (
               <motion.div
                 key="nav-date"
                 initial={{ opacity: 0, x: -8, scale: 0.96 }}
@@ -443,7 +511,7 @@ export default function DashboardPage() {
                   <ChevronRight size={15} />
                 </button>
               </motion.div>
-            ) : (
+            ) : periodMode === 'range' ? (
               <motion.div
                 key="picker-range"
                 initial={{ opacity: 0, x: 8, scale: 0.96 }}
@@ -479,8 +547,31 @@ export default function DashboardPage() {
                   />
                 </div>
               </motion.div>
-            )}
+            ) : null}
           </AnimatePresence>
+
+          {/* Selector período */}
+          <div className="flex items-center rounded-full border border-white/50 dark:border-white/10 bg-white/30 dark:bg-black/30 backdrop-blur-xl p-1 shadow-sm gap-1 w-full sm:w-auto">
+            {([['month', 'Mes'], ['year', 'Año'], ['range', 'Rango'], ['historic', 'Histórico']] as [PeriodMode, string][]).map(([mode, label]) => {
+              const isActive = periodMode === mode
+              return (
+                <button
+                  key={mode}
+                  onClick={() => { setPeriodMode(mode); if (mode !== 'range' && mode !== 'historic') setNavDate(today) }}
+                  className={`relative inline-flex flex-1 sm:flex-none items-center justify-center rounded-full px-4 py-1.5 text-xs font-bold transition-all duration-300 cursor-pointer ${
+                    isActive
+                      ? 'text-white dark:text-gray-900'
+                      : 'text-gray-500 dark:text-[#8A8A9A] hover:text-gray-900 dark:hover:text-white'
+                  }`}
+                >
+                  {isActive && (
+                    <div className="absolute inset-0 rounded-full bg-gray-900 dark:bg-white shadow-[0_2px_8px_rgba(0,0,0,0.15)]" style={{ zIndex: 0 }} />
+                  )}
+                  <span className="relative z-10">{label}</span>
+                </button>
+              )
+            })}
+          </div>
 
           {/* Refresh global */}
           <button
@@ -506,7 +597,7 @@ export default function DashboardPage() {
           {/* Clientes en deuda */}
           <motion.button
             whileHover={{ scale: 1.01 }} whileTap={{ scale: 0.99 }}
-            onClick={() => navigate(ROUTES.CLIENTS)}
+            onClick={() => navigate(ROUTES.CLIENTS + '?estado=debt')}
             className={`rounded-2xl lg:rounded-[2rem] border p-4 lg:p-6 text-left transition-all backdrop-blur-3xl flex items-start gap-3 lg:gap-4 ${
               a && a.clientesEnDeuda > 0
                 ? 'border-red-500/30 bg-red-500/10 hover:bg-red-500/15'
@@ -535,11 +626,15 @@ export default function DashboardPage() {
           </motion.button>
 
           {/* Membresías vencen en 7 días */}
-          <div className={`rounded-2xl lg:rounded-[2rem] border p-4 lg:p-6 backdrop-blur-3xl flex items-start gap-3 lg:gap-4 ${
-            a && a.membresiasPorVencer.en7dias > 0
-              ? 'border-orange-500/30 bg-orange-500/10'
-              : 'border-white/50 dark:border-white/10 bg-white/30 dark:bg-black/30'
-          }`}>
+          <motion.button
+            whileHover={{ scale: 1.01 }} whileTap={{ scale: 0.99 }}
+            onClick={() => navigate(ROUTES.CLIENTS + '?estado=expiring')}
+            className={`rounded-2xl lg:rounded-[2rem] border p-4 lg:p-6 text-left transition-all backdrop-blur-3xl flex items-start gap-3 lg:gap-4 ${
+              a && a.membresiasPorVencer.en7dias > 0
+                ? 'border-orange-500/30 bg-orange-500/10 hover:bg-orange-500/15'
+                : 'border-white/50 dark:border-white/10 bg-white/30 dark:bg-black/30'
+            }`}
+          >
             <div className={`flex h-9 w-9 lg:h-11 lg:w-11 shrink-0 items-center justify-center rounded-xl lg:rounded-2xl ${a && a.membresiasPorVencer.en7dias > 0 ? 'bg-orange-500/20' : 'bg-white/20 dark:bg-white/10'}`}>
               <AlertTriangle size={20} className={a && a.membresiasPorVencer.en7dias > 0 ? 'text-orange-400' : 'text-gray-400'} />
             </div>
@@ -557,16 +652,20 @@ export default function DashboardPage() {
                   </p>
                 </>
               )}
-              <p className="text-xs text-gray-400 dark:text-[#8A8A9A] mt-1">Contactar para renovar</p>
+              <p className="text-xs text-gray-400 dark:text-[#8A8A9A] mt-1">Tocá para ver el listado →</p>
             </div>
-          </div>
+          </motion.button>
 
           {/* Membresías vencen en 30 días */}
-          <div className={`rounded-2xl lg:rounded-[2rem] border p-4 lg:p-6 backdrop-blur-3xl flex items-start gap-3 lg:gap-4 ${
-            a && a.membresiasPorVencer.en30dias > 0
-              ? 'border-yellow-500/30 bg-yellow-500/10'
-              : 'border-white/50 dark:border-white/10 bg-white/30 dark:bg-black/30'
-          }`}>
+          <motion.button
+            whileHover={{ scale: 1.01 }} whileTap={{ scale: 0.99 }}
+            onClick={() => navigate(ROUTES.CLIENTS + '?estado=expiring')}
+            className={`rounded-2xl lg:rounded-[2rem] border p-4 lg:p-6 text-left transition-all backdrop-blur-3xl flex items-start gap-3 lg:gap-4 ${
+              a && a.membresiasPorVencer.en30dias > 0
+                ? 'border-yellow-500/30 bg-yellow-500/10 hover:bg-yellow-500/15'
+                : 'border-white/50 dark:border-white/10 bg-white/30 dark:bg-black/30'
+            }`}
+          >
             <div className={`flex h-9 w-9 lg:h-11 lg:w-11 shrink-0 items-center justify-center rounded-xl lg:rounded-2xl ${a && a.membresiasPorVencer.en30dias > 0 ? 'bg-yellow-500/20' : 'bg-white/20 dark:bg-white/10'}`}>
               <Clock size={20} className={a && a.membresiasPorVencer.en30dias > 0 ? 'text-yellow-400' : 'text-gray-400'} />
             </div>
@@ -584,9 +683,9 @@ export default function DashboardPage() {
                   </p>
                 </>
               )}
-              <p className="text-xs text-gray-400 dark:text-[#8A8A9A] mt-1">En el próximo mes</p>
+              <p className="text-xs text-gray-400 dark:text-[#8A8A9A] mt-1">Tocá para ver el listado →</p>
             </div>
-          </div>
+          </motion.button>
 
         </div>
       </Section>
@@ -603,7 +702,7 @@ export default function DashboardPage() {
           <ChartCard
             title="Ingresos vs Gastos"
             subtitle={chartSubtitle}
-            className="xl:col-span-8 min-h-[240px] lg:min-h-[300px] xl:min-h-[340px]"
+            className="xl:col-span-9 min-h-[240px] lg:min-h-[300px] xl:min-h-[340px]"
           >
             <div className="flex items-center gap-5 mb-4">
               {[['Ingresos', C.primary], ['Gastos', C.red], ['Ganancia', C.green]].map(([label, color]) => (
@@ -643,7 +742,7 @@ export default function DashboardPage() {
           </ChartCard>
 
           {/* BarChart por método */}
-          <ChartCard title="Por método de cobro" subtitle={periodLabel} className="xl:col-span-4 min-h-[240px] lg:min-h-[300px] xl:min-h-[340px]">
+          <ChartCard title="Por método de cobro" subtitle={periodLabel} className="xl:col-span-3 min-h-[240px] lg:min-h-[300px] xl:min-h-[340px]">
             {financieroHook.isLoading ? (
               <div className="flex-1 min-h-[160px] lg:min-h-[220px] xl:min-h-[260px] flex items-center justify-center">
                 <Skeleton className="h-full w-full rounded-2xl min-h-[200px]" />
@@ -659,7 +758,7 @@ export default function DashboardPage() {
                     <CartesianGrid strokeDasharray="3 3" stroke="currentColor" opacity={0.05} vertical={false} horizontal={false} />
                     <XAxis dataKey="metodo" axisLine={false} tickLine={false} tick={{ fill: '#9CA3AF', fontSize: 11, fontWeight: 700 }} interval={0} angle={-15} textAnchor="end" dy={6} />
                     <YAxis tick={{ fill: '#9CA3AF', fontSize: 11, fontWeight: 700 }} axisLine={false} tickLine={false} width={52} tickFormatter={v => `$${(v / 1000).toFixed(0)}k`} />
-                    <Tooltip {...TooltipStyle} formatter={(v: number) => [formatCurrency(v), 'Total']} />
+                    <Tooltip {...TooltipStyle} formatter={(v: number, _: string, props: any) => [formatCurrency(v), props?.payload?.metodo ?? 'Total']} />
                     <Bar dataKey="total" radius={[8, 8, 8, 8]}>
                       {f.ingresosPorMetodo.map((_, i) => (
                         <Cell key={i} fill={BAR_METODOS[i % BAR_METODOS.length]} />
@@ -703,10 +802,27 @@ export default function DashboardPage() {
               <div className="h-[175px] lg:h-[185px] xl:h-[195px]">
                 <ResponsiveContainer width="100%" height="100%">
                   <PieChart>
-                    <Pie data={pieClientesData} cx="50%" cy="50%" innerRadius={55} outerRadius={80} dataKey="value" paddingAngle={3}>
-                      {pieClientesData.map((d, i) => <Cell key={i} fill={d.color} strokeWidth={0} />)}
+                    <Pie
+                      data={pieClientesData}
+                      cx="50%" cy="50%"
+                      innerRadius={55} outerRadius={80}
+                      dataKey="value" paddingAngle={3}
+                      onMouseEnter={(_, i) => setActivePieClienteIdx(i)}
+                      onMouseLeave={() => setActivePieClienteIdx(null)}
+                    >
+                      {pieClientesData.map((d, i) => (
+                        <Cell
+                          key={i}
+                          fill={d.color}
+                          strokeWidth={0}
+                          style={{
+                            opacity: activePieClienteIdx === null || activePieClienteIdx === i ? 1 : 0.15,
+                            transition: 'opacity 0.35s ease-in-out',
+                          }}
+                        />
+                      ))}
                     </Pie>
-                    <Tooltip {...TooltipStyle} formatter={(v: number) => [v, 'Clientes']} />
+                    <Tooltip {...TooltipStyle} formatter={(v: number, name: string) => [v, name]} />
                   </PieChart>
                 </ResponsiveContainer>
               </div>
@@ -748,7 +864,7 @@ export default function DashboardPage() {
                       tickLine={false}
                       tickFormatter={(v: string) => v.replace(' veces por semana', '×/sem').replace('Full (4-5 veces por semana)', 'Full')}
                     />
-                    <Tooltip {...TooltipStyle} formatter={(v: number) => [v, 'Clientes']} />
+                    <Tooltip {...TooltipStyle} formatter={(v: number, _: string, props: any) => [v, props?.payload?.nombre ?? 'Clientes']} />
                     <Bar dataKey="cantidad" radius={[0, 8, 8, 0]} fill={C.primary} />
                   </BarChart>
                 </ResponsiveContainer>
@@ -781,10 +897,27 @@ export default function DashboardPage() {
               <div className="h-[175px] lg:h-[185px] xl:h-[195px]">
                 <ResponsiveContainer width="100%" height="100%">
                   <PieChart>
-                    <Pie data={pieGastosData} cx="50%" cy="50%" innerRadius={55} outerRadius={80} dataKey="value" paddingAngle={3}>
-                      {pieGastosData.map((d, i) => <Cell key={i} fill={d.color} strokeWidth={0} />)}
+                    <Pie
+                      data={pieGastosData}
+                      cx="50%" cy="50%"
+                      innerRadius={55} outerRadius={80}
+                      dataKey="value" paddingAngle={3}
+                      onMouseEnter={(_, i) => setActivePieGastoIdx(i)}
+                      onMouseLeave={() => setActivePieGastoIdx(null)}
+                    >
+                      {pieGastosData.map((d, i) => (
+                        <Cell
+                          key={i}
+                          fill={d.color}
+                          strokeWidth={0}
+                          style={{
+                            opacity: activePieGastoIdx === null || activePieGastoIdx === i ? 1 : 0.15,
+                            transition: 'opacity 0.35s ease-in-out',
+                          }}
+                        />
+                      ))}
                     </Pie>
-                    <Tooltip {...TooltipStyle} formatter={(v: number) => [formatCurrency(v), 'Total']} />
+                    <Tooltip {...TooltipStyle} formatter={(v: number, name: string) => [formatCurrency(v), name]} />
                   </PieChart>
                 </ResponsiveContainer>
               </div>
@@ -798,59 +931,38 @@ export default function DashboardPage() {
       {/* ══ SECCIÓN 5: FACTURACIÓN — carga independientemente ══ */}
       <Section
         title="Facturación"
-        subtitle={chartView === 'meses' ? `Estado de los ingresos, ${periodLabel}` : chartView === 'años' ? 'Totales por año' : 'Totales históricos'}
-        headerAction={makeChartHeaderAction('view-toggle-facturacion')}
+        subtitle={
+          chartView === 'meses'
+            ? facturacionMesLabel
+            : chartView === 'años'
+            ? `Año ${facturacionYear}`
+            : 'Todo el tiempo'
+        }
+        headerAction={makeFacturacionHeaderAction()}
       >
         <div className="grid grid-cols-1 md:grid-cols-2 gap-4 lg:gap-6">
 
-          {chartView === 'meses' ? (
-            <ChartCard title="Ingresos facturados vs sin facturar">
-              {facturacionHook.isLoading ? (
-                <div className="space-y-3">
-                  <div className="flex justify-between">
-                    <Skeleton className="h-3 w-16" />
-                    <Skeleton className="h-3 w-8" />
-                  </div>
-                  <Skeleton className="h-3 w-full rounded-full" />
-                  <div className="grid grid-cols-2 gap-3 pt-1">
-                    <Skeleton className="h-16 rounded-2xl" />
-                    <Skeleton className="h-16 rounded-2xl" />
-                  </div>
+          <ChartCard title="Facturado vs sin facturar">
+            {facturacionChartHook.isLoading ? (
+              <div className="space-y-3">
+                <div className="flex justify-between">
+                  <Skeleton className="h-3 w-16" />
+                  <Skeleton className="h-3 w-8" />
                 </div>
-              ) : (
-                <FacturacionBar
-                  facturado={fc?.facturacion.facturado ?? 0}
-                  sinFacturar={fc?.facturacion.sinFacturar ?? 0}
-                  total={fc?.facturacion.total ?? 0}
-                />
-              )}
-            </ChartCard>
-          ) : (
-            <ChartCard title="Ingresos vs Gastos" subtitle={chartSubtitle} className="min-h-[220px]">
-              {historicoHook.isLoading ? (
-                <div className="flex-1 min-h-[160px] flex items-center justify-center">
-                  <Skeleton className="h-full w-full rounded-2xl min-h-[130px]" />
+                <Skeleton className="h-3 w-full rounded-full" />
+                <div className="grid grid-cols-2 gap-3 pt-1">
+                  <Skeleton className="h-16 rounded-2xl" />
+                  <Skeleton className="h-16 rounded-2xl" />
                 </div>
-              ) : chartData.length === 0 ? (
-                <div className="flex-1 flex items-center justify-center">
-                  <p className="text-sm text-gray-400 dark:text-[#8A8A9A]">Sin datos en este período</p>
-                </div>
-              ) : (
-                <div className="flex-1 min-h-[160px]">
-                  <ResponsiveContainer width="100%" height="100%">
-                    <BarChart data={activeChartData} barSize={18} margin={{ top: 5, right: 8, left: 0, bottom: 0 }}>
-                      <CartesianGrid strokeDasharray="3 3" stroke="currentColor" opacity={0.05} vertical={false} />
-                      <XAxis dataKey="label" tick={{ fill: '#9CA3AF', fontSize: 11, fontWeight: 700 }} axisLine={false} tickLine={false} dy={6} />
-                      <YAxis tick={{ fill: '#9CA3AF', fontSize: 11, fontWeight: 700 }} axisLine={false} tickLine={false} width={52} tickFormatter={v => `$${(v / 1000).toFixed(0)}k`} />
-                      <Tooltip {...TooltipStyle} formatter={(v: number) => formatCurrency(v)} />
-                      <Bar dataKey="ingresos" name="Ingresos" radius={[4, 4, 0, 0]} fill={C.primary} />
-                      <Bar dataKey="gastos"   name="Gastos"   radius={[4, 4, 0, 0]} fill={C.red} />
-                    </BarChart>
-                  </ResponsiveContainer>
-                </div>
-              )}
-            </ChartCard>
-          )}
+              </div>
+            ) : (
+              <FacturacionBar
+                facturado={facturacionChartHook.data?.facturacion.facturado ?? 0}
+                sinFacturar={facturacionChartHook.data?.facturacion.sinFacturar ?? 0}
+                total={facturacionChartHook.data?.facturacion.total ?? 0}
+              />
+            )}
+          </ChartCard>
 
           {/* Resumen del período */}
           <ChartCard title="Resumen del período">

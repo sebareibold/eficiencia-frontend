@@ -2,12 +2,13 @@
 
 export const QK = {
   clients: {
-    all:    ()           => ['clients']       as const,
+    all:    (p?: object) => ['clients', p]    as const,
     detail: (id: string) => ['clients', id]   as const,
   },
   payments: {
-    all:    (p?: object) => ['payments', p]   as const,
-    detail: (id: string | number) => ['payments', 'detail', String(id)] as const,
+    all:     (p?: object) => ['payments', p]                    as const,
+    detail:  (id: string | number) => ['payments', 'detail', String(id)] as const,
+    summary: (p?: object) => ['payments', 'summary', p]         as const,
   },
   shifts: {
     all:    ()           => ['shifts']        as const,

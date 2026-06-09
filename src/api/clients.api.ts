@@ -3,6 +3,12 @@ import type { Client, CreateClientDto, UpdateClientDto } from '../types/client.t
 import type { FichaEntrenamiento, EventoDeportivo } from '../types/rutina.types'
 import type { ClientStatus } from '../constants/clientStatus'
 
+export interface PaginatedClients {
+  data: Client[]
+  total: number
+  totalPages: number
+}
+
 function mapEstado(estado: string): ClientStatus {
   if (estado === 'ACTIVO') return 'active'
   if (estado === 'EN_DEUDA') return 'debt'
@@ -58,11 +64,23 @@ function mapFicha(f: any): FichaEntrenamiento {
 }
 
 export const clientsApi = {
-  getAll: (): Promise<Client[]> =>
-    api.get('/clientes').then((r) => {
-      // Después del unwrap global, r.data puede ser el objeto de paginación { data: [...], total }
-      const items: any[] = Array.isArray(r.data) ? r.data : (r.data?.data ?? [])
-      return items.map(mapCliente)
+  getAll: (params?: { page?: number; limit?: number; search?: string; estado?: string; desde?: string; hasta?: string }): Promise<PaginatedClients> =>
+    api.get('/clientes', {
+      params: {
+        page:  params?.page  ?? 1,
+        limit: params?.limit ?? 20,
+        ...(params?.search && { search: params.search }),
+        ...(params?.estado && { estado: params.estado }),
+        ...(params?.desde  && { desde:  params.desde }),
+        ...(params?.hasta  && { hasta:  params.hasta }),
+      },
+    }).then((r) => {
+      const raw = r.data
+      if (raw && !Array.isArray(raw) && Array.isArray(raw.data)) {
+        return { data: raw.data.map(mapCliente), total: raw.total, totalPages: raw.totalPages } as PaginatedClients
+      }
+      const arr: any[] = Array.isArray(raw) ? raw : []
+      return { data: arr.map(mapCliente), total: arr.length, totalPages: 1 }
     }),
 
   getById: (id: string | number): Promise<Client> =>

@@ -9,6 +9,17 @@ export interface PaginatedPayments {
   totalPages: number
 }
 
+export interface PaymentsSummary {
+  total: number
+  cantidad: number
+  porMetodo: {
+    EFECTIVO:      { total: number; cantidad: number }
+    TRANSFERENCIA: { total: number; cantidad: number }
+    DEBITO:        { total: number; cantidad: number }
+    EMPRESA:       { total: number; cantidad: number }
+  }
+}
+
 type BackendMetodo = 'EFECTIVO' | 'TRANSFERENCIA' | 'DEBITO' | 'EMPRESA'
 
 function mapMetodoToFrontend(metodo: BackendMetodo): Payment['method'] {
@@ -67,7 +78,7 @@ export const paymentsApi = {
         ...(params?.hasta    && { hasta:     params.hasta }),
         ...(params?.clientId && { clienteId: params.clientId }),
         page:     params?.page     ?? 1,
-        pageSize: params?.pageSize ?? 200,
+        pageSize: params?.pageSize ?? 15,
       },
     }).then((r) => {
       const raw = r.data
@@ -97,4 +108,14 @@ export const paymentsApi = {
     api.patch(`/pagos/${id}`, { facturado: value }),
 
   remove: (id: string | number) => api.delete(`/pagos/${id}`),
+
+  getSummary: (params?: { mes?: string; desde?: string; hasta?: string; anio?: string }): Promise<PaymentsSummary> =>
+    api.get('/pagos/resumen', {
+      params: {
+        ...(params?.mes   && { mes:   params.mes }),
+        ...(params?.desde && { desde: params.desde }),
+        ...(params?.hasta && { hasta: params.hasta }),
+        ...(params?.anio  && { anio:  params.anio }),
+      },
+    }).then(r => r.data),
 }
