@@ -18,12 +18,13 @@ import { usePayments } from '../hooks/usePayments'
 import { useMemberships } from '../hooks/useMemberships'
 import { paymentsApi } from '../api/payments.api'
 import { membershipsApi } from '../api/memberships.api'
+import { membresiasClienteApi } from '../api/membresiasCliente.api'
 import { tarifasApi } from '../api/tarifas.api'
 import { clientsApi } from '../api/clients.api'
 import { usePermissions } from '../hooks/usePermissions'
 import { useUiStore } from '../store/uiStore'
 import { MODALIDAD_LABELS, MODALIDAD_DURACION, MODALIDADES } from '../types/membership.types'
-import type { Plan, Modalidad, TarifaVigente } from '../types/membership.types'
+import type { Plan, Modalidad, TarifaVigente, MembresiaCliente } from '../types/membership.types'
 import Button from '../components/ui/Button'
 import Modal from '../components/ui/Modal'
 import Input from '../components/ui/Input'
@@ -472,6 +473,9 @@ export default function PaymentsPage() {
   const [clientSearch, setClientSearch] = useState('')
   const [clientOptions, setClientOptions] = useState<{ value: string; label: string }[]>([])
   const [loadingClients, setLoadingClients] = useState(false)
+  const [paymentMembresiaId, setPaymentMembresiaId] = useState('')
+  const [membresiaOpts, setMembresiaOpts] = useState<MembresiaCliente[]>([])
+  const [loadingMembOpts, setLoadingMembOpts] = useState(false)
 
   // ── Estado planes ──
   const [planModalOpen, setPlanModalOpen] = useState(false)
@@ -510,10 +514,19 @@ export default function PaymentsPage() {
   const addToast = useUiStore(s => s.addToast)
 
   // ── Forms ──
-  const { register, handleSubmit, formState: { errors }, reset } = useForm<PaymentFormValues>({
+  const { register, handleSubmit, formState: { errors }, reset, watch } = useForm<PaymentFormValues>({
     resolver: zodResolver(paymentSchema),
     defaultValues: { method: 'transfer', paidAt: format(today, 'yyyy-MM-dd'), invoiced: false },
   })
+  const watchedClientId = watch('clientId')
+
+  useEffect(() => {
+    if (!watchedClientId || !modalOpen) { setMembresiaOpts([]); setPaymentMembresiaId(''); return }
+    setLoadingMembOpts(true)
+    membresiasClienteApi.getAll(watchedClientId)
+      .then(m => setMembresiaOpts([...m].sort((a, b) => b.fechaInicio.localeCompare(a.fechaInicio))))
+      .finally(() => setLoadingMembOpts(false))
+  }, [watchedClientId, modalOpen])
 
   const {
     register: planRegister, handleSubmit: planHandleSubmit,
@@ -562,9 +575,10 @@ export default function PaymentsPage() {
       await paymentsApi.create({
         clientId: Number(data.clientId), amount: Number(data.amount),
         method: data.method, paidAt: data.paidAt, invoiced: data.invoiced, notes: data.notes || undefined,
+        ...(paymentMembresiaId && { membresiaId: paymentMembresiaId }),
       })
       addToast('Pago registrado', 'success')
-      setModalOpen(false); reset(); refetch()
+      setModalOpen(false); reset(); setPaymentMembresiaId(''); setMembresiaOpts([]); refetch()
     } catch { addToast('Error al registrar el pago', 'error') }
     finally { setIsSubmitting(false) }
   }
@@ -1103,8 +1117,30 @@ export default function PaymentsPage() {
             <label htmlFor="invoiced" className="text-sm text-[#9CA3AF]">Facturado</label>
           </div>
           <Input label="Notas" {...register('notes')} />
+          {/* Selector de membresía — visible si hay cliente y tiene membresías */}
+          {watchedClientId && (loadingMembOpts || membresiaOpts.length > 0) && (
+            <div className="flex flex-col gap-1">
+              <label className="text-sm text-[#9CA3AF]">Membresía <span className="opacity-60">(opcional)</span></label>
+              {loadingMembOpts ? (
+                <Skeleton className="h-9 w-full rounded-lg" />
+              ) : (
+                <select
+                  value={paymentMembresiaId}
+                  onChange={e => setPaymentMembresiaId(e.target.value)}
+                  className="rounded-lg border border-white/[0.08] bg-white/[0.04] px-3 py-2 text-sm text-white focus:border-primary focus:outline-none"
+                >
+                  <option value="">— Sin membresía —</option>
+                  {membresiaOpts.map(m => (
+                    <option key={m.id} value={m.id}>
+                      {m.plan.nombre} · {MODALIDAD_LABELS[m.modalidad] ?? m.modalidad} · {m.estado === 'ACTIVA' ? 'Activa' : m.estado === 'PENDIENTE' ? 'Programada' : m.estado === 'VENCIDA' ? 'Vencida' : 'Cancelada'} · {m.fechaInicio.slice(0, 10)}
+                    </option>
+                  ))}
+                </select>
+              )}
+            </div>
+          )}
           <div className="flex justify-end gap-2 pt-2">
-            <Button variant="ghost" type="button" onClick={() => { setModalOpen(false); reset() }}>Cancelar</Button>
+            <Button variant="ghost" type="button" onClick={() => { setModalOpen(false); reset(); setPaymentMembresiaId(''); setMembresiaOpts([]) }}>Cancelar</Button>
             <Button type="submit" isLoading={isSubmitting}>Registrar</Button>
           </div>
         </form>

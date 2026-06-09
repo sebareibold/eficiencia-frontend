@@ -104,6 +104,23 @@ export const paymentsApi = {
   getById: (id: string | number): Promise<Payment> =>
     api.get(`/pagos/${id}`).then((r) => mapPago(r.data)),
 
+  update: (id: string | number, fields: {
+    amount?: number
+    method?: Payment['method']
+    paidAt?: string
+    notes?: string | null
+    membresiaId?: string | null
+    invoiced?: boolean
+  }): Promise<Payment> =>
+    api.patch(`/pagos/${id}`, {
+      ...(fields.amount    !== undefined && { monto:       fields.amount }),
+      ...(fields.method    !== undefined && { metodo:      mapMetodoToBackend(fields.method) }),
+      ...(fields.paidAt    !== undefined && { fecha:       fields.paidAt }),
+      ...(fields.notes     !== undefined && { comprobante: fields.notes }),
+      ...(fields.membresiaId !== undefined && { membresiaId: fields.membresiaId }),
+      ...(fields.invoiced  !== undefined && { facturado:   fields.invoiced }),
+    }).then(r => mapPago(r.data)),
+
   toggleInvoiced: (id: string | number, value: boolean): Promise<void> =>
     api.patch(`/pagos/${id}`, { facturado: value }),
 

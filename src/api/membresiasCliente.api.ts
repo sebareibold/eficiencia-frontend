@@ -39,6 +39,9 @@ export const membresiasClienteApi = {
   renovar: (membresiaId: string): Promise<MembresiaCliente> =>
     api.post(`/membresias/${membresiaId}/renovar`).then((r) => mapMembresia(r.data)),
 
+  cancelar: (membresiaId: string): Promise<MembresiaCliente> =>
+    api.post(`/membresias/${membresiaId}/cancelar`).then((r) => mapMembresia(r.data)),
+
   remove: (membresiaId: string): Promise<void> =>
     api.delete(`/membresias/${membresiaId}`),
 }

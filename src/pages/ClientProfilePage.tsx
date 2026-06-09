@@ -21,6 +21,8 @@ import { z } from 'zod'
 import { clientsApi } from '../api/clients.api'
 import { attendanceApi } from '../api/attendance.api'
 import { paymentsApi } from '../api/payments.api'
+import { membresiasClienteApi } from '../api/membresiasCliente.api'
+import { membershipsApi } from '../api/memberships.api'
 import { inscripcionesApi } from '../api/inscripciones.api'
 import type { InscripcionClienteEntry } from '../api/inscripciones.api'
 import { listaEsperaApi } from '../api/listaEspera.api'
@@ -37,7 +39,8 @@ import Modal from '../components/ui/Modal'
 import Skeleton, { SkeletonClientProfile } from '../components/ui/Skeleton'
 import EmptyState from '../components/ui/EmptyState'
 import { getStatusLabel } from '../utils/getStatusColor'
-import { MODALIDAD_LABELS } from '../types/membership.types'
+import { MODALIDAD_LABELS, MODALIDADES } from '../types/membership.types'
+import type { MembresiaCliente, Modalidad, Plan } from '../types/membership.types'
 import { formatDate } from '../utils/formatDate'
 import { formatCurrency } from '../utils/formatCurrency'
 import type { Client } from '../types/client.types'
@@ -105,6 +108,15 @@ function statusBarColor(status: Client['status']) {
 function membershipDaysLeft(expiresAt: string | null): number | null {
   if (!expiresAt) return null
   return Math.ceil((new Date(expiresAt).getTime() - Date.now()) / 86_400_000)
+}
+
+const DIAS_POR_MODALIDAD_FE: Record<string, number> = {
+  TRANSFERENCIA_MENSUAL: 30, EFECTIVO: 30, MEMBRESIA_3_MESES: 90, MEMBRESIA_6_MESES: 180,
+}
+function calcVencimiento(fechaInicio: string, modalidad: string): string {
+  if (!fechaInicio) return ''
+  const d = addDays(new Date(fechaInicio), DIAS_POR_MODALIDAD_FE[modalidad] ?? 30)
+  return format(d, "d 'de' MMMM 'de' yyyy", { locale: es })
 }
 
 // ─── Glassmorphism card ───────────────────────────────────────────────────────
@@ -458,6 +470,15 @@ export default function ClientProfilePage() {
   const [savingEvento, setSavingEvento] = useState(false)
   const [membershipDetailOpen, setMembershipDetailOpen] = useState(false)
   const [membershipOpen, setMembershipOpen] = useState(true)
+  const [membresias, setMembresias] = useState<MembresiaCliente[]>([])
+  const [loadingMembresias, setLoadingMembresias] = useState(false)
+  const [planes, setPlanes] = useState<Plan[]>([])
+  const [loadingPlanes, setLoadingPlanes] = useState(false)
+  const [newMembresiaOpen, setNewMembresiaOpen] = useState(false)
+  const [savingMembresia, setSavingMembresia] = useState(false)
+  const [newMembresiaForm, setNewMembresiaForm] = useState<{
+    planId: string; modalidad: Modalidad; precio: string; fechaInicio: string
+  }>({ planId: '', modalidad: 'TRANSFERENCIA_MENSUAL', precio: '', fechaInicio: '' })
 
   // Rutinas — solo para el resumen en el tab (la edición vive en ClientRutinaPage)
   const { rutinas, isLoading: loadingRutinas } = useRutinas(id)
@@ -485,15 +506,46 @@ export default function ClientProfilePage() {
 
   useEffect(() => { clientsApi.getSedes().then(setSedes).catch(() => {}) }, [])
 
+  // Carga lazy de planes cuando se abre el modal de nueva membresía
+  useEffect(() => {
+    if (!newMembresiaOpen || planes.length > 0) return
+    setLoadingPlanes(true)
+    membershipsApi.getAll().then(setPlanes).finally(() => setLoadingPlanes(false))
+  }, [newMembresiaOpen])
+
+  // Sugiere fecha inicio y resetea precio al abrir modal
+  useEffect(() => {
+    if (!newMembresiaOpen) return
+    const active = [...membresias]
+      .filter(m => m.estado !== 'CANCELADA')
+      .sort((a, b) => b.fechaVencimiento.localeCompare(a.fechaVencimiento))[0]
+    const hoy = format(new Date(), 'yyyy-MM-dd')
+    const suggested = active
+      ? (() => { const nd = addDays(new Date(active.fechaVencimiento), 1); return nd > new Date() ? format(nd, 'yyyy-MM-dd') : hoy })()
+      : hoy
+    setNewMembresiaForm({ planId: '', modalidad: 'TRANSFERENCIA_MENSUAL', precio: '', fechaInicio: suggested })
+  }, [newMembresiaOpen])
+
+  // Auto-relleno de precio desde tarifa vigente
+  useEffect(() => {
+    if (!newMembresiaForm.planId || planes.length === 0) return
+    const plan = planes.find(p => p.id === newMembresiaForm.planId)
+    if (!plan) return
+    const tarifa = plan.tarifas.find(t => t.modalidad === newMembresiaForm.modalidad)
+    if (tarifa) setNewMembresiaForm(prev => ({ ...prev, precio: String(tarifa.precio) }))
+  }, [newMembresiaForm.planId, newMembresiaForm.modalidad, planes])
+
   useEffect(() => {
     if (!id) return
     setLoading(true)
+    setLoadingMembresias(true)
     Promise.allSettled([
       clientsApi.getById(id),
       paymentsApi.getAll({ clientId: id }),
       attendanceApi.getByClient(id),
       clientsApi.getFichaConEventos(id),
-    ]).then(([clientRes, paymentsRes, attendanceRes, fichaRes]) => {
+      membresiasClienteApi.getAll(id),
+    ]).then(([clientRes, paymentsRes, attendanceRes, fichaRes, membresiasRes]) => {
       const f = fichaRes.status === 'fulfilled' ? fichaRes.value : null
       if (clientRes.status === 'fulfilled') {
         const c = clientRes.value
@@ -516,7 +568,10 @@ export default function ClientProfilePage() {
       if (paymentsRes.status === 'fulfilled') setPayments(paymentsRes.value.data)
       if (attendanceRes.status === 'fulfilled') setAttendance(attendanceRes.value)
       if (f !== null) { setFicha(f); setEventos(f.eventos ?? []) }
-    }).finally(() => setLoading(false))
+      if (membresiasRes.status === 'fulfilled') {
+        setMembresias([...membresiasRes.value].sort((a, b) => b.fechaInicio.localeCompare(a.fechaInicio)))
+      }
+    }).finally(() => { setLoading(false); setLoadingMembresias(false) })
   }, [id])
 
   useEffect(() => {
@@ -609,6 +664,53 @@ export default function ClientProfilePage() {
   function startEditEvento(ev: EventoDeportivo) {
     setEditingEvento(ev)
     setEventoForm({ nombre: ev.nombre, fecha: ev.fecha.slice(0, 10), observacion: ev.observacion ?? '' })
+  }
+
+  async function handleCreateMembresia() {
+    if (!client) return
+    setSavingMembresia(true)
+    try {
+      const precio = newMembresiaForm.precio ? parseFloat(newMembresiaForm.precio) : undefined
+      const created = await membresiasClienteApi.create({
+        clienteId: client.id,
+        planId: newMembresiaForm.planId,
+        modalidad: newMembresiaForm.modalidad,
+        ...(precio !== undefined && !isNaN(precio) && { precio }),
+        ...(newMembresiaForm.fechaInicio && { fechaInicio: newMembresiaForm.fechaInicio }),
+      })
+      setMembresias(prev => [created, ...prev].sort((a, b) => b.fechaInicio.localeCompare(a.fechaInicio)))
+      addToast('Membresía creada', 'success')
+      setNewMembresiaOpen(false)
+      clientsApi.getById(client.id).then(c => setClient(c)).catch(() => {})
+    } catch (err: any) {
+      addToast(err?.response?.data?.message ?? 'Error al crear membresía', 'error')
+    } finally {
+      setSavingMembresia(false)
+    }
+  }
+
+  async function handleCancelarMembresia(membresiaId: string) {
+    if (!client) return
+    try {
+      const updated = await membresiasClienteApi.cancelar(membresiaId)
+      setMembresias(prev => prev.map(m => m.id === membresiaId ? updated : m))
+      addToast('Membresía cancelada', 'success')
+      clientsApi.getById(client.id).then(c => setClient(c)).catch(() => {})
+    } catch {
+      addToast('Error al cancelar la membresía', 'error')
+    }
+  }
+
+  async function handleEliminarMembresia(membresiaId: string) {
+    if (!client) return
+    try {
+      await membresiasClienteApi.remove(membresiaId)
+      setMembresias(prev => prev.filter(m => m.id !== membresiaId))
+      addToast('Membresía eliminada', 'success')
+      clientsApi.getById(client.id).then(c => setClient(c)).catch(() => {})
+    } catch {
+      addToast('Error al eliminar la membresía', 'error')
+    }
   }
 
   async function handleDarDeBaja(inscripcionId: string) {
@@ -770,9 +872,10 @@ export default function ClientProfilePage() {
   })()
 
   const MEMBRESIA_STATUS_CONFIG: Record<string, { label: string; color: string; bg: string; dot: string }> = {
-    ACTIVA: { label: 'Activa', color: 'text-emerald-600 dark:text-emerald-400', bg: 'bg-emerald-500/10', dot: 'bg-emerald-500' },
-    VENCIDA: { label: 'Vencida', color: 'text-red-600 dark:text-red-400', bg: 'bg-red-500/10', dot: 'bg-red-500' },
-    CANCELADA: { label: 'Cancelada', color: 'text-gray-600 dark:text-gray-400', bg: 'bg-gray-500/10', dot: 'bg-gray-400' },
+    PENDIENTE:  { label: 'Programada',  color: 'text-blue-600 dark:text-blue-400',   bg: 'bg-blue-500/10',   dot: 'bg-blue-500'   },
+    ACTIVA:     { label: 'Activa',      color: 'text-emerald-600 dark:text-emerald-400', bg: 'bg-emerald-500/10', dot: 'bg-emerald-500' },
+    VENCIDA:    { label: 'Vencida',     color: 'text-red-600 dark:text-red-400',     bg: 'bg-red-500/10',    dot: 'bg-red-500'    },
+    CANCELADA:  { label: 'Cancelada',   color: 'text-gray-600 dark:text-gray-400',   bg: 'bg-gray-500/10',   dot: 'bg-gray-400'   },
   }
 
   const planFreqGlobal = client?.planFrequency ? Number(client.planFrequency) : null
@@ -956,32 +1059,35 @@ export default function ClientProfilePage() {
                     <span>Detalle</span>
                   </div>
                   <div className="divide-y divide-gray-100 dark:divide-gray-100 dark:divide-white/[0.04]">
-                    {[
-                      {
-                        label: 'Plan',
-                        value: client.planName ? formatPlanName(client.planName) : 'Sin membresía activa',
-                        icon: Dumbbell,
-                        color: client.planName ? 'text-gray-900 dark:text-white font-bold' : 'text-gray-400 dark:text-[#8A8A9A] font-semibold'
-                      },
-                      {
-                        label: 'Modalidad',
-                        value: client.planName && client.membershipModalidad ? MODALIDAD_LABELS[client.membershipModalidad] ?? client.membershipModalidad : '—',
-                        icon: Clock,
-                        color: client.planName ? 'text-gray-700 dark:text-gray-300 font-semibold' : 'text-gray-400 dark:text-[#8A8A9A]'
-                      },
-                      {
-                        label: 'Precio',
-                        value: client.planName && client.membershipPrecio != null ? formatCurrency(client.membershipPrecio) : '—',
-                        icon: Banknote,
-                        color: client.planName ? 'text-primary font-bold' : 'text-gray-400 dark:text-[#8A8A9A]'
-                      },
-                      {
-                        label: 'Vencimiento',
-                        value: !client.planName ? '—' : daysLeft !== null ? (daysLeft > 0 ? `${daysLeft} días restantes` : 'Finalizada') : 'Sin fecha',
-                        icon: CalendarDays,
-                        color: !client.planName ? 'text-gray-400 dark:text-[#8A8A9A]' : daysLeft !== null ? (daysLeft <= 0 ? 'text-red-500 dark:text-red-400 font-semibold' : daysLeft <= 30 ? 'text-amber-500 dark:text-amber-400 font-semibold' : 'text-emerald-500 dark:text-emerald-400 font-semibold') : 'text-gray-500 dark:text-[#8A8A9A]'
-                      }
-                    ].map((row, idx) => {
+                    {(() => {
+                      const hasActiveMembership = !!(client.planName && client.membershipStatus !== 'CANCELADA')
+                      return [
+                        {
+                          label: 'Plan',
+                          value: hasActiveMembership ? formatPlanName(client.planName!) : 'Sin membresía activa',
+                          icon: Dumbbell,
+                          color: hasActiveMembership ? 'text-gray-900 dark:text-white font-bold' : 'text-gray-400 dark:text-[#8A8A9A] font-semibold'
+                        },
+                        {
+                          label: 'Modalidad',
+                          value: hasActiveMembership && client.membershipModalidad ? MODALIDAD_LABELS[client.membershipModalidad] ?? client.membershipModalidad : '—',
+                          icon: Clock,
+                          color: hasActiveMembership ? 'text-gray-700 dark:text-gray-300 font-semibold' : 'text-gray-400 dark:text-[#8A8A9A]'
+                        },
+                        {
+                          label: 'Precio',
+                          value: hasActiveMembership && client.membershipPrecio != null ? formatCurrency(client.membershipPrecio) : '—',
+                          icon: Banknote,
+                          color: hasActiveMembership ? 'text-primary font-bold' : 'text-gray-400 dark:text-[#8A8A9A]'
+                        },
+                        {
+                          label: 'Vencimiento',
+                          value: !hasActiveMembership ? '—' : daysLeft !== null ? (daysLeft > 0 ? `${daysLeft} días restantes` : 'Finalizada') : 'Sin fecha',
+                          icon: CalendarDays,
+                          color: !hasActiveMembership ? 'text-gray-400 dark:text-[#8A8A9A]' : daysLeft !== null ? (daysLeft <= 0 ? 'text-red-500 dark:text-red-400 font-semibold' : daysLeft <= 30 ? 'text-amber-500 dark:text-amber-400 font-semibold' : 'text-emerald-500 dark:text-emerald-400 font-semibold') : 'text-gray-500 dark:text-[#8A8A9A]'
+                        }
+                      ]
+                    })().map((row, idx) => {
                       const Icon = row.icon
                       return (
                         <div key={idx} className="grid grid-cols-2 px-4 py-2.5 hover:bg-black/[0.02] dark:hover:bg-white/[0.01] transition-colors items-center">
@@ -1251,11 +1357,12 @@ export default function ClientProfilePage() {
               </p>
               <div className="space-y-1">
                 {[
-                  { id: 'perfil',     label: 'Perfil',     icon: User       },
-                  { id: 'rutinas',    label: 'Rutinas',    icon: BookOpen   },
-                  { id: 'clases',     label: 'Clases',     icon: Dumbbell   },
-                  { id: 'asistencia', label: 'Asistencia', icon: Activity   },
-                  { id: 'pagos',      label: 'Pagos',      icon: CreditCard },
+                  { id: 'perfil',      label: 'Perfil',      icon: User       },
+                  { id: 'rutinas',     label: 'Rutinas',     icon: BookOpen   },
+                  { id: 'clases',      label: 'Clases',      icon: Dumbbell   },
+                  { id: 'asistencia',  label: 'Asistencia',  icon: Activity   },
+                  { id: 'membresias',  label: 'Membresías',  icon: Tag        },
+                  { id: 'pagos',       label: 'Pagos',       icon: CreditCard },
                 ].map(item => {
                   const Icon = item.icon
                   return (
@@ -1588,7 +1695,105 @@ export default function ClientProfilePage() {
             )}
           </div>
 
-          {/* ─── SECCIÓN 4: PAGOS Y FACTURACIÓN ───────────────────────────────────── */}
+          {/* ─── SECCIÓN 4: MEMBRESÍAS ──────────────────────────────────────────── */}
+          <div id="membresias" className={`${glassCard} p-6 space-y-5 scroll-mt-24`}>
+            <div className="flex items-center justify-between border-b border-gray-200 dark:border-white/[0.06] pb-3">
+              <div className="flex items-center gap-3">
+                <div className="h-10 w-10 rounded-xl bg-primary/10 flex items-center justify-center shrink-0">
+                  <Tag size={18} className="text-primary" />
+                </div>
+                <div>
+                  <h3 className="text-lg font-black tracking-tight text-gray-900 dark:text-white">Membresías</h3>
+                  <p className="text-xs text-gray-500 dark:text-[#8A8A9A]">Historial completo de membresías del cliente</p>
+                </div>
+              </div>
+              {isAdmin && (
+                <button
+                  onClick={() => setNewMembresiaOpen(true)}
+                  className="flex items-center gap-2 rounded-xl btn-action px-4 py-2.5 text-sm"
+                >
+                  <Plus size={13} /> Nueva membresía
+                </button>
+              )}
+            </div>
+
+            {loadingMembresias ? (
+              <div className="space-y-2">
+                {[1, 2, 3].map(i => <Skeleton key={i} className="h-16 w-full rounded-xl" />)}
+              </div>
+            ) : membresias.length === 0 ? (
+              <div className="flex flex-col items-center gap-3 py-12">
+                <div className="h-12 w-12 rounded-2xl bg-gray-100 dark:bg-white/[0.04] border border-gray-200 dark:border-white/[0.06] flex items-center justify-center">
+                  <Tag size={20} className="text-gray-400 dark:text-[#8A8A9A]" />
+                </div>
+                <p className="text-sm text-gray-500 dark:text-[#8A8A9A]">Sin membresías registradas</p>
+                {isAdmin && (
+                  <button onClick={() => setNewMembresiaOpen(true)} className="text-xs text-primary hover:underline transition-colors">
+                    Crear la primera membresía →
+                  </button>
+                )}
+              </div>
+            ) : (
+              <div className="space-y-2.5">
+                {membresias.map(m => {
+                  const statusCfg = MEMBRESIA_STATUS_CONFIG[m.estado] ?? MEMBRESIA_STATUS_CONFIG.CANCELADA
+                  const daysLeftM = Math.ceil((new Date(m.fechaVencimiento).getTime() - Date.now()) / 86_400_000)
+                  return (
+                    <div
+                      key={m.id}
+                      className="flex items-center justify-between gap-3 rounded-2xl border border-gray-200 dark:border-white/[0.06] bg-white/40 dark:bg-white/[0.01] px-5 py-4"
+                    >
+                      <div className="flex items-center gap-3 min-w-0 flex-1">
+                        <span className={`inline-flex items-center gap-1.5 text-xs font-semibold px-2.5 py-1 rounded-lg shrink-0 ${statusCfg.bg} ${statusCfg.color}`}>
+                          <span className={`h-1.5 w-1.5 rounded-full ${statusCfg.dot}`} />
+                          {statusCfg.label}
+                        </span>
+                        <div className="min-w-0">
+                          <p className="text-sm font-bold text-gray-900 dark:text-white truncate">{m.plan.nombre}</p>
+                          <p className="text-xs text-gray-500 dark:text-[#8A8A9A] mt-0.5">
+                            {MODALIDAD_LABELS[m.modalidad] ?? m.modalidad} · {formatDate(m.fechaInicio)} → {formatDate(m.fechaVencimiento)}
+                            {m.estado === 'ACTIVA' && daysLeftM > 0 && (
+                              <span className={`ml-1.5 font-semibold ${daysLeftM <= 7 ? 'text-red-400' : daysLeftM <= 30 ? 'text-amber-400' : 'text-emerald-400'}`}>
+                                ({daysLeftM} días restantes)
+                              </span>
+                            )}
+                            {m.estado === 'PENDIENTE' && (
+                              <span className="ml-1.5 font-semibold text-blue-400">
+                                (inicia en {Math.ceil((new Date(m.fechaInicio).getTime() - Date.now()) / 86_400_000)} días)
+                              </span>
+                            )}
+                          </p>
+                        </div>
+                      </div>
+                      <div className="flex items-center gap-2 shrink-0">
+                        <span className="text-sm font-black text-gray-900 dark:text-white tabular-nums">
+                          {formatCurrency(m.precio)}
+                        </span>
+                        {isAdmin && (m.estado === 'ACTIVA' || m.estado === 'PENDIENTE') && (
+                          <button
+                            onClick={() => handleCancelarMembresia(m.id)}
+                            className="text-xs font-semibold text-gray-400 hover:text-amber-400 transition-colors px-2.5 py-1.5 rounded-xl hover:bg-amber-500/10 border border-transparent hover:border-amber-500/20"
+                          >
+                            Cancelar
+                          </button>
+                        )}
+                        {isAdmin && (
+                          <button
+                            onClick={() => handleEliminarMembresia(m.id)}
+                            className="text-xs font-semibold text-gray-400 hover:text-red-400 transition-colors px-2.5 py-1.5 rounded-xl hover:bg-red-500/10 border border-transparent hover:border-red-500/20"
+                          >
+                            Eliminar
+                          </button>
+                        )}
+                      </div>
+                    </div>
+                  )
+                })}
+              </div>
+            )}
+          </div>
+
+          {/* ─── SECCIÓN 5: PAGOS Y FACTURACIÓN ───────────────────────────────────── */}
           <div id="pagos" className={`${glassCard} p-6 space-y-6 scroll-mt-24`}>
             <div className="flex items-center justify-between border-b border-gray-200 dark:border-white/[0.06] pb-3">
               <div className="flex items-center gap-3">
@@ -1602,7 +1807,7 @@ export default function ClientProfilePage() {
               </div>
             </div>
 
-            {client.planName ? (
+            {(client.planName && client.membershipStatus !== 'CANCELADA') ? (
               <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
                 {/* Columna Izquierda/Centro: Información de la Membresía y Cronograma de Cuotas */}
                 <div className="lg:col-span-2 space-y-6">
@@ -1832,6 +2037,99 @@ export default function ClientProfilePage() {
             )}
           </div>
         )}
+      </Modal>
+
+      {/* ── MODAL NUEVA MEMBRESÍA ───────────────────────────────────────────── */}
+      <Modal isOpen={newMembresiaOpen} onClose={() => setNewMembresiaOpen(false)} title="Nueva membresía" size="md">
+        <div className="space-y-4">
+          {/* Plan */}
+          <div className="flex flex-col gap-1.5">
+            <label className="text-xs font-semibold text-gray-500 dark:text-[#8A8A9A] uppercase tracking-wider">Plan</label>
+            {loadingPlanes ? (
+              <Skeleton className="h-10 w-full rounded-xl" />
+            ) : (
+              <select
+                value={newMembresiaForm.planId}
+                onChange={e => setNewMembresiaForm(f => ({ ...f, planId: e.target.value }))}
+                className="w-full bg-white/60 dark:bg-white/[0.06] border border-gray-200 dark:border-white/[0.15] rounded-xl px-3 py-2.5 text-sm text-gray-900 dark:text-white focus:outline-none focus:ring-1 focus:ring-primary/60 transition-all"
+              >
+                <option value="">— Seleccionar plan —</option>
+                {planes.map(p => (
+                  <option key={p.id} value={p.id}>{p.name} ({p.classesPerWeek}× / sem.)</option>
+                ))}
+              </select>
+            )}
+          </div>
+
+          {/* Modalidad */}
+          <div className="flex flex-col gap-1.5">
+            <label className="text-xs font-semibold text-gray-500 dark:text-[#8A8A9A] uppercase tracking-wider">Modalidad</label>
+            <select
+              value={newMembresiaForm.modalidad}
+              onChange={e => setNewMembresiaForm(f => ({ ...f, modalidad: e.target.value as Modalidad }))}
+              className="w-full bg-white/60 dark:bg-white/[0.06] border border-gray-200 dark:border-white/[0.15] rounded-xl px-3 py-2.5 text-sm text-gray-900 dark:text-white focus:outline-none focus:ring-1 focus:ring-primary/60 transition-all"
+            >
+              {MODALIDADES.map(m => (
+                <option key={m} value={m}>{MODALIDAD_LABELS[m]}</option>
+              ))}
+            </select>
+          </div>
+
+          {/* Precio */}
+          <div className="flex flex-col gap-1.5">
+            <label className="text-xs font-semibold text-gray-500 dark:text-[#8A8A9A] uppercase tracking-wider">
+              Precio (ARS)
+            </label>
+            <input
+              type="number"
+              value={newMembresiaForm.precio}
+              onChange={e => setNewMembresiaForm(f => ({ ...f, precio: e.target.value }))}
+              placeholder="Se carga desde la tarifa vigente"
+              className="w-full bg-white/60 dark:bg-white/[0.06] border border-gray-200 dark:border-white/[0.15] rounded-xl px-3 py-2.5 text-sm text-gray-900 dark:text-white placeholder-gray-400 focus:outline-none focus:ring-1 focus:ring-primary/60 transition-all"
+            />
+          </div>
+
+          {/* Fecha inicio */}
+          <div className="flex flex-col gap-1.5">
+            <label className="text-xs font-semibold text-gray-500 dark:text-[#8A8A9A] uppercase tracking-wider">
+              Fecha de inicio
+              <span className="normal-case ml-1 font-normal text-gray-400">(sugerida automáticamente)</span>
+            </label>
+            <input
+              type="date"
+              value={newMembresiaForm.fechaInicio}
+              onChange={e => setNewMembresiaForm(f => ({ ...f, fechaInicio: e.target.value }))}
+              className="w-full bg-white/60 dark:bg-white/[0.06] border border-gray-200 dark:border-white/[0.15] rounded-xl px-3 py-2.5 text-sm text-gray-900 dark:text-white focus:outline-none focus:ring-1 focus:ring-primary/60 transition-all"
+            />
+          </div>
+
+          {/* Vencimiento calculado */}
+          {newMembresiaForm.fechaInicio && (
+            <div className="flex items-center gap-2 px-3 py-2.5 rounded-xl bg-primary/[0.04] border border-primary/20">
+              <CalendarDays size={13} className="text-primary shrink-0" />
+              <span className="text-xs text-gray-600 dark:text-gray-300">
+                Vencimiento calculado: <strong className="text-gray-900 dark:text-white">{calcVencimiento(newMembresiaForm.fechaInicio, newMembresiaForm.modalidad)}</strong>
+              </span>
+            </div>
+          )}
+
+          {/* Acciones */}
+          <div className="flex gap-2 pt-2">
+            <button
+              onClick={() => setNewMembresiaOpen(false)}
+              className="flex-1 px-4 py-2.5 rounded-xl border border-gray-200 dark:border-white/[0.1] text-sm font-semibold text-gray-500 hover:bg-gray-50 dark:hover:bg-white/[0.04] transition-all"
+            >
+              Cancelar
+            </button>
+            <button
+              onClick={handleCreateMembresia}
+              disabled={savingMembresia || !newMembresiaForm.planId}
+              className="flex-1 px-4 py-2.5 rounded-xl bg-primary text-black text-sm font-bold hover:bg-primary-dark disabled:opacity-50 transition-all"
+            >
+              {savingMembresia ? 'Creando…' : 'Crear membresía'}
+            </button>
+          </div>
+        </div>
       </Modal>
 
       {/* ── MODAL AÑADIR TURNO ─────────────────────────────────────────────── */}

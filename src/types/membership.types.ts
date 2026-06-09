@@ -70,6 +70,6 @@ export interface MembresiaCliente {
   precio: number
   fechaInicio: string
   fechaVencimiento: string
-  estado: 'ACTIVA' | 'VENCIDA' | 'CANCELADA'
+  estado: 'PENDIENTE' | 'ACTIVA' | 'VENCIDA' | 'CANCELADA'
   plan: { nombre: string; frecuenciaSemanal: number }
 }

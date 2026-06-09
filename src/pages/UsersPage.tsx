@@ -1214,17 +1214,17 @@ export default function UsersPage() {
       </div>
 
       <div className="overflow-x-auto -mx-1 px-1 pb-0.5">
-        <div className="flex gap-1 p-1 rounded-2xl bg-white/40 dark:bg-white/[0.04] border border-gray-200/60 dark:border-white/[0.07] w-fit min-w-max">
+        <div className="flex gap-1 p-1 rounded-2xl bg-white/30 dark:bg-black/30 backdrop-blur-xl border border-white/50 dark:border-white/10 shadow-sm w-fit min-w-max">
           {TABS.map(t => {
             const Icon = t.icon
             return (
               <button
                 key={t.value}
                 onClick={() => setTab(t.value)}
-                className={`flex items-center gap-2 px-4 py-2 rounded-xl text-sm font-semibold transition-all duration-150 whitespace-nowrap ${
+                className={`flex items-center gap-2 px-4 py-2 rounded-xl text-sm font-semibold transition-all duration-200 whitespace-nowrap ${
                   tab === t.value
-                    ? 'bg-white dark:bg-white/[0.09] text-gray-900 dark:text-white shadow-sm'
-                    : 'text-gray-500 dark:text-[#8A8A9A] hover:text-gray-800 dark:hover:text-gray-200'
+                    ? 'bg-white/50 dark:bg-white/[0.08] backdrop-blur-sm border border-white/70 dark:border-white/[0.12] text-gray-900 dark:text-white shadow-sm'
+                    : 'text-gray-500 dark:text-[#8A8A9A] hover:text-gray-800 dark:hover:text-white hover:bg-white/30 dark:hover:bg-white/[0.04]'
                 }`}
               >
                 <Icon size={15} strokeWidth={2} />
