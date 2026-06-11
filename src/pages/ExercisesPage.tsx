@@ -116,20 +116,23 @@ export default function ExercisesPage() {
               className="w-full rounded-xl border border-saas-border bg-white py-2 pl-10 pr-4 text-sm text-gray-900 transition-all focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/20"
             />
           </div>
-          <div className="flex flex-wrap gap-2">
-            {(['todos', 'FACIL', 'DIFICIL', 'AVANZADO'] as const).map(d => (
-              <button
-                key={d}
-                onClick={() => setFilterDif(d)}
-                className={`inline-flex items-center rounded-full px-3 py-1.5 text-sm font-medium transition-all active:scale-[0.98] ${
-                  filterDif === d
-                    ? 'bg-gray-900 text-white shadow-sm'
-                    : 'border border-saas-border bg-white text-gray-700 hover:bg-saas-hover'
-                }`}
-              >
-                {d === 'todos' ? 'Todos' : DIFICULTAD_CONFIG[d as keyof typeof DIFICULTAD_CONFIG].label}
-              </button>
-            ))}
+          <div className="flex flex-col gap-1.5">
+            <span className="text-[10px] font-bold uppercase tracking-wider text-gray-400 dark:text-gray-500 px-1">Dificultad</span>
+            <div className="flex flex-wrap gap-2">
+              {(['todos', 'FACIL', 'DIFICIL', 'AVANZADO'] as const).map(d => (
+                <button
+                  key={d}
+                  onClick={() => setFilterDif(d)}
+                  className={`inline-flex items-center rounded-full px-3 py-1.5 text-sm font-medium transition-all active:scale-[0.98] ${
+                    filterDif === d
+                      ? 'bg-gray-900 text-white shadow-sm'
+                      : 'border border-saas-border bg-white text-gray-700 hover:bg-saas-hover'
+                  }`}
+                >
+                  {d === 'todos' ? 'Todos' : DIFICULTAD_CONFIG[d as keyof typeof DIFICULTAD_CONFIG].label}
+                </button>
+              ))}
+            </div>
           </div>
         </div>
 

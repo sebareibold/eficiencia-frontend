@@ -90,6 +90,20 @@ const LETRAS = ['A', 'B', 'C', 'D', 'E', 'F', 'G', 'H']
 
 const DIAS_DEFAULT = ['Lunes', 'Martes', 'Miércoles', 'Jueves', 'Viernes', 'Sábado', 'Domingo']
 
+const SESIONES_DESC: Record<number, string> = {
+  2: 'Inicio · Recuperación',
+  3: 'Estándar',
+  4: 'Intenso',
+  5: 'Avanzado',
+}
+
+const PERIODO_DESCS: Record<string, string> = {
+  CARGA:         'Alta carga y volumen. Semana eje del mesociclo.',
+  IMPACTO:       'Alta intensidad con menor volumen. Foco en rendimiento.',
+  DESCARGA:      'Recuperación activa con carga reducida.',
+  MANTENIMIENTO: 'Conserva las adaptaciones con trabajo mínimo.',
+}
+
 function uid(): string {
   return Math.random().toString(36).slice(2, 11)
 }
@@ -773,7 +787,7 @@ function SearchableExerciseSelector({
           <button
             type="button"
             onClick={onCancel}
-            className="shrink-0 p-2.5 rounded-xl border border-white/[0.08] text-gray-400 hover:text-white hover:border-white/20 transition-colors"
+            className="shrink-0 p-2.5 rounded-xl border border-gray-200 dark:border-white/[0.08] text-gray-400 hover:text-gray-900 dark:hover:text-white hover:border-gray-400 dark:hover:border-white/20 transition-colors"
           >
             <X size={14} />
           </button>
@@ -815,7 +829,7 @@ function SearchableExerciseSelector({
               <div className="min-w-0">
                 <p className="text-sm font-semibold text-gray-900 dark:text-white leading-tight truncate">{ej.nombre}</p>
                 {ej.patronMovimiento && (
-                  <p className="text-[10px] text-gray-500 mt-0.5">{ej.patronMovimiento}</p>
+                  <p className="text-[10px] text-gray-500 mt-0.5">{PATRON_LABELS[ej.patronMovimiento] ?? ej.patronMovimiento}</p>
                 )}
               </div>
               <div className="flex items-center gap-2 shrink-0">
@@ -856,7 +870,7 @@ function SearchableExerciseSelector({
             >
               <div className="flex items-center justify-between p-3 border-b border-white/[0.08]">
                 <span className="text-sm text-gray-900 dark:text-white font-semibold">Video del ejercicio</span>
-                <button onClick={() => setVideoModal(null)} className="p-1 rounded-lg text-gray-400 hover:text-white transition-colors">
+                <button onClick={() => setVideoModal(null)} className="p-1 rounded-lg text-gray-400 hover:text-gray-900 dark:hover:text-white transition-colors">
                   <X size={16} />
                 </button>
               </div>
@@ -1391,7 +1405,7 @@ export default function CreateRutinaPage() {
                 setClienteRutinas([])
                 dispatch({ type: 'RESET_PASO1' })
               }}
-              className="text-xs text-gray-500 hover:text-white transition-colors shrink-0"
+              className="text-xs text-gray-500 hover:text-gray-900 dark:hover:text-white transition-colors shrink-0"
             >
               Cambiar
             </button>
@@ -1546,7 +1560,7 @@ export default function CreateRutinaPage() {
               <button
                 type="button"
                 onClick={() => setClienteSeleccionadoRaw(null)}
-                className="ml-auto p-1.5 rounded-lg text-gray-500 hover:text-white hover:bg-white/[0.06] transition-colors"
+                className="ml-auto p-1.5 rounded-lg text-gray-500 hover:text-gray-900 dark:hover:text-white hover:bg-gray-100 dark:hover:bg-white/[0.06] transition-colors"
               >
                 <X size={13} />
               </button>
@@ -1650,6 +1664,7 @@ export default function CreateRutinaPage() {
                 )}
                 <span className={`text-3xl font-black block ${state.sesionesSemanales === n ? 'text-primary' : 'text-gray-900 dark:text-white'}`}>{n}</span>
                 <span className="text-[10px] font-semibold uppercase tracking-wider text-gray-500 mt-1 block">días/semana</span>
+                <span className="text-[9px] text-gray-400 dark:text-white/30 mt-1 block leading-tight">{SESIONES_DESC[n]}</span>
               </button>
             )
           })}
@@ -2324,7 +2339,7 @@ export default function CreateRutinaPage() {
         .catch(() => setProfesores([]))
     }, [])
 
-    const { register, handleSubmit, formState: { errors } } = useForm<ConfigForm>({
+    const { register, handleSubmit, watch, formState: { errors } } = useForm<ConfigForm>({
       resolver: zodResolver(configSchema),
       defaultValues: {
         nombre:      sugerencia,
@@ -2397,6 +2412,11 @@ export default function CreateRutinaPage() {
               <option key={p} value={p}>{PERIODO_LABELS[p]}</option>
             ))}
           </select>
+          {watch('periodo') && (
+            <p className="mt-1 text-[10px] text-gray-400 dark:text-white/35 leading-snug pl-0.5">
+              {PERIODO_DESCS[watch('periodo')!]}
+            </p>
+          )}
         </div>
 
         <div>

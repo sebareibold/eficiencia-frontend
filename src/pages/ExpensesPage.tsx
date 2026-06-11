@@ -321,56 +321,42 @@ export default function ExpensesPage() {
           <h1 className="text-2xl lg:text-3xl xl:text-4xl font-black tracking-tighter text-gray-900 dark:text-white drop-shadow-sm">
             Gastos
           </h1>
-          <div className="flex items-center gap-2.5 flex-wrap">
-            {/* Selector de período — pill toggle glassmorphism */}
-            <div className="flex items-center rounded-full border border-white/50 dark:border-white/10 bg-white/30 dark:bg-black/30 backdrop-blur-xl p-1 shadow-sm gap-1 shrink-0">
-              {(['month', 'year', 'all'] as PeriodMode[]).map((m) => {
-                const isActive = periodMode === m
-                return (
-                  <button
-                    key={m}
-                    onClick={() => setPeriodMode(m)}
-                    className={`relative inline-flex items-center justify-center rounded-full px-3.5 py-1.5 text-xs font-bold transition-all duration-300 cursor-pointer ${
-                      isActive
-                        ? 'text-white dark:text-gray-900'
-                        : 'text-gray-500 dark:text-[#8A8A9A] hover:text-gray-900 dark:hover:text-white'
-                    }`}
-                  >
-                    {isActive && (
-                      <div className="absolute inset-0 rounded-full bg-gray-900 dark:bg-white shadow-[0_2px_8px_rgba(0,0,0,0.15)]" style={{ zIndex: 0 }} />
-                    )}
-                    <span className="relative z-10">
-                      {m === 'month' ? 'Mes' : m === 'year' ? 'Año' : 'Histórico'}
+          <div className="flex items-end gap-2.5 flex-wrap">
+            {/* Período */}
+            <div className="flex flex-col gap-1.5">
+              <span className="text-[10px] font-bold uppercase tracking-wider text-gray-400 dark:text-gray-500 px-1">Período</span>
+              <div className="flex items-center gap-2">
+                <div className="flex items-center rounded-full border border-white/50 dark:border-white/10 bg-white/30 dark:bg-black/30 backdrop-blur-xl p-1 shadow-sm gap-1 shrink-0">
+                  {(['all', 'year', 'month'] as PeriodMode[]).map((m) => {
+                    const isActive = periodMode === m
+                    return (
+                      <button key={m} onClick={() => setPeriodMode(m)}
+                        className={`relative inline-flex items-center justify-center rounded-full px-3.5 py-1.5 text-xs font-bold transition-all duration-300 cursor-pointer ${isActive ? 'text-white dark:text-gray-900' : 'text-gray-500 dark:text-[#8A8A9A] hover:text-gray-900 dark:hover:text-white'}`}
+                      >
+                        {isActive && <div className="absolute inset-0 rounded-full bg-gray-900 dark:bg-white shadow-[0_2px_8px_rgba(0,0,0,0.15)]" style={{ zIndex: 0 }} />}
+                        <span className="relative z-10">{m === 'month' ? 'Mes' : m === 'year' ? 'Año' : 'Histórico'}</span>
+                      </button>
+                    )
+                  })}
+                </div>
+                {periodMode !== 'all' && (
+                  <div className="flex items-center rounded-full border border-white/50 dark:border-white/10 bg-white/30 dark:bg-black/30 backdrop-blur-xl p-1 shadow-sm gap-1 shrink-0">
+                    <button onClick={() => periodMode === 'month' ? navigateMonth(-1) : navigateYear(-1)} className="flex h-7 w-7 items-center justify-center rounded-full text-gray-500 dark:text-gray-400 hover:text-gray-900 dark:hover:text-white hover:bg-white/40 dark:hover:bg-white/[0.05] transition-all cursor-pointer">
+                      <ChevronLeft size={14} />
+                    </button>
+                    <span className="px-2 text-xs font-bold text-gray-800 dark:text-gray-200 tabular-nums whitespace-nowrap">
+                      {periodMode === 'month' ? getMonthLabel(month) : year}
                     </span>
-                  </button>
-                )
-              })}
-            </div>
-
-            {/* Navegador mes / año — glassmorphism */}
-            {periodMode !== 'all' && (
-              <div className="flex items-center rounded-full border border-white/50 dark:border-white/10 bg-white/30 dark:bg-black/30 backdrop-blur-xl p-1 shadow-sm gap-1 shrink-0">
-                <button
-                  onClick={() => periodMode === 'month' ? navigateMonth(-1) : navigateYear(-1)}
-                  className="flex h-7 w-7 items-center justify-center rounded-full text-gray-500 dark:text-gray-400 hover:text-gray-900 dark:hover:text-white hover:bg-white/40 dark:hover:bg-white/[0.05] transition-all cursor-pointer"
-                >
-                  <ChevronLeft size={14} />
-                </button>
-                <span className="px-2 text-xs font-bold text-gray-800 dark:text-gray-200 tabular-nums whitespace-nowrap">
-                  {periodMode === 'month' ? getMonthLabel(month) : year}
-                </span>
-                <button
-                  onClick={() => periodMode === 'month' ? navigateMonth(1) : navigateYear(1)}
-                  disabled={
-                    (periodMode === 'month' && month >= format(today, 'yyyy-MM')) ||
-                    (periodMode === 'year' && year >= format(today, 'yyyy'))
-                  }
-                  className="flex h-7 w-7 items-center justify-center rounded-full text-gray-500 dark:text-gray-400 hover:text-gray-900 dark:hover:text-white hover:bg-white/40 dark:hover:bg-white/[0.05] transition-all disabled:opacity-30 disabled:cursor-not-allowed cursor-pointer"
-                >
-                  <ChevronRight size={14} />
-                </button>
+                    <button onClick={() => periodMode === 'month' ? navigateMonth(1) : navigateYear(1)}
+                      disabled={(periodMode === 'month' && month >= format(today, 'yyyy-MM')) || (periodMode === 'year' && year >= format(today, 'yyyy'))}
+                      className="flex h-7 w-7 items-center justify-center rounded-full text-gray-500 dark:text-gray-400 hover:text-gray-900 dark:hover:text-white hover:bg-white/40 dark:hover:bg-white/[0.05] transition-all disabled:opacity-30 disabled:cursor-not-allowed cursor-pointer"
+                    >
+                      <ChevronRight size={14} />
+                    </button>
+                  </div>
+                )}
               </div>
-            )}
+            </div>
           </div>
         </div>
 
@@ -438,90 +424,57 @@ export default function ExpensesPage() {
           </div>
 
           {/* Controls: filtros + orden + vista */}
-          <div className="flex flex-wrap items-center justify-between gap-4">
-            {/* Category filter — select en mobile, pills en desktop */}
-            <select
-              value={categoryFilter}
-              onChange={e => setCategoryFilter(e.target.value as CategoryFilter)}
-              className="sm:hidden rounded-xl border border-white/50 dark:border-white/10 bg-white/30 dark:bg-black/30 backdrop-blur-xl px-3 py-2 text-xs font-bold text-gray-800 dark:text-gray-200 focus:outline-none h-10 cursor-pointer"
-            >
-              <option value="all">Todos</option>
-              {(Object.keys(CATEGORY_LABELS) as ExpenseCategory[]).map(c => (
-                <option key={c} value={c}>{CATEGORY_LABELS[c]}</option>
-              ))}
-            </select>
-            <div className="hidden sm:flex items-center rounded-full border border-white/50 dark:border-white/10 bg-white/30 dark:bg-black/30 backdrop-blur-xl p-1 shadow-sm gap-1">
-              {(['all', ...(Object.keys(CATEGORY_LABELS) as ExpenseCategory[])] as CategoryFilter[]).map(c => {
-                const isActive = categoryFilter === c
-                return (
-                  <button
-                    key={c}
-                    onClick={() => setCategoryFilter(c)}
-                    className={`relative inline-flex items-center justify-center rounded-full px-4 py-1.5 text-xs font-bold transition-all duration-300 cursor-pointer ${
-                      isActive
-                        ? 'text-white dark:text-gray-900'
-                        : 'text-gray-500 dark:text-[#8A8A9A] hover:text-gray-900 dark:hover:text-white'
-                    }`}
-                  >
-                    {isActive && (
-                      <div className="absolute inset-0 rounded-full bg-gray-900 dark:bg-white shadow-[0_2px_8px_rgba(0,0,0,0.15)]" style={{ zIndex: 0 }} />
-                    )}
-                    <span className="relative z-10">
-                      {c === 'all' ? 'Todos' : CATEGORY_LABELS[c]}
-                    </span>
-                  </button>
-                )
-              })}
+          <div className="flex flex-wrap items-end gap-4">
+            {/* Categoría */}
+            <div className="flex flex-col gap-1.5">
+              <span className="text-[10px] font-bold uppercase tracking-wider text-gray-400 dark:text-gray-500 px-1">Categoría</span>
+              <div className="flex items-center rounded-full border border-white/50 dark:border-white/10 bg-white/30 dark:bg-black/30 backdrop-blur-xl p-1 shadow-sm gap-1">
+                {(['all', ...(Object.keys(CATEGORY_LABELS) as ExpenseCategory[])] as CategoryFilter[]).map(c => {
+                  const isActive = categoryFilter === c
+                  return (
+                    <button key={c} onClick={() => setCategoryFilter(c)}
+                      className={`relative inline-flex items-center justify-center rounded-full px-4 py-1.5 text-xs font-bold transition-all duration-300 cursor-pointer ${isActive ? 'text-white dark:text-gray-900' : 'text-gray-500 dark:text-[#8A8A9A] hover:text-gray-900 dark:hover:text-white'}`}
+                    >
+                      {isActive && <div className="absolute inset-0 rounded-full bg-gray-900 dark:bg-white shadow-[0_2px_8px_rgba(0,0,0,0.15)]" style={{ zIndex: 0 }} />}
+                      <span className="relative z-10">{c === 'all' ? 'Todos' : CATEGORY_LABELS[c]}</span>
+                    </button>
+                  )
+                })}
+              </div>
             </div>
 
-            <div className="flex items-center gap-4 flex-wrap">
-              {/* Sort buttons */}
-              <div className="flex items-center gap-1">
-                <span className="text-[10px] font-bold uppercase tracking-wider text-gray-400 dark:text-[#8A8A9A] ml-1 mr-1">Ordenar:</span>
-                <div className="flex items-center rounded-full border border-white/50 dark:border-white/10 bg-white/30 dark:bg-black/30 backdrop-blur-xl p-1 shadow-sm gap-1">
-                  {(['date', 'amount', 'category'] as SortKey[]).map(k => {
-                    const isActive = sortKey === k
-                    return (
-                      <button
-                        key={k}
-                        onClick={() => toggleSort(k)}
-                        className={`relative inline-flex items-center justify-center rounded-full px-3 py-1.5 text-xs font-bold transition-all duration-300 cursor-pointer ${
-                          isActive
-                            ? 'text-white dark:text-gray-900'
-                            : 'text-gray-500 dark:text-[#8A8A9A] hover:text-gray-900 dark:hover:text-white'
-                        }`}
-                      >
-                        {isActive && (
-                          <div className="absolute inset-0 rounded-full bg-gray-900 dark:bg-white shadow-[0_2px_8px_rgba(0,0,0,0.15)]" style={{ zIndex: 0 }} />
-                        )}
-                        <span className="relative z-10 flex items-center gap-1">
-                          {k === 'date' ? 'Fecha' : k === 'amount' ? 'Monto' : 'Tipo'}
-                          <SortIcon active={sortKey === k} dir={sortDir} />
-                        </span>
-                      </button>
-                    )
-                  })}
-                </div>
+            {/* Ordenar */}
+            <div className="flex flex-col gap-1.5">
+              <span className="text-[10px] font-bold uppercase tracking-wider text-gray-400 dark:text-gray-500 px-1">Ordenar</span>
+              <div className="flex items-center rounded-full border border-white/50 dark:border-white/10 bg-white/30 dark:bg-black/30 backdrop-blur-xl p-1 shadow-sm gap-1">
+                {(['date', 'amount', 'category'] as SortKey[]).map(k => {
+                  const isActive = sortKey === k
+                  return (
+                    <button key={k} onClick={() => toggleSort(k)}
+                      className={`relative inline-flex items-center justify-center rounded-full px-3 py-1.5 text-xs font-bold transition-all duration-300 cursor-pointer ${isActive ? 'text-white dark:text-gray-900' : 'text-gray-500 dark:text-[#8A8A9A] hover:text-gray-900 dark:hover:text-white'}`}
+                    >
+                      {isActive && <div className="absolute inset-0 rounded-full bg-gray-900 dark:bg-white shadow-[0_2px_8px_rgba(0,0,0,0.15)]" style={{ zIndex: 0 }} />}
+                      <span className="relative z-10 flex items-center gap-1">
+                        {k === 'date' ? 'Fecha' : k === 'amount' ? 'Monto' : 'Tipo'}
+                        <SortIcon active={sortKey === k} dir={sortDir} />
+                      </span>
+                    </button>
+                  )
+                })}
               </div>
+            </div>
 
-              {/* View toggle */}
+            {/* Vista */}
+            <div className="flex flex-col gap-1.5">
+              <span className="text-[10px] font-bold uppercase tracking-wider text-gray-400 dark:text-gray-500 px-1">Vista</span>
               <div className="flex items-center rounded-full border border-white/50 dark:border-white/10 bg-white/30 dark:bg-black/30 backdrop-blur-xl p-1 shadow-sm gap-1 shrink-0">
                 {(['table', 'grid'] as const).map((mode) => {
                   const isActive = viewMode === mode
                   return (
-                    <button
-                      key={mode}
-                      onClick={() => setViewMode(mode)}
-                      title={mode === 'table' ? 'Vista tabla' : 'Vista tarjetas'}
-                      className={`relative inline-flex items-center justify-center rounded-full px-4 py-1.5 text-xs font-bold transition-all duration-300 cursor-pointer ${
-                        isActive
-                          ? 'text-white dark:text-gray-900'
-                          : 'text-gray-500 dark:text-[#8A8A9A] hover:text-gray-900 dark:hover:text-white'
-                      }`}
+                    <button key={mode} onClick={() => setViewMode(mode)} title={mode === 'table' ? 'Vista tabla' : 'Vista tarjetas'}
+                      className={`relative inline-flex items-center justify-center rounded-full px-4 py-1.5 text-xs font-bold transition-all duration-300 cursor-pointer ${isActive ? 'text-white dark:text-gray-900' : 'text-gray-500 dark:text-[#8A8A9A] hover:text-gray-900 dark:hover:text-white'}`}
                     >
-                      {isActive && (
-                        <div className="absolute inset-0 rounded-full bg-gray-900 dark:bg-white shadow-[0_2px_8px_rgba(0,0,0,0.15)]" style={{ zIndex: 0 }} />
-                      )}
+                      {isActive && <div className="absolute inset-0 rounded-full bg-gray-900 dark:bg-white shadow-[0_2px_8px_rgba(0,0,0,0.15)]" style={{ zIndex: 0 }} />}
                       <span className="relative z-10 flex items-center justify-center">
                         {mode === 'table' ? <List size={14} /> : <LayoutGrid size={14} />}
                       </span>

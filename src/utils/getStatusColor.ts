@@ -8,7 +8,7 @@ const STATUS_CLASSES: Record<ClientStatus, string> = {
 }
 
 const STATUS_LABELS: Record<ClientStatus, string> = {
-  active: 'ACTIVO',
+  active: 'AL DÍA',
   expiring: 'POR VENCER',
   debt: 'EN DEUDA',
   inactive: 'INACTIVO',

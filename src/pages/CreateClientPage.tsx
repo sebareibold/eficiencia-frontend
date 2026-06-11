@@ -285,7 +285,7 @@ export default function CreateClientPage() {
     try {
       const client = await clientsApi.create({
         name: clientData.nombre, lastName: clientData.apellido,
-        email: clientData.email, phone: clientData.telefono, cuil: clientData.cuil,
+        email: clientData.email, phone: clientData.telefono, cuil: clientData.cuil || undefined,
       })
       const membresia = await membresiasClienteApi.create({
         clienteId: String(client.id), planId: membershipData.planId,

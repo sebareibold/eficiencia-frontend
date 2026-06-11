@@ -66,7 +66,7 @@ export default function Skeleton({ className = '', style, rows }: SkeletonProps)
 // ── Glassmorphic card shell ───────────────────────────────────────────────────
 export function SkeletonCard({ className = '' }: { className?: string }) {
   return (
-    <div className={`rounded-[2rem] border border-white/50 dark:border-white/10 bg-white/20 dark:bg-black/20 backdrop-blur-xl p-6 ${className}`}>
+    <div className={`rounded-[2rem] border border-gray-200 dark:border-white/10 bg-white/20 dark:bg-black/20 backdrop-blur-xl p-6 ${className}`}>
       <div className="flex items-start justify-between mb-4">
         <Skeleton className="h-12 w-12 rounded-2xl" />
       </div>
@@ -105,7 +105,7 @@ export function SkeletonKpiGrid() {
       {Array.from({ length: 4 }).map((_, i) => (
         <div
           key={i}
-          className="rounded-[2rem] border border-white/50 dark:border-white/10 bg-white/30 dark:bg-black/30 backdrop-blur-3xl p-4 sm:p-5 xl:p-6 flex flex-col justify-between gap-4 min-h-[120px]"
+          className="rounded-[2rem] border border-gray-200 dark:border-white/10 bg-white/30 dark:bg-black/30 backdrop-blur-3xl p-4 sm:p-5 xl:p-6 flex flex-col justify-between gap-4 min-h-[120px]"
         >
           <div className="flex items-start justify-between">
             <Skeleton className="h-10 w-10 xl:h-12 xl:w-12 rounded-xl" />
@@ -129,7 +129,7 @@ export function SkeletonDashboardCharts() {
     <div className="grid grid-cols-1 xl:grid-cols-12 gap-6">
 
       {/* Area chart */}
-      <div className="xl:col-span-8 rounded-[2.5rem] border border-white/50 dark:border-white/10 bg-white/30 dark:bg-black/30 backdrop-blur-3xl p-8 flex flex-col gap-6">
+      <div className="xl:col-span-8 rounded-[2.5rem] border border-gray-200 dark:border-white/10 bg-white/30 dark:bg-black/30 backdrop-blur-3xl p-8 flex flex-col gap-6">
         <div className="flex items-start justify-between">
           <div className="space-y-2">
             <Skeleton className="h-6 w-52" />
@@ -159,7 +159,7 @@ export function SkeletonDashboardCharts() {
       </div>
 
       {/* Bar chart */}
-      <div className="xl:col-span-4 rounded-[2.5rem] border border-white/50 dark:border-white/10 bg-white/30 dark:bg-black/30 backdrop-blur-3xl p-8 flex flex-col gap-6">
+      <div className="xl:col-span-4 rounded-[2.5rem] border border-gray-200 dark:border-white/10 bg-white/30 dark:bg-black/30 backdrop-blur-3xl p-8 flex flex-col gap-6">
         <Skeleton className="h-4 w-36" />
 
         <div className="relative min-h-[280px]">
@@ -193,7 +193,7 @@ export function SkeletonClientProfile() {
       </button>
 
       {/* Hero card — mirrors glassCard from ClientProfilePage */}
-      <div className="rounded-3xl border border-white/50 dark:border-white/[0.08] bg-white/30 dark:bg-black/30 backdrop-blur-3xl overflow-hidden">
+      <div className="rounded-3xl border border-gray-200 dark:border-white/[0.08] bg-white/30 dark:bg-black/30 backdrop-blur-3xl overflow-hidden">
         <div className="h-1 bg-black/[0.08] dark:bg-white/[0.06]" />
         <div className="p-5 md:p-7">
           <div className="flex flex-col sm:flex-row gap-5">
@@ -225,7 +225,7 @@ export function SkeletonClientProfile() {
         {(['w-16', 'w-12', 'w-20'] as const).map((w, i) => (
           <div
             key={i}
-            className="rounded-3xl border border-white/50 dark:border-white/[0.08] bg-white/30 dark:bg-black/30 backdrop-blur-3xl p-4 flex items-center gap-3"
+            className="rounded-3xl border border-gray-200 dark:border-white/[0.08] bg-white/30 dark:bg-black/30 backdrop-blur-3xl p-4 flex items-center gap-3"
           >
             <Skeleton className="h-10 w-10 rounded-xl shrink-0" />
             <div className="flex-1 min-w-0 space-y-1.5">
@@ -243,7 +243,7 @@ export function SkeletonClientProfile() {
           {[1, 2, 3, 4].map(i => <Skeleton key={i} className="flex-1 h-9 rounded-xl" />)}
         </div>
         {/* Tab content area */}
-        <div className="rounded-3xl border border-white/50 dark:border-white/[0.08] bg-white/30 dark:bg-black/30 backdrop-blur-3xl p-5 space-y-3 min-h-[240px]">
+        <div className="rounded-3xl border border-gray-200 dark:border-white/[0.08] bg-white/30 dark:bg-black/30 backdrop-blur-3xl p-5 space-y-3 min-h-[240px]">
           {[1, 2, 3].map(i => <Skeleton key={i} className="h-14 w-full rounded-2xl" />)}
         </div>
       </div>
@@ -253,7 +253,7 @@ export function SkeletonClientProfile() {
 
 // ── Rutina page: back link + sidebar + exercise table ────────────────────────
 // Mirrors the exact layout of ClientRutinaPage (glassCard, widths, table columns).
-const GLASS = 'rounded-[2rem] border border-white/50 dark:border-white/10 bg-white/30 dark:bg-black/30 backdrop-blur-3xl shadow-[0_8px_32px_rgba(0,0,0,0.04)] dark:shadow-[0_8px_32px_rgba(0,0,0,0.3)]'
+const GLASS = 'rounded-[2rem] border border-gray-200 dark:border-white/10 bg-white/30 dark:bg-black/30 backdrop-blur-3xl shadow-[0_8px_32px_rgba(0,0,0,0.04)] dark:shadow-[0_8px_32px_rgba(0,0,0,0.3)]'
 
 export function SkeletonRutinaPanel() {
   return (
@@ -277,7 +277,7 @@ export function SkeletonRutinaPanel() {
             {[1, 2, 3].map(i => (
               <div
                 key={i}
-                className="rounded-2xl border border-white/40 dark:border-white/[0.05] bg-white/20 dark:bg-white/[0.02] p-3 space-y-2"
+                className="rounded-2xl border border-gray-200/80 dark:border-white/[0.05] bg-white/20 dark:bg-white/[0.02] p-3 space-y-2"
               >
                 <div className="flex items-start justify-between gap-2">
                   <Skeleton className={`h-4 ${i === 1 ? 'w-28' : i === 2 ? 'w-36' : 'w-32'}`} />
@@ -310,9 +310,9 @@ export function SkeletonRutinaPanel() {
           </div>
 
           {/* Table */}
-          <div className="rounded-2xl border border-white/40 dark:border-white/[0.06] overflow-hidden">
+          <div className="rounded-2xl border border-gray-200/80 dark:border-white/[0.06] overflow-hidden">
             {/* Table header */}
-            <div className="flex gap-4 px-4 py-2.5 bg-gray-50/60 dark:bg-white/[0.03] border-b border-white/40 dark:border-white/[0.06]">
+            <div className="flex gap-4 px-4 py-2.5 bg-gray-50/60 dark:bg-white/[0.03] border-b border-gray-200/80 dark:border-white/[0.06]">
               <Skeleton className="h-3 w-16" />
               <Skeleton className="h-3 w-12" />
               <Skeleton className="h-3 flex-1 max-w-[200px]" />
@@ -330,7 +330,7 @@ export function SkeletonRutinaPanel() {
             ].map((r, i) => (
               <div
                 key={i}
-                className="flex items-center gap-4 px-4 py-3 border-b border-white/30 dark:border-white/[0.04] last:border-0"
+                className="flex items-center gap-4 px-4 py-3 border-b border-gray-200/60 dark:border-white/[0.04] last:border-0"
               >
                 {r.w1 ? <Skeleton className={`h-5 ${r.w1} rounded-lg shrink-0`} /> : <div className="h-5 w-14 shrink-0" />}
                 {r.w2 ? <Skeleton className={`h-4 ${r.w2} shrink-0`} /> : <div className="h-4 w-10 shrink-0" />}

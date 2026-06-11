@@ -173,7 +173,7 @@ function EjercicioDraftRow({ ej, onUpdate, onDelete }: EjercicioDraftRowProps) {
           <button
             type="button"
             onClick={() => { setIsEditing(false); reset() }}
-            className="px-3 py-1.5 rounded-lg border border-saas-border dark:border-white/[0.08] text-xs text-saas-muted dark:text-white/45 hover:text-white transition-colors"
+            className="px-3 py-1.5 rounded-lg border border-saas-border dark:border-white/[0.08] text-xs text-saas-muted dark:text-white/45 hover:text-gray-900 dark:hover:text-white transition-colors"
           >
             Cancelar
           </button>
@@ -191,7 +191,7 @@ function EjercicioDraftRow({ ej, onUpdate, onDelete }: EjercicioDraftRowProps) {
         </div>
         <div className="flex items-center gap-1 shrink-0 ml-2">
           <button onClick={() => onDelete(ej.id)} className="px-2.5 py-1 rounded-lg bg-red-500/15 text-red-400 text-[11px] font-semibold hover:bg-red-500/25 transition-colors">Sí</button>
-          <button onClick={() => setConfirmDelete(false)} className="px-2.5 py-1 rounded-lg border border-saas-border dark:border-white/[0.08] text-[11px] text-gray-400 dark:text-white/40 hover:text-white transition-colors">No</button>
+          <button onClick={() => setConfirmDelete(false)} className="px-2.5 py-1 rounded-lg border border-saas-border dark:border-white/[0.08] text-[11px] text-gray-400 dark:text-white/40 hover:text-gray-900 dark:hover:text-white transition-colors">No</button>
         </div>
       </div>
     )
@@ -237,14 +237,14 @@ function EjercicioDraftRow({ ej, onUpdate, onDelete }: EjercicioDraftRowProps) {
           {hasExtra && (
             <button
               onClick={() => setExpanded(v => !v)}
-              className="p-1.5 rounded-lg text-gray-300 dark:text-white/25 hover:text-white hover:bg-white/[0.06] transition-colors"
+              className="p-1.5 rounded-lg text-gray-300 dark:text-white/25 hover:text-gray-900 dark:hover:text-white hover:bg-gray-100 dark:hover:bg-white/[0.06] transition-colors"
             >
               <ChevronDown className={`w-3 h-3 transition-transform duration-200 ${expanded ? 'rotate-180' : ''}`} />
             </button>
           )}
           <button
             onClick={() => setIsEditing(true)}
-            className="p-1.5 rounded-lg text-gray-300 dark:text-white/20 hover:text-white hover:bg-white/[0.08] transition-colors opacity-0 group-hover/row:opacity-100"
+            className="p-1.5 rounded-lg text-gray-300 dark:text-white/20 hover:text-gray-900 dark:hover:text-white hover:bg-gray-100 dark:hover:bg-white/[0.08] transition-colors opacity-0 group-hover/row:opacity-100"
           >
             <Pencil className="w-3 h-3" />
           </button>
@@ -365,7 +365,7 @@ function AddEjercicioPanel({ bloqueId, onAdd, onClose }: AddEjercicioPanelProps)
             placeholder="Buscar en el catálogo..."
             className="flex-1 bg-transparent text-sm text-saas-text dark:text-white placeholder-gray-400 dark:placeholder-white/25 focus:outline-none"
           />
-          <button onClick={onClose} className="text-gray-300 dark:text-white/25 hover:text-white transition-colors shrink-0">
+          <button onClick={onClose} className="text-gray-300 dark:text-white/25 hover:text-gray-900 dark:hover:text-white transition-colors shrink-0">
             <X className="w-3.5 h-3.5" />
           </button>
         </div>
@@ -464,7 +464,7 @@ function ExerciseViewRow({ ej }: { ej: EjercicioPlan }) {
           {hasExtra && (
             <button
               onClick={() => setExpanded(v => !v)}
-              className="p-1 rounded-lg text-gray-300 dark:text-white/25 hover:text-white hover:bg-white/[0.06] transition-colors"
+              className="p-1 rounded-lg text-gray-300 dark:text-white/25 hover:text-gray-900 dark:hover:text-white hover:bg-gray-100 dark:hover:bg-white/[0.06] transition-colors"
             >
               <ChevronDown className={`w-3 h-3 transition-transform duration-200 ${expanded ? 'rotate-180' : ''}`} />
             </button>
@@ -678,7 +678,7 @@ function DraftBloqueCard({ bloque, sesionId, addingBloqueId, onSetAdding, onDele
               <AlertTriangle className="w-3.5 h-3.5 text-red-400/70" />
               <span className="text-[11px] text-red-400/80">¿Eliminar?</span>
               <button onClick={() => { onDeleteBloque(sesionId, bloque.id); setConfirmDelete(false) }} className="px-2 py-1 rounded-lg bg-red-500/15 text-red-400 text-[11px] font-semibold hover:bg-red-500/25 transition-colors">Sí</button>
-              <button onClick={() => setConfirmDelete(false)} className="px-2 py-1 rounded-lg border border-saas-border dark:border-white/[0.08] text-[11px] text-gray-400 dark:text-white/40 hover:text-white transition-colors">No</button>
+              <button onClick={() => setConfirmDelete(false)} className="px-2 py-1 rounded-lg border border-saas-border dark:border-white/[0.08] text-[11px] text-gray-400 dark:text-white/40 hover:text-gray-900 dark:hover:text-white transition-colors">No</button>
             </div>
           ) : (
             <button onClick={() => setConfirmDelete(true)} className="p-1.5 rounded-lg text-gray-300 dark:text-white/20 hover:text-red-400 hover:bg-red-500/10 transition-colors">
@@ -747,7 +747,7 @@ function SesionDayDropdown({ existentes, semanaId, onSelect, onClose }: {
     >
       <div className="flex items-center justify-between mb-2 px-1">
         <span className="text-xs text-gray-500 dark:text-white/50 font-medium">Agregar día</span>
-        <button onClick={onClose} className="text-gray-400 dark:text-white/30 hover:text-white transition-colors"><X className="w-3.5 h-3.5" /></button>
+        <button onClick={onClose} className="text-gray-400 dark:text-white/30 hover:text-gray-900 dark:hover:text-white transition-colors"><X className="w-3.5 h-3.5" /></button>
       </div>
       <div className="grid grid-cols-2 gap-1.5">
         {DIAS.map(dia => (
@@ -797,7 +797,7 @@ function SemanaTreeItem({
     <div className="relative">
       {/* Vertical tree line — no dibuja en la última semana */}
       {!isLast && (
-        <div className="absolute left-[7px] top-5 bottom-0 w-px bg-white/[0.07]" />
+        <div className="absolute left-[7px] top-5 bottom-0 w-px bg-gray-200 dark:bg-white/[0.07]" />
       )}
 
       {/* Header de semana */}
@@ -823,12 +823,12 @@ function SemanaTreeItem({
           <>
             <span className="text-sm font-semibold text-gray-800 dark:text-white/80">{label}</span>
             <button onClick={() => { setRenameVal(semana.nombre ?? ''); setRenaming(true) }}
-              className="p-1 rounded-lg text-gray-300 dark:text-white/20 hover:text-white hover:bg-white/[0.06] transition-colors">
+              className="p-1 rounded-lg text-gray-300 dark:text-white/20 hover:text-gray-900 dark:hover:text-white hover:bg-gray-100 dark:hover:bg-white/[0.06] transition-colors">
               <Pencil className="w-3 h-3" />
             </button>
             <button onClick={() => onCloneSemana(semana.id)}
               title="Clonar semana"
-              className="p-1 rounded-lg text-gray-300 dark:text-white/20 hover:text-white hover:bg-white/[0.06] transition-colors">
+              className="p-1 rounded-lg text-gray-300 dark:text-white/20 hover:text-gray-900 dark:hover:text-white hover:bg-gray-100 dark:hover:bg-white/[0.06] transition-colors">
               <Copy className="w-3 h-3" />
             </button>
             {confirmDelete ? (
@@ -877,7 +877,7 @@ function SemanaTreeItem({
                     className={`flex items-center gap-1.5 px-3 py-1.5 rounded-xl border text-xs font-semibold transition-all ${
                       isSelected
                         ? 'bg-primary/15 border-primary/40 text-primary'
-                        : 'bg-gray-50 dark:bg-white/[0.03] border-saas-border dark:border-white/[0.08] text-gray-500 dark:text-white/55 hover:bg-white/[0.07] hover:text-white hover:border-white/[0.2]'
+                        : 'bg-gray-50 dark:bg-white/[0.03] border-saas-border dark:border-white/[0.08] text-gray-500 dark:text-white/55 hover:bg-gray-100 dark:hover:bg-white/[0.07] hover:text-gray-900 dark:hover:text-white hover:border-gray-300 dark:hover:border-white/[0.2]'
                     }`}
                   >
                     <span className="text-[10px] font-bold tracking-wider">{DIA_SHORT[ses.dia] ?? ses.dia.slice(0, 3).toUpperCase()}</span>
@@ -1023,7 +1023,7 @@ function EditCard({ clienteId: _clienteId, rutina, onCancel, onSaved }: EditCard
         </div>
         <button
           onClick={onCancel}
-          className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl border border-saas-border dark:border-white/[0.08] text-sm text-saas-muted dark:text-white/45 hover:text-white transition-colors"
+          className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl border border-saas-border dark:border-white/[0.08] text-sm text-saas-muted dark:text-white/45 hover:text-gray-900 dark:hover:text-white transition-colors"
         >
           <X className="w-3.5 h-3.5" /> Cancelar
         </button>
@@ -1707,7 +1707,7 @@ export default function ClientRutinaPage() {
       {/* Volver */}
       <button
         onClick={() => navigate(ROUTES.CLIENT_PROFILE.replace(':id', clienteId!))}
-        className="flex items-center gap-2 text-gray-500 dark:text-white/50 hover:text-white transition-colors mb-6"
+        className="flex items-center gap-2 text-gray-500 dark:text-white/50 hover:text-gray-900 dark:hover:text-white transition-colors mb-6"
       >
         <ArrowLeft className="w-4 h-4" />
         <span className="text-sm">Volver al perfil</span>
@@ -1923,7 +1923,7 @@ export default function ClientRutinaPage() {
                     {canEdit && (
                       <button
                         onClick={handleEnterEdit}
-                        className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl border border-saas-border dark:border-white/[0.08] text-sm text-saas-muted dark:text-white/45 hover:text-white hover:border-white/20 transition-colors shrink-0"
+                        className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl border border-saas-border dark:border-white/[0.08] text-sm text-saas-muted dark:text-white/45 hover:text-gray-900 dark:hover:text-white hover:border-gray-400 dark:hover:border-white/20 transition-colors shrink-0"
                       >
                         <Pencil className="w-3.5 h-3.5" /> Editar rutina
                       </button>

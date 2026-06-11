@@ -261,8 +261,8 @@ select {
    --sk-shimmer  : midpoint color of the Framer Motion sweep gradient
 ────────────────────────────────────────────────────────────────────────────── */
 :root {
-  --sk-fill:    rgba(0,   0,   0,   0.06);
-  --sk-shimmer: rgba(0,   0,   0,   0.05);
+  --sk-fill:    rgba(0,   0,   0,   0.09);
+  --sk-shimmer: rgba(0,   0,   0,   0.06);
 }
 .dark {
   --sk-fill:    rgba(255, 255, 255, 0.06);

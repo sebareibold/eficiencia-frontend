@@ -64,7 +64,7 @@ type ChartView = 'meses' | 'años' | 'historico'
 function ViewToggle({ value, onChange }: { value: ChartView; onChange: (v: ChartView) => void }) {
   return (
     <div className="flex items-center rounded-full border border-black/[0.08] dark:border-white/10 bg-white/60 dark:!bg-black/40 backdrop-blur-xl p-1 shadow-sm gap-1 w-full sm:w-auto">
-      {([['meses', 'Meses'], ['años', 'Años'], ['historico', 'Histórico']] as [ChartView, string][]).map(([mode, label]) => {
+      {([['historico', 'Histórico'], ['años', 'Años'], ['meses', 'Meses']] as [ChartView, string][]).map(([mode, label]) => {
         const isActive = value === mode
         return (
           <button
@@ -552,7 +552,7 @@ export default function DashboardPage() {
 
           {/* Selector período */}
           <div className="flex items-center rounded-full border border-white/50 dark:border-white/10 bg-white/30 dark:bg-black/30 backdrop-blur-xl p-1 shadow-sm gap-1 w-full sm:w-auto">
-            {([['month', 'Mes'], ['year', 'Año'], ['range', 'Rango'], ['historic', 'Histórico']] as [PeriodMode, string][]).map(([mode, label]) => {
+            {([['historic', 'Histórico'], ['year', 'Año'], ['month', 'Mes'], ['range', 'Rango']] as [PeriodMode, string][]).map(([mode, label]) => {
               const isActive = periodMode === mode
               return (
                 <button

@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react'
-import { useNavigate, useSearchParams } from 'react-router-dom'
+import { useNavigate } from 'react-router-dom'
 import { motion } from 'framer-motion'
 import { pageVariants } from '../lib/motion'
 import { Plus, Search, RefreshCw, LayoutList, LayoutGrid, ChevronRight, ChevronLeft, Phone, Mail } from 'lucide-react'
@@ -11,18 +11,24 @@ import Badge from '../components/ui/Badge'
 import Table, { type Column } from '../components/ui/Table'
 import Skeleton from '../components/ui/Skeleton'
 import type { Client } from '../types/client.types'
-import type { ClientStatus } from '../constants/clientStatus'
 
-type StatusFilter = 'all' | ClientStatus
+type ActividadFilter = 'all' | 'active' | 'inactive'
+type MembresiaFilter = 'all' | 'active' | 'expiring' | 'debt'
 
-const STATUS_FILTERS: { value: StatusFilter; label: string }[] = [
+const ACTIVIDAD_FILTERS: { value: ActividadFilter; label: string }[] = [
   { value: 'all',      label: 'Todos' },
   { value: 'active',   label: 'Activo' },
-  { value: 'expiring', label: 'Por vencer' },
-  { value: 'debt',     label: 'Deuda' },
+  { value: 'inactive', label: 'Inactivo' },
 ]
 
-function mapStatusToEstadoPago(s: StatusFilter): string | undefined {
+const MEMBRESIA_FILTERS: { value: MembresiaFilter; label: string }[] = [
+  { value: 'all',      label: 'Todos' },
+  { value: 'active',   label: 'Al día' },
+  { value: 'expiring', label: 'Por vencer' },
+  { value: 'debt',     label: 'En deuda' },
+]
+
+function mapMembresiaToEstadoPago(s: MembresiaFilter): string | undefined {
   if (s === 'active')   return 'AL_DIA'
   if (s === 'debt')     return 'EN_DEUDA'
   if (s === 'expiring') return 'VENCIDO'
@@ -58,7 +64,6 @@ const MODALIDAD_LABEL: Record<string, string> = {
 export default function ClientsPage() {
   const navigate = useNavigate()
   const { can } = usePermissions()
-  const [searchParams] = useSearchParams()
   const today = new Date()
 
   const [viewMode, setViewMode] = useState<'table' | 'grid'>(() =>
@@ -66,9 +71,8 @@ export default function ClientsPage() {
   )
   const [search, setSearch] = useState('')
   const [debouncedSearch, setDebouncedSearch] = useState('')
-  const [statusFilter, setStatusFilter] = useState<StatusFilter>(
-    () => (searchParams.get('estado') as StatusFilter | null) ?? 'all'
-  )
+  const [actividadFilter, setActividadFilter] = useState<ActividadFilter>('all')
+  const [membresiaFilter, setMembresiaFilter] = useState<MembresiaFilter>('all')
   const [periodMode, setPeriodMode] = useState<PeriodMode>('historic')
   const [navDate, setNavDate] = useState(today)
 
@@ -109,13 +113,14 @@ export default function ClientsPage() {
 
   const { clients, total, totalPages, currentPage, goToPage, isLoading, error, refetch } = useClients({
     search: debouncedSearch || undefined,
-    estadoPago: mapStatusToEstadoPago(statusFilter),
+    estado:     actividadFilter === 'inactive' ? 'INACTIVO' : actividadFilter === 'active' ? 'ACTIVO' : undefined,
+    estadoPago: mapMembresiaToEstadoPago(membresiaFilter),
     desde,
     hasta,
   })
 
   // Resetear página al cambiar filtros
-  useEffect(() => { goToPage(1) }, [debouncedSearch, statusFilter, periodMode]) // eslint-disable-line react-hooks/exhaustive-deps
+  useEffect(() => { goToPage(1) }, [debouncedSearch, actividadFilter, membresiaFilter, periodMode]) // eslint-disable-line react-hooks/exhaustive-deps
 
   const columns: Column<Client>[] = [
     {
@@ -139,18 +144,24 @@ export default function ClientsPage() {
       ),
     },
     {
-      key: 'status',
-      header: 'Estado',
+      key: 'activityStatus',
+      header: 'Actividad',
       render: (c) => (
-        <div className="flex flex-wrap items-center gap-1.5">
-          <Badge status={c.status} />
-          {c.activityStatus === 'inactive' && (
-            <span className="inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[10px] font-semibold bg-gray-100 dark:bg-gray-800/60 text-gray-500 dark:text-gray-400 border border-gray-200 dark:border-gray-700/50">
+        c.activityStatus === 'inactive'
+          ? <span className="inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[10px] font-semibold bg-gray-100 dark:bg-gray-800/60 text-gray-500 dark:text-gray-400 border border-gray-200 dark:border-gray-700/50">
+              <span className="h-1.5 w-1.5 rounded-full bg-gray-400 shrink-0" />
               INACTIVO
             </span>
-          )}
-        </div>
+          : <span className="inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[10px] font-semibold bg-emerald-50 dark:bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border border-emerald-200 dark:border-emerald-500/20">
+              <span className="h-1.5 w-1.5 rounded-full bg-emerald-500 shrink-0" />
+              ACTIVO
+            </span>
       ),
+    },
+    {
+      key: 'status',
+      header: 'Estado membresía',
+      render: (c) => <Badge status={c.status} />,
     },
     {
       key: 'planName',
@@ -181,15 +192,6 @@ export default function ClientsPage() {
         const d = fmtDate(c.membershipExpiresAt)
         return <span className={`text-sm font-semibold ${vencimientoColor(c.membershipExpiresAt)}`}>{d ?? '—'}</span>
       },
-    },
-    {
-      key: 'membershipModalidad',
-      header: 'Modalidad',
-      render: (c) => (
-        c.membershipModalidad
-          ? <span className="text-xs font-medium text-gray-600 dark:text-gray-400">{MODALIDAD_LABEL[c.membershipModalidad] ?? c.membershipModalidad}</span>
-          : <span className="text-sm text-saas-muted">—</span>
-      ),
     },
     {
       key: 'actions',
@@ -263,53 +265,10 @@ export default function ClientsPage() {
       </div>
 
       {/* Period filter */}
-      <div className="flex flex-col sm:flex-row sm:items-center gap-2 mb-4">
-        {periodMode !== 'historic' && (
-          <div className="flex items-center rounded-full border border-white/50 dark:border-white/10 bg-white/30 dark:bg-black/30 backdrop-blur-xl p-1 shadow-sm gap-1 w-full sm:w-auto">
-            <button
-              onClick={goBack}
-              className="flex h-7 w-7 items-center justify-center rounded-full text-gray-500 dark:text-gray-400 hover:text-gray-900 dark:hover:text-white hover:bg-white/40 dark:hover:bg-white/[0.05] transition-all cursor-pointer"
-            >
-              <ChevronLeft size={14} />
-            </button>
-            <span className="flex-1 px-3 text-xs font-bold tracking-tight text-gray-800 dark:text-gray-200 text-center tabular-nums">
-              {periodLabel}
-            </span>
-            <button
-              onClick={goForward}
-              disabled={isAtPresent}
-              className="flex h-7 w-7 items-center justify-center rounded-full text-gray-500 dark:text-gray-400 hover:text-gray-900 dark:hover:text-white hover:bg-white/40 dark:hover:bg-white/[0.05] transition-all disabled:opacity-30 disabled:cursor-not-allowed cursor-pointer"
-            >
-              <ChevronRight size={14} />
-            </button>
-          </div>
-        )}
-        <div className="flex items-center rounded-full border border-white/50 dark:border-white/10 bg-white/30 dark:bg-black/30 backdrop-blur-xl p-1 shadow-sm gap-1 w-full sm:w-auto">
-          {([['month', 'Mes'], ['year', 'Año'], ['historic', 'Histórico']] as [PeriodMode, string][]).map(([mode, label]) => {
-            const isActive = periodMode === mode
-            return (
-              <button
-                key={mode}
-                onClick={() => { setPeriodMode(mode); setNavDate(today) }}
-                className={`relative inline-flex flex-1 sm:flex-none items-center justify-center rounded-full px-4 py-1.5 text-xs font-bold transition-all duration-300 cursor-pointer ${
-                  isActive
-                    ? 'text-white dark:text-gray-900'
-                    : 'text-gray-500 dark:text-[#8A8A9A] hover:text-gray-900 dark:hover:text-white'
-                }`}
-              >
-                {isActive && (
-                  <div className="absolute inset-0 rounded-full bg-gray-900 dark:bg-white shadow-[0_2px_8px_rgba(0,0,0,0.15)]" style={{ zIndex: 0 }} />
-                )}
-                <span className="relative z-10">{label}</span>
-              </button>
-            )
-          })}
-        </div>
-      </div>
-
-      {/* Search + filters */}
-      <div className="mb-6 flex w-full flex-col items-center justify-between gap-4 sm:flex-row">
-        <div className="relative w-full max-w-md">
+      {/* Search + Filtros — misma fila */}
+      <div className="mb-6 flex flex-col lg:flex-row lg:items-end lg:justify-between gap-4">
+        {/* Búsqueda */}
+        <div className="relative w-full max-w-md shrink-0">
           <Search size={14} className="pointer-events-none absolute left-3.5 top-1/2 -translate-y-1/2 text-gray-400 dark:text-[#8A8A9A]" />
           <input
             value={search}
@@ -318,35 +277,77 @@ export default function ClientsPage() {
             className="w-full rounded-xl border border-white/50 dark:border-white/10 bg-white/30 dark:bg-black/30 backdrop-blur-xl pl-10 pr-4 py-2 text-xs font-semibold text-gray-800 dark:text-gray-200 placeholder-gray-400 focus:outline-none h-10"
           />
         </div>
-        {/* Mobile: select nativo */}
-        <select
-          value={statusFilter}
-          onChange={e => setStatusFilter(e.target.value as StatusFilter)}
-          className="sm:hidden w-full rounded-xl border border-white/50 dark:border-white/10 bg-white/30 dark:bg-black/30 backdrop-blur-xl px-3 py-2 text-xs font-bold text-gray-800 dark:text-gray-200 focus:outline-none h-10 cursor-pointer"
-        >
-          {STATUS_FILTERS.map(f => <option key={f.value} value={f.value}>{f.label}</option>)}
-        </select>
-        {/* Desktop: pills */}
-        <div className="hidden sm:flex items-center rounded-full border border-white/50 dark:border-white/10 bg-white/30 dark:bg-black/30 backdrop-blur-xl p-1 shadow-sm gap-1 shrink-0">
-          {STATUS_FILTERS.map(f => {
-            const isActive = statusFilter === f.value
-            return (
-              <button
-                key={f.value}
-                onClick={() => setStatusFilter(f.value)}
-                className={`relative inline-flex items-center justify-center rounded-full px-4 py-1.5 text-xs font-bold transition-all duration-300 cursor-pointer ${
-                  isActive
-                    ? 'text-white dark:text-gray-900'
-                    : 'text-gray-500 dark:text-[#8A8A9A] hover:text-gray-900 dark:hover:text-white'
-                }`}
-              >
-                {isActive && (
-                  <div className="absolute inset-0 rounded-full bg-gray-900 dark:bg-white shadow-[0_2px_8px_rgba(0,0,0,0.15)]" style={{ zIndex: 0 }} />
-                )}
-                <span className="relative z-10">{f.label}</span>
-              </button>
-            )
-          })}
+
+        {/* Filtros */}
+        <div className="flex flex-col sm:flex-row gap-3 flex-wrap">
+          {/* Período */}
+          <div className="flex flex-col gap-1.5">
+            <span className="text-[10px] font-bold uppercase tracking-wider text-gray-400 dark:text-gray-500 px-1">Período</span>
+            <div className="flex items-center gap-2">
+              {periodMode !== 'historic' && (
+                <div className="flex items-center rounded-full border border-white/50 dark:border-white/10 bg-white/30 dark:bg-black/30 backdrop-blur-xl p-1 shadow-sm gap-1">
+                  <button onClick={goBack} className="flex h-7 w-7 items-center justify-center rounded-full text-gray-500 dark:text-gray-400 hover:text-gray-900 dark:hover:text-white hover:bg-white/40 dark:hover:bg-white/[0.05] transition-all cursor-pointer">
+                    <ChevronLeft size={14} />
+                  </button>
+                  <span className="px-2 text-xs font-bold tracking-tight text-gray-800 dark:text-gray-200 tabular-nums whitespace-nowrap">
+                    {periodLabel}
+                  </span>
+                  <button onClick={goForward} disabled={isAtPresent} className="flex h-7 w-7 items-center justify-center rounded-full text-gray-500 dark:text-gray-400 hover:text-gray-900 dark:hover:text-white hover:bg-white/40 dark:hover:bg-white/[0.05] transition-all disabled:opacity-30 disabled:cursor-not-allowed cursor-pointer">
+                    <ChevronRight size={14} />
+                  </button>
+                </div>
+              )}
+              <div className="flex items-center rounded-full border border-white/50 dark:border-white/10 bg-white/30 dark:bg-black/30 backdrop-blur-xl p-1 shadow-sm gap-1">
+                {([['historic', 'Histórico'], ['year', 'Año'], ['month', 'Mes']] as [PeriodMode, string][]).map(([mode, label]) => {
+                  const isActive = periodMode === mode
+                  return (
+                    <button key={mode} onClick={() => { setPeriodMode(mode); setNavDate(today) }}
+                      className={`relative inline-flex items-center justify-center rounded-full px-4 py-1.5 text-xs font-bold transition-all duration-300 cursor-pointer ${isActive ? 'text-white dark:text-gray-900' : 'text-gray-500 dark:text-[#8A8A9A] hover:text-gray-900 dark:hover:text-white'}`}
+                    >
+                      {isActive && <div className="absolute inset-0 rounded-full bg-gray-900 dark:bg-white shadow-[0_2px_8px_rgba(0,0,0,0.15)]" style={{ zIndex: 0 }} />}
+                      <span className="relative z-10">{label}</span>
+                    </button>
+                  )
+                })}
+              </div>
+            </div>
+          </div>
+
+          {/* Actividad */}
+          <div className="flex flex-col gap-1.5">
+            <span className="text-[10px] font-bold uppercase tracking-wider text-gray-400 dark:text-gray-500 px-1">Actividad</span>
+            <div className="flex items-center rounded-full border border-white/50 dark:border-white/10 bg-white/30 dark:bg-black/30 backdrop-blur-xl p-1 shadow-sm gap-1">
+              {ACTIVIDAD_FILTERS.map(f => {
+                const isActive = actividadFilter === f.value
+                return (
+                  <button key={f.value} onClick={() => setActividadFilter(f.value)}
+                    className={`relative inline-flex items-center justify-center rounded-full px-4 py-1.5 text-xs font-bold transition-all duration-300 cursor-pointer ${isActive ? 'text-white dark:text-gray-900' : 'text-gray-500 dark:text-[#8A8A9A] hover:text-gray-900 dark:hover:text-white'}`}
+                  >
+                    {isActive && <div className="absolute inset-0 rounded-full bg-gray-900 dark:bg-white shadow-[0_2px_8px_rgba(0,0,0,0.15)]" style={{ zIndex: 0 }} />}
+                    <span className="relative z-10">{f.label}</span>
+                  </button>
+                )
+              })}
+            </div>
+          </div>
+
+          {/* Estado membresía */}
+          <div className="flex flex-col gap-1.5">
+            <span className="text-[10px] font-bold uppercase tracking-wider text-gray-400 dark:text-gray-500 px-1">Estado membresía</span>
+            <div className="flex items-center rounded-full border border-white/50 dark:border-white/10 bg-white/30 dark:bg-black/30 backdrop-blur-xl p-1 shadow-sm gap-1">
+              {MEMBRESIA_FILTERS.map(f => {
+                const isActive = membresiaFilter === f.value
+                return (
+                  <button key={f.value} onClick={() => setMembresiaFilter(f.value)}
+                    className={`relative inline-flex items-center justify-center rounded-full px-4 py-1.5 text-xs font-bold transition-all duration-300 cursor-pointer ${isActive ? 'text-white dark:text-gray-900' : 'text-gray-500 dark:text-[#8A8A9A] hover:text-gray-900 dark:hover:text-white'}`}
+                  >
+                    {isActive && <div className="absolute inset-0 rounded-full bg-gray-900 dark:bg-white shadow-[0_2px_8px_rgba(0,0,0,0.15)]" style={{ zIndex: 0 }} />}
+                    <span className="relative z-10">{f.label}</span>
+                  </button>
+                )
+              })}
+            </div>
+          </div>
         </div>
       </div>
 

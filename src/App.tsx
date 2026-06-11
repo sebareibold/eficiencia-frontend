@@ -82,12 +82,10 @@ export default function App() {
 
               <Route element={<PermissionGuard module="exercises" />}>
                 <Route path={ROUTES.EXERCISES}       element={<ExercisesPage />} />
-                <Route path={ROUTES.EXERCISE_NEW}    element={<EjercicioDetailPage />} />
                 <Route path={ROUTES.EXERCISE_DETAIL} element={<EjercicioDetailPage />} />
               </Route>
 
               <Route element={<PermissionGuard module="plantillas" />}>
-                <Route path={ROUTES.PLANTILLA_NEW}    element={<PlantillaDetailPage />} />
                 <Route path={ROUTES.PLANTILLA_DETAIL} element={<PlantillaDetailPage />} />
               </Route>
 

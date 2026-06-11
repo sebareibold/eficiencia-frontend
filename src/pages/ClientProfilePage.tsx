@@ -31,11 +31,13 @@ import { shiftsApi } from '../api/shifts.api'
 import type { Shift } from '../types/shift.types'
 import { useRutinas } from '../hooks/useRutinas'
 import type { Rutina } from '../types/rutina.types'
+import { rutinasApi } from '../api/rutinas.api'
 import { useUiStore } from '../store/uiStore'
 import { useAuthStore } from '../store/authStore'
 import Badge from '../components/ui/Badge'
 import Button from '../components/ui/Button'
 import Modal from '../components/ui/Modal'
+import ConfirmDialog from '../components/ui/ConfirmDialog'
 import Skeleton, { SkeletonClientProfile } from '../components/ui/Skeleton'
 import EmptyState from '../components/ui/EmptyState'
 import { getStatusLabel } from '../utils/getStatusColor'
@@ -79,6 +81,7 @@ const editSchema = z.object({
   experiencia:     z.string().optional(),
   lesiones:        z.string().optional(),
   patologiasBase:  z.string().optional(),
+  estado:          z.enum(['ACTIVO', 'INACTIVO']).optional(),
 })
 type EditValues = z.infer<typeof editSchema>
 
@@ -464,6 +467,8 @@ export default function ClientProfilePage() {
   const isAdmin = user?.role === 'admin'
 
   const [navOpen, setNavOpen] = useState(false)
+  const [deleteRutinaId, setDeleteRutinaId] = useState<string | null>(null)
+  const [deletingRutina, setDeletingRutina] = useState(false)
   const [client, setClient] = useState<Client | null>(null)
   const [ficha, setFicha] = useState<FichaEntrenamiento | null>(null)
   const [payments, setPayments] = useState<Payment[]>([])
@@ -490,7 +495,7 @@ export default function ClientProfilePage() {
   }>({ planId: '', modalidad: 'TRANSFERENCIA_MENSUAL', precio: '', fechaInicio: '' })
 
   // Rutinas — solo para el resumen en el tab (la edición vive en ClientRutinaPage)
-  const { rutinas, isLoading: loadingRutinas } = useRutinas(id)
+  const { rutinas, isLoading: loadingRutinas, refetch: refetchRutinas } = useRutinas(id)
 
   // Turnos — carga lazy al abrir el tab
   const [inscripciones, setInscripciones] = useState<InscripcionClienteEntry[]>([])
@@ -562,6 +567,7 @@ export default function ClientProfilePage() {
         reset({
           name: c.name, lastName: c.lastName, email: c.email ?? '', phone: c.phone ?? '', cuil: c.cuil ?? '',
           sedeId: c.sede?.id ?? '',
+          estado: c.activityStatus === 'inactive' ? 'INACTIVO' : 'ACTIVO',
           peso:            f?.peso    != null ? String(f.peso)   : '',
           altura:          f?.altura  != null ? String(f.altura) : '',
           actividadDiaria: f?.actividadDiaria  ?? '',
@@ -614,6 +620,7 @@ export default function ClientProfilePage() {
           name: data.name, lastName: data.lastName,
           email: data.email ?? '', phone: data.phone ?? '', cuil: data.cuil,
           sedeId: data.sedeId || null,
+          ...(data.estado !== undefined && { estado: data.estado }),
         }),
         clientsApi.updateFicha(client.id, {
           peso:            toNum(data.peso),
@@ -719,6 +726,21 @@ export default function ClientProfilePage() {
       clientsApi.getById(client.id).then(c => setClient(c)).catch(() => {})
     } catch {
       addToast('Error al eliminar la membresía', 'error')
+    }
+  }
+
+  async function handleDeleteRutina() {
+    if (!deleteRutinaId) return
+    setDeletingRutina(true)
+    try {
+      await rutinasApi.remove(deleteRutinaId)
+      addToast('Rutina eliminada', 'success')
+      refetchRutinas()
+    } catch {
+      addToast('Error al eliminar la rutina', 'error')
+    } finally {
+      setDeletingRutina(false)
+      setDeleteRutinaId(null)
     }
   }
 
@@ -1041,30 +1063,40 @@ export default function ClientProfilePage() {
                       </div>
                     ))}
 
-                    {/* Estado — lectura + toggle actividad admin */}
+                    {/* Estado — actividad editable en form, toggle rápido en lectura */}
                     <div className="grid grid-cols-2 px-4 py-2.5 hover:bg-black/[0.02] dark:hover:bg-white/[0.01] transition-colors items-center">
                       <span className="text-gray-500 dark:text-[#8A8A9A] flex items-center gap-1.5 font-semibold">
                         <CheckCircle2 size={12} className="opacity-60 text-gray-400 dark:text-gray-500" />
                         Estado
                       </span>
-                      <div className="flex items-center gap-2 flex-wrap">
-                        <StatusBadge client={client} size="sm" />
-                        {isAdmin && (
-                          <button
-                            onClick={handleToggleActividad}
-                            disabled={isTogglingActivity}
-                            title={client.activityStatus === 'inactive' ? 'Marcar como activo' : 'Marcar como inactivo'}
-                            className="inline-flex items-center gap-1 text-[10px] font-semibold px-2 py-0.5 rounded-full border transition-all disabled:opacity-50
-                              border-gray-200 dark:border-gray-700/60 text-gray-400 dark:text-gray-500
-                              hover:border-gray-400 hover:text-gray-600 dark:hover:border-gray-500 dark:hover:text-gray-300"
-                          >
-                            {client.activityStatus === 'inactive'
-                              ? <><UserCheck size={10} /> Activar</>
-                              : <><UserX size={10} /> Dar de baja</>
-                            }
-                          </button>
-                        )}
-                      </div>
+                      {isEditing ? (
+                        <select
+                          className="w-full bg-white/60 dark:bg-white/[0.06] border border-gray-200 dark:border-white/[0.15] rounded-lg px-2 py-1 text-xs text-gray-900 dark:text-white focus:outline-none focus:ring-1 focus:ring-primary/60 transition-all"
+                          {...register('estado')}
+                        >
+                          <option value="ACTIVO">Activo</option>
+                          <option value="INACTIVO">Inactivo</option>
+                        </select>
+                      ) : (
+                        <div className="flex items-center gap-2 flex-wrap">
+                          <StatusBadge client={client} size="sm" />
+                          {isAdmin && (
+                            <button
+                              onClick={handleToggleActividad}
+                              disabled={isTogglingActivity}
+                              title={client.activityStatus === 'inactive' ? 'Marcar como activo' : 'Marcar como inactivo'}
+                              className="inline-flex items-center gap-1 text-[10px] font-semibold px-2 py-0.5 rounded-full border transition-all disabled:opacity-50
+                                border-gray-200 dark:border-gray-700/60 text-gray-400 dark:text-gray-500
+                                hover:border-gray-400 hover:text-gray-600 dark:hover:border-gray-500 dark:hover:text-gray-300"
+                            >
+                              {client.activityStatus === 'inactive'
+                                ? <><UserCheck size={10} /> Activar</>
+                                : <><UserX size={10} /> Dar de baja</>
+                              }
+                            </button>
+                          )}
+                        </div>
+                      )}
                     </div>
 
                     {/* Sede */}
@@ -1491,9 +1523,21 @@ export default function ClientProfilePage() {
                         <div>
                           <div className="flex items-start justify-between gap-3">
                             <h5 className="text-base font-black text-gray-900 dark:text-white group-hover:text-primary transition-colors">{activa.nombre}</h5>
-                            <span className="px-2.5 py-0.5 rounded-full text-[10px] font-bold bg-green-500/10 text-green-600 dark:text-green-400 border border-green-500/25 shrink-0">
-                              Activa
-                            </span>
+                            <div className="flex items-center gap-2 shrink-0">
+                              <span className="px-2.5 py-0.5 rounded-full text-[10px] font-bold bg-green-500/10 text-green-600 dark:text-green-400 border border-green-500/25">
+                                Activa
+                              </span>
+                              {(isAdmin || user?.role === 'profesor') && (
+                                <button
+                                  type="button"
+                                  onClick={e => { e.stopPropagation(); setDeleteRutinaId(activa.id) }}
+                                  className="opacity-0 group-hover:opacity-100 p-1.5 rounded-lg text-gray-400 hover:text-red-400 hover:bg-red-500/10 transition-all"
+                                  title="Eliminar rutina"
+                                >
+                                  <Trash2 size={13} />
+                                </button>
+                              )}
+                            </div>
                           </div>
                           {activa.descripcion && (
                             <p className="text-xs text-gray-500 dark:text-[#8A8A9A] mt-2 line-clamp-2">{activa.descripcion}</p>
@@ -1539,9 +1583,21 @@ export default function ClientProfilePage() {
                                 {(rutina.semanas ?? []).length} sem.
                               </p>
                             </div>
-                            <span className="text-[10px] px-1.5 py-0.5 rounded bg-gray-500/10 text-gray-500 dark:text-[#8A8A9A] shrink-0">
-                              Inactiva
-                            </span>
+                            <div className="flex items-center gap-1.5 shrink-0">
+                              <span className="text-[10px] px-1.5 py-0.5 rounded bg-gray-500/10 text-gray-500 dark:text-[#8A8A9A]">
+                                Inactiva
+                              </span>
+                              {(isAdmin || user?.role === 'profesor') && (
+                                <button
+                                  type="button"
+                                  onClick={e => { e.stopPropagation(); setDeleteRutinaId(rutina.id) }}
+                                  className="opacity-0 group-hover:opacity-100 p-1 rounded text-gray-400 hover:text-red-400 hover:bg-red-500/10 transition-all"
+                                  title="Eliminar rutina"
+                                >
+                                  <Trash2 size={12} />
+                                </button>
+                              )}
+                            </div>
                           </div>
                         ))}
                       </div>
@@ -2278,6 +2334,19 @@ export default function ClientProfilePage() {
           })()
         })()}
       </Modal>
+
+      <ConfirmDialog
+        isOpen={deleteRutinaId !== null}
+        title="Eliminar rutina"
+        message={`¿Eliminás la rutina "${rutinas.find(r => r.id === deleteRutinaId)?.nombre ?? ''}"? Esta acción no se puede deshacer.`}
+        warning={rutinas.find(r => r.id === deleteRutinaId)?.activa
+          ? 'Esta es la rutina activa del cliente. Al eliminarla quedará sin rutina activa.'
+          : undefined}
+        confirmLabel="Eliminar"
+        isLoading={deletingRutina}
+        onConfirm={() => void handleDeleteRutina()}
+        onClose={() => setDeleteRutinaId(null)}
+      />
 
     </motion.div>
   )

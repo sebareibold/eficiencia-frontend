@@ -1494,7 +1494,13 @@ export default function ShiftsPage() {
                 <button
                   key={t}
                   type="button"
-                  onClick={() => setDiaEspTipo(t)}
+                  onClick={() => {
+                    setDiaEspTipo(t)
+                    if (t === 'CIERRE_TOTAL') {
+                      setDiaEspHoraDesde('')
+                      setDiaEspHoraHasta('')
+                    }
+                  }}
                   className={`flex-1 rounded-xl py-2.5 text-xs font-semibold transition-all border ${diaEspTipo === t ? 'bg-gray-900 dark:bg-white text-white dark:text-gray-900 border-transparent' : 'border-gray-200 dark:border-white/[0.08] text-gray-500 dark:text-[#8A8A9A] hover:bg-black/5 dark:hover:bg-white/5'}`}
                 >
                   {t === 'CIERRE_TOTAL' ? 'Cierre total' : 'Horario reducido'}
@@ -1571,8 +1577,10 @@ export default function ShiftsPage() {
                   setEditingDiaEspId(null)
                   setDiaEspFecha(''); setDiaEspMotivo(''); setDiaEspHoraDesde(''); setDiaEspHoraHasta('')
                   setDiaEspTipo('CIERRE_TOTAL')
-                } catch {
-                  addToast('Error al guardar', 'error')
+                } catch (err: unknown) {
+                  const apiMsg = (err as { response?: { data?: { message?: string | string[] } } })?.response?.data?.message
+                  const msg = Array.isArray(apiMsg) ? apiMsg[0] : (apiMsg ?? 'Error al guardar')
+                  addToast(msg, 'error')
                 } finally {
                   setSavingDiaEsp(false)
                 }

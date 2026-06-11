@@ -50,7 +50,7 @@ interface ExerciseInputCellsProps {
 }
 
 function ExerciseInputCells({ ejId, form, ej, lastEj, onChange }: ExerciseInputCellsProps) {
-  const inp = 'w-full bg-white/[0.06] dark:bg-white/[0.07] border border-white/[0.14] rounded-xl px-3 py-2.5 text-base font-medium text-gray-800 dark:text-white text-center focus:outline-none focus:border-primary/70 focus:bg-white/10 transition-colors placeholder:text-gray-600 dark:placeholder:text-white/60 [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none'
+  const inp = 'w-full bg-white/[0.06] dark:bg-white/[0.07] border border-gray-300 dark:border-white/[0.14] rounded-xl px-3 py-2.5 text-base font-medium text-gray-800 dark:text-white text-center focus:outline-none focus:border-primary/70 focus:bg-white/10 transition-colors placeholder:text-gray-600 dark:placeholder:text-white/60 [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none'
   const set = (key: keyof RowState) => (e: React.ChangeEvent<HTMLInputElement>) => onChange(ejId, key, e.target.value)
 
   const phSeries = lastEj?.series?.toString() ?? ej.series?.toString() ?? ''
@@ -254,7 +254,7 @@ export default function EjecucionRutinaPage() {
           {/* Navegador semana */}
           <div className="flex items-center gap-3">
             <button onClick={() => setSemanaIdx(i => Math.max(0, i - 1))} disabled={semanaIdx === 0}
-              className="p-2 rounded-xl bg-white/[0.04] border border-white/[0.08] text-gray-500 dark:text-white/40 hover:text-gray-900 dark:hover:text-white hover:bg-white/[0.08] disabled:opacity-25 transition-colors">
+              className="p-2 rounded-xl bg-gray-100 dark:bg-white/[0.04] border border-gray-300 dark:border-white/[0.08] text-gray-500 dark:text-white/40 hover:text-gray-900 dark:hover:text-white hover:bg-gray-200 dark:hover:bg-white/[0.08] disabled:opacity-25 transition-colors">
               <ChevronLeft className="w-4 h-4" />
             </button>
             <div className="flex-1 text-center">
@@ -269,7 +269,7 @@ export default function EjecucionRutinaPage() {
               )}
             </div>
             <button onClick={() => setSemanaIdx(i => Math.min(semanas.length - 1, i + 1))} disabled={semanaIdx >= semanas.length - 1}
-              className="p-2 rounded-xl bg-white/[0.04] border border-white/[0.08] text-gray-500 dark:text-white/40 hover:text-gray-900 dark:hover:text-white hover:bg-white/[0.08] disabled:opacity-25 transition-colors">
+              className="p-2 rounded-xl bg-gray-100 dark:bg-white/[0.04] border border-gray-300 dark:border-white/[0.08] text-gray-500 dark:text-white/40 hover:text-gray-900 dark:hover:text-white hover:bg-gray-200 dark:hover:bg-white/[0.08] disabled:opacity-25 transition-colors">
               <ChevronRight className="w-4 h-4" />
             </button>
           </div>
