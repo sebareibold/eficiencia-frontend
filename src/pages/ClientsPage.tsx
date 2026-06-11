@@ -2,11 +2,13 @@ import { useState, useEffect } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { motion } from 'framer-motion'
 import { pageVariants } from '../lib/motion'
-import { Plus, Search, RefreshCw, LayoutList, LayoutGrid, ChevronRight, ChevronLeft, Phone, Mail } from 'lucide-react'
+import { Plus, Search, RefreshCw, LayoutList, LayoutGrid, ChevronRight, ChevronLeft, ChevronsRight, ChevronsLeft, Phone, Mail, Users, X } from 'lucide-react'
 import { format, startOfMonth, endOfMonth, addMonths, subMonths, differenceInDays } from 'date-fns'
 import { es } from 'date-fns/locale'
 import { usePermissions } from '../hooks/usePermissions'
 import { useClients } from '../hooks/useClients'
+import { useUiStore } from '../store/uiStore'
+import { clientsApi } from '../api/clients.api'
 import Badge from '../components/ui/Badge'
 import Table, { type Column } from '../components/ui/Table'
 import Skeleton from '../components/ui/Skeleton'
@@ -64,6 +66,7 @@ const MODALIDAD_LABEL: Record<string, string> = {
 export default function ClientsPage() {
   const navigate = useNavigate()
   const { can } = usePermissions()
+  const addToast = useUiStore(s => s.addToast)
   const today = new Date()
 
   const [viewMode, setViewMode] = useState<'table' | 'grid'>(() =>
@@ -75,6 +78,11 @@ export default function ClientsPage() {
   const [membresiaFilter, setMembresiaFilter] = useState<MembresiaFilter>('all')
   const [periodMode, setPeriodMode] = useState<PeriodMode>('historic')
   const [navDate, setNavDate] = useState(today)
+  const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set())
+  const [isBulkLoading, setIsBulkLoading] = useState(false)
+  const [bulkProgress, setBulkProgress] = useState(0)
+  const [bulkTotal, setBulkTotal] = useState(0)
+  const [isSelectingAll, setIsSelectingAll] = useState(false)
 
   // Debounce search para no disparar una query por cada tecla
   useEffect(() => {
@@ -122,7 +130,110 @@ export default function ClientsPage() {
   // Resetear página al cambiar filtros
   useEffect(() => { goToPage(1) }, [debouncedSearch, actividadFilter, membresiaFilter, periodMode]) // eslint-disable-line react-hooks/exhaustive-deps
 
+  // Limpiar selección al cambiar filtros o página
+  useEffect(() => { setSelectedIds(new Set()) }, [debouncedSearch, actividadFilter, membresiaFilter, periodMode, currentPage])
+
+  const isAllSelected = clients.length > 0 && clients.every(c => selectedIds.has(c.id))
+  const isIndeterminate = !isAllSelected && clients.some(c => selectedIds.has(c.id))
+
+  function toggleSelect(id: string) {
+    setSelectedIds(prev => {
+      const next = new Set(prev)
+      next.has(id) ? next.delete(id) : next.add(id)
+      return next
+    })
+  }
+
+  function toggleSelectAll() {
+    if (isAllSelected) {
+      setSelectedIds(prev => {
+        const next = new Set(prev)
+        clients.forEach(c => next.delete(c.id))
+        return next
+      })
+    } else {
+      setSelectedIds(prev => {
+        const next = new Set(prev)
+        clients.forEach(c => next.add(c.id))
+        return next
+      })
+    }
+  }
+
+  async function handleSelectAllPages() {
+    setIsSelectingAll(true)
+    try {
+      const result = await clientsApi.getAll({
+        search: debouncedSearch || undefined,
+        estado: actividadFilter === 'inactive' ? 'INACTIVO' : actividadFilter === 'active' ? 'ACTIVO' : undefined,
+        estadoPago: mapMembresiaToEstadoPago(membresiaFilter),
+        desde,
+        hasta,
+        limit: total,
+        page: 1,
+      })
+      setSelectedIds(new Set(result.data.map(c => c.id)))
+    } catch {
+      addToast('Error al cargar clientes', 'error')
+    } finally {
+      setIsSelectingAll(false)
+    }
+  }
+
+  async function handleBulkAction(estado: 'ACTIVO' | 'INACTIVO') {
+    if (isBulkLoading) return
+    const ids = [...selectedIds]
+    setBulkTotal(ids.length)
+    setBulkProgress(0)
+    setIsBulkLoading(true)
+    try {
+      const result = await clientsApi.bulkUpdateEstado(ids, estado)
+      setBulkProgress(result.updated)
+      await refetch()
+      setSelectedIds(new Set())
+      addToast(`${result.updated} cliente${result.updated !== 1 ? 's' : ''} actualizado${result.updated !== 1 ? 's' : ''}`, 'success')
+    } catch {
+      addToast('Error al actualizar clientes', 'error')
+    } finally {
+      setIsBulkLoading(false)
+      setBulkProgress(0)
+      setBulkTotal(0)
+    }
+  }
+
+  const isAdmin = can('clients', 'delete')
+
   const columns: Column<Client>[] = [
+    ...(isAdmin ? [{
+      key: 'select',
+      header: (
+        <div
+          onClick={e => { e.stopPropagation(); toggleSelectAll() }}
+          className={`h-4 w-4 rounded cursor-pointer border-2 flex items-center justify-center transition-colors ${
+            isAllSelected
+              ? 'bg-gray-900 dark:bg-white border-gray-900 dark:border-white'
+              : isIndeterminate
+              ? 'bg-gray-400 dark:bg-gray-500 border-gray-400 dark:border-gray-500'
+              : 'border-gray-300 dark:border-gray-600 hover:border-gray-500 dark:hover:border-gray-400'
+          }`}
+        >
+          {isAllSelected && <div className="h-2 w-2 rounded-full bg-white dark:bg-gray-900" />}
+          {isIndeterminate && <div className="h-0.5 w-2 rounded-full bg-white dark:bg-gray-900" />}
+        </div>
+      ),
+      render: (c: Client) => (
+        <div
+          onClick={e => { e.stopPropagation(); toggleSelect(c.id) }}
+          className={`h-4 w-4 rounded cursor-pointer border-2 flex items-center justify-center transition-colors ${
+            selectedIds.has(c.id)
+              ? 'bg-gray-900 dark:bg-white border-gray-900 dark:border-white'
+              : 'border-gray-300 dark:border-gray-600 hover:border-gray-500 dark:hover:border-gray-400'
+          }`}
+        >
+          {selectedIds.has(c.id) && <div className="h-2 w-2 rounded-full bg-white dark:bg-gray-900" />}
+        </div>
+      ),
+    } as Column<Client>] : []),
     {
       key: 'name',
       header: 'Nombre',
@@ -361,6 +472,31 @@ export default function ClientsPage() {
         </div>
       )}
 
+      {/* Select all pages banner */}
+      {total > clients.length && isAllSelected && selectedIds.size < total && (
+        <div className="flex items-center justify-center gap-2 rounded-xl border border-primary/20 bg-primary/5 px-4 py-2.5 text-xs text-gray-700 dark:text-gray-300">
+          Los <strong>{clients.length}</strong> clientes de esta página están seleccionados.
+          <button
+            onClick={handleSelectAllPages}
+            disabled={isSelectingAll}
+            className="font-bold text-primary hover:underline disabled:opacity-50 ml-1"
+          >
+            {isSelectingAll ? 'Cargando…' : `Seleccionar los ${total} en total →`}
+          </button>
+        </div>
+      )}
+      {total > clients.length && selectedIds.size === total && (
+        <div className="flex items-center justify-center gap-2 rounded-xl border border-primary/20 bg-primary/5 px-4 py-2.5 text-xs text-gray-700 dark:text-gray-300">
+          <strong>Los {total} clientes</strong> están seleccionados.
+          <button
+            onClick={() => setSelectedIds(new Set())}
+            className="font-bold text-primary hover:underline ml-1"
+          >
+            Cancelar selección
+          </button>
+        </div>
+      )}
+
       {/* Table / Grid */}
       {viewMode === 'table' ? (
         <Table
@@ -397,8 +533,22 @@ export default function ClientsPage() {
                 <div className="flex flex-col gap-4">
                   {/* Top row: avatar + chevron */}
                   <div className="flex items-start justify-between">
-                    <div className={`h-11 w-11 rounded-2xl flex items-center justify-center text-sm font-black ${avatarColor}`}>
-                      {initials}
+                    <div className="flex items-start gap-2">
+                      {isAdmin && (
+                        <div
+                          onClick={e => { e.stopPropagation(); toggleSelect(c.id) }}
+                          className={`mt-0.5 h-4 w-4 rounded cursor-pointer border-2 flex items-center justify-center transition-colors shrink-0 ${
+                            selectedIds.has(c.id)
+                              ? 'bg-gray-900 dark:bg-white border-gray-900 dark:border-white'
+                              : 'border-gray-300 dark:border-gray-600 hover:border-gray-500 dark:hover:border-gray-400'
+                          }`}
+                        >
+                          {selectedIds.has(c.id) && <div className="h-2 w-2 rounded-full bg-white dark:bg-gray-900" />}
+                        </div>
+                      )}
+                      <div className={`h-11 w-11 rounded-2xl flex items-center justify-center text-sm font-black ${avatarColor}`}>
+                        {initials}
+                      </div>
                     </div>
                     <ChevronRight
                       size={16}
@@ -462,6 +612,15 @@ export default function ClientsPage() {
             Página {currentPage} de {totalPages} · {total} clientes en total
           </span>
           <div className="flex items-center rounded-full border border-white/50 dark:border-white/10 bg-white/30 dark:bg-black/30 backdrop-blur-xl p-1 gap-1">
+            {/* Primera página */}
+            <button
+              onClick={() => goToPage(1)}
+              disabled={currentPage <= 1}
+              className="flex h-7 w-7 items-center justify-center rounded-full text-gray-500 dark:text-gray-400 hover:text-gray-900 dark:hover:text-white hover:bg-white/40 dark:hover:bg-white/[0.05] transition-all disabled:opacity-30 disabled:cursor-not-allowed cursor-pointer"
+            >
+              <ChevronsLeft size={14} />
+            </button>
+            {/* Anterior */}
             <button
               onClick={() => goToPage(currentPage - 1)}
               disabled={currentPage <= 1}
@@ -469,28 +628,44 @@ export default function ClientsPage() {
             >
               <ChevronLeft size={14} />
             </button>
-            {Array.from({ length: Math.min(totalPages, 5) }, (_, i) => {
-              const pg = totalPages <= 5 ? i + 1
-                : currentPage <= 3 ? i + 1
-                : currentPage >= totalPages - 2 ? totalPages - 4 + i
-                : currentPage - 2 + i
-              return (
-                <button
-                  key={pg}
-                  onClick={() => goToPage(pg)}
-                  className={`relative flex h-7 w-7 items-center justify-center rounded-full text-xs font-bold transition-all cursor-pointer ${
-                    pg === currentPage
-                      ? 'text-white dark:text-gray-900'
-                      : 'text-gray-500 dark:text-gray-400 hover:text-gray-900 dark:hover:text-white hover:bg-white/40 dark:hover:bg-white/[0.05]'
-                  }`}
-                >
-                  {pg === currentPage && (
-                    <div className="absolute inset-0 rounded-full bg-gray-900 dark:bg-white" style={{ zIndex: 0 }} />
-                  )}
-                  <span className="relative z-10">{pg}</span>
-                </button>
+
+            {/* Números con ellipsis */}
+            {(() => {
+              const items: (number | null)[] = []
+              if (totalPages <= 7) {
+                for (let p = 1; p <= totalPages; p++) items.push(p)
+              } else {
+                items.push(1)
+                if (currentPage > 3) items.push(null)
+                const lo = Math.max(2, currentPage - 1)
+                const hi = Math.min(totalPages - 1, currentPage + 1)
+                for (let p = lo; p <= hi; p++) items.push(p)
+                if (currentPage < totalPages - 2) items.push(null)
+                items.push(totalPages)
+              }
+              return items.map((pg, i) =>
+                pg === null ? (
+                  <span key={`el-${i}`} className="flex h-7 w-5 items-end justify-center pb-0.5 text-xs text-gray-400 dark:text-gray-600 select-none">…</span>
+                ) : (
+                  <button
+                    key={pg}
+                    onClick={() => goToPage(pg)}
+                    className={`relative flex h-7 w-7 items-center justify-center rounded-full text-xs font-bold transition-all cursor-pointer ${
+                      pg === currentPage
+                        ? 'text-white dark:text-gray-900'
+                        : 'text-gray-500 dark:text-gray-400 hover:text-gray-900 dark:hover:text-white hover:bg-white/40 dark:hover:bg-white/[0.05]'
+                    }`}
+                  >
+                    {pg === currentPage && (
+                      <div className="absolute inset-0 rounded-full bg-gray-900 dark:bg-white" style={{ zIndex: 0 }} />
+                    )}
+                    <span className="relative z-10">{pg}</span>
+                  </button>
+                )
               )
-            })}
+            })()}
+
+            {/* Siguiente */}
             <button
               onClick={() => goToPage(currentPage + 1)}
               disabled={currentPage >= totalPages}
@@ -498,10 +673,67 @@ export default function ClientsPage() {
             >
               <ChevronRight size={14} />
             </button>
+            {/* Última página */}
+            <button
+              onClick={() => goToPage(totalPages)}
+              disabled={currentPage >= totalPages}
+              className="flex h-7 w-7 items-center justify-center rounded-full text-gray-500 dark:text-gray-400 hover:text-gray-900 dark:hover:text-white hover:bg-white/40 dark:hover:bg-white/[0.05] transition-all disabled:opacity-30 disabled:cursor-not-allowed cursor-pointer"
+            >
+              <ChevronsRight size={14} />
+            </button>
           </div>
         </div>
       )}
 
+      {/* Bulk actions bar */}
+      {selectedIds.size > 0 && (
+        <div className="fixed bottom-6 left-1/2 -translate-x-1/2 z-50 rounded-2xl border border-white/30 dark:border-white/10 bg-white/95 dark:bg-gray-950/95 backdrop-blur-xl shadow-[0_8px_40px_rgba(0,0,0,0.15)] dark:shadow-[0_8px_40px_rgba(0,0,0,0.6)] overflow-hidden whitespace-nowrap">
+          <div className="flex items-center gap-3 px-4 py-3">
+            <div className="flex items-center gap-2 pr-3 border-r border-gray-200 dark:border-white/10">
+              <Users size={14} className="text-gray-500 dark:text-gray-400 shrink-0" />
+              <span className="text-xs font-bold text-gray-700 dark:text-gray-200">
+                {isBulkLoading
+                  ? `${bulkProgress} / ${bulkTotal}`
+                  : `${selectedIds.size} seleccionado${selectedIds.size !== 1 ? 's' : ''}`
+                }
+              </span>
+            </div>
+            {isBulkLoading ? (
+              <span className="text-xs text-gray-500 dark:text-gray-400">Actualizando…</span>
+            ) : (
+              <>
+                <button
+                  onClick={() => handleBulkAction('ACTIVO')}
+                  className="flex items-center gap-1.5 rounded-xl px-3 py-1.5 text-xs font-bold bg-emerald-50 dark:bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border border-emerald-200 dark:border-emerald-500/20 hover:bg-emerald-100 dark:hover:bg-emerald-500/20 transition-colors"
+                >
+                  Marcar activos
+                </button>
+                <button
+                  onClick={() => handleBulkAction('INACTIVO')}
+                  className="flex items-center gap-1.5 rounded-xl px-3 py-1.5 text-xs font-bold bg-gray-100 dark:bg-gray-800/60 text-gray-600 dark:text-gray-400 border border-gray-200 dark:border-gray-700/50 hover:bg-gray-200 dark:hover:bg-gray-700/60 transition-colors"
+                >
+                  Marcar inactivos
+                </button>
+                <button
+                  onClick={() => setSelectedIds(new Set())}
+                  className="flex h-7 w-7 items-center justify-center rounded-full text-gray-400 hover:text-gray-600 dark:text-gray-500 dark:hover:text-gray-300 hover:bg-gray-100 dark:hover:bg-white/[0.06] transition-colors"
+                >
+                  <X size={14} />
+                </button>
+              </>
+            )}
+          </div>
+          {/* Progress bar */}
+          {isBulkLoading && (
+            <div className="h-1 bg-gray-100 dark:bg-white/[0.05]">
+              <div
+                className="h-full bg-primary transition-all duration-150 ease-out"
+                style={{ width: bulkTotal > 0 ? `${(bulkProgress / bulkTotal) * 100}%` : '0%' }}
+              />
+            </div>
+          )}
+        </div>
+      )}
     </motion.div>
   )
 }

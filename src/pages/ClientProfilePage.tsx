@@ -6,7 +6,7 @@ import {
   Edit2, CreditCard, Activity, Clock, Hash, Banknote, ArrowLeftRight,
   MessageCircle, Tag, Dumbbell, BookOpen, Plus, ChevronDown, ChevronRight,
   BarChart2, PieChart as PieIcon, LineChart as LineChartIcon,
-  Receipt, AlertTriangle, MapPin, User, Trophy, Trash2, Save, UserX, UserCheck,
+  Receipt, AlertTriangle, MapPin, User, Trophy, Trash2, Save,
 } from 'lucide-react'
 import { format, parseISO, addDays } from 'date-fns'
 import { es } from 'date-fns/locale'
@@ -144,23 +144,38 @@ function getStatusTooltip(client: Client): string | null {
 
 function StatusBadge({ client, size = 'md' }: { client: Client; size?: 'sm' | 'md' }) {
   const tooltip = getStatusTooltip(client)
-  const badgeCls =
-    client.status === 'active'   ? 'bg-emerald-500/10 text-emerald-600 dark:text-emerald-400'
-    : client.status === 'expiring' ? 'bg-amber-500/10  text-amber-600  dark:text-amber-400'
-    : client.status === 'debt'     ? 'bg-red-500/10    text-red-600    dark:text-red-400'
-    : 'bg-gray-500/10 text-gray-500 dark:text-gray-400'
-  const dotCls =
+  const paddingCls = size === 'sm' ? 'px-2 py-0.5 rounded-full font-semibold' : 'px-2.5 py-1.5 rounded-lg font-medium'
+
+  // Badge de actividad: ACTIVO / INACTIVO
+  const activityCls = client.activityStatus === 'inactive'
+    ? 'bg-gray-100 dark:bg-gray-800/60 text-gray-500 dark:text-gray-400 border border-gray-200 dark:border-gray-700/50'
+    : 'bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border border-emerald-500/20'
+  const activityDot = client.activityStatus === 'inactive' ? 'bg-gray-400' : 'bg-emerald-500'
+  const activityLabel = client.activityStatus === 'inactive' ? 'INACTIVO' : 'ACTIVO'
+
+  // Badge de estado de pago: AL DÍA / POR VENCER / EN DEUDA
+  const paymentCls =
+    client.status === 'active'   ? 'bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border border-emerald-500/20'
+    : client.status === 'expiring' ? 'bg-amber-500/10 text-amber-600 dark:text-amber-400 border border-amber-500/20'
+    : client.status === 'debt'     ? 'bg-red-500/10 text-red-600 dark:text-red-400 border border-red-500/20'
+    : 'bg-gray-500/10 text-gray-500 dark:text-gray-400 border border-gray-500/20'
+  const paymentDot =
     client.status === 'active'   ? 'bg-emerald-500'
     : client.status === 'expiring' ? 'bg-amber-500'
     : client.status === 'debt'     ? 'bg-red-500'
     : 'bg-gray-400'
-  const paddingCls = size === 'sm' ? 'px-2 py-0.5 rounded-full font-semibold' : 'px-2.5 py-1.5 rounded-lg font-medium'
 
   return (
     <div className="inline-flex items-center gap-1.5 flex-wrap">
+      {/* Actividad */}
+      <span className={`inline-flex items-center gap-1.5 text-xs ${paddingCls} ${activityCls}`}>
+        <span className={`h-1.5 w-1.5 rounded-full shrink-0 ${activityDot}`} />
+        {activityLabel}
+      </span>
+      {/* Estado membresía */}
       <div className={`relative group inline-flex ${tooltip ? 'cursor-help' : ''}`}>
-        <span className={`inline-flex items-center gap-1.5 text-xs ${paddingCls} ${badgeCls}`}>
-          <span className={`h-1.5 w-1.5 rounded-full shrink-0 ${dotCls}`} />
+        <span className={`inline-flex items-center gap-1.5 text-xs ${paddingCls} ${paymentCls}`}>
+          <span className={`h-1.5 w-1.5 rounded-full shrink-0 ${paymentDot}`} />
           {getStatusLabel(client.status)}
         </span>
         {tooltip && (
@@ -170,12 +185,6 @@ function StatusBadge({ client, size = 'md' }: { client: Client; size?: 'sm' | 'm
           </div>
         )}
       </div>
-      {client.activityStatus === 'inactive' && (
-        <span className={`inline-flex items-center gap-1 text-xs ${paddingCls} bg-gray-100 dark:bg-gray-800/60 text-gray-500 dark:text-gray-400 border border-gray-200 dark:border-gray-700/50`}>
-          <span className="h-1.5 w-1.5 rounded-full bg-gray-400 shrink-0" />
-          INACTIVO
-        </span>
-      )}
     </div>
   )
 }
@@ -615,7 +624,7 @@ export default function ClientProfilePage() {
     setIsSaving(true)
     try {
       const toNum = (v?: string) => { const n = parseFloat(v ?? ''); return isNaN(n) ? undefined : n }
-      const [clientRes, fichaRes] = await Promise.allSettled([
+      await Promise.all([
         clientsApi.update(client.id, {
           name: data.name, lastName: data.lastName,
           email: data.email ?? '', phone: data.phone ?? '', cuil: data.cuil,
@@ -633,8 +642,13 @@ export default function ClientProfilePage() {
           patologiasBase:  data.patologiasBase   || null,
         }),
       ])
-      if (clientRes.status === 'fulfilled') setClient(clientRes.value)
-      if (fichaRes.status   === 'fulfilled') setFicha(fichaRes.value)
+      // Re-fetch para garantizar que la UI refleje exactamente lo que guardó el servidor
+      const [freshClient, freshFicha] = await Promise.all([
+        clientsApi.getById(String(client.id)),
+        clientsApi.getFichaConEventos(String(client.id)),
+      ])
+      setClient(freshClient)
+      if (freshFicha) setFicha(freshFicha)
       addToast('Cliente actualizado', 'success')
       setIsEditing(false)
     } catch {
@@ -933,6 +947,25 @@ export default function ClientProfilePage() {
   ]
 
 
+  // Badge styles compartidos entre header y tabla de datos
+  const activityCls = client.activityStatus === 'inactive'
+    ? 'bg-gray-100 dark:bg-gray-800/60 text-gray-500 dark:text-gray-400 border border-gray-200 dark:border-gray-700/50'
+    : 'bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border border-emerald-500/20'
+  const activityDot   = client.activityStatus === 'inactive' ? 'bg-gray-400' : 'bg-emerald-500'
+  const activityLabel = client.activityStatus === 'inactive' ? 'INACTIVO' : 'ACTIVO'
+  const paymentCls =
+    client.status === 'active'   ? 'bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border border-emerald-500/20'
+    : client.status === 'expiring' ? 'bg-amber-500/10 text-amber-600 dark:text-amber-400 border border-amber-500/20'
+    : client.status === 'debt'     ? 'bg-red-500/10 text-red-600 dark:text-red-400 border border-red-500/20'
+    : 'bg-gray-500/10 text-gray-500 dark:text-gray-400 border border-gray-500/20'
+  const paymentDot =
+    client.status === 'active'   ? 'bg-emerald-500'
+    : client.status === 'expiring' ? 'bg-amber-500'
+    : client.status === 'debt'     ? 'bg-red-500'
+    : 'bg-gray-400'
+  const paymentLabel      = getStatusLabel(client.status)
+  const membershipTooltip = getStatusTooltip(client)
+
   return (
     <motion.div
       initial={{ opacity: 0, y: 10 }}
@@ -962,51 +995,76 @@ export default function ClientProfilePage() {
               {initials}
             </div>
 
-            {/* Nombre + fecha + acciones */}
+            {/* Nombre + badges + acciones */}
             <div className="flex-1 min-w-0 w-full">
-              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
-                <div>
+              <div className="flex flex-col sm:flex-row sm:items-start justify-between gap-4">
+                {/* Izquierda: nombre, fecha, badges con título */}
+                <div className="flex-1 min-w-0">
                   <h1 className="text-2xl md:text-3xl font-black tracking-tight text-gray-900 dark:text-white leading-none">
                     {client.name} {client.lastName}
                   </h1>
                   <p className="text-sm text-gray-400 dark:text-[#8A8A9A] mt-1.5">
                     Miembro desde {formatDate(client.createdAt)}
                   </p>
-                </div>
-                <div className="flex items-center gap-2 shrink-0">
-                  <StatusBadge client={client} size="md" />
-                  {isAdmin && (
-                    isEditing ? (
-                      <div className="flex items-center gap-2">
-                        <button
-                          type="button"
-                          onClick={() => { reset({ name: client.name, lastName: client.lastName, email: client.email ?? '', phone: client.phone ?? '', cuil: client.cuil ?? '', peso: ficha?.peso != null ? String(ficha.peso) : '', altura: ficha?.altura != null ? String(ficha.altura) : '', actividadDiaria: ficha?.actividadDiaria ?? '', objetivos: ficha?.objetivos ?? '', deportePractica: ficha?.deportePractica ?? '', experiencia: ficha?.experiencia ?? '', lesiones: ficha?.lesiones ?? '', patologiasBase: ficha?.patologiasBase ?? '' }); setIsEditing(false) }}
-                          className="flex items-center gap-1.5 text-xs font-semibold px-3 py-1.5 rounded-xl border border-gray-200 dark:border-white/[0.1] bg-white/70 dark:bg-white/[0.04] text-gray-700 dark:text-gray-300 hover:bg-white dark:hover:bg-white/[0.09] transition-all"
-                        >
-                          <XCircle size={12} />
-                          Cancelar
-                        </button>
-                        <button
-                          type="button"
-                          onClick={handleSubmit(onEdit)}
-                          disabled={isSaving}
-                          className="flex items-center gap-1.5 text-xs font-semibold px-3 py-1.5 rounded-xl bg-primary text-black hover:bg-primary-dark transition-all disabled:opacity-60"
-                        >
-                          <CheckCircle2 size={12} />
-                          {isSaving ? 'Guardando…' : 'Guardar'}
-                        </button>
+                  {/* Badges con etiqueta — Actividad + Estado membresía */}
+                  <div className="flex items-center gap-5 mt-4">
+                    <div className="flex flex-col gap-1.5 items-start">
+                      <span className="text-[10px] font-bold uppercase tracking-wider text-gray-400 dark:text-[#8A8A9A]">Actividad</span>
+                      <span className={`inline-flex items-center gap-1.5 text-xs px-2.5 py-1 rounded-lg font-semibold ${activityCls}`}>
+                        <span className={`h-1.5 w-1.5 rounded-full shrink-0 ${activityDot}`} />
+                        {activityLabel}
+                      </span>
+                    </div>
+                    <div className="w-px h-9 bg-gray-200 dark:bg-white/[0.07] self-end mb-0.5" />
+                    <div className="flex flex-col gap-1.5 items-start">
+                      <span className="text-[10px] font-bold uppercase tracking-wider text-gray-400 dark:text-[#8A8A9A]">Estado membresía</span>
+                      <div className={`relative group inline-flex ${membershipTooltip ? 'cursor-help' : ''}`}>
+                        <span className={`inline-flex items-center gap-1.5 text-xs px-2.5 py-1 rounded-lg font-semibold ${paymentCls}`}>
+                          <span className={`h-1.5 w-1.5 rounded-full shrink-0 ${paymentDot}`} />
+                          {paymentLabel}
+                        </span>
+                        {membershipTooltip && (
+                          <div className="absolute bottom-full left-1/2 -translate-x-1/2 mb-2.5 w-60 px-3 py-2.5 rounded-xl bg-gray-900 dark:bg-[#0d0d0d] border border-white/[0.07] text-white text-[11px] leading-relaxed opacity-0 group-hover:opacity-100 pointer-events-none transition-opacity duration-150 z-50 shadow-2xl text-center whitespace-normal">
+                            {membershipTooltip}
+                            <span className="absolute top-full left-1/2 -translate-x-1/2 border-[5px] border-transparent border-t-gray-900 dark:border-t-[#0d0d0d]" />
+                          </div>
+                        )}
                       </div>
-                    ) : (
+                    </div>
+                  </div>
+                </div>
+                {/* Derecha: botón Editar / Cancelar + Guardar */}
+                {isAdmin && (
+                  isEditing ? (
+                    <div className="flex items-center gap-2 shrink-0">
                       <button
-                        onClick={() => { reset({ name: client.name, lastName: client.lastName, email: client.email ?? '', phone: client.phone ?? '', cuil: client.cuil ?? '', peso: ficha?.peso != null ? String(ficha.peso) : '', altura: ficha?.altura != null ? String(ficha.altura) : '', actividadDiaria: ficha?.actividadDiaria ?? '', objetivos: ficha?.objetivos ?? '', deportePractica: ficha?.deportePractica ?? '', experiencia: ficha?.experiencia ?? '', lesiones: ficha?.lesiones ?? '', patologiasBase: ficha?.patologiasBase ?? '' }); setIsEditing(true) }}
+                        type="button"
+                        onClick={() => { reset({ name: client.name, lastName: client.lastName, email: client.email ?? '', phone: client.phone ?? '', cuil: client.cuil ?? '', peso: ficha?.peso != null ? String(ficha.peso) : '', altura: ficha?.altura != null ? String(ficha.altura) : '', actividadDiaria: ficha?.actividadDiaria ?? '', objetivos: ficha?.objetivos ?? '', deportePractica: ficha?.deportePractica ?? '', experiencia: ficha?.experiencia ?? '', lesiones: ficha?.lesiones ?? '', patologiasBase: ficha?.patologiasBase ?? '' }); setIsEditing(false) }}
                         className="flex items-center gap-1.5 text-xs font-semibold px-3 py-1.5 rounded-xl border border-gray-200 dark:border-white/[0.1] bg-white/70 dark:bg-white/[0.04] text-gray-700 dark:text-gray-300 hover:bg-white dark:hover:bg-white/[0.09] transition-all"
                       >
-                        <Edit2 size={12} />
-                        Editar
+                        <XCircle size={12} />
+                        Cancelar
                       </button>
-                    )
-                  )}
-                </div>
+                      <button
+                        type="button"
+                        onClick={handleSubmit(onEdit)}
+                        disabled={isSaving}
+                        className="flex items-center gap-1.5 text-xs font-semibold px-3 py-1.5 rounded-xl bg-primary text-black hover:bg-primary-dark transition-all disabled:opacity-60"
+                      >
+                        <CheckCircle2 size={12} />
+                        {isSaving ? 'Guardando…' : 'Guardar'}
+                      </button>
+                    </div>
+                  ) : (
+                    <button
+                      onClick={() => { reset({ name: client.name, lastName: client.lastName, email: client.email ?? '', phone: client.phone ?? '', cuil: client.cuil ?? '', peso: ficha?.peso != null ? String(ficha.peso) : '', altura: ficha?.altura != null ? String(ficha.altura) : '', actividadDiaria: ficha?.actividadDiaria ?? '', objetivos: ficha?.objetivos ?? '', deportePractica: ficha?.deportePractica ?? '', experiencia: ficha?.experiencia ?? '', lesiones: ficha?.lesiones ?? '', patologiasBase: ficha?.patologiasBase ?? '' }); setIsEditing(true) }}
+                      className="flex items-center gap-1.5 text-xs font-semibold px-3 py-1.5 rounded-xl border border-gray-200 dark:border-white/[0.1] bg-white/70 dark:bg-white/[0.04] text-gray-700 dark:text-gray-300 hover:bg-white dark:hover:bg-white/[0.09] transition-all shrink-0"
+                    >
+                      <Edit2 size={12} />
+                      Editar
+                    </button>
+                  )
+                )}
               </div>
             </div>
           </div>
@@ -1015,275 +1073,179 @@ export default function ClientProfilePage() {
 
         {/* ── Contenedor 2: Tablas de Datos ───────────────────────────────── */}
         <div className="px-5 md:px-7 pt-3 md:pt-4 pb-5 md:pb-7">
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-6 w-full">
-                {/* Tabla Izquierda: Datos Personales */}
-                <div className="rounded-2xl border border-gray-200/60 dark:border-white/[0.08] bg-white/20 dark:bg-white/[0.01] overflow-hidden text-xs">
-                  <div className="grid grid-cols-2 border-b border-gray-200/60 dark:border-white/[0.06] bg-gray-50/50 dark:bg-white/[0.02] px-4 py-2.5 font-bold text-gray-500 dark:text-[#8A8A9A]">
-                    <span>Datos Personales</span>
-                    <span>Valor</span>
-                  </div>
-                  <div className="divide-y divide-gray-100 dark:divide-white/[0.04]">
+          {/* Tabla unificada: Datos Personales + Ficha en 2 columnas */}
+          <div className="rounded-2xl border border-gray-200/60 dark:border-white/[0.08] bg-white/20 dark:bg-white/[0.01] overflow-hidden text-xs">
+            <div className="border-b border-gray-200/60 dark:border-white/[0.06] bg-gray-50/50 dark:bg-white/[0.02] px-4 py-3">
+              <span className="text-[11px] font-bold uppercase tracking-wider text-gray-500 dark:text-[#8A8A9A]">Datos Personales</span>
+            </div>
+            <div className="grid grid-cols-1 md:grid-cols-3 divide-y md:divide-y-0 md:divide-x divide-gray-100 dark:divide-white/[0.04]">
 
-                    {/* Filas editables */}
-                    {([
-                      { label: 'Nombre',   regKey: 'name'     as keyof EditValues, Icon: User,  placeholder: 'Sin nombre',   raw: client.name },
-                      { label: 'Apellido', regKey: 'lastName' as keyof EditValues, Icon: User,  placeholder: 'Sin apellido', raw: client.lastName },
-                      { label: 'CUIL',     regKey: 'cuil'     as keyof EditValues, Icon: Hash,  placeholder: 'Sin CUIL',     raw: client.cuil },
-                      { label: 'Email',    regKey: 'email'    as keyof EditValues, Icon: Mail,  placeholder: 'Sin email',    raw: client.email },
-                      { label: 'Teléfono', regKey: 'phone'    as keyof EditValues, Icon: Phone, placeholder: 'Sin teléfono', raw: client.phone },
-                    ]).map(({ label, regKey, Icon, placeholder, raw }) => (
-                      <div key={regKey} className="grid grid-cols-2 px-4 py-2.5 hover:bg-black/[0.02] dark:hover:bg-white/[0.01] transition-colors items-start">
-                        <span className="text-gray-500 dark:text-[#8A8A9A] flex items-center gap-1.5 font-semibold pt-1">
-                          <Icon size={12} className="opacity-60 text-gray-400 dark:text-gray-500 shrink-0" />
-                          {label}
-                        </span>
-                        {isEditing ? (
-                          <div className="flex flex-col gap-0.5">
-                            <input
-                              className="w-full bg-white/60 dark:bg-white/[0.06] border border-gray-200 dark:border-white/[0.15] rounded-lg px-2 py-1 text-xs text-gray-900 dark:text-white placeholder-gray-400 focus:outline-none focus:ring-1 focus:ring-primary/60 transition-all"
-                              {...register(regKey)}
-                            />
-                            {errors[regKey] && (
-                              <span className="text-red-400 text-[10px] leading-tight">{errors[regKey]?.message}</span>
-                            )}
-                          </div>
-                        ) : (
-                          <span className="pt-0.5 truncate">
-                            {regKey === 'email' && raw ? (
-                              <a href={`mailto:${raw}`} className="text-primary hover:underline font-semibold transition-all">{raw}</a>
-                            ) : regKey === 'phone' && raw ? (
-                              <a href={`https://wa.me/54${raw.replace(/\D/g, '')}`} target="_blank" rel="noopener noreferrer" className="text-emerald-600 dark:text-emerald-400 hover:underline font-semibold">{raw}</a>
-                            ) : raw ? (
-                              <span className="text-gray-900 dark:text-white font-semibold">{raw}</span>
-                            ) : (
-                              <span className="text-gray-400 dark:text-gray-500">{placeholder}</span>
-                            )}
-                          </span>
-                        )}
-                      </div>
-                    ))}
-
-                    {/* Estado — actividad editable en form, toggle rápido en lectura */}
-                    <div className="grid grid-cols-2 px-4 py-2.5 hover:bg-black/[0.02] dark:hover:bg-white/[0.01] transition-colors items-center">
-                      <span className="text-gray-500 dark:text-[#8A8A9A] flex items-center gap-1.5 font-semibold">
-                        <CheckCircle2 size={12} className="opacity-60 text-gray-400 dark:text-gray-500" />
-                        Estado
-                      </span>
-                      {isEditing ? (
-                        <select
-                          className="w-full bg-white/60 dark:bg-white/[0.06] border border-gray-200 dark:border-white/[0.15] rounded-lg px-2 py-1 text-xs text-gray-900 dark:text-white focus:outline-none focus:ring-1 focus:ring-primary/60 transition-all"
-                          {...register('estado')}
-                        >
-                          <option value="ACTIVO">Activo</option>
-                          <option value="INACTIVO">Inactivo</option>
-                        </select>
-                      ) : (
-                        <div className="flex items-center gap-2 flex-wrap">
-                          <StatusBadge client={client} size="sm" />
-                          {isAdmin && (
-                            <button
-                              onClick={handleToggleActividad}
-                              disabled={isTogglingActivity}
-                              title={client.activityStatus === 'inactive' ? 'Marcar como activo' : 'Marcar como inactivo'}
-                              className="inline-flex items-center gap-1 text-[10px] font-semibold px-2 py-0.5 rounded-full border transition-all disabled:opacity-50
-                                border-gray-200 dark:border-gray-700/60 text-gray-400 dark:text-gray-500
-                                hover:border-gray-400 hover:text-gray-600 dark:hover:border-gray-500 dark:hover:text-gray-300"
-                            >
-                              {client.activityStatus === 'inactive'
-                                ? <><UserCheck size={10} /> Activar</>
-                                : <><UserX size={10} /> Dar de baja</>
-                              }
-                            </button>
-                          )}
-                        </div>
-                      )}
-                    </div>
-
-                    {/* Sede */}
-                    <div className="grid grid-cols-2 px-4 py-2.5 hover:bg-black/[0.02] dark:hover:bg-white/[0.01] transition-colors items-center">
-                      <span className="text-gray-500 dark:text-[#8A8A9A] flex items-center gap-1.5 font-semibold">
-                        <MapPin size={12} className="opacity-60 text-gray-400 dark:text-gray-500" />
-                        Sede
-                      </span>
-                      {isEditing ? (
-                        <select
-                          className="w-full bg-white/60 dark:bg-white/[0.06] border border-gray-200 dark:border-white/[0.15] rounded-lg px-2 py-1 text-xs text-gray-900 dark:text-white focus:outline-none focus:ring-1 focus:ring-primary/60 transition-all"
-                          {...register('sedeId')}
-                        >
-                          <option value="">— Sin sede —</option>
-                          {sedes.map(s => (
-                            <option key={s.id} value={s.id}>{s.nombre}</option>
-                          ))}
-                        </select>
-                      ) : (
-                        <span className={client.sede ? 'text-gray-900 dark:text-white font-semibold' : 'text-gray-400 dark:text-gray-500'}>
-                          {client.sede?.nombre ?? 'Sin sede'}
-                        </span>
-                      )}
-                    </div>
-
-                  </div>
-                </div>
-
-                {/* Tabla Derecha: Resumen de Membresía */}
-                <div className="rounded-2xl border border-gray-200/60 dark:border-white/[0.08] bg-white/20 dark:bg-white/[0.01] overflow-hidden text-xs">
-                  <div className="grid grid-cols-2 border-b border-gray-200/60 dark:border-white/[0.06] bg-gray-50/50 dark:bg-white/[0.02] px-4 py-2.5 font-bold text-gray-500 dark:text-[#8A8A9A]">
-                    <span>Resumen de Membresía</span>
-                    <span>Detalle</span>
-                  </div>
-                  <div className="divide-y divide-gray-100 dark:divide-gray-100 dark:divide-white/[0.04]">
-                    {(() => {
-                      const hasActiveMembership = !!(client.planName && client.membershipStatus !== 'CANCELADA')
-                      return [
-                        {
-                          label: 'Plan',
-                          value: hasActiveMembership ? formatPlanName(client.planName!) : 'Sin membresía activa',
-                          icon: Dumbbell,
-                          color: hasActiveMembership ? 'text-gray-900 dark:text-white font-bold' : 'text-gray-400 dark:text-[#8A8A9A] font-semibold'
-                        },
-                        {
-                          label: 'Modalidad',
-                          value: hasActiveMembership && client.membershipModalidad ? MODALIDAD_LABELS[client.membershipModalidad] ?? client.membershipModalidad : '—',
-                          icon: Clock,
-                          color: hasActiveMembership ? 'text-gray-700 dark:text-gray-300 font-semibold' : 'text-gray-400 dark:text-[#8A8A9A]'
-                        },
-                        {
-                          label: 'Precio',
-                          value: hasActiveMembership && client.membershipPrecio != null ? formatCurrency(client.membershipPrecio) : '—',
-                          icon: Banknote,
-                          color: hasActiveMembership ? 'text-primary font-bold' : 'text-gray-400 dark:text-[#8A8A9A]'
-                        },
-                        {
-                          label: 'Vencimiento',
-                          value: !hasActiveMembership ? '—' : daysLeft !== null ? (daysLeft > 0 ? `${daysLeft} días restantes` : 'Finalizada') : 'Sin fecha',
-                          icon: CalendarDays,
-                          color: !hasActiveMembership ? 'text-gray-400 dark:text-[#8A8A9A]' : daysLeft !== null ? (daysLeft <= 0 ? 'text-red-500 dark:text-red-400 font-semibold' : daysLeft <= 30 ? 'text-amber-500 dark:text-amber-400 font-semibold' : 'text-emerald-500 dark:text-emerald-400 font-semibold') : 'text-gray-500 dark:text-[#8A8A9A]'
-                        }
-                      ]
-                    })().map((row, idx) => {
-                      const Icon = row.icon
-                      return (
-                        <div key={idx} className="grid grid-cols-2 px-4 py-2.5 hover:bg-black/[0.02] dark:hover:bg-white/[0.01] transition-colors items-center">
-                          <span className="text-gray-500 dark:text-[#8A8A9A] flex items-center gap-1.5 font-semibold">
-                            <Icon size={12} className="opacity-60 text-gray-400 dark:text-gray-500" />
-                            {row.label}
-                          </span>
-                          <span className={`${row.color} truncate`}>
-                            {row.value}
-                          </span>
-                        </div>
-                      )
-                    })}
-                  </div>
-                </div>
-          </div>
-
-          {/* ── Ficha + Calendario en grid ──────────────────────────────────── */}
-          <div className="mt-6 grid grid-cols-1 lg:grid-cols-2 gap-6 items-start">
-
-            {/* Ficha de Entrenamiento */}
-            <div className="rounded-2xl border border-gray-200/60 dark:border-white/[0.08] bg-white/20 dark:bg-white/[0.01] overflow-hidden text-xs">
-              <div className="grid grid-cols-2 border-b border-gray-200/60 dark:border-white/[0.06] bg-gray-50/50 dark:bg-white/[0.02] px-4 py-2.5 font-bold text-gray-500 dark:text-[#8A8A9A]">
-                <span>Ficha de Entrenamiento</span>
-                <span>Detalle</span>
-              </div>
-              <div className="grid grid-cols-1 md:grid-cols-2 divide-y md:divide-y-0 md:divide-x divide-gray-100 dark:divide-white/[0.04]">
-                {/* Columna izquierda */}
-                <div className="divide-y divide-gray-100 dark:divide-white/[0.04]">
-                  {/* Actividad diaria */}
-                  <div className="grid grid-cols-2 px-4 py-2.5 hover:bg-black/[0.02] dark:hover:bg-white/[0.01] transition-colors items-start">
+              {/* Col 1 — Nombre, Apellido, CUIL, Email, Teléfono */}
+              <div className="divide-y divide-gray-100 dark:divide-white/[0.04]">
+                {([
+                  { label: 'Nombre',   regKey: 'name'     as keyof EditValues, Icon: User,  placeholder: 'Sin nombre',   raw: client.name },
+                  { label: 'Apellido', regKey: 'lastName' as keyof EditValues, Icon: User,  placeholder: 'Sin apellido', raw: client.lastName },
+                  { label: 'CUIL',     regKey: 'cuil'     as keyof EditValues, Icon: Hash,  placeholder: 'Sin CUIL',     raw: client.cuil },
+                  { label: 'Email',    regKey: 'email'    as keyof EditValues, Icon: Mail,  placeholder: 'Sin email',    raw: client.email },
+                  { label: 'Teléfono', regKey: 'phone'    as keyof EditValues, Icon: Phone, placeholder: 'Sin teléfono', raw: client.phone },
+                ]).map(({ label, regKey, Icon, placeholder, raw }) => (
+                  <div key={regKey} className="grid grid-cols-[3fr_5fr] px-4 py-2.5 hover:bg-black/[0.02] dark:hover:bg-white/[0.01] transition-colors items-start">
                     <span className="text-gray-500 dark:text-[#8A8A9A] flex items-center gap-1.5 font-semibold pt-1">
-                      <Activity size={12} className="opacity-60 text-gray-400 dark:text-gray-500 shrink-0" />
-                      Actividad
+                      <Icon size={12} className="opacity-60 text-gray-400 dark:text-gray-500 shrink-0" />
+                      {label}
                     </span>
                     {isEditing ? (
-                      <select
-                        className="w-full bg-white/60 dark:bg-white/[0.06] border border-gray-200 dark:border-white/[0.15] rounded-lg px-2 py-1 text-xs text-gray-900 dark:text-white focus:outline-none focus:ring-1 focus:ring-primary/60 transition-all"
-                        {...register('actividadDiaria')}
-                      >
-                        {ACTIVIDAD_OPTIONS.map(o => <option key={o.value} value={o.value}>{o.label}</option>)}
-                      </select>
+                      <div className="flex flex-col gap-0.5">
+                        <input
+                          className="w-full bg-white/60 dark:bg-white/[0.06] border border-gray-200 dark:border-white/[0.15] rounded-lg px-2 py-1 text-xs text-gray-900 dark:text-white placeholder-gray-400 focus:outline-none focus:ring-1 focus:ring-primary/60 transition-all"
+                          {...register(regKey)}
+                        />
+                        {errors[regKey] && (
+                          <span className="text-red-400 text-[10px] leading-tight">{errors[regKey]?.message}</span>
+                        )}
+                      </div>
                     ) : (
-                      <span className={ficha?.actividadDiaria ? 'text-gray-900 dark:text-white font-semibold pt-0.5' : 'text-gray-400 dark:text-gray-500 pt-0.5'}>
-                        {ficha?.actividadDiaria ? (ACTIVIDAD_LABELS[ficha.actividadDiaria] ?? ficha.actividadDiaria) : '—'}
+                      <span className="pt-0.5 truncate">
+                        {regKey === 'email' && raw ? (
+                          <a href={`mailto:${raw}`} className="text-primary hover:underline font-semibold transition-all">{raw}</a>
+                        ) : regKey === 'phone' && raw ? (
+                          <a href={`https://wa.me/54${raw.replace(/\D/g, '')}`} target="_blank" rel="noopener noreferrer" className="text-emerald-600 dark:text-emerald-400 hover:underline font-semibold">{raw}</a>
+                        ) : raw ? (
+                          <span className="text-gray-900 dark:text-white font-semibold">{raw}</span>
+                        ) : (
+                          <span className="text-gray-400 dark:text-gray-500">{placeholder}</span>
+                        )}
                       </span>
                     )}
                   </div>
-                  {/* Objetivos */}
-                  {([
-                    { label: 'Objetivos', regKey: 'objetivos' as const, Icon: Tag,      raw: ficha?.objetivos },
-                    { label: 'Deporte',   regKey: 'deportePractica' as const, Icon: Dumbbell, raw: ficha?.deportePractica },
-                    { label: 'Experiencia', regKey: 'experiencia' as const, Icon: BookOpen, raw: ficha?.experiencia },
-                  ]).map(({ label, regKey, Icon, raw }) => (
-                    <div key={regKey} className="grid grid-cols-2 px-4 py-2.5 hover:bg-black/[0.02] dark:hover:bg-white/[0.01] transition-colors items-start">
-                      <span className="text-gray-500 dark:text-[#8A8A9A] flex items-center gap-1.5 font-semibold pt-1">
-                        <Icon size={12} className="opacity-60 text-gray-400 dark:text-gray-500 shrink-0" />
-                        {label}
-                      </span>
-                      {isEditing ? (
-                        <input
-                          className="w-full bg-white/60 dark:bg-white/[0.06] border border-gray-200 dark:border-white/[0.15] rounded-lg px-2 py-1 text-xs text-gray-900 dark:text-white placeholder-gray-400 focus:outline-none focus:ring-1 focus:ring-primary/60 transition-all"
-                          {...register(regKey)}
-                        />
-                      ) : (
-                        <span className={raw ? 'text-gray-900 dark:text-white font-semibold pt-0.5' : 'text-gray-400 dark:text-gray-500 pt-0.5'}>
-                          {raw ?? '—'}
-                        </span>
-                      )}
-                    </div>
-                  ))}
+                ))}
+                {isEditing && (
+                  <div className="grid grid-cols-[3fr_5fr] px-4 py-2.5 hover:bg-black/[0.02] dark:hover:bg-white/[0.01] transition-colors items-center">
+                    <span className="text-gray-500 dark:text-[#8A8A9A] flex items-center gap-1.5 font-semibold">
+                      <CheckCircle2 size={12} className="opacity-60 text-gray-400 dark:text-gray-500" />
+                      Actividad
+                    </span>
+                    <select className="w-full bg-white/60 dark:bg-white/[0.06] border border-gray-200 dark:border-white/[0.15] rounded-lg px-2 py-1 text-xs text-gray-900 dark:text-white focus:outline-none focus:ring-1 focus:ring-primary/60 transition-all" {...register('estado')}>
+                      <option value="ACTIVO">Activo</option>
+                      <option value="INACTIVO">Inactivo</option>
+                    </select>
+                  </div>
+                )}
+              </div>
+
+              {/* Col 2 — Sede, Act. diaria, Objetivos, Deporte, Experiencia */}
+              <div className="divide-y divide-gray-100 dark:divide-white/[0.04]">
+                <div className="grid grid-cols-[3fr_5fr] px-4 py-2.5 hover:bg-black/[0.02] dark:hover:bg-white/[0.01] transition-colors items-center">
+                  <span className="text-gray-500 dark:text-[#8A8A9A] flex items-center gap-1.5 font-semibold">
+                    <MapPin size={12} className="opacity-60 text-gray-400 dark:text-gray-500" />
+                    Sede
+                  </span>
+                  {isEditing ? (
+                    <select className="w-full bg-white/60 dark:bg-white/[0.06] border border-gray-200 dark:border-white/[0.15] rounded-lg px-2 py-1 text-xs text-gray-900 dark:text-white focus:outline-none focus:ring-1 focus:ring-primary/60 transition-all" {...register('sedeId')}>
+                      <option value="">— Sin sede —</option>
+                      {sedes.map(s => <option key={s.id} value={s.id}>{s.nombre}</option>)}
+                    </select>
+                  ) : (
+                    <span className={client.sede ? 'text-gray-900 dark:text-white font-semibold' : 'text-gray-400 dark:text-gray-500'}>
+                      {client.sede?.nombre ?? 'Sin sede'}
+                    </span>
+                  )}
                 </div>
-                {/* Columna derecha */}
-                <div className="divide-y divide-gray-100 dark:divide-white/[0.04]">
-                  {/* Peso y Altura con unidades */}
-                  {([
-                    { label: 'Peso',   regKey: 'peso'   as const, Icon: Activity, unit: 'kg', raw: ficha?.peso   && ficha.peso   > 20 ? `${ficha.peso} kg`   : null },
-                    { label: 'Altura', regKey: 'altura' as const, Icon: Activity, unit: 'cm', raw: ficha?.altura && ficha.altura > 50 ? `${ficha.altura} cm` : null },
-                  ]).map(({ label, regKey, Icon, unit, raw }) => (
-                    <div key={regKey} className="grid grid-cols-2 px-4 py-2.5 hover:bg-black/[0.02] dark:hover:bg-white/[0.01] transition-colors items-start">
-                      <span className="text-gray-500 dark:text-[#8A8A9A] flex items-center gap-1.5 font-semibold pt-1">
-                        <Icon size={12} className="opacity-60 text-gray-400 dark:text-gray-500 shrink-0" />
-                        {label}
-                      </span>
-                      {isEditing ? (
+                <div className="grid grid-cols-[3fr_5fr] px-4 py-2.5 hover:bg-black/[0.02] dark:hover:bg-white/[0.01] transition-colors items-start">
+                  <span className="text-gray-500 dark:text-[#8A8A9A] flex items-center gap-1.5 font-semibold pt-1">
+                    <Activity size={12} className="opacity-60 text-gray-400 dark:text-gray-500 shrink-0" />
+                    Act. diaria
+                  </span>
+                  {isEditing ? (
+                    <select className="w-full bg-white/60 dark:bg-white/[0.06] border border-gray-200 dark:border-white/[0.15] rounded-lg px-2 py-1 text-xs text-gray-900 dark:text-white focus:outline-none focus:ring-1 focus:ring-primary/60 transition-all" {...register('actividadDiaria')}>
+                      {ACTIVIDAD_OPTIONS.map(o => <option key={o.value} value={o.value}>{o.label}</option>)}
+                    </select>
+                  ) : (
+                    <span className={ficha?.actividadDiaria ? 'text-gray-900 dark:text-white font-semibold pt-0.5' : 'text-gray-400 dark:text-gray-500 pt-0.5'}>
+                      {ficha?.actividadDiaria ? (ACTIVIDAD_LABELS[ficha.actividadDiaria] ?? ficha.actividadDiaria) : '—'}
+                    </span>
+                  )}
+                </div>
+                {([
+                  { label: 'Objetivos',   regKey: 'objetivos'       as keyof EditValues, Icon: Tag,      raw: ficha?.objetivos },
+                  { label: 'Deporte',     regKey: 'deportePractica' as keyof EditValues, Icon: Dumbbell, raw: ficha?.deportePractica },
+                  { label: 'Experiencia', regKey: 'experiencia'     as keyof EditValues, Icon: BookOpen, raw: ficha?.experiencia },
+                ]).map(({ label, regKey, Icon, raw }) => (
+                  <div key={regKey} className="grid grid-cols-[3fr_5fr] px-4 py-2.5 hover:bg-black/[0.02] dark:hover:bg-white/[0.01] transition-colors items-start">
+                    <span className="text-gray-500 dark:text-[#8A8A9A] flex items-center gap-1.5 font-semibold pt-1">
+                      <Icon size={12} className="opacity-60 text-gray-400 dark:text-gray-500 shrink-0" />
+                      {label}
+                    </span>
+                    {isEditing ? (
+                      <input className="w-full bg-white/60 dark:bg-white/[0.06] border border-gray-200 dark:border-white/[0.15] rounded-lg px-2 py-1 text-xs text-gray-900 dark:text-white placeholder-gray-400 focus:outline-none focus:ring-1 focus:ring-primary/60 transition-all" {...register(regKey)} />
+                    ) : (
+                      <span className={raw ? 'text-gray-900 dark:text-white font-semibold pt-0.5' : 'text-gray-400 dark:text-gray-500 pt-0.5'}>{raw ?? '—'}</span>
+                    )}
+                  </div>
+                ))}
+              </div>
+
+              {/* Col 3 — Peso, Altura, Lesiones, Patologías */}
+              <div className="divide-y divide-gray-100 dark:divide-white/[0.04]">
+                {([
+                  { label: 'Peso',       regKey: 'peso'          as keyof EditValues, Icon: Activity,      isNum: true,  unit: 'kg', raw: ficha?.peso   && ficha.peso   > 20 ? `${ficha.peso} kg`   : null },
+                  { label: 'Altura',     regKey: 'altura'        as keyof EditValues, Icon: Activity,      isNum: true,  unit: 'cm', raw: ficha?.altura && ficha.altura > 50 ? `${ficha.altura} cm` : null },
+                  { label: 'Lesiones',   regKey: 'lesiones'      as keyof EditValues, Icon: AlertTriangle, isNum: false, unit: '',   raw: ficha?.lesiones },
+                  { label: 'Patologías', regKey: 'patologiasBase' as keyof EditValues, Icon: Receipt,      isNum: false, unit: '',   raw: ficha?.patologiasBase },
+                ] as Array<{ label: string; regKey: keyof EditValues; Icon: typeof Activity; isNum: boolean; unit: string; raw: string | null | undefined }>).map(({ label, regKey, Icon, isNum, unit, raw }) => (
+                  <div key={regKey} className="grid grid-cols-[3fr_5fr] px-4 py-2.5 hover:bg-black/[0.02] dark:hover:bg-white/[0.01] transition-colors items-start">
+                    <span className="text-gray-500 dark:text-[#8A8A9A] flex items-center gap-1.5 font-semibold pt-1">
+                      <Icon size={12} className="opacity-60 text-gray-400 dark:text-gray-500 shrink-0" />
+                      {label}
+                    </span>
+                    {isEditing ? (
+                      isNum ? (
                         <div className="flex items-center gap-1">
-                          <input
-                            type="number"
-                            className="w-full bg-white/60 dark:bg-white/[0.06] border border-gray-200 dark:border-white/[0.15] rounded-lg px-2 py-1 text-xs text-gray-900 dark:text-white placeholder-gray-400 focus:outline-none focus:ring-1 focus:ring-primary/60 transition-all"
-                            {...register(regKey)}
-                          />
+                          <input type="number" className="w-full bg-white/60 dark:bg-white/[0.06] border border-gray-200 dark:border-white/[0.15] rounded-lg px-2 py-1 text-xs text-gray-900 dark:text-white placeholder-gray-400 focus:outline-none focus:ring-1 focus:ring-primary/60 transition-all" {...register(regKey)} />
                           <span className="text-gray-400 shrink-0">{unit}</span>
                         </div>
                       ) : (
-                        <span className={raw ? 'text-gray-900 dark:text-white font-semibold pt-0.5' : 'text-gray-400 dark:text-gray-500 pt-0.5'}>
-                          {raw ?? '—'}
-                        </span>
-                      )}
-                    </div>
-                  ))}
-                  {/* Lesiones y Patologías */}
-                  {([
-                    { label: 'Lesiones',   regKey: 'lesiones'  as const, Icon: AlertTriangle, raw: ficha?.lesiones },
-                    { label: 'Patologías', regKey: 'patologiasBase' as const, Icon: Receipt,  raw: ficha?.patologiasBase },
-                  ]).map(({ label, regKey, Icon, raw }) => (
-                    <div key={regKey} className="grid grid-cols-2 px-4 py-2.5 hover:bg-black/[0.02] dark:hover:bg-white/[0.01] transition-colors items-start">
-                      <span className="text-gray-500 dark:text-[#8A8A9A] flex items-center gap-1.5 font-semibold pt-1">
-                        <Icon size={12} className="opacity-60 text-gray-400 dark:text-gray-500 shrink-0" />
-                        {label}
+                        <input className="w-full bg-white/60 dark:bg-white/[0.06] border border-gray-200 dark:border-white/[0.15] rounded-lg px-2 py-1 text-xs text-gray-900 dark:text-white placeholder-gray-400 focus:outline-none focus:ring-1 focus:ring-primary/60 transition-all" {...register(regKey)} />
+                      )
+                    ) : (
+                      <span className={raw ? 'text-gray-900 dark:text-white font-semibold pt-0.5' : 'text-gray-400 dark:text-gray-500 pt-0.5'}>{raw ?? '—'}</span>
+                    )}
+                  </div>
+                ))}
+              </div>
+
+            </div>
+          </div>
+
+          {/* ── Membresía + Calendario en grid ──────────────────────────────── */}
+          <div className="mt-4 grid grid-cols-1 md:grid-cols-2 gap-6 items-start">
+
+            {/* Resumen de Membresía */}
+            <div className="rounded-2xl border border-gray-200/60 dark:border-white/[0.08] bg-white/20 dark:bg-white/[0.01] overflow-hidden text-xs">
+              <div className="border-b border-gray-200/60 dark:border-white/[0.06] bg-gray-50/50 dark:bg-white/[0.02] px-4 py-3">
+                <span className="text-[11px] font-bold uppercase tracking-wider text-gray-500 dark:text-[#8A8A9A]">Resumen de Membresía</span>
+              </div>
+              <div className="divide-y divide-gray-100 dark:divide-white/[0.04]">
+                {(() => {
+                  const hasActiveMembership = !!(client.planName && client.membershipStatus !== 'CANCELADA')
+                  return [
+                    { label: 'Plan', value: hasActiveMembership ? formatPlanName(client.planName!) : 'Sin membresía activa', icon: Dumbbell, color: hasActiveMembership ? 'text-gray-900 dark:text-white font-bold' : 'text-gray-400 dark:text-[#8A8A9A] font-semibold' },
+                    { label: 'Modalidad', value: hasActiveMembership && client.membershipModalidad ? MODALIDAD_LABELS[client.membershipModalidad] ?? client.membershipModalidad : '—', icon: Clock, color: hasActiveMembership ? 'text-gray-700 dark:text-gray-300 font-semibold' : 'text-gray-400 dark:text-[#8A8A9A]' },
+                    { label: 'Precio', value: hasActiveMembership && client.membershipPrecio != null ? formatCurrency(client.membershipPrecio) : '—', icon: Banknote, color: hasActiveMembership ? 'text-primary font-bold' : 'text-gray-400 dark:text-[#8A8A9A]' },
+                    { label: 'Vencimiento', value: !hasActiveMembership ? '—' : daysLeft !== null ? (daysLeft > 0 ? `${daysLeft} días restantes` : 'Finalizada') : 'Sin fecha', icon: CalendarDays, color: !hasActiveMembership ? 'text-gray-400 dark:text-[#8A8A9A]' : daysLeft !== null ? (daysLeft <= 0 ? 'text-red-500 dark:text-red-400 font-semibold' : daysLeft <= 30 ? 'text-amber-500 dark:text-amber-400 font-semibold' : 'text-emerald-500 dark:text-emerald-400 font-semibold') : 'text-gray-500 dark:text-[#8A8A9A]' },
+                  ]
+                })().map((row, idx) => {
+                  const Icon = row.icon
+                  return (
+                    <div key={idx} className="grid grid-cols-[3fr_5fr] px-4 py-2.5 hover:bg-black/[0.02] dark:hover:bg-white/[0.01] transition-colors items-center">
+                      <span className="text-gray-500 dark:text-[#8A8A9A] flex items-center gap-1.5 font-semibold">
+                        <Icon size={12} className="opacity-60 text-gray-400 dark:text-gray-500" />
+                        {row.label}
                       </span>
-                      {isEditing ? (
-                        <input
-                          className="w-full bg-white/60 dark:bg-white/[0.06] border border-gray-200 dark:border-white/[0.15] rounded-lg px-2 py-1 text-xs text-gray-900 dark:text-white placeholder-gray-400 focus:outline-none focus:ring-1 focus:ring-primary/60 transition-all"
-                          {...register(regKey)}
-                        />
-                      ) : (
-                        <span className={raw ? 'text-gray-900 dark:text-white font-semibold pt-0.5' : 'text-gray-400 dark:text-gray-500 pt-0.5'}>
-                          {raw ?? '—'}
-                        </span>
-                      )}
+                      <span className={`${row.color} truncate`}>{row.value}</span>
                     </div>
-                  ))}
-                </div>
+                  )
+                })}
               </div>
             </div>
 

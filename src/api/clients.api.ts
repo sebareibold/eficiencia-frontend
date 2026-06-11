@@ -113,6 +113,9 @@ export const clientsApi = {
       ...(dto.estado !== undefined && { estado: dto.estado }),
     }).then((r) => mapCliente(r.data)),
 
+  bulkUpdateEstado: (ids: string[], estado: 'ACTIVO' | 'INACTIVO'): Promise<{ updated: number }> =>
+    api.patch('/clientes/bulk-estado', { ids, estado }).then((r) => r.data),
+
   getSedes: (): Promise<{ id: string; nombre: string; activa: boolean }[]> =>
     api.get('/clientes/sedes').then((r) => Array.isArray(r.data) ? r.data : (r.data?.data ?? [])),
 

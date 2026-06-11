@@ -231,6 +231,7 @@ export default function DashboardPage() {
   const [chartView, setChartView] = useState<ChartView>('meses')
   const [chartMonthOffset, setChartMonthOffset] = useState(0)
   const [activePieClienteIdx, setActivePieClienteIdx] = useState<number | null>(null)
+  const [activePiePagoIdx,    setActivePiePagoIdx]    = useState<number | null>(null)
   const [activePieGastoIdx,   setActivePieGastoIdx]   = useState<number | null>(null)
   const [facturacionYear, setFacturacionYear] = useState(today.getFullYear())
   const [facturacionMonthOffset, setFacturacionMonthOffset] = useState(0)
@@ -452,9 +453,16 @@ export default function DashboardPage() {
     },
   ]
 
-  const pieClientesData = c
+  const pieActividadData = (a || c)
     ? [
-        { name: 'Activos',  value: c.distribucion.activos,  color: C.green },
+        { name: 'Activos',   value: a?.clientesActivos ?? 0, color: C.green },
+        { name: 'Inactivos', value: Math.max(0, (c?.distribucion.total ?? 0) - (a?.clientesActivos ?? 0)), color: '#6B7280' },
+      ].filter(d => d.value > 0)
+    : []
+
+  const piePagoData = c
+    ? [
+        { name: 'Al día',   value: c.distribucion.activos,  color: C.green },
         { name: 'En deuda', value: c.distribucion.enDeuda,  color: C.orange },
         { name: 'Vencidos', value: c.distribucion.vencidos, color: C.red },
       ].filter(d => d.value > 0)
@@ -775,50 +783,43 @@ export default function DashboardPage() {
 
       {/* ══ SECCIÓN 4: CLIENTES & PLANES — carga independientemente ══ */}
       <Section title="Clientes y planes" subtitle="Distribución actual del gimnasio">
-        <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4 lg:gap-6">
+        <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-4 gap-4 lg:gap-6">
 
-          {/* Donut clientes por estado */}
-          <ChartCard title="Estado de clientes" subtitle="Total actual">
-            {clientesHook.isLoading ? (
+          {/* Donut actividad: ACTIVO vs INACTIVO */}
+          <ChartCard title="Estado de clientes" subtitle="Actividad">
+            {(clientesHook.isLoading || alertasHook.isLoading) ? (
               <div className="flex-1 flex flex-col justify-between py-2">
-                <div className="flex justify-center items-center h-[140px] lg:h-[170px] xl:h-[180px]">
-                  <div className="relative h-[110px] w-[110px] lg:h-[130px] lg:w-[130px]">
+                <div className="flex justify-center items-center h-[140px] lg:h-[160px]">
+                  <div className="relative h-[100px] w-[100px] lg:h-[120px] lg:w-[120px]">
                     <Skeleton className="absolute inset-0 rounded-full animate-pulse" />
-                    <div className="absolute inset-[20px] rounded-full bg-white/30 dark:bg-black/30" />
+                    <div className="absolute inset-[18px] rounded-full bg-white/30 dark:bg-black/30" />
                   </div>
                 </div>
                 <div className="space-y-2 mt-4">
-                  {[1, 2, 3].map(i => (
+                  {[1, 2].map(i => (
                     <div key={i} className="flex justify-between items-center">
-                      <Skeleton className="h-3 w-16" />
-                      <Skeleton className="h-3 w-8" />
+                      <Skeleton className="h-3 w-16" /><Skeleton className="h-3 w-8" />
                     </div>
                   ))}
                 </div>
               </div>
-            ) : pieClientesData.length === 0 ? (
-              <p className="text-sm text-gray-400 flex-1 flex items-center">Sin clientes registrados</p>
+            ) : pieActividadData.length === 0 ? (
+              <p className="text-sm text-gray-400 flex-1 flex items-center">Sin datos</p>
             ) : (<>
-              <div className="h-[175px] lg:h-[185px] xl:h-[195px]">
+              <div className="h-[155px] lg:h-[165px] xl:h-[175px]">
                 <ResponsiveContainer width="100%" height="100%">
                   <PieChart>
                     <Pie
-                      data={pieClientesData}
+                      data={pieActividadData}
                       cx="50%" cy="50%"
-                      innerRadius={55} outerRadius={80}
+                      innerRadius={48} outerRadius={70}
                       dataKey="value" paddingAngle={3}
                       onMouseEnter={(_, i) => setActivePieClienteIdx(i)}
                       onMouseLeave={() => setActivePieClienteIdx(null)}
                     >
-                      {pieClientesData.map((d, i) => (
-                        <Cell
-                          key={i}
-                          fill={d.color}
-                          strokeWidth={0}
-                          style={{
-                            opacity: activePieClienteIdx === null || activePieClienteIdx === i ? 1 : 0.15,
-                            transition: 'opacity 0.35s ease-in-out',
-                          }}
+                      {pieActividadData.map((d, i) => (
+                        <Cell key={i} fill={d.color} strokeWidth={0}
+                          style={{ opacity: activePieClienteIdx === null || activePieClienteIdx === i ? 1 : 0.15, transition: 'opacity 0.35s ease-in-out' }}
                         />
                       ))}
                     </Pie>
@@ -826,7 +827,53 @@ export default function DashboardPage() {
                   </PieChart>
                 </ResponsiveContainer>
               </div>
-              <PieLegend items={pieClientesData.map(d => ({ label: d.name, value: d.value, color: d.color }))} />
+              <PieLegend items={pieActividadData.map(d => ({ label: d.name, value: d.value, color: d.color }))} />
+            </>)}
+          </ChartCard>
+
+          {/* Donut estado de pago: AL_DÍA / EN_DEUDA / VENCIDO */}
+          <ChartCard title="Estado de pago" subtitle="Clientes activos">
+            {clientesHook.isLoading ? (
+              <div className="flex-1 flex flex-col justify-between py-2">
+                <div className="flex justify-center items-center h-[140px] lg:h-[160px]">
+                  <div className="relative h-[100px] w-[100px] lg:h-[120px] lg:w-[120px]">
+                    <Skeleton className="absolute inset-0 rounded-full animate-pulse" />
+                    <div className="absolute inset-[18px] rounded-full bg-white/30 dark:bg-black/30" />
+                  </div>
+                </div>
+                <div className="space-y-2 mt-4">
+                  {[1, 2, 3].map(i => (
+                    <div key={i} className="flex justify-between items-center">
+                      <Skeleton className="h-3 w-16" /><Skeleton className="h-3 w-8" />
+                    </div>
+                  ))}
+                </div>
+              </div>
+            ) : piePagoData.length === 0 ? (
+              <p className="text-sm text-gray-400 flex-1 flex items-center">Sin datos</p>
+            ) : (<>
+              <div className="h-[155px] lg:h-[165px] xl:h-[175px]">
+                <ResponsiveContainer width="100%" height="100%">
+                  <PieChart>
+                    <Pie
+                      data={piePagoData}
+                      cx="50%" cy="50%"
+                      innerRadius={48} outerRadius={70}
+                      dataKey="value" paddingAngle={3}
+                      onMouseEnter={(_, i) => setActivePiePagoIdx(i)}
+                      onMouseLeave={() => setActivePiePagoIdx(null)}
+                    >
+                      {piePagoData.map((d, i) => (
+                        <Cell key={i} fill={d.color} strokeWidth={0}
+                          style={{ opacity: activePiePagoIdx === null || activePiePagoIdx === i ? 1 : 0.15, transition: 'opacity 0.35s ease-in-out' }}
+                        />
+                      ))}
+                    </Pie>
+                    <Tooltip {...TooltipStyle} formatter={(v: number, name: string) => [v, name]} />
+                  </PieChart>
+                </ResponsiveContainer>
+              </div>
+              <PieLegend items={piePagoData.map(d => ({ label: d.name, value: d.value, color: d.color }))} />
             </>)}
           </ChartCard>
 
