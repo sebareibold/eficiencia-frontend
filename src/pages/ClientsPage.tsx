@@ -74,7 +74,7 @@ export default function ClientsPage() {
   )
   const [search, setSearch] = useState('')
   const [debouncedSearch, setDebouncedSearch] = useState('')
-  const [actividadFilter, setActividadFilter] = useState<ActividadFilter>('all')
+  const [actividadFilter, setActividadFilter] = useState<ActividadFilter>('active')
   const [membresiaFilter, setMembresiaFilter] = useState<MembresiaFilter>('all')
   const [periodMode, setPeriodMode] = useState<PeriodMode>('historic')
   const [navDate, setNavDate] = useState(today)
