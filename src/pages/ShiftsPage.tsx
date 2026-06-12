@@ -34,6 +34,7 @@ import Select from '../components/ui/Select'
 import Skeleton from '../components/ui/Skeleton'
 import EmptyState from '../components/ui/EmptyState'
 import type { Shift, WeekDay } from '../types/shift.types'
+import { ROUTES } from '../constants/routes'
 
 // ─── Constants ────────────────────────────────────────────────────────────────
 
@@ -426,18 +427,8 @@ export default function ShiftsPage() {
       const endM = m.toString().padStart(2, '0');
       endTime = `${endH}:${endM}`;
     }
-    reset({
-      days: [wday],
-      recurrente: true,
-      startTime: timeStr,
-      endTime,
-      cupoMaximoSalaA: '',
-      cupoMaximoSalaB: '',
-      profesorId: '',
-      clientIds: []
-    });
-    setClientSearch('');
-    setCreateOpen(true);
+    const params = new URLSearchParams({ day: wday, start: timeStr, end: endTime })
+    navigate(`${ROUTES.SHIFT_NEW}?${params.toString()}`)
   }
 
   async function onCreate(data: FormValues) {
@@ -534,11 +525,7 @@ export default function ShiftsPage() {
           </button>
           {canCreate && (
             <button
-              onClick={() => {
-                reset({ days: [], recurrente: true, cupoMaximoSalaA: '', cupoMaximoSalaB: '', profesorId: '', clientIds: [] })
-                setClientSearch('')
-                setCreateOpen(true)
-              }}
+              onClick={() => navigate(ROUTES.SHIFT_NEW)}
               className="flex items-center gap-2 rounded-xl btn-action px-4 py-2.5 text-sm"
             >
               <span className="flex h-5 w-5 items-center justify-center rounded-md bg-gray-900/10">
@@ -1591,185 +1578,6 @@ export default function ShiftsPage() {
             </button>
           </div>
         </div>
-      </Modal>
-
-      {/* ── Create Modal ──────────────────────────────────────────────────────── */}
-      <Modal isOpen={createOpen} onClose={() => { setCreateOpen(false); reset() }} title="Crear Nuevo Turno" size="2xl">
-        <form onSubmit={handleSubmit(onCreate)} className="space-y-5">
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-
-            {/* Izquierda: Datos del turno */}
-            <div className="space-y-4">
-
-              {/* Días de la semana */}
-              <div>
-                <label className="block text-sm font-medium text-gray-700 dark:text-gray-200 mb-2">
-                  Días de la semana *
-                </label>
-                <div className="flex flex-wrap gap-1.5">
-                  {DAYS.map(d => {
-                    const selected = formDays.includes(d)
-                    return (
-                      <button
-                        key={d}
-                        type="button"
-                        onClick={() => {
-                          if (selected) setValue('days', formDays.filter(x => x !== d), { shouldValidate: true })
-                          else setValue('days', [...formDays, d], { shouldValidate: true })
-                        }}
-                        className={`rounded-full px-3 py-1.5 text-xs font-semibold transition-all ${
-                          selected
-                            ? 'bg-primary text-white shadow-sm'
-                            : 'border border-gray-200 dark:border-white/[0.08] bg-white dark:bg-white/[0.04] text-gray-500 dark:text-[#8A8A9A] hover:border-gray-400 dark:hover:border-white/20 hover:text-gray-900 dark:hover:text-white'
-                        }`}
-                      >
-                        {DAY_LABELS[d].slice(0, 3)}
-                      </button>
-                    )
-                  })}
-                </div>
-                {(errors.days as any)?.message && (
-                  <p className="text-xs text-red-500 mt-1.5">{(errors.days as any).message}</p>
-                )}
-              </div>
-
-              {/* Horario */}
-              <div className="grid grid-cols-2 gap-4">
-                <Input label="Hora inicio *" type="time" error={errors.startTime?.message} {...register('startTime')} />
-                <Input label="Hora fin *"    type="time" error={errors.endTime?.message}   {...register('endTime')} />
-              </div>
-
-              {/* Cupos por sala */}
-              <div className="grid grid-cols-2 gap-4">
-                <Input
-                  label="Cupo Sala A *" type="number" placeholder="Ej. 10"
-                  error={errors.cupoMaximoSalaA?.message}
-                  {...register('cupoMaximoSalaA')}
-                />
-                <Input
-                  label="Cupo Sala B *" type="number" placeholder="Ej. 10"
-                  error={errors.cupoMaximoSalaB?.message}
-                  {...register('cupoMaximoSalaB')}
-                />
-              </div>
-
-              {/* Profesor */}
-              <Select
-                label="Profesor *"
-                options={[
-                  {
-                    value: '',
-                    label: profsLoading ? 'Cargando...' : professors.length === 0 ? 'Sin profesores registrados' : 'Seleccionar...',
-                  },
-                  ...professors.map(p => ({ value: p.id, label: p.name }))
-                ]}
-                error={errors.profesorId?.message}
-                {...register('profesorId')}
-              />
-
-              {/* Toggle recurrencia */}
-              <label className="flex items-center justify-between gap-4 p-3 rounded-xl border border-white/[0.08] bg-white/[0.04] cursor-pointer select-none">
-                <div>
-                  <p className="text-sm font-semibold text-gray-900 dark:text-white">Recurrente semanal</p>
-                  <p className="text-[11px] text-gray-500 dark:text-[#8A8A9A] mt-0.5">Se repite todas las semanas en los días seleccionados</p>
-                </div>
-                <div className="relative flex-shrink-0">
-                  <input type="checkbox" {...register('recurrente')} className="sr-only peer" />
-                  <div className={`w-10 h-5 rounded-full transition-colors ${formRecurrente ? 'bg-primary' : 'bg-gray-200 dark:bg-white/10'}`} />
-                  <div className={`absolute top-0.5 w-4 h-4 bg-white rounded-full shadow transition-transform ${formRecurrente ? 'translate-x-5' : 'translate-x-0.5'}`} />
-                </div>
-              </label>
-
-              {professors.length === 0 && !profsLoading && (
-                <p className="text-xs text-amber-600 dark:text-amber-400 bg-amber-500/10 border border-amber-500/20 rounded-xl px-3 py-2">
-                  No hay profesores registrados. Creá un usuario con rol Profesor primero.
-                </p>
-              )}
-            </div>
-
-            {/* Derecha: Inscribir Clientes (Sala A por defecto) */}
-            <div className="flex flex-col bg-white/5 dark:bg-black/20 rounded-2xl p-4 border border-gray-200 dark:border-white/10 overflow-hidden">
-              <div className="flex items-center justify-between mb-3 shrink-0">
-                <label className="text-sm font-bold text-gray-900 dark:text-white flex items-center gap-2">
-                  <Users size={16} className="text-primary" /> Inscribir en Sala A
-                </label>
-                <span className="text-xs font-semibold px-2 py-1 rounded-lg bg-black/5 dark:bg-white/10 text-gray-500 dark:text-gray-400">
-                  {formClientIds.length} seleccionado{formClientIds.length !== 1 ? 's' : ''}
-                </span>
-              </div>
-
-              <div className="mb-3 shrink-0">
-                <Input
-                  placeholder="Buscar por nombre o apellido..."
-                  value={clientSearch}
-                  onChange={(e) => setClientSearch(e.target.value)}
-                />
-              </div>
-
-              <div className="flex-1 overflow-y-auto min-h-[200px] max-h-[300px] custom-scrollbar pr-2 space-y-1.5">
-                {clients.length === 0 ? (
-                  <p className="text-xs text-gray-500 text-center py-6">No hay clientes disponibles</p>
-                ) : (() => {
-                  const shiftDias = formDays.length
-                  const filteredClients = clients.filter(c =>
-                    `${c.name} ${c.lastName}`.toLowerCase().includes(clientSearch.toLowerCase()) &&
-                    (!c.planFrequency || (c.diasUsados + shiftDias) <= Number(c.planFrequency))
-                  );
-
-                  if (filteredClients.length === 0) {
-                    return <p className="text-xs text-gray-500 text-center py-6">Sin resultados para la búsqueda.</p>;
-                  }
-
-                  return filteredClients.map(c => {
-                    const isSelected = formClientIds.includes(String(c.id));
-                    return (
-                      <label
-                        key={c.id}
-                        className={`flex items-center gap-3 p-2.5 rounded-xl border transition-all cursor-pointer select-none ${
-                          isSelected
-                            ? 'border-primary/50 bg-primary/5 dark:bg-primary/10'
-                            : 'border-black/5 dark:border-white/10 hover:bg-black/5 dark:hover:bg-white/5'
-                        }`}
-                      >
-                        <input
-                          type="checkbox"
-                          checked={isSelected}
-                          onChange={(e) => {
-                            if (e.target.checked) setValue('clientIds', [...formClientIds, String(c.id)], { shouldValidate: true })
-                            else setValue('clientIds', formClientIds.filter(id => id !== String(c.id)), { shouldValidate: true })
-                          }}
-                          className="w-4 h-4 rounded text-primary focus:ring-primary/20 bg-white/10 border-black/20 dark:border-white/20"
-                        />
-                        <div className="flex flex-col flex-1">
-                          <span className="text-sm font-medium text-gray-900 dark:text-white leading-tight">{c.name} {c.lastName}</span>
-                          <span className="text-[10px] text-gray-500 dark:text-gray-400">{c.email}</span>
-                        </div>
-                        {isSelected && (
-                          <button
-                            type="button"
-                            onClick={(e) => {
-                              e.preventDefault();
-                              e.stopPropagation();
-                              setValue('clientIds', formClientIds.filter(id => id !== String(c.id)), { shouldValidate: true })
-                            }}
-                            className="ml-auto flex h-7 w-7 items-center justify-center rounded-full bg-red-500/10 text-red-500 hover:bg-red-500 hover:text-white transition-all shadow-sm"
-                          >
-                            <X size={14} strokeWidth={3} />
-                          </button>
-                        )}
-                      </label>
-                    )
-                  })
-                })()}
-              </div>
-            </div>
-
-          </div>
-
-          <div className="flex justify-end gap-3 pt-4 border-t border-gray-200 dark:border-white/10 mt-6">
-            <Button type="submit" isLoading={isSubmitting} className="px-8 font-bold shadow-lg shadow-primary/20">Guardar y crear</Button>
-          </div>
-        </form>
       </Modal>
 
       <ConfirmDialog

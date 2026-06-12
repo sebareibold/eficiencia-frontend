@@ -380,7 +380,7 @@ export default function ClientsPage() {
       <div className="mb-6 flex flex-col lg:flex-row lg:items-end lg:justify-between gap-4">
         {/* Búsqueda */}
         <div className="relative w-full max-w-md shrink-0">
-          <Search size={14} className="pointer-events-none absolute left-3.5 top-1/2 -translate-y-1/2 text-gray-400 dark:text-[#8A8A9A]" />
+          <Search size={14} className="pointer-events-none absolute left-3.5 top-1/2 -translate-y-1/2 z-10 text-gray-400 dark:text-[#8A8A9A]" />
           <input
             value={search}
             onChange={e => setSearch(e.target.value)}

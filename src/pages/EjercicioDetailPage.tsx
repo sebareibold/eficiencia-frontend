@@ -6,31 +6,13 @@ import { zodResolver } from '@hookform/resolvers/zod'
 import { z } from 'zod'
 import { ArrowLeft, Check, Dumbbell } from 'lucide-react'
 import { ejerciciosApi } from '../api/ejercicios.api'
+import { patronesApi, type PatronMovimientoConfig } from '../api/patrones.api'
 import { useUiStore } from '../store/uiStore'
 import { ROUTES } from '../constants/routes'
 
 const glass    = 'rounded-[2rem] border border-white/50 dark:border-white/10 bg-white/30 dark:bg-black/30 backdrop-blur-3xl shadow-[0_8px_32px_rgba(0,0,0,0.04)] dark:shadow-[0_8px_32px_rgba(0,0,0,0.3)]'
 const inputCls = 'w-full rounded-xl border border-gray-200 dark:border-white/[0.1] bg-gray-50 dark:bg-white/[0.05] px-3 py-2 text-sm text-gray-900 dark:text-white placeholder-gray-400 dark:placeholder-white/30 focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/10 transition-colors'
 const labelCls = 'block text-[10px] font-bold text-gray-500 dark:text-[#8A8A9A] mb-1 uppercase tracking-wider'
-
-const PATRON_OPTIONS = [
-  { value: '',                  label: '— Sin especificar —' },
-  { value: 'MOVILIDAD',        label: 'Movilidad' },
-  { value: 'RODILLA_DOMINANTE', label: 'Rodilla dominante' },
-  { value: 'CADERA_DOMINANTE',  label: 'Cadera dominante' },
-  { value: 'EMPUJE',            label: 'Empuje' },
-  { value: 'TRACCION',          label: 'Tracción' },
-  { value: 'HIBRIDO',           label: 'Híbrido' },
-  { value: 'HOMBROS',           label: 'Hombros' },
-  { value: 'CORE',              label: 'Core' },
-  { value: 'POTENCIA',          label: 'Potencia' },
-  { value: 'PLIO_MI',           label: 'Pliometría MI' },
-  { value: 'PLIO_MS',           label: 'Pliometría MS' },
-  { value: 'ISO_MI',            label: 'Isométrico MI' },
-  { value: 'ISO_MS',            label: 'Isométrico MS' },
-  { value: 'ACCESORIO',         label: 'Accesorio' },
-  { value: 'OTROS',             label: 'Otros' },
-]
 
 const schema = z.object({
   nombre:           z.string().min(1, 'Requerido'),
@@ -49,6 +31,11 @@ export default function EjercicioDetailPage() {
 
   const [loadingData, setLoadingData] = useState(!isNew)
   const [saving, setSaving]           = useState(false)
+  const [patrones, setPatrones]       = useState<PatronMovimientoConfig[]>([])
+
+  useEffect(() => {
+    patronesApi.getAll(true).then(setPatrones).catch(() => {})
+  }, [])
 
   const { register, handleSubmit, reset, formState: { errors } } = useForm<FormValues>({
     resolver: zodResolver(schema),
@@ -111,14 +98,9 @@ export default function EjercicioDetailPage() {
           <ArrowLeft size={14} className="group-hover:-translate-x-0.5 transition-transform" />
           Volver a ejercicios
         </button>
-        <div className="flex items-center gap-3">
-          <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-primary/10">
-            <Dumbbell size={20} className="text-primary" />
-          </div>
-          <h1 className="text-2xl lg:text-3xl xl:text-4xl font-black tracking-tighter text-gray-900 dark:text-white drop-shadow-sm">
-            {isNew ? 'Nuevo ejercicio' : 'Editar ejercicio'}
-          </h1>
-        </div>
+        <h1 className="text-2xl lg:text-3xl xl:text-4xl font-black tracking-tighter text-gray-900 dark:text-white drop-shadow-sm">
+          {isNew ? 'Nuevo ejercicio' : 'Editar ejercicio'}
+        </h1>
       </div>
 
       {/* Formulario */}
@@ -158,8 +140,9 @@ export default function EjercicioDetailPage() {
               <div>
                 <label className={labelCls}>Patrón de movimiento</label>
                 <select {...register('patronMovimiento')} className={inputCls + ' cursor-pointer'}>
-                  {PATRON_OPTIONS.map(o => (
-                    <option key={o.value} value={o.value}>{o.label}</option>
+                  <option value="">— Sin especificar —</option>
+                  {patrones.map(p => (
+                    <option key={p.clave} value={p.clave}>{p.label}</option>
                   ))}
                 </select>
               </div>

@@ -405,7 +405,7 @@ export default function ExpensesPage() {
 
           {/* Búsqueda por descripción */}
           <div className="relative">
-            <Search size={14} className="pointer-events-none absolute left-3.5 top-1/2 -translate-y-1/2 text-gray-400 dark:text-[#8A8A9A]" />
+            <Search size={14} className="pointer-events-none absolute left-3.5 top-1/2 -translate-y-1/2 z-10 text-gray-400 dark:text-[#8A8A9A]" />
             <input
               type="text"
               value={search}

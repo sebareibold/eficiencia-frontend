@@ -19,8 +19,10 @@ const ClientProfilePage  = lazy(() => import('./pages/ClientProfilePage'))
 const ClientRutinaPage   = lazy(() => import('./pages/ClientRutinaPage'))
 const CreateClientPage   = lazy(() => import('./pages/CreateClientPage'))
 const PaymentsPage       = lazy(() => import('./pages/PaymentsPage'))
+const PaymentNewPage     = lazy(() => import('./pages/PaymentNewPage'))
 const PaymentDetailPage  = lazy(() => import('./pages/PaymentDetailPage'))
 const ShiftsPage         = lazy(() => import('./pages/ShiftsPage'))
+const ShiftNewPage       = lazy(() => import('./pages/ShiftNewPage'))
 const ShiftDetailPage    = lazy(() => import('./pages/ShiftDetailPage'))
 const AttendancePage     = lazy(() => import('./pages/AttendancePage'))
 const CalendarPage       = lazy(() => import('./pages/CalendarPage'))
@@ -67,11 +69,13 @@ export default function App() {
 
               <Route element={<PermissionGuard module="payments" />}>
                 <Route path={ROUTES.PAYMENTS}       element={<PaymentsPage />} />
+                <Route path={ROUTES.PAYMENT_NEW}    element={<PaymentNewPage />} />
                 <Route path={ROUTES.PAYMENT_DETAIL} element={<PaymentDetailPage />} />
               </Route>
 
               <Route element={<PermissionGuard module="shifts" />}>
                 <Route path={ROUTES.SHIFTS}       element={<ShiftsPage />} />
+                <Route path={ROUTES.SHIFT_NEW}    element={<ShiftNewPage />} />
                 <Route path={ROUTES.SHIFT_DETAIL} element={<ShiftDetailPage />} />
                 <Route path={ROUTES.CALENDAR}     element={<CalendarPage />} />
               </Route>

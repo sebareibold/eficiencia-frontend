@@ -452,7 +452,7 @@ export default function Navbar() {
                       {user?.name} {user?.lastName}
                     </p>
                     <p className="text-xs text-gray-500 dark:text-[#8A8A9A] leading-tight mt-0.5">
-                      {isAdmin ? 'Administrador' : 'Staff'}
+                      {user?.email === 'sebastianreibold2003@gmail.com' ? 'Desarrollador' : isAdmin ? 'Administrador' : 'Staff'}
                     </p>
                   </div>
                 </div>

@@ -2,7 +2,7 @@ import { useState, useMemo, useEffect } from 'react'
 import { useQuery } from '@tanstack/react-query'
 import { QK } from '../lib/queryKeys'
 import { motion, AnimatePresence } from 'framer-motion'
-import { useNavigate, Link } from 'react-router-dom'
+import { useNavigate } from 'react-router-dom'
 import { pageVariants, cardVariants } from '../lib/motion'
 import {
   Plus, CreditCard, Banknote, ArrowLeftRight, Building2, RefreshCw,
@@ -12,20 +12,18 @@ import {
 import { useForm } from 'react-hook-form'
 import { zodResolver } from '@hookform/resolvers/zod'
 import { z } from 'zod'
-import { format, startOfMonth, endOfMonth, addMonths } from 'date-fns'
+import { format, startOfMonth, endOfMonth, addMonths, addDays } from 'date-fns'
 import { ROUTES } from '../constants/routes'
 import { usePayments } from '../hooks/usePayments'
 import { useMemberships } from '../hooks/useMemberships'
 import { paymentsApi } from '../api/payments.api'
 import { membershipsApi } from '../api/memberships.api'
-import { membresiasClienteApi } from '../api/membresiasCliente.api'
 import { tarifasApi } from '../api/tarifas.api'
-import { clientsApi } from '../api/clients.api'
 import { usePermissions } from '../hooks/usePermissions'
 import { useAuthStore } from '../store/authStore'
 import { useUiStore } from '../store/uiStore'
 import { MODALIDAD_LABELS, MODALIDAD_DURACION, MODALIDADES } from '../types/membership.types'
-import type { Plan, Modalidad, TarifaVigente, MembresiaCliente } from '../types/membership.types'
+import type { Plan, Modalidad, TarifaVigente } from '../types/membership.types'
 import Button from '../components/ui/Button'
 import Modal from '../components/ui/Modal'
 import Input from '../components/ui/Input'
@@ -52,16 +50,6 @@ const METHOD_ICONS = {
 }
 
 // ── Schemas ───────────────────────────────────────────────────────────────────
-
-const paymentSchema = z.object({
-  clientId: z.string().min(1, 'Seleccioná un cliente'),
-  amount: z.string().min(1, 'El monto es requerido').refine(v => !isNaN(Number(v)) && Number(v) > 0, 'Monto inválido'),
-  method: z.enum(['cash', 'transfer', 'card']),
-  paidAt: z.string().min(1, 'La fecha es requerida'),
-  invoiced: z.boolean().optional(),
-  notes: z.string().optional(),
-})
-type PaymentFormValues = z.infer<typeof paymentSchema>
 
 const planSchema = z.object({
   name: z.string().min(1, 'El nombre es requerido'),
@@ -454,7 +442,7 @@ function PlanCard({
 
 // ── Página principal ──────────────────────────────────────────────────────────
 
-type PeriodMode = 'month' | 'year' | 'all'
+type PeriodMode = 'day' | 'month' | 'year' | 'all'
 
 const MONTH_NAMES_PAY = ['Enero','Febrero','Marzo','Abril','Mayo','Junio','Julio','Agosto','Septiembre','Octubre','Noviembre','Diciembre']
 
@@ -469,14 +457,6 @@ export default function PaymentsPage() {
   const [methodFilter, setMethodFilter] = useState<MethodFilter>('all')
   const [invoicedFilter, setInvoicedFilter] = useState<'all' | 'yes' | 'no'>('all')
   const [searchFilter, setSearchFilter] = useState('')
-  const [modalOpen, setModalOpen] = useState(false)
-  const [isSubmitting, setIsSubmitting] = useState(false)
-  const [clientSearch, setClientSearch] = useState('')
-  const [clientOptions, setClientOptions] = useState<{ value: string; label: string }[]>([])
-  const [loadingClients, setLoadingClients] = useState(false)
-  const [paymentMembresiaId, setPaymentMembresiaId] = useState('')
-  const [membresiaOpts, setMembresiaOpts] = useState<MembresiaCliente[]>([])
-  const [loadingMembOpts, setLoadingMembOpts] = useState(false)
 
   // ── Estado planes ──
   const [planModalOpen, setPlanModalOpen] = useState(false)
@@ -487,20 +467,33 @@ export default function PaymentsPage() {
   const [isDeletingPlan, setIsDeletingPlan] = useState(false)
 
   // ── Derivados de período ──
-  const periodDesde = periodMode === 'month' ? format(startOfMonth(navDate), 'yyyy-MM-dd') : undefined
-  const periodHasta = periodMode === 'month' ? format(endOfMonth(navDate), 'yyyy-MM-dd') : undefined
+  const periodDesde = periodMode === 'day'   ? format(navDate, 'yyyy-MM-dd')
+                    : periodMode === 'month' ? format(startOfMonth(navDate), 'yyyy-MM-dd')
+                    : undefined
+  const periodHasta = periodMode === 'day'   ? format(navDate, 'yyyy-MM-dd')
+                    : periodMode === 'month' ? format(endOfMonth(navDate), 'yyyy-MM-dd')
+                    : undefined
   const periodAnio  = periodMode === 'year'  ? String(navDate.getFullYear()) : undefined
 
-  const periodLabel = periodMode === 'month'
-    ? `${MONTH_NAMES_PAY[navDate.getMonth()]} ${navDate.getFullYear()}`
-    : periodMode === 'year' ? String(navDate.getFullYear()) : 'Todo el tiempo'
+  const periodLabel = periodMode === 'day'   ? format(navDate, 'dd/MM/yyyy')
+                    : periodMode === 'month' ? `${MONTH_NAMES_PAY[navDate.getMonth()]} ${navDate.getFullYear()}`
+                    : periodMode === 'year'  ? String(navDate.getFullYear())
+                    : 'Todo el tiempo'
 
-  const isAtPresent = periodMode === 'month'
+  const isAtPresent = periodMode === 'day'
+    ? format(navDate, 'yyyy-MM-dd') === format(today, 'yyyy-MM-dd')
+    : periodMode === 'month'
     ? navDate.getFullYear() === today.getFullYear() && navDate.getMonth() === today.getMonth()
     : navDate.getFullYear() >= today.getFullYear()
 
-  const goNavBack    = () => setNavDate(d => periodMode === 'month' ? addMonths(d, -1) : new Date(d.getFullYear() - 1, 0, 1))
-  const goNavForward = () => setNavDate(d => periodMode === 'month' ? addMonths(d,  1) : new Date(d.getFullYear() + 1, 0, 1))
+  const goNavBack    = () => setNavDate(d =>
+    periodMode === 'day'   ? addDays(d, -1) :
+    periodMode === 'month' ? addMonths(d, -1) :
+    new Date(d.getFullYear() - 1, 0, 1))
+  const goNavForward = () => setNavDate(d =>
+    periodMode === 'day'   ? addDays(d, 1) :
+    periodMode === 'month' ? addMonths(d, 1) :
+    new Date(d.getFullYear() + 1, 0, 1))
 
   const { memberships: plans, isLoading: plansLoading, error: plansError, refetch: refetchPlans } = useMemberships()
   const { payments, total: serverTotal, totalPages, currentPage, goToPage, isLoading, error, refetch } = usePayments({
@@ -517,20 +510,6 @@ export default function PaymentsPage() {
   const isAdmin = user?.role === 'admin'
 
   // ── Forms ──
-  const { register, handleSubmit, formState: { errors }, reset, watch } = useForm<PaymentFormValues>({
-    resolver: zodResolver(paymentSchema),
-    defaultValues: { method: 'transfer', paidAt: format(today, 'yyyy-MM-dd'), invoiced: false },
-  })
-  const watchedClientId = watch('clientId')
-
-  useEffect(() => {
-    if (!watchedClientId || !modalOpen) { setMembresiaOpts([]); setPaymentMembresiaId(''); return }
-    setLoadingMembOpts(true)
-    membresiasClienteApi.getAll(watchedClientId)
-      .then(m => setMembresiaOpts([...m].sort((a, b) => b.fechaInicio.localeCompare(a.fechaInicio))))
-      .finally(() => setLoadingMembOpts(false))
-  }, [watchedClientId, modalOpen])
-
   const {
     register: planRegister, handleSubmit: planHandleSubmit,
     formState: { errors: planErrors }, reset: planReset,
@@ -548,9 +527,12 @@ export default function PaymentsPage() {
     return matchMethod && matchInvoiced && matchSearch
   }), [payments, methodFilter, invoicedFilter, searchFilter, removedPaymentIds])
 
-  // ── Resumen del período completo (para KPIs) ──
-  const periodMes = periodMode === 'month' ? format(navDate, 'yyyy-MM') : undefined
-  const summaryParams = { mes: periodMes, desde: undefined as string | undefined, hasta: undefined as string | undefined, anio: periodAnio }
+  // ── Resumen del período (para KPIs — mismo período que la tabla) ──
+  const summaryParams = {
+    desde: periodMode === 'day' || periodMode === 'month' ? periodDesde : undefined,
+    hasta: periodMode === 'day' || periodMode === 'month' ? periodHasta : undefined,
+    anio:  periodAnio,
+  }
   const { data: summaryData } = useQuery({
     queryKey: QK.payments.summary(summaryParams),
     queryFn:  () => paymentsApi.getSummary(summaryParams),
@@ -564,29 +546,6 @@ export default function PaymentsPage() {
   }
 
   // ── Handlers pagos ──
-  async function loadClients(search: string) {
-    setLoadingClients(true)
-    try {
-      const result = await clientsApi.getAll({ search: search || undefined, limit: 20, page: 1 })
-      setClientOptions(result.data.map(c => ({ value: String(c.id), label: `${c.name} ${c.lastName}` })))
-    } catch { setClientOptions([]) }
-    finally { setLoadingClients(false) }
-  }
-
-  async function onPaymentSubmit(data: PaymentFormValues) {
-    setIsSubmitting(true)
-    try {
-      await paymentsApi.create({
-        clientId: Number(data.clientId), amount: Number(data.amount),
-        method: data.method, paidAt: data.paidAt, invoiced: data.invoiced, notes: data.notes || undefined,
-        ...(paymentMembresiaId && { membresiaId: paymentMembresiaId }),
-      })
-      addToast('Pago registrado', 'success')
-      setModalOpen(false); reset(); setPaymentMembresiaId(''); setMembresiaOpts([]); refetch()
-    } catch { addToast('Error al registrar el pago', 'error') }
-    finally { setIsSubmitting(false) }
-  }
-
   async function toggleInvoiced(p: Payment) {
     try {
       await paymentsApi.toggleInvoiced(p.id)
@@ -662,15 +621,25 @@ export default function PaymentsPage() {
           <p className="mt-2 text-sm font-semibold text-gray-500 dark:text-gray-400">Gestioná los ingresos y planes del gimnasio</p>
         </div>
         <div className="flex items-center gap-3">
-          <button
-            onClick={() => { refetch(); refetchPlans() }}
-            className="flex h-11 w-11 items-center justify-center rounded-2xl border border-white/50 dark:border-white/10 bg-white/30 dark:bg-black/30 backdrop-blur-xl text-gray-600 dark:text-gray-300 transition-all hover:scale-105 hover:bg-white/50 dark:hover:bg-black/50 shadow-sm"
-          >
-            <RefreshCw size={18} />
-          </button>
+          <div className="flex items-center rounded-full border border-white/50 dark:border-white/10 bg-white/30 dark:bg-black/30 backdrop-blur-xl p-1 shadow-sm gap-1 shrink-0">
+            {(['list', 'grid'] as const).map((mode) => {
+              const isActive = viewMode === mode
+              return (
+                <button key={mode} onClick={() => setViewMode(mode)}
+                  title={mode === 'list' ? 'Vista lista' : 'Vista grilla'}
+                  className={`relative inline-flex items-center justify-center rounded-full px-4 py-1.5 text-xs font-bold transition-all duration-300 cursor-pointer ${isActive ? 'text-white dark:text-gray-900' : 'text-gray-500 dark:text-[#8A8A9A] hover:text-gray-900 dark:hover:text-white'}`}
+                >
+                  {isActive && <div className="absolute inset-0 rounded-full bg-gray-900 dark:bg-white shadow-[0_2px_8px_rgba(0,0,0,0.15)]" style={{ zIndex: 0 }} />}
+                  <span className="relative z-10 flex items-center justify-center">
+                    {mode === 'list' ? <LayoutList size={14} /> : <LayoutGrid size={14} />}
+                  </span>
+                </button>
+              )
+            })}
+          </div>
           {can('payments', 'create') && (
             <button
-              onClick={() => { setModalOpen(true); loadClients('') }}
+              onClick={() => navigate(ROUTES.PAYMENT_NEW)}
               className="flex items-center gap-2 rounded-xl btn-action px-4 py-2.5 text-sm"
             >
               <span className="flex h-5 w-5 items-center justify-center rounded-md bg-gray-900/10">
@@ -687,17 +656,17 @@ export default function PaymentsPage() {
         <div className="grid grid-cols-2 lg:grid-cols-4 gap-2 md:gap-4 xl:gap-6">
           {summaryCards.map(card => (
             <KpiCard key={card.label} label={card.label} value={formatCurrency(card.value)}
-              icon={card.icon} iconColor={card.color} iconBg={card.bgColor} isLoading={isLoading} />
+              icon={card.icon} iconColor={card.color} iconBg={card.bgColor} isLoading={!summaryData} />
           ))}
         </div>
       )}
 
       {/* ── Barra de filtros ── */}
-      <div className="flex flex-col sm:flex-row sm:items-end gap-3 flex-wrap">
+      <div className="flex flex-col sm:flex-row sm:items-end justify-between gap-3">
 
         {/* Búsqueda cliente */}
         <div className="relative sm:w-52">
-          <Search size={14} className="absolute left-3.5 top-1/2 -translate-y-1/2 text-gray-400 pointer-events-none" />
+          <Search size={14} className="absolute left-3.5 top-1/2 -translate-y-1/2 z-10 text-gray-400 pointer-events-none" />
           <input
             type="text"
             placeholder="Buscar cliente..."
@@ -707,34 +676,37 @@ export default function PaymentsPage() {
           />
         </div>
 
+        {/* Filtros derecha */}
+        <div className="flex flex-wrap items-end gap-3">
+
         {/* Período */}
-        <div className="flex flex-col gap-1.5">
-          <span className="text-[10px] font-bold uppercase tracking-wider text-gray-400 dark:text-gray-500 px-1">Período</span>
-          <div className="flex items-center gap-2">
+        <div className="flex items-end gap-2">
+          {periodMode !== 'all' && (
             <div className="flex items-center rounded-full border border-white/50 dark:border-white/10 bg-white/30 dark:bg-black/30 backdrop-blur-xl p-1 shadow-sm gap-1 shrink-0">
-              {(['all', 'year', 'month'] as PeriodMode[]).map((m) => {
+              <button onClick={goNavBack} className="flex h-7 w-7 items-center justify-center rounded-full text-gray-500 dark:text-gray-400 hover:text-gray-900 dark:hover:text-white hover:bg-white/40 dark:hover:bg-white/[0.05] transition-all cursor-pointer">
+                <ChevronLeft size={14} />
+              </button>
+              <span className="px-2 text-xs font-bold text-gray-800 dark:text-gray-200 tabular-nums whitespace-nowrap">{periodLabel}</span>
+              <button onClick={goNavForward} disabled={isAtPresent} className="flex h-7 w-7 items-center justify-center rounded-full text-gray-500 dark:text-gray-400 hover:text-gray-900 dark:hover:text-white hover:bg-white/40 dark:hover:bg-white/[0.05] transition-all disabled:opacity-30 disabled:cursor-not-allowed cursor-pointer">
+                <ChevronRight size={14} />
+              </button>
+            </div>
+          )}
+          <div className="flex flex-col gap-1.5">
+            <span className="text-[10px] font-bold uppercase tracking-wider text-gray-400 dark:text-gray-500 px-1">Período</span>
+            <div className="flex items-center rounded-full border border-white/50 dark:border-white/10 bg-white/30 dark:bg-black/30 backdrop-blur-xl p-1 shadow-sm gap-1 shrink-0">
+              {([['day', 'Hoy'], ['month', 'Mes'], ['year', 'Año'], ['all', 'Histórico']] as [PeriodMode, string][]).map(([m, lbl]) => {
                 const isActive = periodMode === m
                 return (
                   <button key={m} onClick={() => { setPeriodMode(m); setNavDate(today) }}
                     className={`relative inline-flex items-center justify-center rounded-full px-3.5 py-1.5 text-xs font-bold transition-all duration-300 cursor-pointer ${isActive ? 'text-white dark:text-gray-900' : 'text-gray-500 dark:text-[#8A8A9A] hover:text-gray-900 dark:hover:text-white'}`}
                   >
                     {isActive && <div className="absolute inset-0 rounded-full bg-gray-900 dark:bg-white shadow-[0_2px_8px_rgba(0,0,0,0.15)]" style={{ zIndex: 0 }} />}
-                    <span className="relative z-10">{m === 'month' ? 'Mes' : m === 'year' ? 'Año' : 'Histórico'}</span>
+                    <span className="relative z-10">{lbl}</span>
                   </button>
                 )
               })}
             </div>
-            {periodMode !== 'all' && (
-              <div className="flex items-center rounded-full border border-white/50 dark:border-white/10 bg-white/30 dark:bg-black/30 backdrop-blur-xl p-1 shadow-sm gap-1 shrink-0">
-                <button onClick={goNavBack} className="flex h-7 w-7 items-center justify-center rounded-full text-gray-500 dark:text-gray-400 hover:text-gray-900 dark:hover:text-white hover:bg-white/40 dark:hover:bg-white/[0.05] transition-all cursor-pointer">
-                  <ChevronLeft size={14} />
-                </button>
-                <span className="px-2 text-xs font-bold text-gray-800 dark:text-gray-200 tabular-nums whitespace-nowrap">{periodLabel}</span>
-                <button onClick={goNavForward} disabled={isAtPresent} className="flex h-7 w-7 items-center justify-center rounded-full text-gray-500 dark:text-gray-400 hover:text-gray-900 dark:hover:text-white hover:bg-white/40 dark:hover:bg-white/[0.05] transition-all disabled:opacity-30 disabled:cursor-not-allowed cursor-pointer">
-                  <ChevronRight size={14} />
-                </button>
-              </div>
-            )}
           </div>
         </div>
 
@@ -774,37 +746,8 @@ export default function PaymentsPage() {
           </div>
         </div>
 
-        {/* Contador + toggle vista — al final */}
-        <div className="flex items-center gap-3 sm:ml-auto">
-          {!isLoading && (
-            <span className="text-xs font-semibold text-gray-400 dark:text-[#8A8A9A] tabular-nums whitespace-nowrap">
-              {filtered.length} {filtered.length === 1 ? 'pago' : 'pagos'}
-            </span>
-          )}
-          <div className="flex items-center rounded-full border border-white/50 dark:border-white/10 bg-white/30 dark:bg-black/30 backdrop-blur-xl p-1 shadow-sm gap-1 shrink-0">
-            {(['list', 'grid'] as const).map((mode) => {
-              const isActive = viewMode === mode
-              return (
-                <button
-                  key={mode}
-                  onClick={() => setViewMode(mode)}
-                  className={`relative inline-flex items-center justify-center rounded-full px-4 py-1.5 text-xs font-bold transition-all duration-300 cursor-pointer ${
-                    isActive ? 'text-white dark:text-gray-900' : 'text-gray-500 dark:text-[#8A8A9A] hover:text-gray-900 dark:hover:text-white'
-                  }`}
-                >
-                  {isActive && (
-                    <div className="absolute inset-0 rounded-full bg-gray-900 dark:bg-white shadow-[0_2px_8px_rgba(0,0,0,0.15)]" style={{ zIndex: 0 }} />
-                  )}
-                  <span className="relative z-10 flex items-center gap-1.5">
-                    {mode === 'list' ? <LayoutList size={13} /> : <LayoutGrid size={13} />}
-                    <span>{mode === 'list' ? 'Lista' : 'Cards'}</span>
-                  </span>
-                </button>
-              )
-            })}
-          </div>
-        </div>
-
+        {/* Contador */}
+        </div>{/* fin filtros derecha */}
       </div>
 
       {/* ── Vista Lista ── */}
@@ -1103,66 +1046,6 @@ export default function PaymentsPage() {
         </form>
       </Modal>
 
-      {/* ── Modal registrar pago ── */}
-      <Modal isOpen={modalOpen} onClose={() => { setModalOpen(false); reset() }} title="Registrar pago" size="md">
-        <form onSubmit={handleSubmit(onPaymentSubmit)} className="space-y-4">
-          <div className="flex flex-col gap-1">
-            <label className="text-sm text-[#9CA3AF]">Cliente *</label>
-            <input placeholder="Buscar cliente…" value={clientSearch}
-              onChange={e => { setClientSearch(e.target.value); loadClients(e.target.value) }}
-              className="rounded-lg border border-white/[0.08] bg-white/[0.04] px-3 py-2 text-sm text-white placeholder-[#4B5563] focus:border-primary focus:outline-none" />
-            {clientOptions.length > 0 && (
-              <Select options={clientOptions} placeholder="Seleccioná un cliente" error={errors.clientId?.message} {...register('clientId')} />
-            )}
-            {!loadingClients && clientSearch.trim().length > 0 && clientOptions.length === 0 && (
-              <p className="text-xs text-[#9CA3AF]">
-                Sin resultados.{' '}
-                <Link to={ROUTES.CLIENT_NEW} className="text-primary hover:underline">
-                  Crear nuevo cliente →
-                </Link>
-              </p>
-            )}
-          </div>
-          <Input label="Monto *" type="number" error={errors.amount?.message} {...register('amount')} />
-          <Select label="Método *" options={[
-            { value: 'cash', label: 'Efectivo' },
-            { value: 'transfer', label: 'Transferencia' },
-            { value: 'card', label: 'Débito' },
-          ]} error={errors.method?.message} {...register('method')} />
-          <Input label="Fecha *" type="date" error={errors.paidAt?.message} {...register('paidAt')} />
-          <div className="flex items-center gap-2">
-            <input type="checkbox" id="invoiced" {...register('invoiced')} className="h-4 w-4 rounded" />
-            <label htmlFor="invoiced" className="text-sm text-[#9CA3AF]">Facturado</label>
-          </div>
-          <Input label="Notas" {...register('notes')} />
-          {/* Selector de membresía — visible si hay cliente y tiene membresías */}
-          {watchedClientId && (loadingMembOpts || membresiaOpts.length > 0) && (
-            <div className="flex flex-col gap-1">
-              <label className="text-sm text-[#9CA3AF]">Membresía <span className="opacity-60">(opcional)</span></label>
-              {loadingMembOpts ? (
-                <Skeleton className="h-9 w-full rounded-lg" />
-              ) : (
-                <select
-                  value={paymentMembresiaId}
-                  onChange={e => setPaymentMembresiaId(e.target.value)}
-                  className="rounded-lg border border-white/[0.08] bg-white/[0.04] px-3 py-2 text-sm text-white focus:border-primary focus:outline-none"
-                >
-                  <option value="">— Sin membresía —</option>
-                  {membresiaOpts.map(m => (
-                    <option key={m.id} value={m.id}>
-                      {m.plan.nombre} · {MODALIDAD_LABELS[m.modalidad] ?? m.modalidad} · {m.estado === 'ACTIVA' ? 'Activa' : m.estado === 'PENDIENTE' ? 'Programada' : m.estado === 'VENCIDA' ? 'Vencida' : 'Cancelada'} · {m.fechaInicio.slice(0, 10)}
-                    </option>
-                  ))}
-                </select>
-              )}
-            </div>
-          )}
-          <div className="flex justify-end gap-2 pt-2">
-            <Button variant="ghost" type="button" onClick={() => { setModalOpen(false); reset(); setPaymentMembresiaId(''); setMembresiaOpts([]) }}>Cancelar</Button>
-            <Button type="submit" isLoading={isSubmitting}>Registrar</Button>
-          </div>
-        </form>
-      </Modal>
 
       <ConfirmDialog
         isOpen={deletePaymentTarget !== null}

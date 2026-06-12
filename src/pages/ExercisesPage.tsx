@@ -1,8 +1,9 @@
 import { useState, useEffect, useCallback } from 'react'
-import { motion } from 'framer-motion'
+import { motion, AnimatePresence } from 'framer-motion'
 import { useNavigate } from 'react-router-dom'
-import { Dumbbell, Plus, Edit2, Trash2, ExternalLink, Search, ChevronLeft, ChevronRight } from 'lucide-react'
+import { Dumbbell, Plus, Edit2, Trash2, ExternalLink, Search, ChevronLeft, ChevronRight, Check, X } from 'lucide-react'
 import { ejerciciosApi } from '../api/ejercicios.api'
+import { patronesApi, type PatronMovimientoConfig } from '../api/patrones.api'
 import { useAuthStore } from '../store/authStore'
 import { useUiStore } from '../store/uiStore'
 import type { EjercicioCatalogo, Dificultad } from '../types/ejercicio-catalogo.types'
@@ -19,6 +20,10 @@ const DIFICULTAD_CONFIG: Record<string, { label: string; cls: string }> = {
   AVANZADO: { label: 'Avanzado', cls: 'bg-red-500/10 text-red-400 border border-red-500/20' },
 }
 const DIFICULTAD_FALLBACK = { label: 'Sin definir', cls: 'bg-gray-500/10 text-gray-400 border border-gray-500/20' }
+
+
+const selectCls = 'rounded-xl border border-white/50 dark:border-white/10 bg-white/30 dark:bg-black/30 backdrop-blur-xl px-3.5 py-1.5 text-xs font-semibold text-gray-800 dark:text-gray-200 focus:outline-none cursor-pointer h-10 shadow-sm transition-all focus:border-primary'
+
 const PAGE_SIZE = 10
 
 export default function ExercisesPage() {
@@ -29,10 +34,24 @@ export default function ExercisesPage() {
 
   const [items, setItems]         = useState<EjercicioCatalogo[]>([])
   const [loading, setLoading]     = useState(true)
-  const [search, setSearch]       = useState('')
-  const [filterDif, setFilterDif] = useState<string>('todos')
-  const [page, setPage]           = useState(1)
+  const [search, setSearch]           = useState('')
+  const [filterDif, setFilterDif]     = useState<string>('todos')
+  const [filterPatron, setFilterPatron] = useState<string>('')
+  const [page, setPage]               = useState(1)
   const [deleteTarget, setDeleteTarget] = useState<string | null>(null)
+
+  // ── Patrones ──
+  const [patrones, setPatrones]               = useState<PatronMovimientoConfig[]>([])
+  const [patronesLoading, setPatronesLoading] = useState(true)
+  const [editingPatron, setEditingPatron]     = useState<string | null>(null)
+  const [editLabel, setEditLabel]             = useState('')
+  const [editDesc, setEditDesc]               = useState('')
+  const [newPatronLabel, setNewPatronLabel]   = useState('')
+  const [newPatronClave, setNewPatronClave]   = useState('')
+  const [newPatronDesc, setNewPatronDesc]     = useState('')
+  const [showNewForm, setShowNewForm]         = useState(false)
+  const [savingPatron, setSavingPatron]       = useState(false)
+  const [deletePatronTarget, setDeletePatronTarget] = useState<string | null>(null)
 
   const totalPages = Math.ceil(items.length / PAGE_SIZE)
   const pageItems  = items.slice((page - 1) * PAGE_SIZE, page * PAGE_SIZE)
@@ -43,6 +62,7 @@ export default function ExercisesPage() {
       const data = await ejerciciosApi.getAll({
         nombre: search || undefined,
         dificultad: filterDif !== 'todos' ? filterDif as Dificultad : undefined,
+        patronMovimiento: filterPatron || undefined,
       })
       setItems(data)
       setPage(1)
@@ -51,12 +71,73 @@ export default function ExercisesPage() {
     } finally {
       setLoading(false)
     }
-  }, [search, filterDif, addToast])
+  }, [search, filterDif, filterPatron, addToast])
 
   useEffect(() => {
     const t = setTimeout(fetchItems, 300)
     return () => clearTimeout(t)
   }, [fetchItems])
+
+  // ── Fetch patrones ──
+  const fetchPatrones = useCallback(async () => {
+    setPatronesLoading(true)
+    try { setPatrones(await patronesApi.getAll()) }
+    catch { addToast('Error al cargar patrones', 'error') }
+    finally { setPatronesLoading(false) }
+  }, [addToast])
+
+  useEffect(() => { fetchPatrones() }, [fetchPatrones])
+
+  async function handleSavePatron(id: string) {
+    if (!editLabel.trim()) return
+    setSavingPatron(true)
+    try {
+      const updated = await patronesApi.update(id, { label: editLabel.trim(), descripcion: editDesc.trim() || undefined })
+      setPatrones(prev => prev.map(p => p.id === id ? updated : p))
+      setEditingPatron(null)
+      addToast('Patrón actualizado', 'success')
+    } catch { addToast('Error al actualizar el patrón', 'error') }
+    finally { setSavingPatron(false) }
+  }
+
+  async function handleCreatePatron() {
+    if (!newPatronLabel.trim() || !newPatronClave.trim()) return
+    setSavingPatron(true)
+    try {
+      const created = await patronesApi.create({
+        clave: newPatronClave.trim().toUpperCase().replace(/\s+/g, '_'),
+        label: newPatronLabel.trim(),
+        descripcion: newPatronDesc.trim() || undefined,
+        orden: patrones.length,
+      })
+      setPatrones(prev => [...prev, created])
+      setNewPatronLabel(''); setNewPatronClave(''); setNewPatronDesc(''); setShowNewForm(false)
+      addToast('Patrón creado', 'success')
+    } catch (err: unknown) {
+      const msg = (err as { response?: { data?: { message?: string } } })?.response?.data?.message ?? 'Error al crear el patrón'
+      addToast(msg, 'error')
+    } finally { setSavingPatron(false) }
+  }
+
+  async function handleDeletePatron(id: string) {
+    setDeletePatronTarget(null)
+    const backup = patrones.find(p => p.id === id)
+    setPatrones(prev => prev.filter(p => p.id !== id))
+    try {
+      await patronesApi.remove(id)
+      addToast('Patrón eliminado', 'success')
+    } catch {
+      if (backup) setPatrones(prev => [...prev, backup])
+      addToast('Error al eliminar el patrón', 'error')
+    }
+  }
+
+  async function handleTogglePatron(id: string, activo: boolean) {
+    try {
+      const updated = await patronesApi.update(id, { activo: !activo })
+      setPatrones(prev => prev.map(p => p.id === id ? updated : p))
+    } catch { addToast('Error al cambiar estado del patrón', 'error') }
+  }
 
   async function handleDelete(id: string) {
     setDeleteTarget(null)
@@ -88,9 +169,6 @@ export default function ExercisesPage() {
       <section className="flex flex-col gap-5">
         <div className="flex items-center justify-between">
           <div className="flex items-center gap-3">
-            <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-primary/10">
-              <Dumbbell size={20} className="text-primary" />
-            </div>
             <h2 className="text-2xl lg:text-3xl xl:text-4xl font-black tracking-tighter text-gray-900 dark:text-white drop-shadow-sm">
               Catálogo
             </h2>
@@ -106,32 +184,53 @@ export default function ExercisesPage() {
         </div>
 
         {/* Búsqueda + filtros */}
-        <div className="flex w-full flex-col items-start justify-between gap-4 sm:flex-row sm:items-center">
-          <div className="relative w-full max-w-md">
-            <Search size={15} className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" />
+        <div className="flex flex-col lg:flex-row lg:items-end lg:justify-between gap-4">
+          {/* Búsqueda */}
+          <div className="relative w-full max-w-md shrink-0">
+            <Search size={14} className="pointer-events-none absolute left-3.5 top-1/2 -translate-y-1/2 z-10 text-gray-400 dark:text-[#8A8A9A]" />
             <input
               value={search}
               onChange={e => setSearch(e.target.value)}
-              placeholder="Buscar ejercicio..."
-              className="w-full rounded-xl border border-saas-border bg-white py-2 pl-10 pr-4 text-sm text-gray-900 transition-all focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/20"
+              placeholder="Buscar ejercicio…"
+              className="w-full rounded-xl border border-white/50 dark:border-white/10 bg-white/30 dark:bg-black/30 backdrop-blur-xl pl-10 pr-4 py-2 text-xs font-semibold text-gray-800 dark:text-gray-200 placeholder-gray-400 focus:outline-none h-10"
             />
           </div>
-          <div className="flex flex-col gap-1.5">
-            <span className="text-[10px] font-bold uppercase tracking-wider text-gray-400 dark:text-gray-500 px-1">Dificultad</span>
-            <div className="flex flex-wrap gap-2">
-              {(['todos', 'FACIL', 'DIFICIL', 'AVANZADO'] as const).map(d => (
-                <button
-                  key={d}
-                  onClick={() => setFilterDif(d)}
-                  className={`inline-flex items-center rounded-full px-3 py-1.5 text-sm font-medium transition-all active:scale-[0.98] ${
-                    filterDif === d
-                      ? 'bg-gray-900 text-white shadow-sm'
-                      : 'border border-saas-border bg-white text-gray-700 hover:bg-saas-hover'
-                  }`}
-                >
-                  {d === 'todos' ? 'Todos' : DIFICULTAD_CONFIG[d as keyof typeof DIFICULTAD_CONFIG].label}
-                </button>
-              ))}
+
+          {/* Filtros */}
+          <div className="flex flex-col sm:flex-row gap-3 flex-wrap items-end">
+            {/* Dificultad */}
+            <div className="flex flex-col gap-1.5">
+              <span className="text-[10px] font-bold uppercase tracking-wider text-gray-400 dark:text-gray-500 px-1">Dificultad</span>
+              <div className="flex items-center rounded-full border border-white/50 dark:border-white/10 bg-white/30 dark:bg-black/30 backdrop-blur-xl p-1 shadow-sm gap-1">
+                {(['todos', 'FACIL', 'DIFICIL', 'AVANZADO'] as const).map(d => {
+                  const isActive = filterDif === d
+                  return (
+                    <button key={d} onClick={() => setFilterDif(d)}
+                      className={`relative inline-flex items-center justify-center rounded-full px-4 py-1.5 text-xs font-bold transition-all duration-300 cursor-pointer ${isActive ? 'text-white dark:text-gray-900' : 'text-gray-500 dark:text-[#8A8A9A] hover:text-gray-900 dark:hover:text-white'}`}
+                    >
+                      {isActive && <div className="absolute inset-0 rounded-full bg-gray-900 dark:bg-white shadow-[0_2px_8px_rgba(0,0,0,0.15)]" style={{ zIndex: 0 }} />}
+                      <span className="relative" style={{ zIndex: 1 }}>
+                        {d === 'todos' ? 'Todos' : DIFICULTAD_CONFIG[d as keyof typeof DIFICULTAD_CONFIG].label}
+                      </span>
+                    </button>
+                  )
+                })}
+              </div>
+            </div>
+
+            {/* Patrón de movimiento */}
+            <div className="flex flex-col gap-1.5">
+              <span className="text-[10px] font-bold uppercase tracking-wider text-gray-400 dark:text-gray-500 px-1">Patrón</span>
+              <select
+                value={filterPatron}
+                onChange={e => setFilterPatron(e.target.value)}
+                className={selectCls}
+              >
+                <option value="" className="bg-white dark:bg-[#1a1a24] text-gray-900 dark:text-white">Todos</option>
+                {patrones.filter(p => p.activo).map(p => (
+                  <option key={p.clave} value={p.clave} className="bg-white dark:bg-[#1a1a24] text-gray-900 dark:text-white">{p.label}</option>
+                ))}
+              </select>
             </div>
           </div>
         </div>
@@ -211,7 +310,7 @@ export default function ExercisesPage() {
                 <div className="flex items-center gap-2 flex-wrap">
                   {ej.patronMovimiento && (
                     <span className="text-[11px] px-2 py-0.5 rounded-md bg-gray-100 dark:bg-white/[0.06] text-gray-500 dark:text-[#8A8A9A]">
-                      {ej.patronMovimiento}
+                      {patrones.find(p => p.clave === ej.patronMovimiento)?.label ?? ej.patronMovimiento}
                     </span>
                   )}
                   <span className={`inline-flex items-center rounded-full px-2.5 py-0.5 text-[11px] font-semibold ${(DIFICULTAD_CONFIG[ej.dificultad] ?? DIFICULTAD_FALLBACK).cls}`}>
@@ -229,7 +328,7 @@ export default function ExercisesPage() {
           </div>
 
           {/* ── Desktop table ── */}
-          <div className="hidden sm:block overflow-x-auto rounded-[2rem] border border-white/50 dark:border-white/10 bg-white/30 dark:bg-black/30 backdrop-blur-3xl shadow-[0_8px_32px_rgba(0,0,0,0.04)] dark:shadow-[0_8px_32px_rgba(0,0,0,0.3)]">
+          <div className="hidden sm:block rounded-[2rem] border border-white/50 dark:border-white/10 bg-white/30 dark:bg-black/30 backdrop-blur-3xl shadow-[0_8px_32px_rgba(0,0,0,0.04)] dark:shadow-[0_8px_32px_rgba(0,0,0,0.3)]">
             <table className="w-full text-sm">
               <thead>
                 <tr className="border-b border-white/20 dark:border-white/10 bg-gray-50/30 dark:bg-black/10">
@@ -264,7 +363,7 @@ export default function ExercisesPage() {
                     <td className="py-3.5 px-4">
                       {ej.patronMovimiento ? (
                         <span className="text-[10px] px-1.5 py-0.5 rounded-md bg-gray-100 dark:bg-white/[0.06] text-gray-500 dark:text-[#8A8A9A]">
-                          {ej.patronMovimiento}
+                          {patrones.find(p => p.clave === ej.patronMovimiento)?.label ?? ej.patronMovimiento}
                         </span>
                       ) : (
                         <span className="text-gray-300 dark:text-[#4B4B5A]">—</span>
@@ -366,6 +465,163 @@ export default function ExercisesPage() {
         )}
       </section>
 
+      {/* ══ Sección Patrones ══ */}
+      <section className="flex flex-col gap-5">
+        <div className="flex items-center justify-between">
+          <h2 className="text-2xl lg:text-3xl xl:text-4xl font-black tracking-tighter text-gray-900 dark:text-white drop-shadow-sm">
+            Patrones
+          </h2>
+          {isAdmin && (
+            <button
+              onClick={() => { setShowNewForm(v => !v); setNewPatronLabel(''); setNewPatronClave(''); setNewPatronDesc('') }}
+              className="flex items-center gap-2 rounded-xl btn-action px-4 py-2.5 text-sm"
+            >
+              <Plus size={14} /> Nuevo patrón
+            </button>
+          )}
+        </div>
+
+        {/* Formulario nuevo patrón */}
+        <AnimatePresence>
+          {showNewForm && isAdmin && (
+            <motion.div
+              initial={{ opacity: 0, y: -8 }}
+              animate={{ opacity: 1, y: 0 }}
+              exit={{ opacity: 0, y: -8 }}
+              className={`${glass} p-5 flex flex-col gap-4`}
+            >
+              <p className="text-xs font-bold uppercase tracking-wider text-gray-500 dark:text-[#6B7280]">Nuevo patrón de movimiento</p>
+              <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+                <div className="flex flex-col gap-1.5">
+                  <label className="text-[11px] font-semibold text-gray-500 dark:text-[#8A8A9A]">Etiqueta *</label>
+                  <input
+                    value={newPatronLabel}
+                    onChange={e => setNewPatronLabel(e.target.value)}
+                    placeholder="Ej: Tracción vertical"
+                    className="rounded-xl border border-white/50 dark:border-white/10 bg-white/60 dark:bg-black/20 px-3 py-2 text-sm text-gray-900 dark:text-white placeholder-gray-400 focus:outline-none focus:border-primary"
+                  />
+                </div>
+                <div className="flex flex-col gap-1.5">
+                  <label className="text-[11px] font-semibold text-gray-500 dark:text-[#8A8A9A]">Clave (código) *</label>
+                  <input
+                    value={newPatronClave}
+                    onChange={e => setNewPatronClave(e.target.value)}
+                    placeholder="Ej: TRACCION_VERTICAL"
+                    className="rounded-xl border border-white/50 dark:border-white/10 bg-white/60 dark:bg-black/20 px-3 py-2 text-sm text-gray-900 dark:text-white placeholder-gray-400 focus:outline-none focus:border-primary font-mono"
+                  />
+                </div>
+                <div className="flex flex-col gap-1.5">
+                  <label className="text-[11px] font-semibold text-gray-500 dark:text-[#8A8A9A]">Descripción</label>
+                  <input
+                    value={newPatronDesc}
+                    onChange={e => setNewPatronDesc(e.target.value)}
+                    placeholder="Opcional"
+                    className="rounded-xl border border-white/50 dark:border-white/10 bg-white/60 dark:bg-black/20 px-3 py-2 text-sm text-gray-900 dark:text-white placeholder-gray-400 focus:outline-none focus:border-primary"
+                  />
+                </div>
+              </div>
+              <div className="flex items-center gap-2 justify-end">
+                <button onClick={() => setShowNewForm(false)} className="px-4 py-2 rounded-xl text-xs font-semibold text-gray-500 dark:text-[#8A8A9A] hover:text-gray-900 dark:hover:text-white transition-colors">
+                  Cancelar
+                </button>
+                <button
+                  onClick={handleCreatePatron}
+                  disabled={savingPatron || !newPatronLabel.trim() || !newPatronClave.trim()}
+                  className="flex items-center gap-2 rounded-xl btn-action px-4 py-2 text-sm disabled:opacity-40"
+                >
+                  {savingPatron ? <span className="h-3.5 w-3.5 rounded-full border-2 border-current border-t-transparent animate-spin" /> : <Check size={13} />}
+                  Guardar
+                </button>
+              </div>
+            </motion.div>
+          )}
+        </AnimatePresence>
+
+        {/* Grid de patrones */}
+        {patronesLoading ? (
+          <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 gap-3">
+            {Array.from({ length: 10 }).map((_, i) => (
+              <div key={i} className="h-20 rounded-2xl bg-black/[0.05] dark:bg-white/[0.04] animate-pulse" style={{ opacity: 1 - i * 0.07 }} />
+            ))}
+          </div>
+        ) : (
+          <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 gap-3">
+            {patrones.map(p => (
+              <motion.div
+                key={p.id}
+                layout
+                initial={{ opacity: 0, scale: 0.96 }}
+                animate={{ opacity: 1, scale: 1 }}
+                className={`group ${glass} p-4 flex flex-col gap-2 ${!p.activo ? 'opacity-50' : ''}`}
+              >
+                {editingPatron === p.id ? (
+                  <div className="flex flex-col gap-2">
+                    <input
+                      value={editLabel}
+                      onChange={e => setEditLabel(e.target.value)}
+                      autoFocus
+                      className="rounded-lg border border-primary/40 bg-white/60 dark:bg-black/20 px-2 py-1 text-sm font-semibold text-gray-900 dark:text-white focus:outline-none"
+                    />
+                    <input
+                      value={editDesc}
+                      onChange={e => setEditDesc(e.target.value)}
+                      placeholder="Descripción"
+                      className="rounded-lg border border-white/50 dark:border-white/10 bg-white/40 dark:bg-black/10 px-2 py-1 text-xs text-gray-600 dark:text-[#8A8A9A] focus:outline-none"
+                    />
+                    <div className="flex items-center gap-1.5 justify-end">
+                      <button onClick={() => setEditingPatron(null)} className="p-1 rounded-lg text-gray-400 hover:text-gray-900 dark:hover:text-white transition-colors">
+                        <X size={12} />
+                      </button>
+                      <button
+                        onClick={() => handleSavePatron(p.id)}
+                        disabled={savingPatron}
+                        className="p-1 rounded-lg text-primary hover:bg-primary/10 transition-colors disabled:opacity-40"
+                      >
+                        {savingPatron ? <span className="h-3 w-3 rounded-full border-2 border-current border-t-transparent animate-spin inline-block" /> : <Check size={12} />}
+                      </button>
+                    </div>
+                  </div>
+                ) : (
+                  <>
+                    <div className="flex items-start justify-between gap-1">
+                      <div className="min-w-0">
+                        <p className="text-sm font-bold text-gray-900 dark:text-white leading-tight truncate">{p.label}</p>
+                        <p className="text-[10px] font-mono text-gray-400 dark:text-[#4B4B5A] mt-0.5 truncate">{p.clave}</p>
+                      </div>
+                      {isAdmin && (
+                        <div className="flex items-center gap-0.5 shrink-0 opacity-0 group-hover:opacity-100 transition-opacity">
+                          <button onClick={() => { setEditingPatron(p.id); setEditLabel(p.label); setEditDesc(p.descripcion ?? '') }} className="p-1 rounded-lg text-gray-400 hover:text-gray-900 dark:hover:text-white hover:bg-gray-100 dark:hover:bg-white/[0.06] transition-colors">
+                            <Edit2 size={11} />
+                          </button>
+                          <button onClick={() => setDeletePatronTarget(p.id)} className="p-1 rounded-lg text-gray-400 hover:text-red-400 hover:bg-red-500/10 transition-colors">
+                            <Trash2 size={11} />
+                          </button>
+                        </div>
+                      )}
+                    </div>
+                    {p.descripcion && (
+                      <p className="text-[11px] text-gray-500 dark:text-[#6B7280] leading-snug line-clamp-2">{p.descripcion}</p>
+                    )}
+                    {isAdmin && (
+                      <button
+                        onClick={() => handleTogglePatron(p.id, p.activo)}
+                        className={`self-start mt-auto inline-flex items-center rounded-full px-2 py-0.5 text-[10px] font-semibold border transition-colors ${
+                          p.activo
+                            ? 'bg-emerald-500/10 text-emerald-400 border-emerald-500/20 hover:bg-red-500/10 hover:text-red-400 hover:border-red-500/20'
+                            : 'bg-gray-100 dark:bg-white/[0.05] text-gray-400 border-gray-200 dark:border-white/[0.1] hover:bg-emerald-500/10 hover:text-emerald-400 hover:border-emerald-500/20'
+                        }`}
+                      >
+                        {p.activo ? 'Activo' : 'Inactivo'}
+                      </button>
+                    )}
+                  </>
+                )}
+              </motion.div>
+            ))}
+          </div>
+        )}
+      </section>
+
       <ConfirmDialog
         isOpen={deleteTarget !== null}
         title="Eliminar ejercicio"
@@ -373,6 +629,15 @@ export default function ExercisesPage() {
         confirmLabel="Eliminar"
         onConfirm={() => deleteTarget !== null && handleDelete(deleteTarget)}
         onClose={() => setDeleteTarget(null)}
+      />
+
+      <ConfirmDialog
+        isOpen={deletePatronTarget !== null}
+        title="Eliminar patrón"
+        message="Se eliminará este patrón. Los ejercicios que lo tengan asignado quedarán sin patrón. Esta acción no se puede deshacer."
+        confirmLabel="Eliminar"
+        onConfirm={() => deletePatronTarget !== null && handleDeletePatron(deletePatronTarget)}
+        onClose={() => setDeletePatronTarget(null)}
       />
     </motion.div>
   )

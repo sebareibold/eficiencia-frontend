@@ -28,6 +28,8 @@ import Skeleton from '../components/ui/Skeleton'
 
 type Tab = 'usuarios' | 'profesores' | 'permisos' | 'solicitudes'
 
+const DEV_EMAIL = 'sebastianreibold2003@gmail.com'
+
 const ROL_LABELS: Record<UserRole, string> = {
   ADMINISTRADOR: 'Administrador',
   STAFF:         'Staff',
@@ -86,10 +88,15 @@ type EditValues   = z.infer<typeof editSchema>
 
 const glassCard = 'rounded-3xl border border-white/50 dark:border-white/[0.08] bg-white/30 dark:bg-black/30 backdrop-blur-3xl shadow-[0_8px_32px_rgba(0,0,0,0.04)] dark:shadow-[0_8px_32px_rgba(0,0,0,0.25)]'
 
-function RolBadge({ rol }: { rol: UserRole }) {
+function RolBadge({ rol, email }: { rol: UserRole; email?: string }) {
+  const isDev = email === DEV_EMAIL
+  const label = isDev ? 'Desarrollador' : ROL_LABELS[rol]
+  const cls   = isDev
+    ? 'bg-violet-500/10 text-violet-700 dark:text-violet-400 border border-violet-500/20'
+    : ROL_COLORS[rol]
   return (
-    <span className={`inline-flex items-center rounded-full px-2.5 py-1 text-xs font-bold ${ROL_COLORS[rol]}`}>
-      {ROL_LABELS[rol]}
+    <span className={`inline-flex items-center rounded-full px-2.5 py-1 text-xs font-bold ${cls}`}>
+      {label}
     </span>
   )
 }
@@ -282,7 +289,7 @@ function UsuariosTab() {
                   <button onClick={() => openEdit(u)} className="rounded-lg p-1.5 text-gray-400 hover:bg-gray-100 dark:hover:bg-white/[0.08] hover:text-gray-700 dark:hover:text-white transition-all">
                     <Edit2 size={14} />
                   </button>
-                  {u.id !== currentUser?.id && (
+                  {u.id !== currentUser?.id && u.rol !== 'ADMINISTRADOR' && (
                     <button onClick={() => setDeleteTarget(u)} disabled={deletingId === u.id} className="rounded-lg p-1.5 text-gray-400 hover:bg-red-50 dark:hover:bg-red-500/10 hover:text-red-500 transition-all disabled:opacity-40">
                       <Trash2 size={14} />
                     </button>
@@ -290,7 +297,7 @@ function UsuariosTab() {
                 </div>
               </div>
               <div className="flex items-center gap-2 flex-wrap">
-                <RolBadge rol={u.rol} />
+                <RolBadge rol={u.rol} email={u.email} />
                 <EstadoBadge activo={u.activo} />
                 {u.profesor && (
                   <span className="inline-flex items-center gap-1 text-xs font-medium text-emerald-600 dark:text-emerald-400">
@@ -333,7 +340,7 @@ function UsuariosTab() {
                       </div>
                     </td>
                     <td className="px-5 py-3.5 text-[#8A8A9A] text-sm">{u.email}</td>
-                    <td className="px-5 py-3.5"><RolBadge rol={u.rol} /></td>
+                    <td className="px-5 py-3.5"><RolBadge rol={u.rol} email={u.email} /></td>
                     <td className="px-5 py-3.5"><EstadoBadge activo={u.activo} /></td>
                     <td className="px-5 py-3.5">
                       {u.profesor
@@ -349,7 +356,7 @@ function UsuariosTab() {
                         >
                           <Edit2 size={14} />
                         </button>
-                        {u.id !== currentUser?.id && (
+                        {u.id !== currentUser?.id && u.rol !== 'ADMINISTRADOR' && (
                           <button
                             onClick={() => setDeleteTarget(u)}
                             disabled={deletingId === u.id}

@@ -1,7 +1,7 @@
 import { useState, useEffect, useCallback } from 'react'
 import { motion } from 'framer-motion'
 import { useNavigate } from 'react-router-dom'
-import { Layers, Plus, Edit2, Trash2, Power, X, Filter } from 'lucide-react'
+import { Layers, Plus, Edit2, Trash2, Power, X, ChevronLeft, ChevronRight, Search } from 'lucide-react'
 import { plantillasApi } from '../api/plantillas.api'
 import { useAuthStore } from '../store/authStore'
 import { useUiStore } from '../store/uiStore'
@@ -25,8 +25,30 @@ const TIPO_COLORS: Record<TipoDistribucion, string> = {
   CUSTOM:    'bg-gray-500/15 text-gray-400 border-gray-500/25',
 }
 
-const glass     = 'rounded-[2rem] border border-white/50 dark:border-white/10 bg-white/30 dark:bg-black/30 backdrop-blur-3xl shadow-[0_8px_32px_rgba(0,0,0,0.04)] dark:shadow-[0_8px_32px_rgba(0,0,0,0.3)]'
-const selectCls = 'rounded-xl border border-white/50 dark:border-white/10 bg-white/30 dark:bg-black/30 backdrop-blur-xl px-3.5 py-1.5 text-xs font-semibold text-gray-800 dark:text-gray-200 focus:outline-none cursor-pointer h-9 shadow-sm transition-all focus:border-primary'
+const PAGE_SIZE = 8
+const glass = 'rounded-[2rem] border border-white/50 dark:border-white/10 bg-white/30 dark:bg-black/30 backdrop-blur-3xl shadow-[0_8px_32px_rgba(0,0,0,0.04)] dark:shadow-[0_8px_32px_rgba(0,0,0,0.3)]'
+
+const TIPO_FILTER_OPTIONS: { value: TipoDistribucion | ''; label: string }[] = [
+  { value: '',          label: 'Todos' },
+  { value: 'FULL_BODY', label: 'Full Body' },
+  { value: 'ARM_LEG',   label: 'Arm-Leg' },
+  { value: 'PUSH_PULL', label: 'Push-Pull' },
+  { value: 'CUSTOM',    label: 'Custom' },
+]
+
+const SESIONES_OPTIONS: { value: number | ''; label: string }[] = [
+  { value: '',  label: 'Todas' },
+  { value: 2,   label: '2×' },
+  { value: 3,   label: '3×' },
+  { value: 4,   label: '4×' },
+  { value: 5,   label: '5×' },
+]
+
+const ESTADO_OPTIONS: { value: boolean | undefined; label: string }[] = [
+  { value: undefined, label: 'Todas' },
+  { value: true,      label: 'Activas' },
+  { value: false,     label: 'Inactivas' },
+]
 
 // ─── FilaPlantilla ────────────────────────────────────────────────────────────
 
@@ -134,8 +156,14 @@ export default function PlantillasPage({ embedded = false }: PlantillasPageProps
   const [filtroSesiones, setFiltroSesiones] = useState<number | ''>('')
   const [filtroActivas, setFiltroActivas]   = useState<boolean | undefined>(undefined)
 
+  const [search, setSearch] = useState('')
+  const [page, setPage] = useState(1)
   const [loadingToggle, setLoadingToggle] = useState<string | null>(null)
   const [loadingDelete, setLoadingDelete] = useState<string | null>(null)
+
+  const filtered   = plantillas.filter(p => !search || p.nombre.toLowerCase().includes(search.toLowerCase()))
+  const totalPages = Math.ceil(filtered.length / PAGE_SIZE)
+  const pageItems  = filtered.slice((page - 1) * PAGE_SIZE, page * PAGE_SIZE)
 
   const fetchPlantillas = useCallback(async () => {
     setLoading(true)
@@ -146,6 +174,7 @@ export default function PlantillasPage({ embedded = false }: PlantillasPageProps
         soloActivas: filtroActivas,
       })
       setPlantillas(data)
+      setPage(1)
     } catch {
       addToast('Error al cargar las plantillas', 'error')
     } finally {
@@ -198,9 +227,6 @@ export default function PlantillasPage({ embedded = false }: PlantillasPageProps
       {!embedded && (
         <div className="flex items-center justify-between">
           <div className="flex items-center gap-3">
-            <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-primary/10">
-              <Layers size={20} className="text-primary" />
-            </div>
             <div>
               <h1 className="text-2xl lg:text-3xl xl:text-4xl font-black tracking-tighter text-gray-900 dark:text-white drop-shadow-sm">
                 Plantillas
@@ -216,9 +242,6 @@ export default function PlantillasPage({ embedded = false }: PlantillasPageProps
       {embedded && (
         <div className="flex items-center justify-between">
           <div className="flex items-center gap-3">
-            <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-primary/10">
-              <Layers size={20} className="text-primary" />
-            </div>
             <h2 className="text-2xl lg:text-3xl xl:text-4xl font-black tracking-tighter text-gray-900 dark:text-white drop-shadow-sm">
               Plantillas
             </h2>
@@ -228,55 +251,93 @@ export default function PlantillasPage({ embedded = false }: PlantillasPageProps
       )}
 
       <div className="space-y-4">
-        {/* Filtros */}
-        <div className={`${glass} px-4 py-3`}>
-          <div className="flex flex-wrap items-center gap-3">
-            <Filter size={13} className="text-gray-400 dark:text-white/30 shrink-0" />
-            <select
-              value={filtroTipo}
-              onChange={e => setFiltroTipo(e.target.value as TipoDistribucion | '')}
-              className={selectCls}
-            >
-              <option value="" className="bg-white dark:bg-[#1a1a24] text-gray-900 dark:text-white">Todos los tipos</option>
-              {(Object.keys(TIPO_LABELS) as TipoDistribucion[]).map(t => (
-                <option key={t} value={t} className="bg-white dark:bg-[#1a1a24] text-gray-900 dark:text-white">{TIPO_LABELS[t]}</option>
-              ))}
-            </select>
-            <select
-              value={filtroSesiones}
-              onChange={e => setFiltroSesiones(e.target.value ? Number(e.target.value) : '')}
-              className={selectCls}
-            >
-              <option value="" className="bg-white dark:bg-[#1a1a24] text-gray-900 dark:text-white">Todas las sesiones</option>
-              {[2, 3, 4, 5].map(n => <option key={n} value={n} className="bg-white dark:bg-[#1a1a24] text-gray-900 dark:text-white">{n}× semana</option>)}
-            </select>
-            <select
-              value={filtroActivas === undefined ? '' : String(filtroActivas)}
-              onChange={e => setFiltroActivas(e.target.value === '' ? undefined : e.target.value === 'true')}
-              className={selectCls}
-            >
-              <option value="" className="bg-white dark:bg-[#1a1a24] text-gray-900 dark:text-white">Todas</option>
-              <option value="true" className="bg-white dark:bg-[#1a1a24] text-gray-900 dark:text-white">Solo activas</option>
-              <option value="false" className="bg-white dark:bg-[#1a1a24] text-gray-900 dark:text-white">Solo inactivas</option>
-            </select>
+        {/* Búsqueda + Filtros */}
+        <div className="flex flex-col lg:flex-row lg:items-end lg:justify-between gap-4">
+          {/* Buscador */}
+          <div className="relative w-full max-w-md shrink-0">
+            <Search size={14} className="pointer-events-none absolute left-3.5 top-1/2 -translate-y-1/2 z-10 text-gray-400 dark:text-[#8A8A9A]" />
+            <input
+              value={search}
+              onChange={e => { setSearch(e.target.value); setPage(1) }}
+              placeholder="Buscar plantilla…"
+              className="w-full rounded-xl border border-white/50 dark:border-white/10 bg-white/30 dark:bg-black/30 backdrop-blur-xl pl-10 pr-4 py-2 text-xs font-semibold text-gray-800 dark:text-gray-200 placeholder-gray-400 focus:outline-none h-10"
+            />
+          </div>
+
+          {/* Filtros */}
+          <div className="flex flex-col sm:flex-row gap-3 flex-wrap items-end">
+          <div className="flex flex-col sm:flex-row gap-3 flex-wrap items-end">
+            {/* Tipo */}
+            <div className="flex flex-col gap-1.5">
+              <span className="text-[10px] font-bold uppercase tracking-wider text-gray-400 dark:text-gray-500 px-1">Tipo</span>
+              <div className="flex items-center rounded-full border border-white/50 dark:border-white/10 bg-white/30 dark:bg-black/30 backdrop-blur-xl p-1 shadow-sm gap-1">
+                {TIPO_FILTER_OPTIONS.map(opt => {
+                  const isActive = filtroTipo === opt.value
+                  return (
+                    <button key={String(opt.value)} onClick={() => setFiltroTipo(opt.value as TipoDistribucion | '')}
+                      className={`relative inline-flex items-center justify-center rounded-full px-3 py-1.5 text-xs font-bold transition-all duration-300 cursor-pointer ${isActive ? 'text-white dark:text-gray-900' : 'text-gray-500 dark:text-[#8A8A9A] hover:text-gray-900 dark:hover:text-white'}`}
+                    >
+                      {isActive && <div className="absolute inset-0 rounded-full bg-gray-900 dark:bg-white shadow-[0_2px_8px_rgba(0,0,0,0.15)]" style={{ zIndex: 0 }} />}
+                      <span className="relative" style={{ zIndex: 1 }}>{opt.label}</span>
+                    </button>
+                  )
+                })}
+              </div>
+            </div>
+
+            {/* Sesiones */}
+            <div className="flex flex-col gap-1.5">
+              <span className="text-[10px] font-bold uppercase tracking-wider text-gray-400 dark:text-gray-500 px-1">Sesiones</span>
+              <div className="flex items-center rounded-full border border-white/50 dark:border-white/10 bg-white/30 dark:bg-black/30 backdrop-blur-xl p-1 shadow-sm gap-1">
+                {SESIONES_OPTIONS.map(opt => {
+                  const isActive = filtroSesiones === opt.value
+                  return (
+                    <button key={String(opt.value)} onClick={() => setFiltroSesiones(opt.value as number | '')}
+                      className={`relative inline-flex items-center justify-center rounded-full px-3 py-1.5 text-xs font-bold transition-all duration-300 cursor-pointer ${isActive ? 'text-white dark:text-gray-900' : 'text-gray-500 dark:text-[#8A8A9A] hover:text-gray-900 dark:hover:text-white'}`}
+                    >
+                      {isActive && <div className="absolute inset-0 rounded-full bg-gray-900 dark:bg-white shadow-[0_2px_8px_rgba(0,0,0,0.15)]" style={{ zIndex: 0 }} />}
+                      <span className="relative" style={{ zIndex: 1 }}>{opt.label}</span>
+                    </button>
+                  )
+                })}
+              </div>
+            </div>
+
+            {/* Estado */}
+            <div className="flex flex-col gap-1.5">
+              <span className="text-[10px] font-bold uppercase tracking-wider text-gray-400 dark:text-gray-500 px-1">Estado</span>
+              <div className="flex items-center rounded-full border border-white/50 dark:border-white/10 bg-white/30 dark:bg-black/30 backdrop-blur-xl p-1 shadow-sm gap-1">
+                {ESTADO_OPTIONS.map(opt => {
+                  const isActive = filtroActivas === opt.value
+                  return (
+                    <button key={String(opt.value)} onClick={() => setFiltroActivas(opt.value)}
+                      className={`relative inline-flex items-center justify-center rounded-full px-3 py-1.5 text-xs font-bold transition-all duration-300 cursor-pointer ${isActive ? 'text-white dark:text-gray-900' : 'text-gray-500 dark:text-[#8A8A9A] hover:text-gray-900 dark:hover:text-white'}`}
+                    >
+                      {isActive && <div className="absolute inset-0 rounded-full bg-gray-900 dark:bg-white shadow-[0_2px_8px_rgba(0,0,0,0.15)]" style={{ zIndex: 0 }} />}
+                      <span className="relative" style={{ zIndex: 1 }}>{opt.label}</span>
+                    </button>
+                  )
+                })}
+              </div>
+            </div>
+
             {(filtroTipo || filtroSesiones || filtroActivas !== undefined) && (
               <button
                 onClick={() => { setFiltroTipo(''); setFiltroSesiones(''); setFiltroActivas(undefined) }}
-                className="flex items-center gap-1 text-xs text-gray-400 dark:text-white/30 hover:text-gray-900 dark:hover:text-white transition-colors"
+                className="flex items-center gap-1 h-9 text-xs text-gray-400 dark:text-white/30 hover:text-gray-900 dark:hover:text-white transition-colors"
               >
                 <X size={11} /> Limpiar
               </button>
             )}
-            <span className="ml-auto text-xs text-gray-400 dark:text-white/25">
-              {plantillas.length} plantilla{plantillas.length !== 1 ? 's' : ''}
-            </span>
           </div>
+          </div>
+
         </div>
 
         {/* Tabla */}
         <div className={`${glass} overflow-hidden`}>
           {loading ? (
-            <div className="overflow-x-auto">
+            <div className="">
               <table className="w-full">
                 <thead>
                   <tr className="border-b border-white/20 dark:border-white/10 bg-gray-50/30 dark:bg-black/10">
@@ -302,7 +363,7 @@ export default function PlantillasPage({ embedded = false }: PlantillasPageProps
           ) : (<>
             {/* ── Mobile card grid ── */}
             <div className="sm:hidden grid grid-cols-1 gap-3 p-3">
-              {plantillas.map(p => (
+              {pageItems.map(p => (
                 <div key={p.id} className="rounded-2xl border border-white/50 dark:border-white/10 bg-white/40 dark:bg-white/[0.04] backdrop-blur-xl p-4 flex flex-col gap-3">
                   <div className="flex items-start justify-between gap-2">
                     <div className="min-w-0">
@@ -335,7 +396,7 @@ export default function PlantillasPage({ embedded = false }: PlantillasPageProps
               ))}
             </div>
             {/* ── Desktop table ── */}
-            <div className="hidden sm:block overflow-x-auto">
+            <div className="hidden sm:block ">
               <table className="w-full">
                 <thead>
                   <tr className="border-b border-white/20 dark:border-white/10 bg-gray-50/30 dark:bg-black/10">
@@ -347,7 +408,7 @@ export default function PlantillasPage({ embedded = false }: PlantillasPageProps
                   </tr>
                 </thead>
                 <tbody>
-                  {plantillas.map(p => (
+                  {pageItems.map(p => (
                     <FilaPlantilla
                       key={p.id}
                       plantilla={p}
@@ -364,6 +425,54 @@ export default function PlantillasPage({ embedded = false }: PlantillasPageProps
             </div>
           </>)}
         </div>
+
+        {totalPages > 1 && (
+          <div className="flex items-center justify-between px-1">
+            <span className="text-xs text-gray-500 dark:text-[#8A8A9A]">
+              {(page - 1) * PAGE_SIZE + 1}–{Math.min(page * PAGE_SIZE, filtered.length)} de {filtered.length} plantillas
+            </span>
+            <div className="flex items-center gap-1.5">
+              <button
+                onClick={() => setPage(p => Math.max(1, p - 1))}
+                disabled={page === 1}
+                className="flex h-8 w-8 items-center justify-center rounded-xl border border-white/50 dark:border-white/10 bg-white/30 dark:bg-black/30 backdrop-blur-3xl text-gray-500 dark:text-gray-400 shadow-[0_4px_16px_rgba(0,0,0,0.04)] dark:shadow-[0_4px_16px_rgba(0,0,0,0.3)] transition-all duration-200 hover:-translate-y-0.5 hover:bg-white/50 dark:hover:bg-black/50 hover:shadow-[0_8px_24px_rgba(0,0,0,0.08)] dark:hover:shadow-[0_8px_24px_rgba(0,0,0,0.4)] disabled:opacity-30 disabled:cursor-not-allowed disabled:hover:translate-y-0 disabled:hover:shadow-[0_4px_16px_rgba(0,0,0,0.04)]"
+              >
+                <ChevronLeft size={14} />
+              </button>
+              {Array.from({ length: totalPages }, (_, i) => i + 1)
+                .filter(p => p === 1 || p === totalPages || Math.abs(p - page) <= 1)
+                .reduce<(number | '...')[]>((acc, p, idx, arr) => {
+                  if (idx > 0 && (p as number) - (arr[idx - 1] as number) > 1) acc.push('...')
+                  acc.push(p)
+                  return acc
+                }, [])
+                .map((p, idx) =>
+                  p === '...' ? (
+                    <span key={`ellipsis-${idx}`} className="w-8 text-center text-xs text-gray-400 dark:text-[#4B4B5A]">…</span>
+                  ) : (
+                    <button
+                      key={p}
+                      onClick={() => setPage(p as number)}
+                      className={`h-8 min-w-[2rem] rounded-xl px-2.5 text-xs font-bold backdrop-blur-3xl transition-all duration-200 ${
+                        page === p
+                          ? 'bg-gray-900/90 dark:bg-white/90 text-white dark:text-gray-900 border border-gray-900/20 dark:border-white/20 shadow-[0_8px_24px_rgba(0,0,0,0.18)] dark:shadow-[0_8px_24px_rgba(255,255,255,0.08)] -translate-y-0.5'
+                          : 'border border-white/50 dark:border-white/10 bg-white/30 dark:bg-black/30 text-gray-600 dark:text-gray-400 shadow-[0_4px_16px_rgba(0,0,0,0.04)] dark:shadow-[0_4px_16px_rgba(0,0,0,0.3)] hover:-translate-y-0.5 hover:bg-white/50 dark:hover:bg-black/50 hover:shadow-[0_8px_24px_rgba(0,0,0,0.08)] dark:hover:shadow-[0_8px_24px_rgba(0,0,0,0.4)]'
+                      }`}
+                    >
+                      {p}
+                    </button>
+                  )
+                )}
+              <button
+                onClick={() => setPage(p => Math.min(totalPages, p + 1))}
+                disabled={page === totalPages}
+                className="flex h-8 w-8 items-center justify-center rounded-xl border border-white/50 dark:border-white/10 bg-white/30 dark:bg-black/30 backdrop-blur-3xl text-gray-500 dark:text-gray-400 shadow-[0_4px_16px_rgba(0,0,0,0.04)] dark:shadow-[0_4px_16px_rgba(0,0,0,0.3)] transition-all duration-200 hover:-translate-y-0.5 hover:bg-white/50 dark:hover:bg-black/50 hover:shadow-[0_8px_24px_rgba(0,0,0,0.08)] dark:hover:shadow-[0_8px_24px_rgba(0,0,0,0.4)] disabled:opacity-30 disabled:cursor-not-allowed disabled:hover:translate-y-0 disabled:hover:shadow-[0_4px_16px_rgba(0,0,0,0.04)]"
+              >
+                <ChevronRight size={14} />
+              </button>
+            </div>
+          </div>
+        )}
 
         {plantillas.length > 0 && (
           <p className="text-[10px] text-gray-400 dark:text-white/20 text-center">

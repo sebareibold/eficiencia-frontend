@@ -27,7 +27,7 @@ import ConfirmDialog from '../components/ui/ConfirmDialog'
 
 // ─── Constantes ───────────────────────────────────────────────────────────────
 
-const PATRON_LABELS: Record<PatronMovimientoEnum, string> = {
+const PATRON_LABELS: Partial<Record<string, string>> = {
   RODILLA_DOMINANTE: 'Rodilla dom.',
   CADERA_DOMINANTE:  'Cadera dom.',
   EMPUJE:            'Empuje',
@@ -41,6 +41,7 @@ const PATRON_LABELS: Record<PatronMovimientoEnum, string> = {
   ISO_MI:            'Iso MI',
   ISO_MS:            'Iso MS',
   ACCESORIO:         'Accesorio',
+  MOVILIDAD:         'Movilidad',
   OTROS:             'Otros',
 }
 
@@ -210,7 +211,7 @@ function EjercicioDraftRow({ ej, onUpdate, onDelete }: EjercicioDraftRowProps) {
           <span className="text-sm text-saas-text dark:text-white/90 font-medium truncate block">{ej.nombre}</span>
           {ej.catalogo?.patronMovimiento && (
             <span className="text-[11px] text-gray-400 dark:text-white/35 truncate block">
-              {PATRON_LABELS[ej.catalogo.patronMovimiento as PatronMovimientoEnum] ?? ej.catalogo.patronMovimiento}
+              {PATRON_LABELS[ej.catalogo.patronMovimiento] ?? ej.catalogo.patronMovimiento}
             </span>
           )}
         </div>
@@ -437,7 +438,7 @@ function ExerciseViewRow({ ej }: { ej: EjercicioPlan }) {
           <span className="text-sm text-saas-text dark:text-white/90 font-medium truncate block">{ej.nombre}</span>
           {ej.catalogo?.patronMovimiento && (
             <span className="text-[11px] text-gray-400 dark:text-white/35 truncate block">
-              {PATRON_LABELS[ej.catalogo.patronMovimiento as PatronMovimientoEnum] ?? ej.catalogo.patronMovimiento}
+              {PATRON_LABELS[ej.catalogo.patronMovimiento] ?? ej.catalogo.patronMovimiento}
             </span>
           )}
         </div>
@@ -567,7 +568,7 @@ function EjInlineCells({ ej, isEditing, onEditStart, onUpdate, onCancelEdit, onD
           </div>
           {ej.catalogo?.patronMovimiento && (
             <span className="text-[11px] text-gray-400 dark:text-white/35 block">
-              {PATRON_LABELS[ej.catalogo.patronMovimiento as PatronMovimientoEnum] ?? ej.catalogo.patronMovimiento}
+              {PATRON_LABELS[ej.catalogo.patronMovimiento] ?? ej.catalogo.patronMovimiento}
             </span>
           )}
         </td>
@@ -2042,7 +2043,7 @@ export default function ClientRutinaPage() {
                                           </div>
                                           {ej.catalogo?.patronMovimiento && (
                                             <span className="text-[11px] text-gray-400 dark:text-white/35 block">
-                                              {PATRON_LABELS[ej.catalogo.patronMovimiento as PatronMovimientoEnum] ?? ej.catalogo.patronMovimiento}
+                                              {PATRON_LABELS[ej.catalogo.patronMovimiento] ?? ej.catalogo.patronMovimiento}
                                             </span>
                                           )}
                                         </td>

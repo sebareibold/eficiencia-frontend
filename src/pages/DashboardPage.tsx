@@ -468,6 +468,13 @@ export default function DashboardPage() {
       ].filter(d => d.value > 0)
     : []
 
+  const vencimientosData = a ? [
+    { label: '7 días',  value: a.membresiasPorVencer.en7dias,  color: C.red },
+    { label: '15 días', value: a.membresiasPorVencer.en15dias, color: C.orange },
+    { label: '30 días', value: a.membresiasPorVencer.en30dias, color: C.primary },
+  ] : []
+  const maxVencimiento = Math.max(...vencimientosData.map(d => d.value), 1)
+
   const pieGastosData = f
     ? f.gastosPorCategoria.map((g, i) => ({
         name: g.categoria, value: g.total, color: PIE_GASTOS[i % PIE_GASTOS.length],
@@ -785,51 +792,6 @@ export default function DashboardPage() {
       <Section title="Clientes y planes" subtitle="Distribución actual del gimnasio">
         <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-4 gap-4 lg:gap-6">
 
-          {/* Donut actividad: ACTIVO vs INACTIVO */}
-          <ChartCard title="Estado de clientes" subtitle="Actividad">
-            {(clientesHook.isLoading || alertasHook.isLoading) ? (
-              <div className="flex-1 flex flex-col justify-between py-2">
-                <div className="flex justify-center items-center h-[140px] lg:h-[160px]">
-                  <div className="relative h-[100px] w-[100px] lg:h-[120px] lg:w-[120px]">
-                    <Skeleton className="absolute inset-0 rounded-full animate-pulse" />
-                    <div className="absolute inset-[18px] rounded-full bg-white/30 dark:bg-black/30" />
-                  </div>
-                </div>
-                <div className="space-y-2 mt-4">
-                  {[1, 2].map(i => (
-                    <div key={i} className="flex justify-between items-center">
-                      <Skeleton className="h-3 w-16" /><Skeleton className="h-3 w-8" />
-                    </div>
-                  ))}
-                </div>
-              </div>
-            ) : pieActividadData.length === 0 ? (
-              <p className="text-sm text-gray-400 flex-1 flex items-center">Sin datos</p>
-            ) : (<>
-              <div className="h-[155px] lg:h-[165px] xl:h-[175px]">
-                <ResponsiveContainer width="100%" height="100%">
-                  <PieChart>
-                    <Pie
-                      data={pieActividadData}
-                      cx="50%" cy="50%"
-                      innerRadius={48} outerRadius={70}
-                      dataKey="value" paddingAngle={3}
-                      onMouseEnter={(_, i) => setActivePieClienteIdx(i)}
-                      onMouseLeave={() => setActivePieClienteIdx(null)}
-                    >
-                      {pieActividadData.map((d, i) => (
-                        <Cell key={i} fill={d.color} strokeWidth={0}
-                          style={{ opacity: activePieClienteIdx === null || activePieClienteIdx === i ? 1 : 0.15, transition: 'opacity 0.35s ease-in-out' }}
-                        />
-                      ))}
-                    </Pie>
-                    <Tooltip {...TooltipStyle} formatter={(v: number, name: string) => [v, name]} />
-                  </PieChart>
-                </ResponsiveContainer>
-              </div>
-              <PieLegend items={pieActividadData.map(d => ({ label: d.name, value: d.value, color: d.color }))} />
-            </>)}
-          </ChartCard>
 
           {/* Donut estado de pago: AL_DÍA / EN_DEUDA / VENCIDO */}
           <ChartCard title="Estado de pago" subtitle="Clientes activos">
@@ -970,6 +932,42 @@ export default function DashboardPage() {
               </div>
               <PieLegend items={pieGastosData.map(d => ({ label: d.name, value: formatCurrency(d.value), color: d.color }))} />
             </>)}
+          </ChartCard>
+
+          {/* Próximos vencimientos */}
+          <ChartCard title="Próximos vencimientos" subtitle="Membresías por vencer">
+            {alertasHook.isLoading ? (
+              <div className="flex-1 flex flex-col justify-evenly gap-4 py-2">
+                {[1, 2, 3].map(i => (
+                  <div key={i} className="flex flex-col gap-2">
+                    <div className="flex justify-between"><Skeleton className="h-3 w-14" /><Skeleton className="h-3 w-6" /></div>
+                    <Skeleton className="h-4 w-full rounded-full" />
+                  </div>
+                ))}
+              </div>
+            ) : !a ? (
+              <p className="text-sm text-gray-400 flex-1 flex items-center">Sin datos</p>
+            ) : (
+              <div className="flex-1 flex flex-col justify-evenly gap-4 py-1">
+                {vencimientosData.map(d => (
+                  <div key={d.label} className="flex flex-col gap-1.5">
+                    <div className="flex items-center justify-between">
+                      <span className="text-xs font-bold text-gray-500 dark:text-gray-400">En {d.label}</span>
+                      <span className="text-sm font-black tabular-nums" style={{ color: d.color }}>{d.value}</span>
+                    </div>
+                    <div className="h-2.5 w-full rounded-full bg-white/20 dark:bg-white/[0.06] overflow-hidden">
+                      <div
+                        className="h-full rounded-full transition-all duration-700"
+                        style={{ width: `${Math.round((d.value / maxVencimiento) * 100)}%`, backgroundColor: d.color }}
+                      />
+                    </div>
+                  </div>
+                ))}
+                <p className="text-[10px] font-semibold text-gray-400 dark:text-[#8A8A9A] text-center pt-1">
+                  Los de 15 y 30 días incluyen los de 7
+                </p>
+              </div>
+            )}
           </ChartCard>
 
         </div>

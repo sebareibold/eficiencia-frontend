@@ -11,6 +11,8 @@ import {
   GripVertical, Copy,
 } from 'lucide-react'
 import { ejerciciosApi } from '../api/ejercicios.api'
+import { patronesApi } from '../api/patrones.api'
+import type { PatronMovimientoConfig } from '../api/patrones.api'
 import { clientsApi } from '../api/clients.api'
 import { rutinasApi } from '../api/rutinas.api'
 import { plantillasApi } from '../api/plantillas.api'
@@ -26,42 +28,6 @@ import type {
 import type { EjercicioCatalogo } from '../types/ejercicio-catalogo.types'
 
 // ─── Constantes y helpers ─────────────────────────────────────────────────────
-
-const PATRON_LABELS: Record<PatronMovimientoEnum, string> = {
-  MOVILIDAD:         'Movilidad',
-  RODILLA_DOMINANTE: 'Rodilla dominante',
-  CADERA_DOMINANTE:  'Cadera dominante',
-  EMPUJE:            'Empuje',
-  TRACCION:          'Tracción',
-  HIBRIDO:           'Híbrido',
-  HOMBROS:           'Hombros',
-  CORE:              'Core',
-  POTENCIA:          'Potencia',
-  PLIO_MI:           'Pliometría MI',
-  PLIO_MS:           'Pliometría MS',
-  ISO_MI:            'Isometría MI',
-  ISO_MS:            'Isometría MS',
-  ACCESORIO:         'Accesorio',
-  OTROS:             'Otros',
-}
-
-const PATRON_SHORT: Record<PatronMovimientoEnum, string> = {
-  MOVILIDAD:         'Movilidad',
-  RODILLA_DOMINANTE: 'Rodilla',
-  CADERA_DOMINANTE:  'Cadera',
-  EMPUJE:            'Empuje',
-  TRACCION:          'Tracción',
-  HIBRIDO:           'Híbrido',
-  HOMBROS:           'Hombros',
-  CORE:              'Core',
-  POTENCIA:          'Potencia',
-  PLIO_MI:           'Plio MI',
-  PLIO_MS:           'Plio MS',
-  ISO_MI:            'Iso MI',
-  ISO_MS:            'Iso MS',
-  ACCESORIO:         'Accesorio',
-  OTROS:             'Otros',
-}
 
 const TIPO_LABELS: Record<TipoDistribucion, string> = {
   FULL_BODY:  'Full Body',
@@ -721,10 +687,12 @@ function OptionCard({
 
 function SearchableExerciseSelector({
   patronHint,
+  patrones,
   onSelect,
   onCancel,
 }: {
   patronHint: PatronMovimientoEnum | null
+  patrones: PatronMovimientoConfig[]
   onSelect: (ej: EjercicioCatalogo) => void
   onCancel: () => void
 }) {
@@ -798,8 +766,8 @@ function SearchableExerciseSelector({
           className={inputCls + ' cursor-pointer'}
         >
           <option value="">Todos los patrones</option>
-          {(Object.keys(PATRON_LABELS) as PatronMovimientoEnum[]).map(p => (
-            <option key={p} value={p}>{PATRON_SHORT[p]}</option>
+          {patrones.map(p => (
+            <option key={p.clave} value={p.clave}>{p.label}</option>
           ))}
         </select>
       </div>
@@ -829,7 +797,7 @@ function SearchableExerciseSelector({
               <div className="min-w-0">
                 <p className="text-sm font-semibold text-gray-900 dark:text-white leading-tight truncate">{ej.nombre}</p>
                 {ej.patronMovimiento && (
-                  <p className="text-[10px] text-gray-500 mt-0.5">{PATRON_LABELS[ej.patronMovimiento] ?? ej.patronMovimiento}</p>
+                  <p className="text-[10px] text-gray-500 mt-0.5">{patrones.find(p => p.clave === ej.patronMovimiento)?.label ?? ej.patronMovimiento}</p>
                 )}
               </div>
               <div className="flex items-center gap-2 shrink-0">
@@ -898,11 +866,13 @@ function SearchableExerciseSelector({
 function EjercicioSlot({
   ejercicio,
   patronBloque,
+  patrones,
   onUpdate,
   esReferencia = false,
 }: {
   ejercicio: EjercicioDraft
   patronBloque: PatronMovimientoEnum | null
+  patrones: PatronMovimientoConfig[]
   onUpdate: (changes: Partial<EjercicioDraft>) => void
   esReferencia?: boolean
 }) {
@@ -940,6 +910,7 @@ function EjercicioSlot({
       <div className="rounded-xl border border-white/[0.08] bg-white/[0.03] overflow-hidden p-3">
         <SearchableExerciseSelector
           patronHint={patronBloque}
+          patrones={patrones}
           onSelect={(ej) => {
             onUpdate({
               catalogoId: ej.id,
@@ -1234,8 +1205,14 @@ export default function CreateRutinaPage() {
   const [assigningEjId, setAssigningEjId] = useState<string | null>(null)
   const [plantillasOptions, setPlantillasOptions] = useState<PlantillaRutinaData[]>([])
   const [loadingPlantillas, setLoadingPlantillas] = useState(false)
+  const [patrones, setPatrones] = useState<PatronMovimientoConfig[]>([])
   const plantillasFetchedRef  = useRef(false)
   const paso4ScrollTop        = useRef(0)
+
+  // Carga patrones de movimiento al montar
+  useEffect(() => {
+    patronesApi.getAll(true).then(setPatrones).catch(() => {})
+  }, [])
 
   // Carga plantillas una sola vez al llegar al paso 3
   useEffect(() => {
@@ -2063,7 +2040,7 @@ export default function CreateRutinaPage() {
                               <div className="space-y-[2px] max-w-[72px]">
                                 {patronesLetra.map((p, pi) => (
                                   <span key={pi} className="block text-[8px] text-gray-400 dark:text-white/25 leading-tight">
-                                    {PATRON_SHORT[p]}
+                                    {patrones.find(pat => pat.clave === p)?.label ?? p}
                                   </span>
                                 ))}
                               </div>
@@ -2120,6 +2097,7 @@ export default function CreateRutinaPage() {
                               <td colSpan={7} className="px-3 py-2">
                                 <SearchableExerciseSelector
                                   patronHint={bl.patronMovimiento}
+                                  patrones={patrones}
                                   onSelect={catalogo => {
                                     dispatch({ type: 'UPDATE_EJ_W', sesionId: ses._id, bloqueId: bl._id, ejId: ej._id, changes: { catalogoId: catalogo.id, nombre: catalogo.nombre, _esReferencia: false } })
                                     setAssigningEjId(null)

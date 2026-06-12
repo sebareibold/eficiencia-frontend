@@ -4,7 +4,7 @@ import { motion } from 'framer-motion'
 import {
   ArrowLeft, Phone, Mail, CalendarDays, CheckCircle2, XCircle,
   Edit2, CreditCard, Activity, Clock, Hash, Banknote, ArrowLeftRight,
-  MessageCircle, Tag, Dumbbell, BookOpen, Plus, ChevronDown, ChevronRight,
+  MessageCircle, Tag, Dumbbell, BookOpen, Plus, ChevronDown, ChevronRight, ChevronLeft,
   BarChart2, PieChart as PieIcon, LineChart as LineChartIcon,
   Receipt, AlertTriangle, MapPin, User, Trophy, Trash2, Save,
 } from 'lucide-react'
@@ -495,6 +495,8 @@ export default function ClientProfilePage() {
   const [membershipOpen, setMembershipOpen] = useState(true)
   const [membresias, setMembresias] = useState<MembresiaCliente[]>([])
   const [loadingMembresias, setLoadingMembresias] = useState(false)
+  const [membPage, setMembPage] = useState(1)
+  const MEMB_PAGE_SIZE = 5
   const [planes, setPlanes] = useState<Plan[]>([])
   const [loadingPlanes, setLoadingPlanes] = useState(false)
   const [newMembresiaOpen, setNewMembresiaOpen] = useState(false)
@@ -934,7 +936,7 @@ export default function ClientProfilePage() {
   const MEMBRESIA_STATUS_CONFIG: Record<string, { label: string; color: string; bg: string; dot: string }> = {
     PENDIENTE:  { label: 'Programada',  color: 'text-blue-600 dark:text-blue-400',   bg: 'bg-blue-500/10',   dot: 'bg-blue-500'   },
     ACTIVA:     { label: 'Activa',      color: 'text-emerald-600 dark:text-emerald-400', bg: 'bg-emerald-500/10', dot: 'bg-emerald-500' },
-    VENCIDA:    { label: 'Vencida',     color: 'text-red-600 dark:text-red-400',     bg: 'bg-red-500/10',    dot: 'bg-red-500'    },
+    VENCIDA:    { label: 'Expirada',    color: 'text-red-600 dark:text-red-400',     bg: 'bg-red-500/10',    dot: 'bg-red-500'    },
     CANCELADA:  { label: 'Cancelada',   color: 'text-gray-600 dark:text-gray-400',   bg: 'bg-gray-500/10',   dot: 'bg-gray-400'   },
   }
 
@@ -1010,14 +1012,27 @@ export default function ClientProfilePage() {
                   <div className="flex items-center gap-5 mt-4">
                     <div className="flex flex-col gap-1.5 items-start">
                       <span className="text-[10px] font-bold uppercase tracking-wider text-gray-400 dark:text-[#8A8A9A]">Actividad</span>
-                      <span className={`inline-flex items-center gap-1.5 text-xs px-2.5 py-1 rounded-lg font-semibold ${activityCls}`}>
-                        <span className={`h-1.5 w-1.5 rounded-full shrink-0 ${activityDot}`} />
-                        {activityLabel}
-                      </span>
+                      {isEditing ? (
+                        <select
+                          className="bg-white/60 dark:bg-white/[0.06] border border-gray-200 dark:border-white/[0.15] rounded-lg px-2 py-1 text-xs text-gray-900 dark:text-white focus:outline-none focus:ring-1 focus:ring-primary/60 transition-all"
+                          {...register('estado')}
+                        >
+                          <option value="ACTIVO">Activo</option>
+                          <option value="INACTIVO">Inactivo</option>
+                        </select>
+                      ) : (
+                        <span className={`inline-flex items-center gap-1.5 text-xs px-2.5 py-1 rounded-lg font-semibold ${activityCls}`}>
+                          <span className={`h-1.5 w-1.5 rounded-full shrink-0 ${activityDot}`} />
+                          {activityLabel}
+                        </span>
+                      )}
                     </div>
                     <div className="w-px h-9 bg-gray-200 dark:bg-white/[0.07] self-end mb-0.5" />
                     <div className="flex flex-col gap-1.5 items-start">
-                      <span className="text-[10px] font-bold uppercase tracking-wider text-gray-400 dark:text-[#8A8A9A]">Estado membresía</span>
+                      <span className="text-[10px] font-bold uppercase tracking-wider text-gray-400 dark:text-[#8A8A9A]">
+                        Estado membresía
+                        {isEditing && <span className="ml-1 font-normal normal-case tracking-normal text-gray-300 dark:text-[#5A5A6A]">(automático)</span>}
+                      </span>
                       <div className={`relative group inline-flex ${membershipTooltip ? 'cursor-help' : ''}`}>
                         <span className={`inline-flex items-center gap-1.5 text-xs px-2.5 py-1 rounded-lg font-semibold ${paymentCls}`}>
                           <span className={`h-1.5 w-1.5 rounded-full shrink-0 ${paymentDot}`} />
@@ -1119,18 +1134,6 @@ export default function ClientProfilePage() {
                     )}
                   </div>
                 ))}
-                {isEditing && (
-                  <div className="grid grid-cols-[3fr_5fr] px-4 py-2.5 hover:bg-black/[0.02] dark:hover:bg-white/[0.01] transition-colors items-center">
-                    <span className="text-gray-500 dark:text-[#8A8A9A] flex items-center gap-1.5 font-semibold">
-                      <CheckCircle2 size={12} className="opacity-60 text-gray-400 dark:text-gray-500" />
-                      Actividad
-                    </span>
-                    <select className="w-full bg-white/60 dark:bg-white/[0.06] border border-gray-200 dark:border-white/[0.15] rounded-lg px-2 py-1 text-xs text-gray-900 dark:text-white focus:outline-none focus:ring-1 focus:ring-primary/60 transition-all" {...register('estado')}>
-                      <option value="ACTIVO">Activo</option>
-                      <option value="INACTIVO">Inactivo</option>
-                    </select>
-                  </div>
-                )}
               </div>
 
               {/* Col 2 — Sede, Act. diaria, Objetivos, Deporte, Experiencia */}
@@ -1793,62 +1796,106 @@ export default function ClientProfilePage() {
                 )}
               </div>
             ) : (
-              <div className="space-y-2.5">
-                {membresias.map(m => {
-                  const statusCfg = MEMBRESIA_STATUS_CONFIG[m.estado] ?? MEMBRESIA_STATUS_CONFIG.CANCELADA
-                  const daysLeftM = Math.ceil((new Date(m.fechaVencimiento).getTime() - Date.now()) / 86_400_000)
-                  return (
-                    <div
-                      key={m.id}
-                      className="flex items-center justify-between gap-3 rounded-2xl border border-gray-200 dark:border-white/[0.06] bg-white/40 dark:bg-white/[0.01] px-5 py-4"
-                    >
-                      <div className="flex items-center gap-3 min-w-0 flex-1">
-                        <span className={`inline-flex items-center gap-1.5 text-xs font-semibold px-2.5 py-1 rounded-lg shrink-0 ${statusCfg.bg} ${statusCfg.color}`}>
-                          <span className={`h-1.5 w-1.5 rounded-full ${statusCfg.dot}`} />
-                          {statusCfg.label}
+              (() => {
+                const membTotalPages = Math.ceil(membresias.length / MEMB_PAGE_SIZE)
+                const membPageItems  = membresias.slice((membPage - 1) * MEMB_PAGE_SIZE, membPage * MEMB_PAGE_SIZE)
+                return (
+                  <div className="space-y-2.5">
+                    {membPageItems.map(m => {
+                      const statusCfg = MEMBRESIA_STATUS_CONFIG[m.estado] ?? MEMBRESIA_STATUS_CONFIG.CANCELADA
+                      const daysLeftM = Math.ceil((new Date(m.fechaVencimiento).getTime() - Date.now()) / 86_400_000)
+                      return (
+                        <div
+                          key={m.id}
+                          className="flex items-center justify-between gap-3 rounded-2xl border border-gray-200 dark:border-white/[0.06] bg-white/40 dark:bg-white/[0.01] px-5 py-4"
+                        >
+                          <div className="flex items-center gap-3 min-w-0 flex-1">
+                            <span className={`inline-flex items-center gap-1.5 text-xs font-semibold px-2.5 py-1 rounded-lg shrink-0 ${statusCfg.bg} ${statusCfg.color}`}>
+                              <span className={`h-1.5 w-1.5 rounded-full ${statusCfg.dot}`} />
+                              {statusCfg.label}
+                            </span>
+                            <div className="min-w-0">
+                              <p className="text-sm font-bold text-gray-900 dark:text-white truncate">{m.plan.nombre}</p>
+                              <p className="text-xs text-gray-500 dark:text-[#8A8A9A] mt-0.5">
+                                {MODALIDAD_LABELS[m.modalidad] ?? m.modalidad} · {formatDate(m.fechaInicio)} → {formatDate(m.fechaVencimiento)}
+                                {m.estado === 'ACTIVA' && daysLeftM > 0 && (
+                                  <span className={`ml-1.5 font-semibold ${daysLeftM <= 7 ? 'text-red-400' : daysLeftM <= 30 ? 'text-amber-400' : 'text-emerald-400'}`}>
+                                    ({daysLeftM} días restantes)
+                                  </span>
+                                )}
+                                {m.estado === 'PENDIENTE' && (
+                                  <span className="ml-1.5 font-semibold text-blue-400">
+                                    (inicia en {Math.ceil((new Date(m.fechaInicio).getTime() - Date.now()) / 86_400_000)} días)
+                                  </span>
+                                )}
+                              </p>
+                            </div>
+                          </div>
+                          <div className="flex items-center gap-2 shrink-0">
+                            <span className="text-sm font-black text-gray-900 dark:text-white tabular-nums">
+                              {formatCurrency(m.precio)}
+                            </span>
+                            {isAdmin && (m.estado === 'ACTIVA' || m.estado === 'PENDIENTE') && (
+                              <button
+                                onClick={() => handleCancelarMembresia(m.id)}
+                                className="text-xs font-semibold text-gray-400 hover:text-amber-400 transition-colors px-2.5 py-1.5 rounded-xl hover:bg-amber-500/10 border border-transparent hover:border-amber-500/20"
+                              >
+                                Cancelar
+                              </button>
+                            )}
+                            {isAdmin && (
+                              <button
+                                onClick={() => handleEliminarMembresia(m.id)}
+                                className="text-xs font-semibold text-gray-400 hover:text-red-400 transition-colors px-2.5 py-1.5 rounded-xl hover:bg-red-500/10 border border-transparent hover:border-red-500/20"
+                              >
+                                Eliminar
+                              </button>
+                            )}
+                          </div>
+                        </div>
+                      )
+                    })}
+
+                    {/* Paginación */}
+                    {membTotalPages > 1 && (
+                      <div className="flex items-center justify-between pt-1 px-1">
+                        <span className="text-xs text-gray-500 dark:text-[#8A8A9A]">
+                          {(membPage - 1) * MEMB_PAGE_SIZE + 1}–{Math.min(membPage * MEMB_PAGE_SIZE, membresias.length)} de {membresias.length}
                         </span>
-                        <div className="min-w-0">
-                          <p className="text-sm font-bold text-gray-900 dark:text-white truncate">{m.plan.nombre}</p>
-                          <p className="text-xs text-gray-500 dark:text-[#8A8A9A] mt-0.5">
-                            {MODALIDAD_LABELS[m.modalidad] ?? m.modalidad} · {formatDate(m.fechaInicio)} → {formatDate(m.fechaVencimiento)}
-                            {m.estado === 'ACTIVA' && daysLeftM > 0 && (
-                              <span className={`ml-1.5 font-semibold ${daysLeftM <= 7 ? 'text-red-400' : daysLeftM <= 30 ? 'text-amber-400' : 'text-emerald-400'}`}>
-                                ({daysLeftM} días restantes)
-                              </span>
-                            )}
-                            {m.estado === 'PENDIENTE' && (
-                              <span className="ml-1.5 font-semibold text-blue-400">
-                                (inicia en {Math.ceil((new Date(m.fechaInicio).getTime() - Date.now()) / 86_400_000)} días)
-                              </span>
-                            )}
-                          </p>
+                        <div className="flex items-center gap-1">
+                          <button
+                            onClick={() => setMembPage(p => Math.max(1, p - 1))}
+                            disabled={membPage === 1}
+                            className="flex h-7 w-7 items-center justify-center rounded-lg border border-white/50 dark:border-white/10 bg-white/30 dark:bg-black/20 text-gray-500 dark:text-gray-400 transition-all hover:bg-white/60 dark:hover:bg-black/40 disabled:opacity-30 disabled:cursor-not-allowed"
+                          >
+                            <ChevronLeft size={13} />
+                          </button>
+                          {Array.from({ length: membTotalPages }, (_, i) => i + 1).map(p => (
+                            <button
+                              key={p}
+                              onClick={() => setMembPage(p)}
+                              className={`h-7 min-w-[1.75rem] rounded-lg px-2 text-xs font-bold transition-all ${
+                                membPage === p
+                                  ? 'bg-gray-900/90 dark:bg-white/90 text-white dark:text-gray-900'
+                                  : 'border border-white/50 dark:border-white/10 bg-white/30 dark:bg-black/20 text-gray-600 dark:text-gray-400 hover:bg-white/60 dark:hover:bg-black/40'
+                              }`}
+                            >
+                              {p}
+                            </button>
+                          ))}
+                          <button
+                            onClick={() => setMembPage(p => Math.min(membTotalPages, p + 1))}
+                            disabled={membPage === membTotalPages}
+                            className="flex h-7 w-7 items-center justify-center rounded-lg border border-white/50 dark:border-white/10 bg-white/30 dark:bg-black/20 text-gray-500 dark:text-gray-400 transition-all hover:bg-white/60 dark:hover:bg-black/40 disabled:opacity-30 disabled:cursor-not-allowed"
+                          >
+                            <ChevronRight size={13} />
+                          </button>
                         </div>
                       </div>
-                      <div className="flex items-center gap-2 shrink-0">
-                        <span className="text-sm font-black text-gray-900 dark:text-white tabular-nums">
-                          {formatCurrency(m.precio)}
-                        </span>
-                        {isAdmin && (m.estado === 'ACTIVA' || m.estado === 'PENDIENTE') && (
-                          <button
-                            onClick={() => handleCancelarMembresia(m.id)}
-                            className="text-xs font-semibold text-gray-400 hover:text-amber-400 transition-colors px-2.5 py-1.5 rounded-xl hover:bg-amber-500/10 border border-transparent hover:border-amber-500/20"
-                          >
-                            Cancelar
-                          </button>
-                        )}
-                        {isAdmin && (
-                          <button
-                            onClick={() => handleEliminarMembresia(m.id)}
-                            className="text-xs font-semibold text-gray-400 hover:text-red-400 transition-colors px-2.5 py-1.5 rounded-xl hover:bg-red-500/10 border border-transparent hover:border-red-500/20"
-                          >
-                            Eliminar
-                          </button>
-                        )}
-                      </div>
-                    </div>
-                  )
-                })}
-              </div>
+                    )}
+                  </div>
+                )
+              })()
             )}
           </div>
 
@@ -2070,7 +2117,7 @@ export default function ClientProfilePage() {
                 { label: 'Plan', value: client.planName ?? '—' },
                 { label: 'Frecuencia', value: client.planFrequency ? `${client.planFrequency}× por semana` : '—' },
                 { label: 'Precio pagado', value: client.membershipPrecio != null ? formatCurrency(client.membershipPrecio) : '—' },
-                { label: 'Días restantes', value: daysLeft !== null ? (daysLeft > 0 ? `${daysLeft} días` : 'Vencida') : '—' },
+                { label: 'Días restantes', value: daysLeft !== null ? (daysLeft > 0 ? `${daysLeft} días` : 'Expirada') : '—' },
                 { label: 'Inicio', value: client.membershipStartDate ? formatDate(client.membershipStartDate) : '—' },
                 { label: 'Vencimiento', value: client.membershipExpiresAt ? formatDate(client.membershipExpiresAt) : '—' },
                 { label: 'Último pago', value: lastPaymentDate ? formatDate(lastPaymentDate) : '—' },

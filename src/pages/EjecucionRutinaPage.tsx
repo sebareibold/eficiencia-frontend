@@ -8,7 +8,7 @@ import type { Rutina, EjercicioPlan, EjecucionCliente, CreateEjecucionPayload, P
 
 // ─── Constantes ───────────────────────────────────────────────────────────────
 
-const PATRON_LABELS: Record<PatronMovimientoEnum, string> = {
+const PATRON_LABELS: Partial<Record<string, string>> = {
   RODILLA_DOMINANTE: 'Rodilla dom.',
   CADERA_DOMINANTE:  'Cadera dom.',
   EMPUJE:            'Empuje',
@@ -22,6 +22,7 @@ const PATRON_LABELS: Record<PatronMovimientoEnum, string> = {
   ISO_MI:            'Iso MI',
   ISO_MS:            'Iso MS',
   ACCESORIO:         'Accesorio',
+  MOVILIDAD:         'Movilidad',
   OTROS:             'Otros',
 }
 
@@ -353,7 +354,7 @@ export default function EjecucionRutinaPage() {
                                     <span className="text-base text-gray-800 dark:text-white/90 font-medium block">{ej.nombre}</span>
                                     {ej.catalogo?.patronMovimiento && (
                                       <span className="text-[11px] text-gray-400 dark:text-white/35 block">
-                                        {PATRON_LABELS[ej.catalogo.patronMovimiento as PatronMovimientoEnum] ?? ej.catalogo.patronMovimiento}
+                                        {PATRON_LABELS[ej.catalogo.patronMovimiento] ?? ej.catalogo.patronMovimiento}
                                       </span>
                                     )}
                                     {ej.catalogo?.videoUrl && (

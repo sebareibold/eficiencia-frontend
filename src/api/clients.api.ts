@@ -106,7 +106,7 @@ export const clientsApi = {
     api.patch(`/clientes/${id}`, {
       ...(dto.name !== undefined && { nombre: dto.name }),
       ...(dto.lastName !== undefined && { apellido: dto.lastName }),
-      ...(dto.email !== undefined && { email: dto.email }),
+      ...(dto.email ? { email: dto.email } : {}),
       ...(dto.phone !== undefined && { telefono: dto.phone }),
       ...(dto.cuil !== undefined && { cuil: dto.cuil }),
       ...(dto.sedeId !== undefined && { sedeId: dto.sedeId || null }),

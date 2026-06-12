@@ -6,6 +6,8 @@ import {
 } from 'lucide-react'
 import { plantillasApi } from '../api/plantillas.api'
 import type { CreatePlantillaPayload, CreateBloquePayload } from '../api/plantillas.api'
+import { patronesApi } from '../api/patrones.api'
+import type { PatronMovimientoConfig } from '../api/patrones.api'
 import { useUiStore } from '../store/uiStore'
 import type { PlantillaRutinaData, TipoDistribucion, PatronMovimientoEnum } from '../types/rutina.types'
 import { ROUTES } from '../constants/routes'
@@ -18,31 +20,6 @@ const TIPO_LABELS: Record<TipoDistribucion, string> = {
   PUSH_PULL: 'Push-Pull',
   CUSTOM:    'Custom',
 }
-
-const PATRON_LABELS: Record<PatronMovimientoEnum, string> = {
-  RODILLA_DOMINANTE: 'Rodilla dom.',
-  CADERA_DOMINANTE:  'Cadera dom.',
-  EMPUJE:            'Empuje',
-  TRACCION:          'Tracción',
-  HIBRIDO:           'Híbrido',
-  HOMBROS:           'Hombros',
-  CORE:              'Core',
-  POTENCIA:          'Potencia',
-  PLIO_MI:           'Plio MI',
-  PLIO_MS:           'Plio MS',
-  ISO_MI:            'Iso MI',
-  ISO_MS:            'Iso MS',
-  ACCESORIO:         'Accesorio',
-  MOVILIDAD:         'Movilidad',
-  OTROS:             'Otros',
-}
-
-const TODOS_PATRONES: PatronMovimientoEnum[] = [
-  'RODILLA_DOMINANTE', 'CADERA_DOMINANTE', 'EMPUJE', 'TRACCION',
-  'HIBRIDO', 'HOMBROS', 'CORE', 'POTENCIA',
-  'PLIO_MI', 'PLIO_MS', 'ISO_MI', 'ISO_MS',
-  'ACCESORIO', 'MOVILIDAD', 'OTROS',
-]
 
 const LETRAS = ['A', 'B', 'C', 'D', 'E', 'F', 'G', 'H']
 
@@ -129,6 +106,7 @@ interface BloqueItemProps {
   bloque: BloqueForm
   index: number
   isOnly: boolean
+  patrones: PatronMovimientoConfig[]
   onChange: (changes: Partial<BloqueForm>) => void
   onDelete: () => void
   onDragStart: (index: number) => void
@@ -136,7 +114,7 @@ interface BloqueItemProps {
   onDrop: (e: React.DragEvent, index: number) => void
 }
 
-function BloqueItem({ bloque, index, isOnly, onChange, onDelete, onDragStart, onDragOver, onDrop }: BloqueItemProps) {
+function BloqueItem({ bloque, index, isOnly, patrones, onChange, onDelete, onDragStart, onDragOver, onDrop }: BloqueItemProps) {
   const letra = LETRAS[index] ?? String.fromCharCode(65 + index)
   return (
     <div
@@ -155,8 +133,8 @@ function BloqueItem({ bloque, index, isOnly, onChange, onDelete, onDragStart, on
         className="flex-1 rounded-lg border border-gray-200 dark:border-white/[0.08] bg-gray-50 dark:bg-white/[0.05] px-2 py-1 text-xs text-gray-900 dark:text-white focus:border-primary/50 focus:outline-none cursor-pointer"
       >
         <option value="">Patrón…</option>
-        {TODOS_PATRONES.map(p => (
-          <option key={p} value={p}>{PATRON_LABELS[p]}</option>
+        {patrones.map(p => (
+          <option key={p.clave} value={p.clave}>{p.label}</option>
         ))}
       </select>
 
@@ -193,10 +171,11 @@ function BloqueItem({ bloque, index, isOnly, onChange, onDelete, onDragStart, on
 
 interface SesionColumnProps {
   sesion: SesionForm
+  patrones: PatronMovimientoConfig[]
   onUpdate: (updated: SesionForm) => void
 }
 
-function SesionColumn({ sesion, onUpdate }: SesionColumnProps) {
+function SesionColumn({ sesion, patrones, onUpdate }: SesionColumnProps) {
   const dragIndexRef = useRef<number | null>(null)
 
   function handleDragStart(index: number) { dragIndexRef.current = index }
@@ -236,6 +215,7 @@ function SesionColumn({ sesion, onUpdate }: SesionColumnProps) {
             bloque={b}
             index={i}
             isOnly={sesion.bloques.length === 1}
+            patrones={patrones}
             onChange={changes => onUpdate({ ...sesion, bloques: sesion.bloques.map((bl, idx) => idx === i ? { ...bl, ...changes } : bl) })}
             onDelete={() => onUpdate({ ...sesion, bloques: sesion.bloques.filter((_, idx) => idx !== i) })}
             onDragStart={handleDragStart}
@@ -269,6 +249,11 @@ export default function PlantillaDetailPage() {
   const [loadingData, setLoadingData] = useState(!isNew)
   const [saving, setSaving]           = useState(false)
   const [errors, setErrors]           = useState<string[]>([])
+  const [patrones, setPatrones]       = useState<PatronMovimientoConfig[]>([])
+
+  useEffect(() => {
+    patronesApi.getAll(true).then(setPatrones).catch(() => {})
+  }, [])
 
   useEffect(() => {
     if (!isNew && id) {
@@ -354,14 +339,9 @@ export default function PlantillaDetailPage() {
           <ArrowLeft size={14} className="group-hover:-translate-x-0.5 transition-transform" />
           Volver a ejercicios
         </button>
-        <div className="flex items-center gap-3">
-          <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-primary/10">
-            <Layers size={20} className="text-primary" />
-          </div>
-          <h1 className="text-2xl lg:text-3xl xl:text-4xl font-black tracking-tighter text-gray-900 dark:text-white drop-shadow-sm">
-            {isNew ? 'Nueva plantilla' : 'Editar plantilla'}
-          </h1>
-        </div>
+        <h1 className="text-2xl lg:text-3xl xl:text-4xl font-black tracking-tighter text-gray-900 dark:text-white drop-shadow-sm">
+          {isNew ? 'Nueva plantilla' : 'Editar plantilla'}
+        </h1>
       </div>
 
       {/* Errores */}
@@ -434,6 +414,7 @@ export default function PlantillaDetailPage() {
             <SesionColumn
               key={s.numero}
               sesion={s}
+              patrones={patrones}
               onUpdate={updated => setForm(prev => ({
                 ...prev,
                 sesiones: prev.sesiones.map((ses, idx) => idx === i ? updated : ses),

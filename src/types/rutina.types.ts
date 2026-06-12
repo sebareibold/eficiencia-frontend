@@ -113,22 +113,7 @@ export interface CreateEjecucionPayload {
 
 // ─── Nuevos tipos para el módulo de rutinas con plantillas ───────────────────
 
-export type PatronMovimientoEnum =
-  | 'MOVILIDAD'
-  | 'RODILLA_DOMINANTE'
-  | 'CADERA_DOMINANTE'
-  | 'EMPUJE'
-  | 'TRACCION'
-  | 'HIBRIDO'
-  | 'HOMBROS'
-  | 'CORE'
-  | 'POTENCIA'
-  | 'PLIO_MI'
-  | 'PLIO_MS'
-  | 'ISO_MI'
-  | 'ISO_MS'
-  | 'ACCESORIO'
-  | 'OTROS'
+export type PatronMovimientoEnum = string
 
 export interface EventoDeportivo {
   id: string
