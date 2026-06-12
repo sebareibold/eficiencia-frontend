@@ -272,7 +272,9 @@ export default function ClientsPage() {
     {
       key: 'status',
       header: 'Estado membresía',
-      render: (c) => <Badge status={c.status} />,
+      render: (c) => c.activityStatus === 'inactive'
+        ? <span className="text-sm text-gray-400 dark:text-gray-600">—</span>
+        : <Badge status={c.status} />,
     },
     {
       key: 'planName',
@@ -578,11 +580,13 @@ export default function ClientsPage() {
                   {/* Footer */}
                   <div className="flex items-center justify-between gap-2 pt-3 border-t border-black/5 dark:border-white/[0.06]">
                     <div className="flex flex-wrap items-center gap-1.5">
-                      <Badge status={c.status} />
-                      {c.activityStatus === 'inactive' && (
+                      {c.activityStatus === 'inactive' ? (
                         <span className="inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[10px] font-semibold bg-gray-100 dark:bg-gray-800/60 text-gray-500 dark:text-gray-400 border border-gray-200 dark:border-gray-700/50">
+                          <span className="h-1.5 w-1.5 rounded-full bg-gray-400 shrink-0" />
                           INACTIVO
                         </span>
+                      ) : (
+                        <Badge status={c.status} />
                       )}
                     </div>
                     <div className="text-right shrink-0 min-w-0">
