@@ -116,7 +116,6 @@ export default function Layout() {
   }, [accessToken, resetTimers])
 
   // ── Carga y refresco de permisos ────────────────────────────────────────────
-  const user = useAuthStore(s => s.user)
   const lastRefreshRef = useRef(0)
 
   useEffect(() => {
