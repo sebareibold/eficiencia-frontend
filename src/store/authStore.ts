@@ -6,12 +6,12 @@ import type { PermisosMap } from '../api/permisos.api'
 interface AuthState {
   user: User | null
   accessToken: string | null      // En memoria — NO persistido (seguridad)
-  refreshToken: string | null     // Persistido para sobrevivir recargas
+  // refreshToken eliminado — ahora vive en cookie HttpOnly (SEC-F01)
   permissions: PermisosMap
   permissionsLoaded: boolean      // true solo cuando el servidor respondió OK
-  login: (user: User, accessToken: string, refreshToken: string, permissions?: PermisosMap) => void
+  login: (user: User, accessToken: string, permissions?: PermisosMap) => void
   logout: () => void
-  setTokens: (accessToken: string, refreshToken?: string) => void
+  setTokens: (accessToken: string) => void
   setPermissions: (permissions: PermisosMap) => void
 }
 
@@ -20,14 +20,12 @@ export const useAuthStore = create<AuthState>()(
     (set) => ({
       user: null,
       accessToken: null,
-      refreshToken: null,
       permissions: {},
       permissionsLoaded: false,
-      login: (user, accessToken, refreshToken, permissions = {}) =>
-        set({ user, accessToken, refreshToken, permissions, permissionsLoaded: Object.keys(permissions).length > 0 }),
-      logout: () => set({ user: null, accessToken: null, refreshToken: null, permissions: {}, permissionsLoaded: false }),
-      setTokens: (accessToken, refreshToken) =>
-        set((s) => ({ accessToken, refreshToken: refreshToken ?? s.refreshToken })),
+      login: (user, accessToken, permissions = {}) =>
+        set({ user, accessToken, permissions, permissionsLoaded: Object.keys(permissions).length > 0 }),
+      logout: () => set({ user: null, accessToken: null, permissions: {}, permissionsLoaded: false }),
+      setTokens: (accessToken) => set({ accessToken }),
       setPermissions: (permissions) => set({ permissions, permissionsLoaded: true }),
     }),
     {
@@ -35,9 +33,9 @@ export const useAuthStore = create<AuthState>()(
       // Excluir accessToken del almacenamiento persistente.
       // Un accessToken solo dura 15 min — no vale la pena persistirlo y es un
       // vector de ataque si alguien accede al localStorage entre sesiones.
+      // refreshToken ya no está aquí — vive en cookie HttpOnly.
       partialize: (state) => ({
         user: state.user,
-        refreshToken: state.refreshToken,
         // accessToken NO se persiste (seguridad — dura 15 min)
         // permissions SÍ se persisten para evitar skeleton de guard en cada navegación.
         // Layout refresca los permisos reales en mount y en window focus.

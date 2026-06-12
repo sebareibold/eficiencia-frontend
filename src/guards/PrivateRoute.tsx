@@ -5,15 +5,17 @@ import { useAuthStore } from '../store/authStore'
 import { ROUTES } from '../constants/routes'
 
 export default function PrivateRoute() {
-  const { accessToken, refreshToken, setTokens, logout } = useAuthStore()
+  const { accessToken, user, setTokens, logout } = useAuthStore()
 
   useEffect(() => {
-    if (!accessToken && refreshToken) {
+    // F5 recovery: hay usuario persistido pero el accessToken se perdió (no persiste en memoria).
+    // La cookie HttpOnly del refreshToken se envía automáticamente — no hay que leerla del store.
+    if (!accessToken && user) {
       axios
-        .post(`${import.meta.env.VITE_API_URL}/auth/refresh`, { refreshToken })
+        .post(`${import.meta.env.VITE_API_URL}/auth/refresh`, {}, { withCredentials: true })
         .then(({ data }) => {
           const tokens = data?.data ?? data
-          setTokens(tokens.accessToken, tokens.refreshToken ?? refreshToken)
+          setTokens(tokens.accessToken)
         })
         .catch(() => {
           logout()
@@ -21,7 +23,8 @@ export default function PrivateRoute() {
     }
   }, []) // eslint-disable-line react-hooks/exhaustive-deps
 
-  if (!accessToken && !refreshToken) return <Navigate to={ROUTES.LOGIN} replace />
+  // Sin usuario persistido → sesión nunca iniciada o logout explícito
+  if (!accessToken && !user) return <Navigate to={ROUTES.LOGIN} replace />
 
   return <Outlet />
 }

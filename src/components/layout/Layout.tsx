@@ -70,7 +70,7 @@ function InitDots() {
 export default function Layout() {
   const setPermissions    = useAuthStore(s => s.setPermissions)
   const accessToken       = useAuthStore(s => s.accessToken)
-  const refreshToken      = useAuthStore(s => s.refreshToken)
+  const user              = useAuthStore(s => s.user)
   const logout            = useAuthStore(s => s.logout)
   const permissionsLoaded = useAuthStore(s => s.permissionsLoaded)
   const navigate          = useNavigate()
@@ -78,7 +78,7 @@ export default function Layout() {
 
   // Inicializando si: (F5 — accessToken aún no recuperado) O (permisos aún no cargados)
   // En ambos casos mostramos InitDots en lugar de pantalla en blanco.
-  const isInitializing = (!accessToken && !!refreshToken) || !permissionsLoaded
+  const isInitializing = (!accessToken && !!user) || !permissionsLoaded
 
   const inactivityTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
   const warningTimer = useRef<ReturnType<typeof setTimeout> | null>(null)

@@ -109,7 +109,7 @@ export default function LoginPage() {
     setLoginError(null)
     try {
       const res = await authApi.login(data);
-      login(res.user, res.accessToken, res.refreshToken, res.permissions);
+      login(res.user, res.accessToken, res.permissions);
       applyFromServer(res.serverConfig);
       const role = res.user.role
       const dest = role === 'admin' ? ROUTES.DASHBOARD

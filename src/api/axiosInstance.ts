@@ -5,6 +5,7 @@ import { useUiStore } from '../store/uiStore'
 const api = axios.create({
   baseURL: import.meta.env.VITE_API_URL,
   timeout: 30_000,
+  withCredentials: true, // envía la cookie HttpOnly del refreshToken en requests /auth/*
 })
 
 api.interceptors.request.use((config) => {
@@ -64,21 +65,18 @@ api.interceptors.response.use(
       originalRequest._retry = true
       isRefreshing = true
 
-      const { refreshToken, setTokens, logout } = useAuthStore.getState()
-
-      if (!refreshToken) {
-        logout()
-        window.location.href = '/login'
-        return Promise.reject(error)
-      }
+      const { setTokens, logout } = useAuthStore.getState()
 
       try {
-        const { data } = await axios.post(`${import.meta.env.VITE_API_URL}/auth/refresh`, {
-          refreshToken,
-        })
+        // refreshToken viaja como cookie HttpOnly — body vacío, withCredentials ya está en la instancia
+        const { data } = await axios.post(
+          `${import.meta.env.VITE_API_URL}/auth/refresh`,
+          {},
+          { withCredentials: true },
+        )
         // El refresh endpoint también está envuelto
         const tokens = data?.data ?? data
-        setTokens(tokens.accessToken, tokens.refreshToken ?? refreshToken)
+        setTokens(tokens.accessToken)
         processQueue(null, tokens.accessToken)
         originalRequest.headers.Authorization = `Bearer ${tokens.accessToken}`
         return api(originalRequest)

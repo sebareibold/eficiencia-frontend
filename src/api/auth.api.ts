@@ -1,6 +1,5 @@
 import axios from 'axios'
 import api from './axiosInstance'
-import { useAuthStore } from '../store/authStore'
 import type { LoginCredentials, LoginResponse } from '../types/auth.types'
 import type { PermisosMap } from './permisos.api'
 import type { ConfiguracionData } from './configuracion.api'
@@ -13,7 +12,8 @@ export interface ExtendedLoginResponse extends LoginResponse {
 export const authApi = {
   login: async (credentials: LoginCredentials): Promise<ExtendedLoginResponse> => {
     const r = await api.post('/auth/login', credentials)
-    const { accessToken, refreshToken, usuario } = r.data
+    // refreshToken ya NO viene en el body — el server lo setea como cookie HttpOnly
+    const { accessToken, usuario } = r.data
 
     const user: LoginResponse['user'] = {
       id: usuario.id,
@@ -47,13 +47,11 @@ export const authApi = {
         .catch(() => ({} as Partial<ConfiguracionData>)),
     ])
 
-    return { accessToken, refreshToken, user, permissions, serverConfig }
+    return { accessToken, user, permissions, serverConfig }
   },
 
-  logout: () => {
-    const { refreshToken } = useAuthStore.getState()
-    return api.post('/auth/logout', refreshToken ? { refreshToken } : {})
-  },
+  // refreshToken ya no se envía en el body — la cookie se envía automáticamente
+  logout: () => api.post('/auth/logout', {}),
 
   changePassword: (data: { passwordActual: string; passwordNueva: string }) =>
     api.patch('/auth/change-password', data),
