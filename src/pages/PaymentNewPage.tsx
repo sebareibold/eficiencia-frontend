@@ -689,7 +689,7 @@ export default function PaymentNewPage() {
       variants={pageVariants}
       initial="hidden"
       animate="visible"
-      className="max-w-4xl mx-auto space-y-5"
+      className="space-y-5"
     >
       {/* Breadcrumb */}
       <button

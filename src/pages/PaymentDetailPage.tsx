@@ -63,6 +63,7 @@ export default function PaymentDetailPage() {
   const [saving, setSaving] = useState(false)
   const [membresias, setMembresias] = useState<MembresiaCliente[]>([])
   const [loadingMemb, setLoadingMemb] = useState(false)
+  const [membPage, setMembPage] = useState(0)
   const [editForm, setEditForm] = useState<{
     amount: string; method: Payment['method']; paidAt: string; notes: string; membresiaId: string
   }>({ amount: '', method: 'cash', paidAt: '', notes: '', membresiaId: '' })
@@ -86,6 +87,7 @@ export default function PaymentDetailPage() {
       notes: payment.notes ?? '',
       membresiaId: payment.membresiaId ?? '',
     })
+    setMembPage(0)
     setIsEditing(true)
     if (payment.clientId && membresias.length === 0) {
       setLoadingMemb(true)
@@ -152,7 +154,7 @@ export default function PaymentDetailPage() {
   const MethodIcon = cfg?.Icon ?? Banknote
 
   return (
-    <motion.div {...pageVariants} className="max-w-2xl mx-auto space-y-6 pb-12 relative z-10">
+    <motion.div {...pageVariants} className="space-y-6 pb-12 relative z-10">
 
       {/* Back + Header */}
       <div className="flex items-center gap-4">
@@ -290,8 +292,8 @@ export default function PaymentDetailPage() {
                       </div>
                     </div>
 
-                    {/* Lista de membresías */}
-                    {membresias.map(m => {
+                    {/* Lista de membresías (paginada de 5 en 5) */}
+                    {membresias.slice(membPage * 5, membPage * 5 + 5).map(m => {
                       const sCfg = MEMB_STATUS_CONFIG[m.estado]
                       const isSelected = editForm.membresiaId === m.id
                       const daysLeft = Math.ceil((new Date(m.fechaVencimiento).getTime() - Date.now()) / 86_400_000)
@@ -340,6 +342,31 @@ export default function PaymentDetailPage() {
                         Este cliente no tiene membresías registradas
                       </p>
                     )}
+
+                    {/* Paginación */}
+                    {membresias.length > 5 && (
+                      <div className="flex items-center justify-between pt-1">
+                        <button
+                          type="button"
+                          onClick={() => setMembPage(p => Math.max(0, p - 1))}
+                          disabled={membPage === 0}
+                          className="text-xs font-semibold text-gray-500 dark:text-gray-400 hover:text-gray-900 dark:hover:text-white disabled:opacity-30 disabled:cursor-not-allowed transition-colors px-2 py-1"
+                        >
+                          ← Anteriores
+                        </button>
+                        <span className="text-[11px] text-gray-400 dark:text-gray-500 tabular-nums">
+                          {membPage * 5 + 1}–{Math.min(membPage * 5 + 5, membresias.length)} de {membresias.length}
+                        </span>
+                        <button
+                          type="button"
+                          onClick={() => setMembPage(p => p + 1)}
+                          disabled={(membPage + 1) * 5 >= membresias.length}
+                          className="text-xs font-semibold text-gray-500 dark:text-gray-400 hover:text-gray-900 dark:hover:text-white disabled:opacity-30 disabled:cursor-not-allowed transition-colors px-2 py-1"
+                        >
+                          Siguientes →
+                        </button>
+                      </div>
+                    )}
                   </div>
                 )}
               </div>
@@ -368,117 +395,112 @@ export default function PaymentDetailPage() {
               animate={{ opacity: 1, y: 0 }}
               exit={{ opacity: 0, y: -6 }}
               transition={{ duration: 0.18 }}
-              className="space-y-6"
+              className="space-y-4"
             >
-              {/* Hero — monto + método */}
-              <div className={`rounded-[2rem] border ${cfg.border} ${cfg.bg} backdrop-blur-3xl p-8 shadow-sm`}>
-                <div className="flex items-start justify-between gap-4">
+              {/* Stack vertical */}
+              <div className="space-y-4">
+
+                {/* 1 — Método + monto + fecha + notas */}
+                <div className={`rounded-[2rem] border ${cfg.border} ${cfg.bg} backdrop-blur-3xl p-7 shadow-sm flex flex-col gap-5`}>
+                  <div className={`inline-flex items-center gap-2 rounded-xl ${cfg.bg} border ${cfg.border} px-3 py-1.5 self-start`}>
+                    <MethodIcon size={14} className={cfg.color} />
+                    <span className={`text-xs font-bold ${cfg.color}`}>{cfg.label}</span>
+                  </div>
                   <div>
-                    <div className={`inline-flex items-center gap-2 rounded-xl ${cfg.bg} border ${cfg.border} px-3 py-1.5 mb-4`}>
-                      <MethodIcon size={15} className={cfg.color} />
-                      <span className={`text-xs font-bold ${cfg.color}`}>{cfg.label}</span>
-                    </div>
-                    <p className="text-5xl font-black tabular-nums tracking-tighter text-gray-900 dark:text-white">
+                    <p className="text-4xl xl:text-5xl font-black tabular-nums tracking-tighter text-gray-900 dark:text-white">
                       {formatCurrency(payment.amount)}
                     </p>
-                    <div className="flex items-center gap-2 mt-3 flex-wrap">
+                    <div className="flex items-center gap-3 mt-3 flex-wrap">
                       <span className="flex items-center gap-1.5 text-sm text-gray-500 dark:text-gray-400">
-                        <Calendar size={14} />
-                        {formatDate(payment.paidAt)}
+                        <Calendar size={13} /> {formatDate(payment.paidAt)}
+                      </span>
+                      <span className="text-gray-300 dark:text-gray-600">·</span>
+                      <span className="font-mono text-xs text-gray-400 dark:text-gray-500">
+                        #{String(payment.id).slice(0, 8)}…
                       </span>
                     </div>
                   </div>
-                  <div className="text-right shrink-0">
-                    <p className="text-[10px] font-bold uppercase tracking-widest text-gray-400 dark:text-gray-500 mb-1">ID</p>
-                    <p className="font-mono text-xs text-gray-400 dark:text-gray-500">
-                      {String(payment.id).slice(0, 12)}…
-                    </p>
-                  </div>
+                  {payment.notes && (
+                    <div className="pt-4 border-t border-white/20 dark:border-white/[0.08]">
+                      <p className={`${labelCls} mb-1.5 flex items-center gap-1.5`}><FileText size={11} /> Comprobante</p>
+                      <p className="text-sm text-gray-700 dark:text-gray-300 font-medium">{payment.notes}</p>
+                    </div>
+                  )}
                 </div>
-              </div>
 
-              {/* Cliente */}
-              <div className="rounded-2xl border border-white/50 dark:border-white/10 bg-white/30 dark:bg-black/30 backdrop-blur-xl p-5 shadow-sm">
-                <p className={`${labelCls} mb-3 flex items-center gap-1.5`}>
-                  <User size={12} /> Cliente
-                </p>
-                <div className="flex items-center justify-between">
-                  <p className="font-bold text-gray-900 dark:text-white text-lg">{payment.clientName}</p>
+                {/* 2 — Cliente */}
+                <div className="rounded-[2rem] border border-white/50 dark:border-white/10 bg-white/30 dark:bg-black/30 backdrop-blur-3xl p-7 shadow-sm flex flex-col gap-5">
+                  <p className={`${labelCls} flex items-center gap-1.5`}><User size={11} /> Cliente</p>
+                  <div className="flex items-center gap-4">
+                    <div className="h-14 w-14 rounded-2xl bg-primary/10 flex items-center justify-center shrink-0">
+                      <span className="text-2xl font-black text-primary leading-none">{payment.clientName.charAt(0).toUpperCase()}</span>
+                    </div>
+                    <p className="text-xl font-black text-gray-900 dark:text-white leading-tight">{payment.clientName}</p>
+                  </div>
                   <Link
                     to={`/clients/${payment.clientId}`}
-                    className="flex items-center gap-1.5 rounded-xl border border-white/50 dark:border-white/10 bg-white/40 dark:bg-white/5 px-3.5 py-2 text-xs font-semibold text-gray-700 dark:text-gray-200 hover:bg-white/70 dark:hover:bg-white/10 transition-all"
+                    className="flex items-center justify-center gap-1.5 rounded-xl border border-white/50 dark:border-white/10 bg-white/40 dark:bg-white/[0.05] px-4 py-2.5 text-sm font-semibold text-gray-700 dark:text-gray-200 hover:bg-white/70 dark:hover:bg-white/10 transition-all"
                   >
                     Ver perfil →
                   </Link>
                 </div>
-              </div>
 
-              {/* Comprobante / notas */}
-              {payment.notes && (
-                <div className="rounded-2xl border border-white/50 dark:border-white/10 bg-white/30 dark:bg-black/30 backdrop-blur-xl p-5 shadow-sm">
-                  <p className={`${labelCls} mb-2 flex items-center gap-1.5`}>
-                    <FileText size={12} /> Comprobante / Notas
-                  </p>
-                  <p className="text-sm text-gray-800 dark:text-gray-200 font-medium">{payment.notes}</p>
-                </div>
-              )}
-
-              {/* Membresía vinculada */}
-              {payment.membresia ? (
-                <div className="rounded-2xl border border-primary/25 bg-primary/[0.05] backdrop-blur-xl p-5 shadow-sm">
-                  <p className={`${labelCls} text-primary mb-4 flex items-center gap-1.5`}>
-                    <Tag size={12} /> Membresía vinculada
-                  </p>
-                  <div className="grid grid-cols-2 gap-3 sm:grid-cols-3">
-                    {[
-                      { label: 'Plan',       value: payment.membresia.planNombre },
-                      { label: 'Modalidad',  value: MODALIDAD_LABELS[payment.membresia.modalidad] ?? payment.membresia.modalidad },
-                      { label: 'Estado',     value: (() => {
-                          const s = MEMB_STATUS_CONFIG[payment.membresia!.estado]
-                          return s
-                            ? <span className={`inline-block text-xs font-bold px-2 py-0.5 rounded-lg ${s.bg} ${s.color}`}>{s.label}</span>
-                            : payment.membresia!.estado
-                        })() },
-                      { label: 'Precio',      value: formatCurrency(payment.membresia.precio) },
-                      { label: 'Inicio',      value: formatDate(payment.membresia.fechaInicio) },
-                      { label: 'Vencimiento', value: formatDate(payment.membresia.fechaVencimiento) },
-                    ].map(({ label, value }) => (
-                      <div key={label} className="rounded-xl bg-white/40 dark:bg-black/20 border border-white/50 dark:border-white/10 px-3.5 py-3">
-                        <p className="text-[10px] text-gray-400 dark:text-gray-500 uppercase tracking-wider font-medium">{label}</p>
-                        <div className="text-sm font-bold text-gray-900 dark:text-white mt-0.5">{value}</div>
-                      </div>
-                    ))}
-                  </div>
-                  {payment.cuotaNumero != null && payment.cuotaNumero <= 36 && (
-                    <div className="mt-3 flex items-center gap-2 text-sm text-gray-500 dark:text-gray-400">
-                      <Hash size={14} className="text-primary" />
-                      Cuota <span className="font-black text-primary ml-0.5">#{payment.cuotaNumero}</span>
+                {/* 3 — Membresía vinculada */}
+                {payment.membresia ? (
+                  <div className="rounded-[2rem] border border-primary/25 bg-primary/[0.04] backdrop-blur-3xl p-7 shadow-sm flex flex-col gap-5">
+                    <p className={`${labelCls} text-primary flex items-center gap-1.5`}><Tag size={11} /> Membresía vinculada</p>
+                    <div className="grid grid-cols-2 gap-2.5">
+                      {[
+                        { label: 'Plan',        value: payment.membresia.planNombre },
+                        { label: 'Modalidad',   value: MODALIDAD_LABELS[payment.membresia.modalidad] ?? payment.membresia.modalidad },
+                        { label: 'Estado',      value: (() => {
+                            const s = MEMB_STATUS_CONFIG[payment.membresia!.estado]
+                            return s
+                              ? <span className={`inline-block text-xs font-bold px-2 py-0.5 rounded-lg ${s.bg} ${s.color}`}>{s.label}</span>
+                              : payment.membresia!.estado
+                          })() },
+                        { label: 'Precio',      value: formatCurrency(payment.membresia.precio) },
+                        { label: 'Inicio',      value: formatDate(payment.membresia.fechaInicio) },
+                        { label: 'Vencimiento', value: formatDate(payment.membresia.fechaVencimiento) },
+                      ].map(({ label, value }) => (
+                        <div key={label} className="rounded-xl bg-white/40 dark:bg-black/20 border border-white/50 dark:border-white/10 px-3.5 py-3">
+                          <p className="text-[10px] text-gray-400 dark:text-gray-500 uppercase tracking-wider font-medium">{label}</p>
+                          <div className="text-sm font-bold text-gray-900 dark:text-white mt-0.5">{value}</div>
+                        </div>
+                      ))}
                     </div>
-                  )}
-                </div>
-              ) : (
-                <div className="rounded-2xl border border-white/50 dark:border-white/10 bg-white/30 dark:bg-black/30 backdrop-blur-xl p-5 shadow-sm text-center">
-                  <p className="text-xs text-gray-400 dark:text-gray-500">Sin membresía vinculada</p>
-                </div>
-              )}
+                    {payment.cuotaNumero != null && payment.cuotaNumero <= 36 && (
+                      <div className="flex items-center gap-2 text-sm text-gray-500 dark:text-gray-400">
+                        <Hash size={14} className="text-primary" />
+                        Cuota <span className="font-black text-primary ml-0.5">#{payment.cuotaNumero}</span>
+                      </div>
+                    )}
+                  </div>
+                ) : (
+                  <div className="rounded-[2rem] border border-white/50 dark:border-white/10 bg-white/30 dark:bg-black/30 backdrop-blur-3xl p-7 shadow-sm flex flex-col items-center justify-center gap-3 text-center">
+                    <Tag size={24} className="text-gray-300 dark:text-gray-600" />
+                    <div>
+                      <p className="text-sm font-bold text-gray-500 dark:text-gray-400">Sin membresía vinculada</p>
+                      <p className="text-xs text-gray-400 dark:text-gray-500 mt-0.5">Editá el pago para vincular una</p>
+                    </div>
+                  </div>
+                )}
 
-              {/* Facturación — toggle dedicado */}
-              <div className="rounded-2xl border border-white/50 dark:border-white/10 bg-white/30 dark:bg-black/30 backdrop-blur-xl shadow-sm overflow-hidden">
-                <div className="flex items-center justify-between gap-4 p-5">
+                {/* 4 — Facturado toggle */}
+                <div className="rounded-[2rem] border border-white/50 dark:border-white/10 bg-white/30 dark:bg-black/30 backdrop-blur-3xl p-7 shadow-sm flex items-center justify-between gap-6">
                   <div className="flex items-center gap-4">
-                    <div className={`h-11 w-11 rounded-xl flex items-center justify-center shrink-0 transition-colors duration-300 ${
+                    <div className={`h-12 w-12 rounded-2xl flex items-center justify-center shrink-0 transition-colors duration-300 ${
                       payment.invoiced ? 'bg-emerald-500/15' : 'bg-gray-100/60 dark:bg-white/[0.05]'
                     }`}>
                       {payment.invoiced
-                        ? <CheckCircle2 size={20} className="text-emerald-500" />
-                        : <FileText size={20} className="text-gray-400 dark:text-gray-500" />
-                      }
+                        ? <CheckCircle2 size={22} className="text-emerald-500" />
+                        : <FileText size={22} className="text-gray-400 dark:text-gray-500" />}
                     </div>
                     <div>
-                      <p className={`text-sm font-bold transition-colors duration-300 ${
+                      <p className={`text-base font-black transition-colors duration-300 ${
                         payment.invoiced ? 'text-emerald-700 dark:text-emerald-400' : 'text-gray-900 dark:text-white'
                       }`}>
-                        {payment.invoiced ? 'Pago facturado' : 'Sin facturar'}
+                        {payment.invoiced ? 'Facturado' : 'Sin facturar'}
                       </p>
                       <p className="text-xs text-gray-500 dark:text-gray-400 mt-0.5">
                         {payment.invoiced ? 'Este pago fue facturado' : 'Este pago aún no fue facturado'}
@@ -489,7 +511,7 @@ export default function PaymentDetailPage() {
                     type="button"
                     onClick={handleToggleInvoiced}
                     disabled={togglingInvoiced}
-                    className={`relative inline-flex h-7 w-14 shrink-0 items-center rounded-full transition-all duration-300 focus:outline-none ${
+                    className={`relative inline-flex h-7 w-14 items-center rounded-full transition-all duration-300 focus:outline-none shrink-0 ${
                       payment.invoiced
                         ? 'bg-emerald-500 shadow-[0_0_16px_rgba(16,185,129,0.35)]'
                         : 'bg-gray-200 dark:bg-gray-700/60'
@@ -497,7 +519,7 @@ export default function PaymentDetailPage() {
                     aria-checked={payment.invoiced}
                     role="switch"
                   >
-                    <span className={`inline-block h-5 w-5 transform rounded-full bg-white shadow-md transition-transform duration-300 ease-in-out ${
+                    <span className={`inline-block h-5 w-5 transform rounded-full bg-white shadow-md transition-transform duration-300 ${
                       payment.invoiced ? 'translate-x-[30px]' : 'translate-x-[4px]'
                     }`} />
                   </button>
@@ -511,16 +533,14 @@ export default function PaymentDetailPage() {
                     onClick={openEdit}
                     className="flex items-center gap-2 rounded-2xl border border-white/50 dark:border-white/10 bg-white/30 dark:bg-black/30 backdrop-blur-xl px-4 py-2.5 text-sm font-semibold text-gray-700 dark:text-gray-200 hover:bg-white/50 dark:hover:bg-black/50 transition-all"
                   >
-                    <Edit2 size={15} />
-                    Editar pago
+                    <Edit2 size={15} /> Editar pago
                   </button>
                   <button
                     onClick={() => setIsConfirmOpen(true)}
                     disabled={deleting}
                     className="flex items-center gap-2 rounded-2xl border border-red-500/20 bg-red-500/10 px-4 py-2.5 text-sm font-semibold text-red-600 dark:text-red-400 hover:bg-red-500/20 transition-all disabled:opacity-50"
                   >
-                    <Trash2 size={15} />
-                    Eliminar pago
+                    <Trash2 size={15} /> Eliminar pago
                   </button>
                 </div>
               )}

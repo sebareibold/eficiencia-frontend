@@ -87,7 +87,7 @@ export default function EjercicioDetailPage() {
       initial={{ opacity: 0, y: 8 }}
       animate={{ opacity: 1, y: 0 }}
       transition={{ duration: 0.18 }}
-      className="flex flex-col gap-6 max-w-2xl"
+      className="flex flex-col gap-6"
     >
       {/* Header */}
       <div className="flex flex-col gap-4">

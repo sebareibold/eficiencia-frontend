@@ -22,7 +22,7 @@ const requestSchema = z.object({
   name: z.string().min(2, "El nombre es requerido"),
   email: z.string().email("Email inválido"),
   password: z.string().min(6, "Mínimo 6 caracteres"),
-  role: z.enum(["ADMINISTRADOR", "STAFF", "PROFESOR", "CLIENTE_COMUN"], { required_error: "Seleccioná un rol" }),
+  role: z.enum(["STAFF", "PROFESOR", "CLIENTE_COMUN"], { required_error: "Seleccioná un rol" }),
 });
 
 type FormValues = z.infer<typeof schema>;
@@ -408,7 +408,6 @@ export default function LoginPage() {
                                 <option value="CLIENTE_COMUN">Cliente del gimnasio</option>
                                 <option value="STAFF">Staff</option>
                                 <option value="PROFESOR">Profesor</option>
-                                <option value="ADMINISTRADOR">Administrador</option>
                               </select>
                               {errorsRequest.role && <span className="text-xs font-bold text-red-500 ml-1">{errorsRequest.role.message}</span>}
                             </div>

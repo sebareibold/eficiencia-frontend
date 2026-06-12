@@ -1,5 +1,5 @@
 import { type ReactNode } from 'react'
-import { ChevronUp, ChevronDown } from 'lucide-react'
+import { ChevronsUpDown, ChevronUp, ChevronDown } from 'lucide-react'
 import Skeleton from './Skeleton'
 
 export interface Column<T> {
@@ -40,13 +40,23 @@ export default function Table<T>({
             {columns.map((col) => (
               <th
                 key={col.key}
-                className={`px-4 py-3 text-left text-xs font-semibold uppercase tracking-wider text-saas-muted ${col.sortable ? 'cursor-pointer select-none hover:text-gray-900' : ''}`}
+                className={`px-4 py-3 text-left text-xs font-semibold uppercase tracking-wider transition-colors ${
+                  col.sortable
+                    ? sortKey === col.key
+                      ? 'text-gray-900 dark:text-white cursor-pointer select-none'
+                      : 'text-gray-500 dark:text-gray-400 cursor-pointer select-none hover:text-gray-800 dark:hover:text-gray-200'
+                    : 'text-gray-500 dark:text-gray-400'
+                }`}
                 onClick={() => col.sortable && onSort?.(col.key)}
               >
-                <span className="inline-flex items-center gap-1">
+                <span className="inline-flex items-center gap-1.5">
                   {col.header}
-                  {col.sortable && sortKey === col.key && (
-                    sortDir === 'asc' ? <ChevronUp size={12} /> : <ChevronDown size={12} />
+                  {col.sortable && (
+                    sortKey === col.key
+                      ? sortDir === 'asc'
+                        ? <ChevronUp size={13} strokeWidth={2.5} className="text-primary shrink-0" />
+                        : <ChevronDown size={13} strokeWidth={2.5} className="text-primary shrink-0" />
+                      : <ChevronsUpDown size={13} strokeWidth={2} className="text-gray-400 dark:text-gray-500 shrink-0" />
                   )}
                 </span>
               </th>

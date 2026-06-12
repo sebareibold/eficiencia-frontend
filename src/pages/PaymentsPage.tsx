@@ -8,6 +8,7 @@ import {
   Plus, CreditCard, Banknote, ArrowLeftRight, Building2, RefreshCw,
   CheckCircle2, XCircle, Trash2, Search, ChevronLeft, ChevronRight,
   Layers, LayoutList, LayoutGrid, Edit2, X, Save, Pencil,
+  ArrowUp, ArrowDown, ArrowUpDown,
 } from 'lucide-react'
 import { useForm } from 'react-hook-form'
 import { zodResolver } from '@hookform/resolvers/zod'
@@ -440,6 +441,18 @@ function PlanCard({
   )
 }
 
+// ── Sort helper ───────────────────────────────────────────────────────────────
+
+type PaySortKey = 'clientName' | 'amount' | 'paidAt' | 'invoiced'
+type PaySortDir = 'asc' | 'desc'
+
+function PaySortIcon({ active, dir }: { active: boolean; dir: PaySortDir }) {
+  if (!active) return <ArrowUpDown size={11} className="opacity-30" />
+  return dir === 'asc'
+    ? <ArrowUp size={11} className="text-primary" />
+    : <ArrowDown size={11} className="text-primary" />
+}
+
 // ── Página principal ──────────────────────────────────────────────────────────
 
 type PeriodMode = 'day' | 'month' | 'year' | 'all'
@@ -509,6 +522,14 @@ export default function PaymentsPage() {
   const user = useAuthStore(s => s.user)
   const isAdmin = user?.role === 'admin'
 
+  const [paySortKey, setPaySortKey] = useState<PaySortKey>('paidAt')
+  const [paySortDir, setPaySortDir] = useState<PaySortDir>('desc')
+
+  function togglePaySort(key: PaySortKey) {
+    if (paySortKey === key) setPaySortDir(d => d === 'asc' ? 'desc' : 'asc')
+    else { setPaySortKey(key); setPaySortDir('asc') }
+  }
+
   // ── Forms ──
   const {
     register: planRegister, handleSubmit: planHandleSubmit,
@@ -526,6 +547,19 @@ export default function PaymentsPage() {
     const matchSearch   = !searchFilter  || p.clientName.toLowerCase().includes(searchFilter.toLowerCase())
     return matchMethod && matchInvoiced && matchSearch
   }), [payments, methodFilter, invoicedFilter, searchFilter, removedPaymentIds])
+
+  const sortedFiltered = useMemo(() => {
+    const arr = [...filtered]
+    arr.sort((a, b) => {
+      let cmp = 0
+      if (paySortKey === 'clientName') cmp = a.clientName.localeCompare(b.clientName)
+      else if (paySortKey === 'amount') cmp = a.amount - b.amount
+      else if (paySortKey === 'paidAt') cmp = a.paidAt.localeCompare(b.paidAt)
+      else if (paySortKey === 'invoiced') cmp = Number(a.invoiced) - Number(b.invoiced)
+      return paySortDir === 'asc' ? cmp : -cmp
+    })
+    return arr
+  }, [filtered, paySortKey, paySortDir])
 
   // ── Resumen del período (para KPIs — mismo período que la tabla) ──
   const summaryParams = {
@@ -781,11 +815,10 @@ export default function PaymentsPage() {
                   </div>
                   <div className="flex flex-col items-end gap-1.5 shrink-0">
                     <span className="text-sm font-black text-emerald-600 dark:text-emerald-400 tabular-nums">{formatCurrency(p.amount)}</span>
-                    <button onClick={e => { e.stopPropagation(); toggleInvoiced(p) }}
-                      className={`inline-flex items-center gap-1 rounded-lg border px-2 py-0.5 text-[10px] font-bold transition-all hover:scale-105 ${p.invoiced ? 'text-emerald-600 dark:text-emerald-400 bg-emerald-500/10 border-emerald-500/20' : 'text-gray-500 dark:text-[#8A8A9A] bg-white/50 dark:bg-white/[0.05] border-white/50 dark:border-white/10'}`}>
+                    <span className={`inline-flex items-center gap-1 rounded-lg border px-2 py-0.5 text-[10px] font-bold ${p.invoiced ? 'text-emerald-600 dark:text-emerald-400 bg-emerald-500/10 border-emerald-500/20' : 'text-gray-500 dark:text-[#8A8A9A] bg-white/50 dark:bg-white/[0.05] border-white/50 dark:border-white/10'}`}>
                       {p.invoiced ? <CheckCircle2 size={10} /> : <XCircle size={10} />}
                       {p.invoiced ? 'Facturado' : 'Sin factura'}
-                    </button>
+                    </span>
                   </div>
                   {can('payments', 'delete') && (<button onClick={e => { e.stopPropagation(); setDeletePaymentTarget(p.id) }}
                     className="rounded-xl p-2 text-gray-400 dark:text-gray-600 opacity-0 group-hover:opacity-100 hover:bg-red-50 dark:hover:bg-red-500/10 hover:text-red-600 dark:hover:text-red-400 transition-all">
@@ -809,17 +842,25 @@ export default function PaymentsPage() {
             <table className="w-full text-sm border-collapse">
               <thead>
                 <tr className="border-b border-white/20 dark:border-white/10 bg-gray-50/30 dark:bg-black/10">
-                  <th className="px-6 py-4 text-left text-xs font-extrabold uppercase tracking-widest text-gray-500 dark:text-gray-400">Cliente</th>
-                  <th className="px-6 py-4 text-left text-xs font-extrabold uppercase tracking-widest text-gray-500 dark:text-gray-400">Importe</th>
-                  <th className="px-6 py-4 text-left text-xs font-extrabold uppercase tracking-widest text-gray-500 dark:text-gray-400">Método · Fecha</th>
-                  <th className="px-6 py-4 text-left text-xs font-extrabold uppercase tracking-widest text-gray-500 dark:text-gray-400">Estado</th>
+                  {(['clientName', 'amount', 'paidAt', 'invoiced'] as const).map((key, idx) => (
+                    <th
+                      key={key}
+                      onClick={() => togglePaySort(key)}
+                      className="px-6 py-4 text-left text-xs font-extrabold uppercase tracking-widest text-gray-500 dark:text-gray-400 cursor-pointer select-none hover:text-gray-700 dark:hover:text-gray-200 transition-colors"
+                    >
+                      <div className="flex items-center gap-1.5">
+                        {['Cliente', 'Importe', 'Método · Fecha', 'Estado'][idx]}
+                        <PaySortIcon active={paySortKey === key} dir={paySortDir} />
+                      </div>
+                    </th>
+                  ))}
                   <th className="w-14 py-4"></th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-white/20 dark:divide-white/10">
-                {filtered.length === 0 ? (
+                {sortedFiltered.length === 0 ? (
                   <tr><td colSpan={5} className="px-6 py-16 text-center text-gray-500 dark:text-gray-400 font-medium">No se encontraron pagos con los filtros actuales</td></tr>
-                ) : filtered.map(p => {
+                ) : sortedFiltered.map(p => {
                   const MethodIcon = METHOD_ICONS[p.method] ?? CreditCard
                   return (
                     <tr key={p.id} onClick={() => navigate(`/payments/${p.id}`)}
@@ -845,11 +886,10 @@ export default function PaymentsPage() {
                         </div>
                       </td>
                       <td className="px-6 py-4">
-                        <button onClick={e => { e.stopPropagation(); toggleInvoiced(p) }}
-                          className={`inline-flex items-center gap-1.5 rounded-xl border px-3 py-1.5 text-[11px] font-bold backdrop-blur-md transition-all hover:scale-105 active:scale-95 shadow-sm ${p.invoiced ? 'text-emerald-600 dark:text-emerald-400 bg-emerald-500/10 border-emerald-500/20' : 'text-gray-500 dark:text-[#8A8A9A] bg-white/50 dark:bg-white/[0.05] border-white/50 dark:border-white/10'}`}>
+                        <span className={`inline-flex items-center gap-1.5 rounded-xl border px-3 py-1.5 text-[11px] font-bold shadow-sm ${p.invoiced ? 'text-emerald-600 dark:text-emerald-400 bg-emerald-500/10 border-emerald-500/20' : 'text-gray-500 dark:text-[#8A8A9A] bg-white/50 dark:bg-white/[0.05] border-white/50 dark:border-white/10'}`}>
                           {p.invoiced ? <CheckCircle2 size={11} /> : <XCircle size={11} />}
                           {p.invoiced ? 'Facturado' : 'Sin factura'}
-                        </button>
+                        </span>
                       </td>
                       <td className="px-4 py-4 text-right">
                         {can('payments', 'delete') && (<button onClick={e => { e.stopPropagation(); setDeletePaymentTarget(p.id) }}
@@ -909,9 +949,9 @@ export default function PaymentsPage() {
                         <span className="inline-flex items-center rounded-lg border border-white/50 dark:border-white/10 bg-white/60 dark:bg-white/5 px-2.5 py-1 text-[11px] font-bold text-gray-700 dark:text-gray-300">
                           {METHOD_LABELS[p.method] ?? p.method}
                         </span>
-                        <button onClick={e => { e.stopPropagation(); toggleInvoiced(p) }} className="transition-transform hover:scale-110">
+                        <span>
                           {p.invoiced ? <CheckCircle2 size={18} className="text-emerald-500" /> : <XCircle size={18} className="text-gray-300 dark:text-gray-600" />}
-                        </button>
+                        </span>
                       </div>
                     </div>
                   </motion.div>

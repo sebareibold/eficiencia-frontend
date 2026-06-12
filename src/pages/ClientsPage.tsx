@@ -2,7 +2,7 @@ import { useState, useEffect } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { motion } from 'framer-motion'
 import { pageVariants } from '../lib/motion'
-import { Plus, Search, RefreshCw, LayoutList, LayoutGrid, ChevronRight, ChevronLeft, ChevronsRight, ChevronsLeft, Phone, Mail, Users, X } from 'lucide-react'
+import { Plus, Search, RefreshCw, LayoutList, LayoutGrid, ChevronRight, ChevronLeft, ChevronsRight, ChevronsLeft, Phone, Mail, Users, X, ArrowUpDown } from 'lucide-react'
 import { format, startOfMonth, endOfMonth, addMonths, subMonths, differenceInDays } from 'date-fns'
 import { es } from 'date-fns/locale'
 import { usePermissions } from '../hooks/usePermissions'
@@ -38,6 +38,40 @@ function mapMembresiaToEstadoPago(s: MembresiaFilter): string | undefined {
 }
 
 type PeriodMode = 'month' | 'year' | 'historic'
+type SortKey = 'createdAt' | 'nombre' | 'vencimiento' | 'estado' | 'email' | 'estadoPago' | 'planName' | 'fechaInicio'
+
+const SORT_OPTIONS: { value: SortKey; label: string }[] = [
+  { value: 'createdAt',   label: 'Fecha de alta' },
+  { value: 'nombre',      label: 'Nombre' },
+  { value: 'vencimiento', label: 'Vencimiento' },
+  { value: 'estado',      label: 'Actividad' },
+  { value: 'email',       label: 'Email' },
+  { value: 'estadoPago',  label: 'Estado membresía' },
+  { value: 'planName',    label: 'Plan' },
+  { value: 'fechaInicio', label: 'Inicio membresía' },
+]
+
+// Mapeo columna tabla ↔ clave backend
+const COL_TO_SORT: Record<string, SortKey> = {
+  name:                'nombre',
+  activityStatus:      'estado',
+  membershipExpiresAt: 'vencimiento',
+  email:               'email',
+  status:              'estadoPago',
+  planName:            'planName',
+  membershipStartDate: 'fechaInicio',
+}
+
+const SORT_TO_COL: Record<SortKey, string> = {
+  nombre:      'name',
+  estado:      'activityStatus',
+  vencimiento: 'membershipExpiresAt',
+  createdAt:   '',
+  email:       'email',
+  estadoPago:  'status',
+  planName:    'planName',
+  fechaInicio: 'membershipStartDate',
+}
 
 function fmtDate(d: string | null | undefined) {
   if (!d) return null
@@ -83,6 +117,8 @@ export default function ClientsPage() {
   const [bulkProgress, setBulkProgress] = useState(0)
   const [bulkTotal, setBulkTotal] = useState(0)
   const [isSelectingAll, setIsSelectingAll] = useState(false)
+  const [sortKey, setSortKey]   = useState<SortKey>('createdAt')
+  const [sortDir, setSortDir]   = useState<'asc' | 'desc'>('desc')
 
   // Debounce search para no disparar una query por cada tecla
   useEffect(() => {
@@ -125,7 +161,21 @@ export default function ClientsPage() {
     estadoPago: mapMembresiaToEstadoPago(membresiaFilter),
     desde,
     hasta,
+    sortBy:  sortKey,
+    sortDir: sortDir,
   })
+
+  function handleSort(colKey: string) {
+    const backendKey = COL_TO_SORT[colKey]
+    if (!backendKey) return
+    if (sortKey === backendKey) {
+      setSortDir(d => d === 'asc' ? 'desc' : 'asc')
+    } else {
+      setSortKey(backendKey)
+      setSortDir('asc')
+    }
+    goToPage(1)
+  }
 
   // Resetear página al cambiar filtros
   useEffect(() => { goToPage(1) }, [debouncedSearch, actividadFilter, membresiaFilter, periodMode]) // eslint-disable-line react-hooks/exhaustive-deps
@@ -237,6 +287,7 @@ export default function ClientsPage() {
     {
       key: 'name',
       header: 'Nombre',
+      sortable: true,
       render: (c) => (
         <div className="flex flex-col gap-0.5">
           <span className="font-semibold text-gray-900 dark:text-white">{c.name} {c.lastName}</span>
@@ -247,6 +298,7 @@ export default function ClientsPage() {
     {
       key: 'email',
       header: 'Contacto',
+      sortable: true,
       render: (c) => (
         <div className="flex flex-col gap-0.5">
           <span className="text-sm text-saas-muted">{c.email || '—'}</span>
@@ -257,6 +309,7 @@ export default function ClientsPage() {
     {
       key: 'activityStatus',
       header: 'Actividad',
+      sortable: true,
       render: (c) => (
         c.activityStatus === 'inactive'
           ? <span className="inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[10px] font-semibold bg-gray-100 dark:bg-gray-800/60 text-gray-500 dark:text-gray-400 border border-gray-200 dark:border-gray-700/50">
@@ -272,6 +325,7 @@ export default function ClientsPage() {
     {
       key: 'status',
       header: 'Estado membresía',
+      sortable: true,
       render: (c) => c.activityStatus === 'inactive'
         ? <span className="text-sm text-gray-400 dark:text-gray-600">—</span>
         : <Badge status={c.status} />,
@@ -279,6 +333,7 @@ export default function ClientsPage() {
     {
       key: 'planName',
       header: 'Plan',
+      sortable: true,
       render: (c) => (
         c.planName
           ? <div className="flex flex-col gap-0.5">
@@ -293,6 +348,7 @@ export default function ClientsPage() {
     {
       key: 'membershipStartDate',
       header: 'Inicio',
+      sortable: true,
       render: (c) => {
         const d = fmtDate(c.membershipStartDate)
         return <span className="text-sm text-gray-600 dark:text-gray-400">{d ?? '—'}</span>
@@ -301,6 +357,7 @@ export default function ClientsPage() {
     {
       key: 'membershipExpiresAt',
       header: 'Vencimiento',
+      sortable: true,
       render: (c) => {
         const d = fmtDate(c.membershipExpiresAt)
         return <span className={`text-sm font-semibold ${vencimientoColor(c.membershipExpiresAt)}`}>{d ?? '—'}</span>
@@ -499,6 +556,44 @@ export default function ClientsPage() {
         </div>
       )}
 
+      {/* Sort selector — solo en vista grid */}
+      {viewMode === 'grid' && (
+        <div className="flex items-center gap-2 flex-wrap">
+          <span className="flex items-center gap-1.5 text-[10px] font-bold uppercase tracking-wider text-gray-400 dark:text-gray-500">
+            <ArrowUpDown size={11} /> Ordenar
+          </span>
+          <div className="flex flex-wrap gap-1">
+            {SORT_OPTIONS.map(opt => {
+              const isActive = sortKey === opt.value
+              return (
+                <button
+                  key={opt.value}
+                  onClick={() => {
+                    if (isActive) {
+                      setSortDir(d => d === 'asc' ? 'desc' : 'asc')
+                    } else {
+                      setSortKey(opt.value)
+                      setSortDir(opt.value === 'nombre' ? 'asc' : 'desc')
+                    }
+                    goToPage(1)
+                  }}
+                  className={`inline-flex items-center gap-1 rounded-full px-3 py-1 text-xs font-semibold transition-all ${
+                    isActive
+                      ? 'bg-gray-900 dark:bg-white text-white dark:text-gray-900'
+                      : 'border border-white/50 dark:border-white/[0.08] bg-white/30 dark:bg-white/[0.04] text-gray-600 dark:text-gray-400 hover:text-gray-900 dark:hover:text-white'
+                  }`}
+                >
+                  {opt.label}
+                  {isActive && (
+                    <span className="text-[9px] opacity-70">{sortDir === 'asc' ? '↑' : '↓'}</span>
+                  )}
+                </button>
+              )
+            })}
+          </div>
+        </div>
+      )}
+
       {/* Table / Grid */}
       {viewMode === 'table' ? (
         <Table
@@ -506,6 +601,9 @@ export default function ClientsPage() {
           data={clients}
           keyExtractor={c => c.id}
           isLoading={isLoading}
+          sortKey={SORT_TO_COL[sortKey] || undefined}
+          sortDir={sortDir}
+          onSort={handleSort}
           onRowClick={c => navigate(`/clients/${c.id}`)}
           emptyMessage="No se encontraron clientes"
         />

@@ -33,8 +33,16 @@ export const useUiStore = create<UiState>((set) => ({
   closeSettings: () => set({ settingsOpen: false }),
   addToast: (messageOrToast, type = 'info') => {
     const id = crypto.randomUUID()
-    const message = typeof messageOrToast === 'string' ? messageOrToast : messageOrToast.message
-    const resolvedType = typeof messageOrToast === 'string' ? type : messageOrToast.type
+    const isStr = typeof messageOrToast === 'string'
+    const message = isStr
+      ? messageOrToast
+      : Array.isArray(messageOrToast)
+        ? (messageOrToast as unknown as string[]).join(', ')
+        : messageOrToast.message
+    const resolvedType: ToastType = ((isStr || Array.isArray(messageOrToast))
+      ? type
+      : (messageOrToast as { message: string; type: ToastType }).type
+    ) ?? 'info'
     set((s) => ({ toasts: [...s.toasts, { id, message, type: resolvedType }] }))
     setTimeout(() => {
       set((s) => ({ toasts: s.toasts.filter((t) => t.id !== id) }))

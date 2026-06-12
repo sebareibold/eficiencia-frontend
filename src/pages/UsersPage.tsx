@@ -1,4 +1,5 @@
 ﻿import { useState, useEffect, Fragment, useCallback } from 'react'
+import { useNavigate } from 'react-router-dom'
 import { motion, AnimatePresence } from 'framer-motion'
 import { pageVariants } from '../lib/motion'
 import {
@@ -17,6 +18,7 @@ import { solicitudesApi, type SolicitudEntry } from '../api/solicitudes.api'
 import { useUiStore } from '../store/uiStore'
 import { useAuthStore } from '../store/authStore'
 import { useSolicitudesStore } from '../store/solicitudesStore'
+import { ROUTES } from '../constants/routes'
 import Button from '../components/ui/Button'
 import Modal from '../components/ui/Modal'
 import ConfirmDialog from '../components/ui/ConfirmDialog'
@@ -65,14 +67,6 @@ const ROL_DESC: Record<string, string> = {
 
 // ─── Schemas ──────────────────────────────────────────────────────────────────
 
-const createSchema = z.object({
-  nombre:   z.string().min(1, 'El nombre es requerido'),
-  email:    z.string().email('Email inválido'),
-  password: z.string().min(6, 'Mínimo 6 caracteres'),
-  rol:      z.enum(['ADMINISTRADOR', 'STAFF', 'PROFESOR']),
-  activo:   z.boolean().optional(),
-})
-
 const editSchema = z.object({
   nombre:   z.string().min(1, 'El nombre es requerido'),
   email:    z.string().email('Email inválido'),
@@ -81,8 +75,7 @@ const editSchema = z.object({
   activo:   z.boolean().optional(),
 })
 
-type CreateValues = z.infer<typeof createSchema>
-type EditValues   = z.infer<typeof editSchema>
+type EditValues = z.infer<typeof editSchema>
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 
@@ -110,17 +103,17 @@ function EstadoBadge({ activo }: { activo: boolean }) {
 // ─── Tab: Usuarios ─────────────────────────────────────────────────────────────
 
 function UsuariosTab() {
-  const addToast  = useUiStore(s => s.addToast)
+  const addToast    = useUiStore(s => s.addToast)
   const currentUser = useAuthStore(s => s.user)
+  const navigate    = useNavigate()
 
-  const [users, setUsers]             = useState<AppUser[]>([])
-  const [loading, setLoading]         = useState(true)
-  const [search, setSearch]           = useState('')
-  const [rolFilter, setRolFilter]     = useState<UserRole | 'all'>('all')
-  const [createOpen, setCreateOpen]   = useState(false)
-  const [editTarget, setEditTarget]   = useState<AppUser | null>(null)
+  const [users, setUsers]               = useState<AppUser[]>([])
+  const [loading, setLoading]           = useState(true)
+  const [search, setSearch]             = useState('')
+  const [rolFilter, setRolFilter]       = useState<UserRole | 'all'>('all')
+  const [editTarget, setEditTarget]     = useState<AppUser | null>(null)
   const [isSubmitting, setIsSubmitting] = useState(false)
-  const [deletingId, setDeletingId]   = useState<string | null>(null)
+  const [deletingId, setDeletingId]     = useState<string | null>(null)
   const [deleteTarget, setDeleteTarget] = useState<AppUser | null>(null)
 
   const load = useCallback(() => {
@@ -133,11 +126,6 @@ function UsuariosTab() {
 
   useEffect(() => { load() }, [load])
 
-  const { register: regCreate, handleSubmit: hsCreate, formState: { errors: errCreate }, reset: resetCreate } = useForm<CreateValues>({
-    resolver: zodResolver(createSchema),
-    defaultValues: { rol: 'STAFF', activo: true },
-  })
-
   const { register: regEdit, handleSubmit: hsEdit, formState: { errors: errEdit }, reset: resetEdit } = useForm<EditValues>({
     resolver: zodResolver(editSchema),
   })
@@ -148,21 +136,6 @@ function UsuariosTab() {
     const matchRol = rolFilter === 'all' || u.rol === rolFilter
     return matchSearch && matchRol
   })
-
-  async function onCreate(data: CreateValues) {
-    setIsSubmitting(true)
-    try {
-      const created = await usuariosApi.create(data)
-      setUsers(prev => [created, ...prev])
-      addToast('Usuario creado correctamente', 'success')
-      setCreateOpen(false)
-      resetCreate()
-    } catch (err: any) {
-      addToast(err?.response?.data?.message ?? 'Error al crear el usuario', 'error')
-    } finally {
-      setIsSubmitting(false)
-    }
-  }
 
   async function onEdit(data: EditValues) {
     if (!editTarget) return
@@ -200,15 +173,18 @@ function UsuariosTab() {
     resetEdit({ nombre: u.nombre, email: u.email, rol: u.rol, activo: u.activo, password: '' })
   }
 
-  const countByRol = (rol: UserRole) => users.filter(u => u.rol === rol).length
+  const DEV_EMAIL = 'sebastianreibold2003@gmail.com'
+  const countByRol = (rol: UserRole) =>
+    users.filter(u => u.rol === rol && (rol !== 'ADMINISTRADOR' || u.email !== DEV_EMAIL)).length
 
   return (
     <div className="space-y-5">
-      <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+      <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
         {([
           { label: 'Administradores', count: countByRol('ADMINISTRADOR'), color: 'text-primary bg-primary/10' },
           { label: 'Staff',           count: countByRol('STAFF'),          color: 'text-blue-600 dark:text-blue-400 bg-blue-500/10' },
           { label: 'Profesores',      count: countByRol('PROFESOR'),       color: 'text-emerald-600 dark:text-emerald-400 bg-emerald-500/10' },
+          { label: 'Cliente común',   count: countByRol('CLIENTE_COMUN'),  color: 'text-purple-600 dark:text-purple-400 bg-purple-500/10' },
         ] as const).map(s => (
           <div key={s.label} className={`${glassCard} p-4 flex items-center gap-3`}>
             <div className={`h-9 w-9 rounded-xl flex items-center justify-center shrink-0 ${s.color.split(' ').slice(1).join(' ')}`}>
@@ -261,7 +237,7 @@ function UsuariosTab() {
               <RefreshCw size={14} />
             </button>
             <button
-              onClick={() => setCreateOpen(true)}
+              onClick={() => navigate(ROUTES.USER_NEW)}
               className="flex items-center gap-2 rounded-xl btn-action px-4 py-2 text-sm"
             >
               <Plus size={14} strokeWidth={2.5} /> Nuevo usuario
@@ -383,27 +359,6 @@ function UsuariosTab() {
           {Array.from({ length: 4 }).map((_, i) => <Skeleton key={i} className="h-20 rounded-2xl" />)}
         </div>
       )}
-
-      <Modal isOpen={createOpen} onClose={() => { setCreateOpen(false); resetCreate() }} title="Nuevo usuario" size="md">
-        <form onSubmit={hsCreate(onCreate)} className="space-y-4">
-          <Input label="Nombre *" error={errCreate.nombre?.message} {...regCreate('nombre')} />
-          <Input label="Email *" type="email" error={errCreate.email?.message} {...regCreate('email')} />
-          <Input label="Contraseña *" type="password" error={errCreate.password?.message} {...regCreate('password')} />
-          <Select label="Rol *" error={errCreate.rol?.message} options={[
-            { value: 'STAFF',         label: 'Staff' },
-            { value: 'PROFESOR',      label: 'Profesor' },
-            { value: 'ADMINISTRADOR', label: 'Administrador' },
-          ]} {...regCreate('rol')} />
-          <label className="flex items-center gap-3 cursor-pointer">
-            <input type="checkbox" {...regCreate('activo')} defaultChecked className="h-4 w-4 rounded accent-primary" />
-            <span className="text-sm font-medium text-gray-700 dark:text-gray-300">Usuario activo</span>
-          </label>
-          <div className="flex justify-end gap-2 pt-2">
-            <Button variant="ghost" type="button" onClick={() => { setCreateOpen(false); resetCreate() }}>Cancelar</Button>
-            <Button type="submit" isLoading={isSubmitting}>Crear usuario</Button>
-          </div>
-        </form>
-      </Modal>
 
       <Modal isOpen={!!editTarget} onClose={() => setEditTarget(null)} title="Editar usuario" size="md">
         <form onSubmit={hsEdit(onEdit)} className="space-y-4">
@@ -1061,8 +1016,9 @@ function SolicitudesTab() {
     setLoading(true)
     solicitudesApi.getAll()
       .then(data => {
-        setSolicitudes(data)
-        setPendingCount(data.filter(s => s.estado === 'PENDIENTE').length)
+        const filtered = data.filter(s => s.email !== 'sebastianreibold2003@gmail.com')
+        setSolicitudes(filtered)
+        setPendingCount(filtered.filter(s => s.estado === 'PENDIENTE').length)
       })
       .catch(() => addToast('Error al cargar solicitudes', 'error'))
       .finally(() => setLoading(false))

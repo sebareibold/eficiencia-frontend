@@ -1,7 +1,7 @@
-import { useState, useEffect, useCallback } from 'react'
+import { useState, useEffect, useCallback, useMemo, useRef } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
 import { useNavigate } from 'react-router-dom'
-import { Dumbbell, Plus, Edit2, Trash2, ExternalLink, Search, ChevronLeft, ChevronRight, Check, X } from 'lucide-react'
+import { Dumbbell, Plus, Edit2, Trash2, ExternalLink, Search, ChevronLeft, ChevronRight, Check, X, ArrowUp, ArrowDown, ArrowUpDown, LayoutGrid, List } from 'lucide-react'
 import { ejerciciosApi } from '../api/ejercicios.api'
 import { patronesApi, type PatronMovimientoConfig } from '../api/patrones.api'
 import { useAuthStore } from '../store/authStore'
@@ -10,6 +10,7 @@ import type { EjercicioCatalogo, Dificultad } from '../types/ejercicio-catalogo.
 import PlantillasPage from './PlantillasPage'
 import { ROUTES } from '../constants/routes'
 import ConfirmDialog from '../components/ui/ConfirmDialog'
+import Modal from '../components/ui/Modal'
 
 const glass = 'rounded-[2rem] border border-white/50 dark:border-white/10 bg-white/30 dark:bg-black/30 backdrop-blur-3xl shadow-[0_8px_32px_rgba(0,0,0,0.04)] dark:shadow-[0_8px_32px_rgba(0,0,0,0.3)]'
 const thCls = 'py-3 px-4 text-left text-[10px] font-bold uppercase tracking-wider text-gray-500 dark:text-[#6B7280]'
@@ -20,6 +21,17 @@ const DIFICULTAD_CONFIG: Record<string, { label: string; cls: string }> = {
   AVANZADO: { label: 'Avanzado', cls: 'bg-red-500/10 text-red-400 border border-red-500/20' },
 }
 const DIFICULTAD_FALLBACK = { label: 'Sin definir', cls: 'bg-gray-500/10 text-gray-400 border border-gray-500/20' }
+const DIFICULTAD_ORDER: Record<string, number> = { FACIL: 1, DIFICIL: 2, AVANZADO: 3 }
+
+type ExSortKey = 'nombre' | 'patronMovimiento' | 'dificultad'
+type ExSortDir = 'asc' | 'desc'
+
+function ExSortIcon({ active, dir }: { active: boolean; dir: ExSortDir }) {
+  if (!active) return <ArrowUpDown size={11} className="opacity-30" />
+  return dir === 'asc'
+    ? <ArrowUp size={11} className="text-primary" />
+    : <ArrowDown size={11} className="text-primary" />
+}
 
 
 const selectCls = 'rounded-xl border border-white/50 dark:border-white/10 bg-white/30 dark:bg-black/30 backdrop-blur-xl px-3.5 py-1.5 text-xs font-semibold text-gray-800 dark:text-gray-200 focus:outline-none cursor-pointer h-10 shadow-sm transition-all focus:border-primary'
@@ -52,9 +64,50 @@ export default function ExercisesPage() {
   const [showNewForm, setShowNewForm]         = useState(false)
   const [savingPatron, setSavingPatron]       = useState(false)
   const [deletePatronTarget, setDeletePatronTarget] = useState<string | null>(null)
+  const [patronViewMode, setPatronViewMode] = useState<'grid' | 'list'>('grid')
+  const descTextareaRef = useRef<HTMLTextAreaElement>(null)
 
-  const totalPages = Math.ceil(items.length / PAGE_SIZE)
-  const pageItems  = items.slice((page - 1) * PAGE_SIZE, page * PAGE_SIZE)
+  function autoResizeTextarea(el: HTMLTextAreaElement) {
+    el.style.height = 'auto'
+    el.style.height = `${el.scrollHeight}px`
+  }
+
+  // Cuando el modal abre con descripción existente, ajustar altura
+  useEffect(() => {
+    if (editingPatron !== null) {
+      requestAnimationFrame(() => {
+        if (descTextareaRef.current) autoResizeTextarea(descTextareaRef.current)
+      })
+    }
+  }, [editingPatron])
+
+  const [sortKey, setSortKey] = useState<ExSortKey>('nombre')
+  const [sortDir, setSortDir] = useState<ExSortDir>('asc')
+
+  function handleSort(key: ExSortKey) {
+    if (sortKey === key) setSortDir(d => d === 'asc' ? 'desc' : 'asc')
+    else { setSortKey(key); setSortDir('asc') }
+  }
+
+  const sortedItems = useMemo(() => {
+    const arr = [...items]
+    arr.sort((a, b) => {
+      let cmp = 0
+      if (sortKey === 'nombre') cmp = a.nombre.localeCompare(b.nombre)
+      else if (sortKey === 'patronMovimiento') {
+        const la = patrones.find(p => p.clave === a.patronMovimiento)?.label ?? a.patronMovimiento ?? ''
+        const lb = patrones.find(p => p.clave === b.patronMovimiento)?.label ?? b.patronMovimiento ?? ''
+        cmp = la.localeCompare(lb)
+      } else if (sortKey === 'dificultad') {
+        cmp = (DIFICULTAD_ORDER[a.dificultad] ?? 0) - (DIFICULTAD_ORDER[b.dificultad] ?? 0)
+      }
+      return sortDir === 'asc' ? cmp : -cmp
+    })
+    return arr
+  }, [items, sortKey, sortDir, patrones])
+
+  const totalPages = Math.ceil(sortedItems.length / PAGE_SIZE)
+  const pageItems  = sortedItems.slice((page - 1) * PAGE_SIZE, page * PAGE_SIZE)
 
   const fetchItems = useCallback(async () => {
     setLoading(true)
@@ -333,9 +386,15 @@ export default function ExercisesPage() {
               <thead>
                 <tr className="border-b border-white/20 dark:border-white/10 bg-gray-50/30 dark:bg-black/10">
                   <th className={`${thCls} w-10`}>#</th>
-                  <th className={thCls}>Ejercicio</th>
-                  <th className={thCls}>Patrón de movimiento</th>
-                  <th className={`${thCls} text-center`}>Dificultad</th>
+                  <th className={`${thCls} cursor-pointer select-none hover:text-gray-700 dark:hover:text-gray-200 transition-colors`} onClick={() => handleSort('nombre')}>
+                    <div className="flex items-center gap-1.5">Ejercicio <ExSortIcon active={sortKey === 'nombre'} dir={sortDir} /></div>
+                  </th>
+                  <th className={`${thCls} cursor-pointer select-none hover:text-gray-700 dark:hover:text-gray-200 transition-colors`} onClick={() => handleSort('patronMovimiento')}>
+                    <div className="flex items-center gap-1.5">Patrón de movimiento <ExSortIcon active={sortKey === 'patronMovimiento'} dir={sortDir} /></div>
+                  </th>
+                  <th className={`${thCls} text-center cursor-pointer select-none hover:text-gray-700 dark:hover:text-gray-200 transition-colors`} onClick={() => handleSort('dificultad')}>
+                    <div className="flex items-center justify-center gap-1.5">Dificultad <ExSortIcon active={sortKey === 'dificultad'} dir={sortDir} /></div>
+                  </th>
                   <th className={`${thCls} text-center w-16`}>Video</th>
                   {isAdmin && <th className="w-24" />}
                 </tr>
@@ -467,18 +526,36 @@ export default function ExercisesPage() {
 
       {/* ══ Sección Patrones ══ */}
       <section className="flex flex-col gap-5">
-        <div className="flex items-center justify-between">
+        <div className="flex items-center justify-between gap-3">
           <h2 className="text-2xl lg:text-3xl xl:text-4xl font-black tracking-tighter text-gray-900 dark:text-white drop-shadow-sm">
             Patrones
           </h2>
-          {isAdmin && (
-            <button
-              onClick={() => { setShowNewForm(v => !v); setNewPatronLabel(''); setNewPatronClave(''); setNewPatronDesc('') }}
-              className="flex items-center gap-2 rounded-xl btn-action px-4 py-2.5 text-sm"
-            >
-              <Plus size={14} /> Nuevo patrón
-            </button>
-          )}
+          <div className="flex items-center gap-2">
+            <div className="flex items-center rounded-xl border border-white/50 dark:border-white/10 bg-white/30 dark:bg-black/30 backdrop-blur-xl p-1 shadow-sm">
+              <button
+                onClick={() => setPatronViewMode('grid')}
+                title="Vista grilla"
+                className={`p-1.5 rounded-lg transition-all duration-200 ${patronViewMode === 'grid' ? 'bg-gray-900 dark:bg-white text-white dark:text-gray-900 shadow-sm' : 'text-gray-400 hover:text-gray-700 dark:hover:text-gray-200'}`}
+              >
+                <LayoutGrid size={14} />
+              </button>
+              <button
+                onClick={() => setPatronViewMode('list')}
+                title="Vista lista"
+                className={`p-1.5 rounded-lg transition-all duration-200 ${patronViewMode === 'list' ? 'bg-gray-900 dark:bg-white text-white dark:text-gray-900 shadow-sm' : 'text-gray-400 hover:text-gray-700 dark:hover:text-gray-200'}`}
+              >
+                <List size={14} />
+              </button>
+            </div>
+            {isAdmin && (
+              <button
+                onClick={() => { setShowNewForm(v => !v); setNewPatronLabel(''); setNewPatronClave(''); setNewPatronDesc('') }}
+                className="flex items-center gap-2 rounded-xl btn-action px-4 py-2.5 text-sm"
+              >
+                <Plus size={14} /> Nuevo patrón
+              </button>
+            )}
+          </div>
         </div>
 
         {/* Formulario nuevo patrón */}
@@ -537,14 +614,14 @@ export default function ExercisesPage() {
           )}
         </AnimatePresence>
 
-        {/* Grid de patrones */}
+        {/* Vista de patrones */}
         {patronesLoading ? (
           <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 gap-3">
             {Array.from({ length: 10 }).map((_, i) => (
               <div key={i} className="h-20 rounded-2xl bg-black/[0.05] dark:bg-white/[0.04] animate-pulse" style={{ opacity: 1 - i * 0.07 }} />
             ))}
           </div>
-        ) : (
+        ) : patronViewMode === 'grid' ? (
           <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 gap-3">
             {patrones.map(p => (
               <motion.div
@@ -554,73 +631,160 @@ export default function ExercisesPage() {
                 animate={{ opacity: 1, scale: 1 }}
                 className={`group ${glass} p-4 flex flex-col gap-2 ${!p.activo ? 'opacity-50' : ''}`}
               >
-                {editingPatron === p.id ? (
-                  <div className="flex flex-col gap-2">
-                    <input
-                      value={editLabel}
-                      onChange={e => setEditLabel(e.target.value)}
-                      autoFocus
-                      className="rounded-lg border border-primary/40 bg-white/60 dark:bg-black/20 px-2 py-1 text-sm font-semibold text-gray-900 dark:text-white focus:outline-none"
-                    />
-                    <input
-                      value={editDesc}
-                      onChange={e => setEditDesc(e.target.value)}
-                      placeholder="Descripción"
-                      className="rounded-lg border border-white/50 dark:border-white/10 bg-white/40 dark:bg-black/10 px-2 py-1 text-xs text-gray-600 dark:text-[#8A8A9A] focus:outline-none"
-                    />
-                    <div className="flex items-center gap-1.5 justify-end">
-                      <button onClick={() => setEditingPatron(null)} className="p-1 rounded-lg text-gray-400 hover:text-gray-900 dark:hover:text-white transition-colors">
-                        <X size={12} />
-                      </button>
-                      <button
-                        onClick={() => handleSavePatron(p.id)}
-                        disabled={savingPatron}
-                        className="p-1 rounded-lg text-primary hover:bg-primary/10 transition-colors disabled:opacity-40"
-                      >
-                        {savingPatron ? <span className="h-3 w-3 rounded-full border-2 border-current border-t-transparent animate-spin inline-block" /> : <Check size={12} />}
-                      </button>
-                    </div>
+                <div className="flex items-start justify-between gap-1">
+                  <div className="min-w-0">
+                    <p className="text-sm font-bold text-gray-900 dark:text-white leading-tight truncate">{p.label}</p>
+                    <p className="text-[10px] font-mono text-gray-400 dark:text-[#4B4B5A] mt-0.5 truncate">{p.clave}</p>
                   </div>
-                ) : (
-                  <>
-                    <div className="flex items-start justify-between gap-1">
-                      <div className="min-w-0">
-                        <p className="text-sm font-bold text-gray-900 dark:text-white leading-tight truncate">{p.label}</p>
-                        <p className="text-[10px] font-mono text-gray-400 dark:text-[#4B4B5A] mt-0.5 truncate">{p.clave}</p>
-                      </div>
-                      {isAdmin && (
-                        <div className="flex items-center gap-0.5 shrink-0 opacity-0 group-hover:opacity-100 transition-opacity">
-                          <button onClick={() => { setEditingPatron(p.id); setEditLabel(p.label); setEditDesc(p.descripcion ?? '') }} className="p-1 rounded-lg text-gray-400 hover:text-gray-900 dark:hover:text-white hover:bg-gray-100 dark:hover:bg-white/[0.06] transition-colors">
-                            <Edit2 size={11} />
-                          </button>
-                          <button onClick={() => setDeletePatronTarget(p.id)} className="p-1 rounded-lg text-gray-400 hover:text-red-400 hover:bg-red-500/10 transition-colors">
-                            <Trash2 size={11} />
-                          </button>
-                        </div>
-                      )}
-                    </div>
-                    {p.descripcion && (
-                      <p className="text-[11px] text-gray-500 dark:text-[#6B7280] leading-snug line-clamp-2">{p.descripcion}</p>
-                    )}
-                    {isAdmin && (
-                      <button
-                        onClick={() => handleTogglePatron(p.id, p.activo)}
-                        className={`self-start mt-auto inline-flex items-center rounded-full px-2 py-0.5 text-[10px] font-semibold border transition-colors ${
-                          p.activo
-                            ? 'bg-emerald-500/10 text-emerald-400 border-emerald-500/20 hover:bg-red-500/10 hover:text-red-400 hover:border-red-500/20'
-                            : 'bg-gray-100 dark:bg-white/[0.05] text-gray-400 border-gray-200 dark:border-white/[0.1] hover:bg-emerald-500/10 hover:text-emerald-400 hover:border-emerald-500/20'
-                        }`}
-                      >
-                        {p.activo ? 'Activo' : 'Inactivo'}
+                  {isAdmin && (
+                    <div className="flex items-center gap-0.5 shrink-0 opacity-0 group-hover:opacity-100 transition-opacity">
+                      <button onClick={() => { setEditingPatron(p.id); setEditLabel(p.label); setEditDesc(p.descripcion ?? '') }} className="p-1 rounded-lg text-gray-400 hover:text-gray-900 dark:hover:text-white hover:bg-gray-100 dark:hover:bg-white/[0.06] transition-colors">
+                        <Edit2 size={11} />
                       </button>
-                    )}
-                  </>
+                      <button onClick={() => setDeletePatronTarget(p.id)} className="p-1 rounded-lg text-gray-400 hover:text-red-400 hover:bg-red-500/10 transition-colors">
+                        <Trash2 size={11} />
+                      </button>
+                    </div>
+                  )}
+                </div>
+                {p.descripcion && (
+                  <p className="text-[11px] text-gray-500 dark:text-[#6B7280] leading-snug line-clamp-2">{p.descripcion}</p>
+                )}
+                {isAdmin && (
+                  <button
+                    onClick={() => handleTogglePatron(p.id, p.activo)}
+                    className={`self-start mt-auto inline-flex items-center rounded-full px-2 py-0.5 text-[10px] font-semibold border transition-colors ${
+                      p.activo
+                        ? 'bg-emerald-500/10 text-emerald-400 border-emerald-500/20 hover:bg-red-500/10 hover:text-red-400 hover:border-red-500/20'
+                        : 'bg-gray-100 dark:bg-white/[0.05] text-gray-400 border-gray-200 dark:border-white/[0.1] hover:bg-emerald-500/10 hover:text-emerald-400 hover:border-emerald-500/20'
+                    }`}
+                  >
+                    {p.activo ? 'Activo' : 'Inactivo'}
+                  </button>
                 )}
               </motion.div>
             ))}
           </div>
+        ) : (
+          <div className={`${glass} overflow-hidden`}>
+            <table className="w-full text-sm">
+              <thead>
+                <tr className="border-b border-white/20 dark:border-white/10 bg-gray-50/30 dark:bg-black/10">
+                  <th className={thCls}>Patrón</th>
+                  <th className={thCls}>Clave</th>
+                  <th className={`hidden md:table-cell ${thCls}`}>Descripción</th>
+                  <th className={`${thCls} text-center`}>Estado</th>
+                  {isAdmin && <th className="w-20" />}
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-white/20 dark:divide-white/10">
+                {patrones.map((p, i) => (
+                  <motion.tr
+                    key={p.id}
+                    layout
+                    initial={{ opacity: 0 }}
+                    animate={{ opacity: 1 }}
+                    transition={{ delay: i * 0.02 }}
+                    className={`group hover:bg-gray-50/80 dark:hover:bg-white/[0.04] transition-colors ${!p.activo ? 'opacity-50' : ''}`}
+                  >
+                    <td className="py-3 px-4">
+                      <p className="font-semibold text-gray-900 dark:text-white">{p.label}</p>
+                    </td>
+                    <td className="py-3 px-4">
+                      <span className="text-[11px] font-mono px-2 py-0.5 rounded-md bg-gray-100 dark:bg-white/[0.06] text-gray-500 dark:text-[#8A8A9A]">{p.clave}</span>
+                    </td>
+                    <td className="hidden md:table-cell py-3 px-4 max-w-[240px]">
+                      <p className="text-xs text-gray-500 dark:text-[#6B7280] line-clamp-1">{p.descripcion ?? <span className="text-gray-300 dark:text-[#4B4B5A]">—</span>}</p>
+                    </td>
+                    <td className="py-3 px-4 text-center">
+                      {isAdmin ? (
+                        <button
+                          onClick={() => handleTogglePatron(p.id, p.activo)}
+                          className={`inline-flex items-center rounded-full px-2.5 py-0.5 text-[10px] font-semibold border transition-colors ${
+                            p.activo
+                              ? 'bg-emerald-500/10 text-emerald-400 border-emerald-500/20 hover:bg-red-500/10 hover:text-red-400 hover:border-red-500/20'
+                              : 'bg-gray-100 dark:bg-white/[0.05] text-gray-400 border-gray-200 dark:border-white/[0.1] hover:bg-emerald-500/10 hover:text-emerald-400 hover:border-emerald-500/20'
+                          }`}
+                        >
+                          {p.activo ? 'Activo' : 'Inactivo'}
+                        </button>
+                      ) : (
+                        <span className={`inline-flex items-center rounded-full px-2.5 py-0.5 text-[10px] font-semibold border ${p.activo ? 'bg-emerald-500/10 text-emerald-400 border-emerald-500/20' : 'bg-gray-100 dark:bg-white/[0.05] text-gray-400 border-gray-200 dark:border-white/[0.1]'}`}>
+                          {p.activo ? 'Activo' : 'Inactivo'}
+                        </span>
+                      )}
+                    </td>
+                    {isAdmin && (
+                      <td className="py-3 px-4">
+                        <div className="flex items-center justify-end gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
+                          <button onClick={() => { setEditingPatron(p.id); setEditLabel(p.label); setEditDesc(p.descripcion ?? '') }} className="p-1.5 rounded-lg text-gray-400 dark:text-[#6B7280] hover:text-gray-900 dark:hover:text-white hover:bg-gray-100 dark:hover:bg-white/[0.06] transition-colors">
+                            <Edit2 size={12} />
+                          </button>
+                          <button onClick={() => setDeletePatronTarget(p.id)} className="p-1.5 rounded-lg text-gray-400 dark:text-[#6B7280] hover:text-red-400 hover:bg-red-500/10 transition-colors">
+                            <Trash2 size={12} />
+                          </button>
+                        </div>
+                      </td>
+                    )}
+                  </motion.tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
         )}
       </section>
+
+      {/* Modal editar patrón */}
+      <Modal isOpen={editingPatron !== null} onClose={() => setEditingPatron(null)} size="md">
+        <div className="space-y-5">
+          <div>
+            <p className="text-base font-bold text-gray-900 dark:text-white">Editar patrón</p>
+            <p className="text-xs font-mono text-gray-400 dark:text-[#6B7280] mt-0.5">
+              {patrones.find(p => p.id === editingPatron)?.clave}
+            </p>
+          </div>
+          <div className="space-y-3">
+            <div className="flex flex-col gap-1.5">
+              <label className="text-[11px] font-bold uppercase tracking-wider text-gray-500 dark:text-[#8A8A9A]">Etiqueta *</label>
+              <input
+                value={editLabel}
+                onChange={e => setEditLabel(e.target.value)}
+                autoFocus
+                className="rounded-xl border border-white/50 dark:border-white/10 bg-white/60 dark:bg-black/20 px-3 py-2.5 text-sm text-gray-900 dark:text-white placeholder-gray-400 focus:outline-none focus:border-primary transition-colors"
+              />
+            </div>
+            <div className="flex flex-col gap-1.5">
+              <label className="text-[11px] font-bold uppercase tracking-wider text-gray-500 dark:text-[#8A8A9A]">Descripción</label>
+              <textarea
+                ref={descTextareaRef}
+                value={editDesc}
+                onChange={e => { setEditDesc(e.target.value); autoResizeTextarea(e.target) }}
+                placeholder="Opcional"
+                rows={3}
+                className="rounded-xl border border-white/50 dark:border-white/10 bg-white/60 dark:bg-black/20 px-3 py-2.5 text-sm text-gray-900 dark:text-white placeholder-gray-400 focus:outline-none focus:border-primary transition-colors resize-none leading-relaxed w-full"
+              />
+            </div>
+          </div>
+          <div className="flex items-center gap-2 pt-1">
+            <button
+              onClick={() => setEditingPatron(null)}
+              className="flex-1 rounded-xl border border-white/30 dark:border-white/10 bg-white/40 dark:bg-white/[0.05] py-2.5 text-sm font-bold text-gray-600 dark:text-gray-300 hover:bg-white/60 dark:hover:bg-white/10 transition-all"
+            >
+              Cancelar
+            </button>
+            <button
+              onClick={() => editingPatron && handleSavePatron(editingPatron)}
+              disabled={savingPatron || !editLabel.trim()}
+              className="flex flex-1 items-center justify-center gap-2 rounded-xl btn-action py-2.5 text-sm font-bold disabled:opacity-60"
+            >
+              {savingPatron
+                ? <span className="h-3.5 w-3.5 rounded-full border-2 border-current border-t-transparent animate-spin" />
+                : <Check size={13} />}
+              Guardar
+            </button>
+          </div>
+        </div>
+      </Modal>
 
       <ConfirmDialog
         isOpen={deleteTarget !== null}

@@ -29,6 +29,7 @@ const CalendarPage       = lazy(() => import('./pages/CalendarPage'))
 const ExpensesPage       = lazy(() => import('./pages/ExpensesPage'))
 const DashboardPage      = lazy(() => import('./pages/DashboardPage'))
 const UsersPage          = lazy(() => import('./pages/UsersPage'))
+const UserNewPage        = lazy(() => import('./pages/UserNewPage'))
 const SettingsPage       = lazy(() => import('./pages/SettingsPage'))
 const ExercisesPage      = lazy(() => import('./pages/ExercisesPage'))
 const PlantillasPage     = lazy(() => import('./pages/PlantillasPage'))
@@ -108,6 +109,7 @@ export default function App() {
               </Route>
               <Route element={<PermissionGuard module="users" />}>
                 <Route path={ROUTES.USERS}    element={<UsersPage />} />
+                <Route path={ROUTES.USER_NEW} element={<UserNewPage />} />
                 <Route path={ROUTES.SETTINGS} element={<SettingsPage />} />
               </Route>
             </Route>

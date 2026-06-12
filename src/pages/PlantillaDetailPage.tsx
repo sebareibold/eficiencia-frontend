@@ -315,7 +315,7 @@ export default function PlantillaDetailPage() {
 
   if (loadingData) {
     return (
-      <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} className={`${glass} p-6 space-y-3 max-w-3xl`}>
+      <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} className={`${glass} p-6 space-y-3`}>
         {[1, 2, 3].map(i => (
           <div key={i} className="h-10 rounded-xl bg-black/[0.05] dark:bg-white/[0.06] animate-pulse" style={{ opacity: 1 - i * 0.2 }} />
         ))}

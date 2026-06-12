@@ -10,6 +10,8 @@ interface UseClientsParams {
   limit?: number
   desde?: string
   hasta?: string
+  sortBy?: string
+  sortDir?: 'asc' | 'desc'
 }
 
 export function useClients(params?: UseClientsParams) {
@@ -23,6 +25,8 @@ export function useClients(params?: UseClientsParams) {
     ...(params?.estadoPago && { estadoPago: params.estadoPago }),
     ...(params?.desde      && { desde:      params.desde }),
     ...(params?.hasta      && { hasta:      params.hasta }),
+    ...(params?.sortBy     && { sortBy:     params.sortBy }),
+    ...(params?.sortDir    && { sortDir:    params.sortDir }),
   }
 
   const { data, isPending, error, refetch } = useQuery({

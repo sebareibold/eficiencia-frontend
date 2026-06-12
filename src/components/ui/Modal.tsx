@@ -34,7 +34,7 @@ export default function Modal({ isOpen, onClose, title, children, size = 'md' }:
         <motion.div
           key="backdrop"
           {...backdropVariants}
-          className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm p-4"
+          className="fixed inset-0 z-50 flex items-center justify-center bg-black/30 backdrop-blur-md p-4"
           onClick={(e) => { if (e.target === e.currentTarget) onClose() }}
         >
           <motion.div
@@ -54,7 +54,7 @@ export default function Modal({ isOpen, onClose, title, children, size = 'md' }:
                 </button>
               </div>
             )}
-            <div className="px-6 py-5 overflow-hidden">{children}</div>
+            <div className="px-6 py-5 overflow-y-auto">{children}</div>
           </motion.div>
         </motion.div>
       )}

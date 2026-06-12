@@ -1,11 +1,13 @@
-import { useEffect, useRef, useCallback, Suspense } from 'react'
+import { useEffect, useRef, useState, useCallback, Suspense } from 'react'
 import { Outlet, useNavigate, useLocation } from 'react-router-dom'
 import { motion, AnimatePresence } from 'framer-motion'
-import { LogOut, Sun, Moon } from 'lucide-react'
+import { LogOut, Sun, Moon, Clock } from 'lucide-react'
 
 import Navbar from './Navbar'
 import ToastContainer from '../ui/Toast'
 import ServerDownScreen from '../ui/ServerDownScreen'
+import Modal from '../ui/Modal'
+import Button from '../ui/Button'
 import { permisosApi } from '../../api/permisos.api'
 import { useAuthStore } from '../../store/authStore'
 import { authApi } from '../../api/auth.api'
@@ -45,6 +47,7 @@ function KioskHeader({ onLogout }: { onLogout: () => void }) {
 }
 
 const SESSION_TIMEOUT_MS  = 30 * 60 * 1000
+const SESSION_WARNING_MS  = 28 * 60 * 1000  // Warning 2 min antes del timeout
 const PERMS_INTERVAL_MS   =  5 * 60 * 1000
 
 function InitDots() {
@@ -78,6 +81,8 @@ export default function Layout() {
   const isInitializing = (!accessToken && !!refreshToken) || !permissionsLoaded
 
   const inactivityTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
+  const warningTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
+  const [showSessionWarning, setShowSessionWarning] = useState(false)
 
   // ── Logout con invalidación en servidor ────────────────────────────────────
   // Limpia estado y navega de inmediato; la llamada al backend va en el fondo
@@ -87,32 +92,40 @@ export default function Layout() {
     navigate('/login', { replace: true })
   }, [logout, navigate])
 
-  // ── Timeout de inactividad — 30 min ────────────────────────────────────────
+  // ── Timeout de inactividad — 30 min con warning a los 28 min ──────────────
+  const resetTimers = useCallback(() => {
+    if (warningTimer.current) clearTimeout(warningTimer.current)
+    if (inactivityTimer.current) clearTimeout(inactivityTimer.current)
+    setShowSessionWarning(false)
+    warningTimer.current = setTimeout(() => setShowSessionWarning(true), SESSION_WARNING_MS)
+    inactivityTimer.current = setTimeout(doLogout, SESSION_TIMEOUT_MS)
+  }, [doLogout])
+
   useEffect(() => {
     if (!accessToken) return
 
-    const resetTimer = () => {
-      if (inactivityTimer.current) clearTimeout(inactivityTimer.current)
-      inactivityTimer.current = setTimeout(doLogout, SESSION_TIMEOUT_MS)
-    }
-
     const events = ['mousedown', 'keydown', 'scroll', 'touchstart', 'click']
-    events.forEach(e => window.addEventListener(e, resetTimer, { passive: true }))
-    resetTimer()
+    events.forEach(e => window.addEventListener(e, resetTimers, { passive: true }))
+    resetTimers()
 
     return () => {
-      events.forEach(e => window.removeEventListener(e, resetTimer))
+      events.forEach(e => window.removeEventListener(e, resetTimers))
       if (inactivityTimer.current) clearTimeout(inactivityTimer.current)
+      if (warningTimer.current) clearTimeout(warningTimer.current)
     }
-  }, [accessToken, doLogout])
+  }, [accessToken, resetTimers])
 
   // ── Carga y refresco de permisos ────────────────────────────────────────────
   const user = useAuthStore(s => s.user)
+  const lastRefreshRef = useRef(0)
 
   useEffect(() => {
     if (!accessToken) return
 
-    const refresh = () => {
+    const refresh = (force = false) => {
+      const now = Date.now()
+      if (!force && now - lastRefreshRef.current < 5_000) return
+      lastRefreshRef.current = now
       permisosApi.getForMyRole()
         .then(perms => {
           if (Object.keys(perms).length > 0) setPermissions(perms)
@@ -128,16 +141,17 @@ export default function Layout() {
         })
     }
 
-    refresh()
+    refresh(true)
 
     // Refrescar al recuperar foco (el admin cambió permisos en otra pestaña)
-    window.addEventListener('focus', refresh)
+    const onFocus = () => refresh()
+    window.addEventListener('focus', onFocus)
 
     // Refrescar cada 5 minutos para detectar cambios de rol en sesiones largas
-    const interval = setInterval(refresh, PERMS_INTERVAL_MS)
+    const interval = setInterval(() => refresh(true), PERMS_INTERVAL_MS)
 
     return () => {
-      window.removeEventListener('focus', refresh)
+      window.removeEventListener('focus', onFocus)
       clearInterval(interval)
     }
   }, [accessToken, setPermissions])
@@ -206,6 +220,31 @@ export default function Layout() {
       </main>
       <ToastContainer />
       <ServerDownScreen />
+
+      {/* Warning de sesión a punto de expirar */}
+      <Modal isOpen={showSessionWarning} onClose={resetTimers} size="sm">
+        <div className="space-y-4">
+          <div className="flex items-start gap-3">
+            <div className="h-10 w-10 rounded-xl bg-amber-500/10 flex items-center justify-center shrink-0 mt-0.5">
+              <Clock size={18} className="text-amber-500" />
+            </div>
+            <div>
+              <p className="text-base font-bold text-gray-900 dark:text-white">Sesión a punto de expirar</p>
+              <p className="text-sm text-gray-500 dark:text-[#8A8A9A] mt-1 leading-relaxed">
+                Tu sesión se cerrará en 2 minutos por inactividad.
+              </p>
+            </div>
+          </div>
+          <div className="flex gap-2">
+            <Button variant="ghost" className="flex-1" onClick={doLogout}>
+              Cerrar sesión
+            </Button>
+            <Button variant="primary" className="flex-1" onClick={resetTimers}>
+              Continuar
+            </Button>
+          </div>
+        </div>
+      </Modal>
     </div>
   )
 }

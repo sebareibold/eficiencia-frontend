@@ -69,7 +69,7 @@ function mapFicha(f: any): FichaEntrenamiento {
 }
 
 export const clientsApi = {
-  getAll: (params?: { page?: number; limit?: number; search?: string; estado?: string; estadoPago?: string; desde?: string; hasta?: string }): Promise<PaginatedClients> =>
+  getAll: (params?: { page?: number; limit?: number; search?: string; estado?: string; estadoPago?: string; desde?: string; hasta?: string; sortBy?: string; sortDir?: 'asc' | 'desc' }): Promise<PaginatedClients> =>
     api.get('/clientes', {
       params: {
         page:  params?.page  ?? 1,
@@ -79,6 +79,8 @@ export const clientsApi = {
         ...(params?.estadoPago && { estadoPago: params.estadoPago }),
         ...(params?.desde      && { desde:      params.desde }),
         ...(params?.hasta      && { hasta:      params.hasta }),
+        ...(params?.sortBy     && { sortBy:     params.sortBy }),
+        ...(params?.sortDir    && { sortDir:    params.sortDir }),
       },
     }).then((r) => {
       const raw = r.data

@@ -23,7 +23,7 @@ const config: Record<ToastType['type'], { icon: React.ReactNode; border: string;
 
 function ToastItem({ toast }: { toast: ToastType }) {
   const removeToast = useUiStore((s) => s.removeToast)
-  const { icon, border, bg } = config[toast.type]
+  const { icon, border, bg } = config[toast.type] ?? config.info
 
   return (
     <motion.div
