@@ -38,6 +38,7 @@ const PlantillaDetailPage = lazy(() => import('./pages/PlantillaDetailPage'))
 const EjecucionPage      = lazy(() => import('./pages/EjecucionPage'))
 const EjecucionRutinaPage = lazy(() => import('./pages/EjecucionRutinaPage'))
 const CreateRutinaPage   = lazy(() => import('./pages/CreateRutinaPage'))
+const SecurityPage       = lazy(() => import('./pages/SecurityPage'))
 
 function DefaultRedirect() {
   const user = useAuthStore((s) => s.user)
@@ -111,6 +112,7 @@ export default function App() {
                 <Route path={ROUTES.USERS}    element={<UsersPage />} />
                 <Route path={ROUTES.USER_NEW} element={<UserNewPage />} />
                 <Route path={ROUTES.SETTINGS} element={<SettingsPage />} />
+                <Route path={ROUTES.SECURITY} element={<SecurityPage />} />
               </Route>
             </Route>
           </Route>

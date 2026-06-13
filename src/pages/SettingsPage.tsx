@@ -1,4 +1,5 @@
 import { useState, useRef, useEffect } from 'react'
+import { useNavigate } from 'react-router-dom'
 import { motion, AnimatePresence } from 'framer-motion'
 import {
   Palette,
@@ -14,6 +15,8 @@ import {
   User,
   Bell,
   Send,
+  Shield,
+  ArrowRight,
 } from 'lucide-react'
 import { useUiStore } from '../store/uiStore'
 import { useSettingsStore } from '../store/settingsStore'
@@ -21,6 +24,7 @@ import { useAuthStore } from '../store/authStore'
 import { configuracionApi } from '../api/configuracion.api'
 import { notificacionesApi } from '../api/notificaciones.api'
 import { authApi } from '../api/auth.api'
+import { ROUTES } from '../constants/routes'
 
 // ─── Sub-components ──────────────────────────────────────────────────────────
 
@@ -537,6 +541,8 @@ function NotificationsSection() {
 function AccountSection() {
   const { user } = useAuthStore()
   const { addToast } = useUiStore()
+  const navigate = useNavigate()
+  const isAdmin = user?.role === 'admin'
 
   const [formData, setFormData] = useState({
     name: user?.name || '',
@@ -715,6 +721,29 @@ function AccountSection() {
           )}
         </AnimatePresence>
       </SectionCard>
+
+      {isAdmin && (
+        <>
+          <SectionHeader title="Seguridad" />
+          <SectionCard>
+            <SectionRow
+              label="Registro de actividad"
+              description="Revisá intentos de acceso, cambios de permisos, pagos eliminados y otras acciones críticas del sistema."
+              last
+            >
+              <button
+                type="button"
+                onClick={() => navigate(ROUTES.SECURITY)}
+                className="flex items-center gap-2 px-4 py-2 rounded-xl bg-white/50 dark:bg-white/[0.06] border border-gray-200/60 dark:border-white/10 text-sm font-semibold text-gray-700 dark:text-gray-300 hover:bg-white dark:hover:bg-white/[0.10] hover:text-gray-900 dark:hover:text-white transition-all"
+              >
+                <Shield size={14} className="text-amber-500 dark:text-amber-400" />
+                Abrir
+                <ArrowRight size={13} className="text-gray-400 dark:text-white/30" />
+              </button>
+            </SectionRow>
+          </SectionCard>
+        </>
+      )}
     </div>
   )
 }
