@@ -1,6 +1,7 @@
 import { useState, useEffect, useMemo } from 'react'
+import { createPortal } from 'react-dom'
 import { useParams, useNavigate } from 'react-router-dom'
-import { motion } from 'framer-motion'
+import { motion, AnimatePresence } from 'framer-motion'
 import {
   ArrowLeft, Phone, Mail, CalendarDays, CheckCircle2, XCircle,
   Edit2, CreditCard, Activity, Clock, Hash, Banknote, ArrowLeftRight,
@@ -485,6 +486,8 @@ export default function ClientProfilePage() {
   const [loading, setLoading] = useState(true)
   const [isEditing, setIsEditing] = useState(false)
   const [isSaving, setIsSaving] = useState(false)
+  const [showDeleteModal, setShowDeleteModal] = useState(false)
+  const [isDeleting, setIsDeleting] = useState(false)
   const [isTogglingActivity, setIsTogglingActivity] = useState(false)
   const [sedes, setSedes] = useState<{ id: string; nombre: string }[]>([])
   const [eventos, setEventos] = useState<EventoDeportivo[]>([])
@@ -795,6 +798,20 @@ export default function ClientProfilePage() {
     }
   }
 
+  async function handleDeleteClient() {
+    if (!client) return
+    setIsDeleting(true)
+    try {
+      await clientsApi.remove(client.id)
+      addToast('Cliente eliminado', 'success')
+      navigate(ROUTES.CLIENTS)
+    } catch {
+      addToast('Error al eliminar el cliente', 'error')
+      setIsDeleting(false)
+      setShowDeleteModal(false)
+    }
+  }
+
   async function handleEnroll(turnoId: string, sala: 'A' | 'B') {
     if (!id) return
     setEnrollingId(turnoId + sala)
@@ -969,6 +986,7 @@ export default function ClientProfilePage() {
   const membershipTooltip = getStatusTooltip(client)
 
   return (
+    <>
     <motion.div
       initial={{ opacity: 0, y: 10 }}
       animate={{ opacity: 1, y: 0 }}
@@ -1071,13 +1089,22 @@ export default function ClientProfilePage() {
                       </button>
                     </div>
                   ) : (
-                    <button
-                      onClick={() => { reset({ name: client.name, lastName: client.lastName, email: client.email ?? '', phone: client.phone ?? '', cuil: client.cuil ?? '', peso: ficha?.peso != null ? String(ficha.peso) : '', altura: ficha?.altura != null ? String(ficha.altura) : '', actividadDiaria: ficha?.actividadDiaria ?? '', objetivos: ficha?.objetivos ?? '', deportePractica: ficha?.deportePractica ?? '', experiencia: ficha?.experiencia ?? '', lesiones: ficha?.lesiones ?? '', patologiasBase: ficha?.patologiasBase ?? '' }); setIsEditing(true) }}
-                      className="flex items-center gap-1.5 text-xs font-semibold px-3 py-1.5 rounded-xl border border-gray-200 dark:border-white/[0.1] bg-white/70 dark:bg-white/[0.04] text-gray-700 dark:text-gray-300 hover:bg-white dark:hover:bg-white/[0.09] transition-all shrink-0"
-                    >
-                      <Edit2 size={12} />
-                      Editar
-                    </button>
+                    <div className="flex items-center gap-2 shrink-0">
+                      <button
+                        onClick={() => { reset({ name: client.name, lastName: client.lastName, email: client.email ?? '', phone: client.phone ?? '', cuil: client.cuil ?? '', peso: ficha?.peso != null ? String(ficha.peso) : '', altura: ficha?.altura != null ? String(ficha.altura) : '', actividadDiaria: ficha?.actividadDiaria ?? '', objetivos: ficha?.objetivos ?? '', deportePractica: ficha?.deportePractica ?? '', experiencia: ficha?.experiencia ?? '', lesiones: ficha?.lesiones ?? '', patologiasBase: ficha?.patologiasBase ?? '' }); setIsEditing(true) }}
+                        className="flex items-center gap-1.5 text-xs font-semibold px-3 py-1.5 rounded-xl border border-gray-200 dark:border-white/[0.1] bg-white/70 dark:bg-white/[0.04] text-gray-700 dark:text-gray-300 hover:bg-white dark:hover:bg-white/[0.09] transition-all"
+                      >
+                        <Edit2 size={12} />
+                        Editar
+                      </button>
+                      <button
+                        onClick={() => setShowDeleteModal(true)}
+                        className="flex items-center gap-1.5 text-xs font-semibold px-3 py-1.5 rounded-xl border border-red-200 dark:border-red-500/20 bg-red-50 dark:bg-red-500/[0.06] text-red-500 hover:bg-red-100 dark:hover:bg-red-500/[0.12] transition-all"
+                      >
+                        <Trash2 size={12} />
+                        Eliminar
+                      </button>
+                    </div>
                   )
                 )}
               </div>
@@ -2358,5 +2385,55 @@ export default function ClientProfilePage() {
       />
 
     </motion.div>
+
+    {createPortal(
+
+      <AnimatePresence>
+        {showDeleteModal && (
+          <motion.div
+            initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
+            className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/50"
+            onClick={() => !isDeleting && setShowDeleteModal(false)}
+          >
+            <motion.div
+              initial={{ opacity: 0, scale: 0.95, y: 8 }} animate={{ opacity: 1, scale: 1, y: 0 }} exit={{ opacity: 0, scale: 0.95, y: 8 }}
+              transition={{ duration: 0.15 }}
+              onClick={e => e.stopPropagation()}
+              className="w-full max-w-sm rounded-2xl border border-white/50 dark:border-white/10 bg-white dark:bg-[#1A1A1A] p-6 shadow-2xl"
+            >
+              <div className="flex items-start gap-3 mb-4">
+                <div className="shrink-0 h-10 w-10 rounded-xl bg-red-500/10 flex items-center justify-center border border-red-500/20">
+                  <Trash2 size={18} className="text-red-400" />
+                </div>
+                <div>
+                  <h3 className="text-base font-black text-gray-900 dark:text-white">¿Eliminar cliente?</h3>
+                  <p className="text-sm text-gray-500 dark:text-white/40 mt-0.5">
+                    Vas a eliminar a <span className="font-semibold text-gray-700 dark:text-white/70">{client?.name} {client?.lastName}</span> y <span className="font-semibold text-gray-700 dark:text-white/70">todos sus datos asociados</span>: pagos, membresías, inscripciones a turnos, asistencias, rutinas y ficha de entrenamiento. Esta acción no tiene vuelta atrás.
+                  </p>
+                </div>
+              </div>
+              <div className="flex gap-3">
+                <button
+                  onClick={() => setShowDeleteModal(false)}
+                  disabled={isDeleting}
+                  className="flex-1 rounded-xl bg-primary py-2.5 text-sm font-black text-black hover:bg-primary-dark transition-colors disabled:opacity-40"
+                >
+                  Cancelar
+                </button>
+                <button
+                  onClick={handleDeleteClient}
+                  disabled={isDeleting}
+                  className="flex-1 rounded-xl bg-red-500 py-2.5 text-sm font-black text-white hover:bg-red-600 transition-colors disabled:opacity-40"
+                >
+                  {isDeleting ? 'Eliminando…' : 'Sí, eliminar'}
+                </button>
+              </div>
+            </motion.div>
+          </motion.div>
+        )}
+      </AnimatePresence>,
+      document.body,
+    )}
+    </>
   )
 }

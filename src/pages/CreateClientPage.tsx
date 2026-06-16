@@ -6,7 +6,7 @@ import {
   Check, ArrowLeft, ChevronRight,
   User, CreditCard, Banknote, Calendar, BookOpen,
   Hash, Mail, Phone, Clock, Users, AlertCircle, Dumbbell,
-  ArrowLeftRight, CalendarDays,
+  ArrowLeftRight, CalendarDays, Plus, X,
 } from 'lucide-react'
 import { format, addDays } from 'date-fns'
 import { es } from 'date-fns/locale'
@@ -17,7 +17,7 @@ import { membershipsApi } from '../api/memberships.api'
 import { membresiasClienteApi } from '../api/membresiasCliente.api'
 import { inscripcionesApi } from '../api/inscripciones.api'
 import { rutinasApi } from '../api/rutinas.api'
-import { shiftsApi } from '../api/shifts.api'
+import { shiftsApi, professorsApi } from '../api/shifts.api'
 import { formatCurrency } from '../utils/formatCurrency'
 import type { Membership, Modalidad } from '../types/membership.types'
 import type { Shift, WeekDay } from '../types/shift.types'
@@ -222,12 +222,58 @@ export default function CreateClientPage() {
   const [planes, setPlanes] = useState<Membership[]>([])
   const [turnos, setTurnos] = useState<Shift[]>([])
   const [loadingData, setLoadingData] = useState(false)
+  const [professors, setProfessors] = useState<{ id: string; name: string }[]>([])
+
+  // ── Nuevo turno inline ──────────────────────────────────────────────────────
+  const [creatingNewTurno, setCreatingNewTurno] = useState(false)
+  const [newTurnoForm, setNewTurnoForm] = useState<{
+    days: WeekDay[]; startTime: string; endTime: string
+    cupoMaximoSalaA: string; cupoMaximoSalaB: string
+    profesorId: string; recurrente: boolean
+  }>({ days: [], startTime: '', endTime: '', cupoMaximoSalaA: '', cupoMaximoSalaB: '', profesorId: '', recurrente: true })
+  const [newTurnoErrors, setNewTurnoErrors] = useState<Record<string, string>>({})
+  const [savingNewTurno, setSavingNewTurno] = useState(false)
+
+  const ALL_DAYS: WeekDay[] = ['monday', 'tuesday', 'wednesday', 'thursday', 'friday', 'saturday']
+
+  async function handleCreateNuevoTurno() {
+    const errs: Record<string, string> = {}
+    if (newTurnoForm.days.length === 0) errs.days = 'Seleccioná al menos un día'
+    if (!newTurnoForm.startTime) errs.startTime = 'Requerida'
+    if (!newTurnoForm.endTime) errs.endTime = 'Requerida'
+    if (!newTurnoForm.cupoMaximoSalaA || isNaN(Number(newTurnoForm.cupoMaximoSalaA))) errs.cupoMaximoSalaA = 'Inválido'
+    if (!newTurnoForm.cupoMaximoSalaB || isNaN(Number(newTurnoForm.cupoMaximoSalaB))) errs.cupoMaximoSalaB = 'Inválido'
+    if (!newTurnoForm.profesorId) errs.profesorId = 'Requerido'
+    if (Object.keys(errs).length) { setNewTurnoErrors(errs); return }
+    setSavingNewTurno(true)
+    try {
+      const turno = await shiftsApi.create({
+        days: newTurnoForm.days,
+        recurrente: newTurnoForm.recurrente,
+        startTime: newTurnoForm.startTime,
+        endTime: newTurnoForm.endTime,
+        cupoMaximoSalaA: Number(newTurnoForm.cupoMaximoSalaA),
+        cupoMaximoSalaB: Number(newTurnoForm.cupoMaximoSalaB),
+        profesorId: newTurnoForm.profesorId,
+      })
+      setTurnos(prev => [...prev, turno])
+      setSelectedTurnoId(String(turno.id))
+      setCreatingNewTurno(false)
+      setNewTurnoForm({ days: [], startTime: '', endTime: '', cupoMaximoSalaA: '', cupoMaximoSalaB: '', profesorId: '', recurrente: true })
+      setNewTurnoErrors({})
+    } catch {
+      setNewTurnoErrors({ general: 'Error al crear el turno. Intentá de nuevo.' })
+    } finally {
+      setSavingNewTurno(false)
+    }
+  }
 
   useEffect(() => {
     setLoadingData(true)
-    Promise.allSettled([membershipsApi.getAll(), shiftsApi.getAll()]).then(([pr, tr]) => {
+    Promise.allSettled([membershipsApi.getAll(), shiftsApi.getAll(), professorsApi.getAll()]).then(([pr, tr, pfr]) => {
       if (pr.status === 'fulfilled') setPlanes(pr.value)
       if (tr.status === 'fulfilled') setTurnos(tr.value)
+      if (pfr.status === 'fulfilled') setProfessors(pfr.value)
       setLoadingData(false)
     })
   }, [])
@@ -763,13 +809,6 @@ export default function CreateClientPage() {
               className={ic()}
             />
           </Field>
-          <Field label="Comprobante (opcional)">
-            <input
-              value={paymentData.comprobante}
-              onChange={e => setPaymentData(p => ({ ...p, comprobante: e.target.value }))}
-              className={ic()}
-            />
-          </Field>
         </div>
       </div>
     )
@@ -784,66 +823,198 @@ export default function CreateClientPage() {
             <div className="h-4 w-4 animate-spin rounded-full border-2 border-gray-200 dark:border-white/10 border-t-primary" />
             Cargando turnos…
           </div>
-        ) : turnos.length === 0 ? (
-          <p className="text-sm text-gray-400 dark:text-[#6A6A7A] py-6 text-center">No hay turnos disponibles.</p>
         ) : (
-          <div className="max-h-72 overflow-y-auto pr-1 space-y-2">
-            {turnos.map(turno => {
-              const sel = selectedTurnoId === String(turno.id)
-              const pct = turno.capacity > 0 ? Math.round((turno.enrolled / turno.capacity) * 100) : 0
-              return (
-                <OptionCard
-                  key={turno.id}
-                  selected={sel}
-                  onClick={() => setSelectedTurnoId(sel ? null : String(turno.id))}
-                >
-                  <div className="flex items-center justify-between gap-3">
-                    <div className="flex-1 min-w-0">
-                      <div className="flex items-center gap-2 flex-wrap">
-                        <span className={[
-                          'text-[10px] font-black uppercase tracking-wider rounded-md px-2 py-0.5',
-                          sel
-                            ? 'bg-primary/20 text-primary'
-                            : 'bg-gray-100 dark:bg-white/[0.07] text-gray-600 dark:text-[#8A8A9A]',
-                        ].join(' ')}>
-                          Sala {turno.room}
-                        </span>
-                        <span className="flex items-center gap-1 text-xs text-gray-500 dark:text-[#6A6A7A]">
-                          <Clock size={10} />
-                          {turno.startTime}–{turno.endTime}
-                        </span>
-                      </div>
-                      <div className="flex flex-wrap gap-1 mt-2">
-                        {turno.days.map(d => (
-                          <span key={d} className={[
-                            'text-[9px] font-bold uppercase tracking-wider rounded-md px-1.5 py-0.5',
-                            sel
-                              ? 'bg-primary/10 text-primary/80'
-                              : 'bg-gray-100 dark:bg-white/[0.05] text-gray-500 dark:text-[#5A5A6A]',
-                          ].join(' ')}>
-                            {WEEKDAY_LABEL[d]}
+          <>
+            {/* Lista de turnos existentes */}
+            {turnos.length > 0 && (
+              <div className="max-h-56 overflow-y-auto pr-1 space-y-2">
+                {turnos.map(turno => {
+                  const sel = selectedTurnoId === String(turno.id)
+                  const pct = turno.capacity > 0 ? Math.round((turno.enrolled / turno.capacity) * 100) : 0
+                  return (
+                    <OptionCard
+                      key={turno.id}
+                      selected={sel}
+                      onClick={() => setSelectedTurnoId(sel ? null : String(turno.id))}
+                    >
+                      <div className="flex items-center justify-between gap-3">
+                        <div className="flex-1 min-w-0">
+                          <div className="flex items-center gap-2 flex-wrap">
+                            <span className={[
+                              'text-[10px] font-black uppercase tracking-wider rounded-md px-2 py-0.5',
+                              sel ? 'bg-primary/20 text-primary' : 'bg-gray-100 dark:bg-white/[0.07] text-gray-600 dark:text-[#8A8A9A]',
+                            ].join(' ')}>
+                              Sala {turno.room}
+                            </span>
+                            <span className="flex items-center gap-1 text-xs text-gray-500 dark:text-[#6A6A7A]">
+                              <Clock size={10} />
+                              {turno.startTime}–{turno.endTime}
+                            </span>
+                          </div>
+                          <div className="flex flex-wrap gap-1 mt-2">
+                            {turno.days.map(d => (
+                              <span key={d} className={[
+                                'text-[9px] font-bold uppercase tracking-wider rounded-md px-1.5 py-0.5',
+                                sel ? 'bg-primary/10 text-primary/80' : 'bg-gray-100 dark:bg-white/[0.05] text-gray-500 dark:text-[#5A5A6A]',
+                              ].join(' ')}>
+                                {WEEKDAY_LABEL[d]}
+                              </span>
+                            ))}
+                          </div>
+                        </div>
+                        <div className="flex flex-col items-end gap-1.5 shrink-0">
+                          <span className="flex items-center gap-1 text-xs text-gray-500 dark:text-[#6A6A7A]">
+                            <Users size={10} />
+                            {turno.enrolled}/{turno.capacity}
                           </span>
-                        ))}
+                          <div className="w-14 h-1 rounded-full bg-gray-200 dark:bg-white/[0.08] overflow-hidden">
+                            <div
+                              className={`h-full rounded-full transition-all ${pct >= 90 ? 'bg-red-400' : pct >= 70 ? 'bg-amber-400' : 'bg-emerald-400'}`}
+                              style={{ width: `${Math.min(pct, 100)}%` }}
+                            />
+                          </div>
+                        </div>
+                      </div>
+                    </OptionCard>
+                  )
+                })}
+              </div>
+            )}
+
+            {/* Formulario inline — nuevo turno */}
+            <AnimatePresence>
+              {creatingNewTurno && (
+                <motion.div
+                  initial={{ opacity: 0, height: 0 }} animate={{ opacity: 1, height: 'auto' }} exit={{ opacity: 0, height: 0 }}
+                  className="overflow-hidden"
+                >
+                  <div className="rounded-2xl border border-primary/25 bg-primary/[0.04] dark:bg-primary/[0.04] p-4 space-y-4">
+                    <p className="text-xs font-black uppercase tracking-widest text-primary">Nuevo turno</p>
+
+                    {/* Días */}
+                    <div className="space-y-1.5">
+                      <label className="text-[10px] font-bold uppercase tracking-widest text-gray-500 dark:text-[#6A6A7A]">Días *</label>
+                      <div className="flex flex-wrap gap-1.5">
+                        {ALL_DAYS.map(d => {
+                          const sel = newTurnoForm.days.includes(d)
+                          return (
+                            <button key={d} type="button"
+                              onClick={() => {
+                                setNewTurnoErrors(p => ({ ...p, days: '' }))
+                                setNewTurnoForm(p => ({
+                                  ...p,
+                                  days: sel ? p.days.filter(x => x !== d) : [...p.days, d],
+                                }))
+                              }}
+                              className={`rounded-xl px-3 py-1.5 text-xs font-bold transition-all ${
+                                sel
+                                  ? 'bg-primary text-gray-900 shadow-sm shadow-primary/30'
+                                  : 'border border-gray-200 dark:border-white/[0.08] bg-gray-50 dark:bg-white/[0.04] text-gray-500 dark:text-[#8A8A9A] hover:border-primary/40 hover:text-gray-900 dark:hover:text-white'
+                              }`}
+                            >
+                              {WEEKDAY_LABEL[d]}
+                            </button>
+                          )
+                        })}
+                      </div>
+                      {newTurnoErrors.days && <p className="text-[10px] text-red-500">{newTurnoErrors.days}</p>}
+                    </div>
+
+                    {/* Horario */}
+                    <div className="grid grid-cols-2 gap-3">
+                      <div className="space-y-1">
+                        <label className="text-[10px] font-bold uppercase tracking-widest text-gray-500 dark:text-[#6A6A7A]">Inicio *</label>
+                        <input type="time" value={newTurnoForm.startTime}
+                          onChange={e => { setNewTurnoErrors(p => ({ ...p, startTime: '' })); setNewTurnoForm(p => ({ ...p, startTime: e.target.value })) }}
+                          className={ic()} />
+                        {newTurnoErrors.startTime && <p className="text-[10px] text-red-500">{newTurnoErrors.startTime}</p>}
+                      </div>
+                      <div className="space-y-1">
+                        <label className="text-[10px] font-bold uppercase tracking-widest text-gray-500 dark:text-[#6A6A7A]">Fin *</label>
+                        <input type="time" value={newTurnoForm.endTime}
+                          onChange={e => { setNewTurnoErrors(p => ({ ...p, endTime: '' })); setNewTurnoForm(p => ({ ...p, endTime: e.target.value })) }}
+                          className={ic()} />
+                        {newTurnoErrors.endTime && <p className="text-[10px] text-red-500">{newTurnoErrors.endTime}</p>}
                       </div>
                     </div>
-                    <div className="flex flex-col items-end gap-1.5 shrink-0">
-                      <span className="flex items-center gap-1 text-xs text-gray-500 dark:text-[#6A6A7A]">
-                        <Users size={10} />
-                        {turno.enrolled}/{turno.capacity}
-                      </span>
-                      <div className="w-14 h-1 rounded-full bg-gray-200 dark:bg-white/[0.08] overflow-hidden">
-                        <div
-                          className={`h-full rounded-full transition-all ${pct >= 90 ? 'bg-red-400' : pct >= 70 ? 'bg-amber-400' : 'bg-emerald-400'}`}
-                          style={{ width: `${Math.min(pct, 100)}%` }}
-                        />
+
+                    {/* Cupos */}
+                    <div className="grid grid-cols-2 gap-3">
+                      <div className="space-y-1">
+                        <label className="text-[10px] font-bold uppercase tracking-widest text-gray-500 dark:text-[#6A6A7A]">Cupo Sala A *</label>
+                        <input type="number" min={0} placeholder="Ej. 10" value={newTurnoForm.cupoMaximoSalaA}
+                          onChange={e => { setNewTurnoErrors(p => ({ ...p, cupoMaximoSalaA: '' })); setNewTurnoForm(p => ({ ...p, cupoMaximoSalaA: e.target.value })) }}
+                          className={ic()} />
+                        {newTurnoErrors.cupoMaximoSalaA && <p className="text-[10px] text-red-500">{newTurnoErrors.cupoMaximoSalaA}</p>}
                       </div>
+                      <div className="space-y-1">
+                        <label className="text-[10px] font-bold uppercase tracking-widest text-gray-500 dark:text-[#6A6A7A]">Cupo Sala B *</label>
+                        <input type="number" min={0} placeholder="Ej. 10" value={newTurnoForm.cupoMaximoSalaB}
+                          onChange={e => { setNewTurnoErrors(p => ({ ...p, cupoMaximoSalaB: '' })); setNewTurnoForm(p => ({ ...p, cupoMaximoSalaB: e.target.value })) }}
+                          className={ic()} />
+                        {newTurnoErrors.cupoMaximoSalaB && <p className="text-[10px] text-red-500">{newTurnoErrors.cupoMaximoSalaB}</p>}
+                      </div>
+                    </div>
+
+                    {/* Profesor */}
+                    <div className="space-y-1">
+                      <label className="text-[10px] font-bold uppercase tracking-widest text-gray-500 dark:text-[#6A6A7A]">Profesor *</label>
+                      <select value={newTurnoForm.profesorId}
+                        onChange={e => { setNewTurnoErrors(p => ({ ...p, profesorId: '' })); setNewTurnoForm(p => ({ ...p, profesorId: e.target.value })) }}
+                        className={ic()}>
+                        <option value="">{professors.length === 0 ? 'Sin profesores disponibles' : 'Seleccionar…'}</option>
+                        {professors.map(p => <option key={p.id} value={p.id}>{p.name}</option>)}
+                      </select>
+                      {newTurnoErrors.profesorId && <p className="text-[10px] text-red-500">{newTurnoErrors.profesorId}</p>}
+                    </div>
+
+                    {/* Recurrente */}
+                    <label className="flex items-center justify-between gap-4 cursor-pointer select-none">
+                      <div>
+                        <p className="text-xs font-bold text-gray-900 dark:text-white">Recurrente semanal</p>
+                        <p className="text-[10px] text-gray-500 dark:text-[#6A6A7A]">Se repite cada semana</p>
+                      </div>
+                      <button type="button" onClick={() => setNewTurnoForm(p => ({ ...p, recurrente: !p.recurrente }))}
+                        className="relative shrink-0">
+                        <div className={`w-10 h-5 rounded-full transition-colors ${newTurnoForm.recurrente ? 'bg-primary' : 'bg-gray-200 dark:bg-white/10'}`} />
+                        <div className={`absolute top-0.5 w-4 h-4 bg-white rounded-full shadow transition-transform ${newTurnoForm.recurrente ? 'translate-x-5' : 'translate-x-0.5'}`} />
+                      </button>
+                    </label>
+
+                    {newTurnoErrors.general && (
+                      <p className="text-xs text-red-500 bg-red-50 dark:bg-red-500/10 rounded-xl px-3 py-2">{newTurnoErrors.general}</p>
+                    )}
+
+                    {/* Acciones */}
+                    <div className="flex gap-2 pt-1">
+                      <button type="button" onClick={() => { setCreatingNewTurno(false); setNewTurnoErrors({}) }}
+                        className="flex items-center gap-1.5 rounded-xl border border-gray-200 dark:border-white/[0.08] px-4 py-2 text-xs font-semibold text-gray-500 dark:text-white/40 hover:text-gray-900 dark:hover:text-white transition-colors">
+                        <X size={12} /> Cancelar
+                      </button>
+                      <button type="button" onClick={handleCreateNuevoTurno} disabled={savingNewTurno}
+                        className="flex items-center gap-1.5 rounded-xl bg-primary px-4 py-2 text-xs font-black text-black hover:bg-primary-dark transition-colors disabled:opacity-40">
+                        {savingNewTurno
+                          ? <span className="h-3 w-3 animate-spin rounded-full border-2 border-black/20 border-t-black" />
+                          : <Check size={12} />}
+                        {savingNewTurno ? 'Creando…' : 'Crear turno'}
+                      </button>
                     </div>
                   </div>
-                </OptionCard>
-              )
-            })}
-          </div>
+                </motion.div>
+              )}
+            </AnimatePresence>
+
+            {/* Botón crear nuevo turno */}
+            {!creatingNewTurno && (
+              <button type="button" onClick={() => setCreatingNewTurno(true)}
+                className="flex items-center gap-2 text-xs font-semibold text-gray-400 dark:text-white/30 hover:text-primary dark:hover:text-primary transition-colors mt-1">
+                <Plus size={13} />
+                {turnos.length === 0 ? 'No hay turnos — crear uno nuevo' : 'Crear nuevo turno'}
+              </button>
+            )}
+          </>
         )}
+
         <p className="text-[11px] text-gray-400 dark:text-[#5A5A6A] pt-1 font-medium">
           {selectedTurnoId ? '✓ 1 turno seleccionado' : 'Sin turno seleccionado — podés asignarlo más tarde'}
         </p>
