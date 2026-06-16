@@ -17,6 +17,7 @@ import {
   Send,
   Shield,
   ArrowRight,
+  BookOpen,
 } from 'lucide-react'
 import { useUiStore } from '../store/uiStore'
 import { useSettingsStore } from '../store/settingsStore'
@@ -25,6 +26,7 @@ import { configuracionApi } from '../api/configuracion.api'
 import { notificacionesApi } from '../api/notificaciones.api'
 import { authApi } from '../api/auth.api'
 import { ROUTES } from '../constants/routes'
+import { ManualContent } from './ManualPage'
 
 // ─── Sub-components ──────────────────────────────────────────────────────────
 
@@ -751,7 +753,7 @@ function AccountSection() {
 
 // ─── Category definitions ─────────────────────────────────────────────────────
 
-type CategoryId = 'appearance' | 'notifications' | 'account'
+type CategoryId = 'appearance' | 'notifications' | 'account' | 'manual'
 
 const CATEGORIES: {
   id: CategoryId
@@ -778,6 +780,12 @@ const CATEGORIES: {
     icon: Bell,
     keywords: ['alertas', 'notificaciones', 'email', 'app', 'frecuencia'],
   },
+  {
+    id: 'manual',
+    label: 'Manual de uso',
+    icon: BookOpen,
+    keywords: ['manual', 'ayuda', 'guía', 'uso', 'documentación', 'cómo'],
+  },
 ]
 
 // ─── Main Drawer ──────────────────────────────────────────────────────────────
@@ -787,6 +795,7 @@ export default function SettingsPage() {
   const { user } = useAuthStore()
   const isAdmin = user?.role === 'admin'
 
+  const navigate = useNavigate()
   const [activeCategory, setActiveCategory] = useState<CategoryId>('account')
   const [search, setSearch] = useState('')
   const searchRef = useRef<HTMLInputElement>(null)
@@ -829,6 +838,7 @@ export default function SettingsPage() {
     account: <AccountSection />,
     appearance: <AppearanceSection />,
     notifications: <NotificationsSection />,
+    manual: <ManualContent />,
   }
 
   const currentCategory =
@@ -899,6 +909,7 @@ export default function SettingsPage() {
               )
             })
           )}
+
         </div>
       </div>
 

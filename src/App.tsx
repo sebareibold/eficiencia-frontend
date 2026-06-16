@@ -39,6 +39,7 @@ const EjecucionPage      = lazy(() => import('./pages/EjecucionPage'))
 const EjecucionRutinaPage = lazy(() => import('./pages/EjecucionRutinaPage'))
 const CreateRutinaPage   = lazy(() => import('./pages/CreateRutinaPage'))
 const SecurityPage       = lazy(() => import('./pages/SecurityPage'))
+const ManualPage         = lazy(() => import('./pages/ManualPage'))
 
 function DefaultRedirect() {
   const user = useAuthStore((s) => s.user)
@@ -112,9 +113,12 @@ export default function App() {
               <Route element={<PermissionGuard module="users" />}>
                 <Route path={ROUTES.USERS}    element={<UsersPage />} />
                 <Route path={ROUTES.USER_NEW} element={<UserNewPage />} />
-                <Route path={ROUTES.SETTINGS} element={<SettingsPage />} />
-                <Route path={ROUTES.SECURITY} element={<SecurityPage />} />
               </Route>
+
+              {/* Accesibles a todos los usuarios autenticados */}
+              <Route path={ROUTES.SETTINGS} element={<SettingsPage />} />
+              <Route path={ROUTES.MANUAL}   element={<ManualPage />} />
+              <Route path={ROUTES.SECURITY} element={<SecurityPage />} />
             </Route>
           </Route>
 

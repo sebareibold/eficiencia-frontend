@@ -30,4 +30,5 @@ export const ROUTES = {
   EJECUCION_RUTINA: '/ejecucion/:clienteId',
   RUTINA_CREAR: '/rutinas/crear',
   SECURITY: '/security',
+  MANUAL: '/settings/manual',
 } as const
