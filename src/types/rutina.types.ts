@@ -139,12 +139,27 @@ export type TipoDistribucion = 'FULL_BODY' | 'ARM_LEG' | 'PUSH_PULL' | 'CUSTOM'
 
 export type PeriodoEntrenamiento = 'CARGA' | 'IMPACTO' | 'DESCARGA' | 'MANTENIMIENTO'
 
+export interface PlantillaEjercicioData {
+  id: string
+  catalogoId?: string
+  nombre: string
+  series?: number
+  repeticiones?: string
+  peso?: string
+  rir?: number
+  rpe?: number
+  notas?: string
+  orden: number
+  catalogo?: { id: string; nombre: string; patronMovimiento?: string; videoUrl?: string }
+}
+
 export interface PlantillaBloqueData {
   id: string
   letra: string
   orden: number
   patronMovimiento: PatronMovimientoEnum
   cantidadEjercicios: number
+  ejercicios: PlantillaEjercicioData[]
 }
 
 export interface PlantillaSesionData {
@@ -160,6 +175,7 @@ export interface PlantillaRutinaData {
   tipo: TipoDistribucion
   cantidadSesiones: number
   activa: boolean
+  especializada: boolean
   sesiones: PlantillaSesionData[]
 }
 

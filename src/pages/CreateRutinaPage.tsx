@@ -100,7 +100,33 @@ function crearSesionVacia(numero: number, cantBloques = 3): SesionDraft {
 function generarEstructura(plantilla: PlantillaRutinaData, cantidadSesiones: number): SesionDraft[] {
   const sesionesPlantilla = plantilla.sesiones.slice(0, cantidadSesiones)
   return sesionesPlantilla.map((sp) => {
-    // Agrupa por letra: el seed puede crear N records por bloque (cantidadEjercicios:1 cada uno)
+    if (plantilla.especializada) {
+      // Plantilla especializada: pre-cargamos ejercicios reales con sus parámetros
+      const bloques: BloqueDraft[] = sp.bloques.map((bp, idx) => ({
+        _id: uid(),
+        letra: bp.letra,
+        orden: idx,
+        patronMovimiento: bp.patronMovimiento,
+        cantidadEjercicios: bp.ejercicios.length || bp.cantidadEjercicios,
+        ejercicios: bp.ejercicios.length > 0
+          ? bp.ejercicios.map(ej => ({
+              _id: uid(),
+              catalogoId: ej.catalogoId,
+              nombre: ej.nombre,
+              series: ej.series ?? undefined,
+              repeticiones: ej.repeticiones ?? undefined,
+              peso: ej.peso ?? undefined,
+              rir: ej.rir ?? undefined,
+              rpe: ej.rpe ?? undefined,
+              notas: ej.notas ?? undefined,
+            }))
+          : Array.from({ length: bp.cantidadEjercicios }, crearEjercicioVacio),
+      }))
+      return { _id: uid(), numero: sp.numero, nombre: sp.nombre, bloques }
+    }
+
+    // Plantilla básica: agrupa por letra y crea ejercicios vacíos.
+    // El seed puede crear N records por bloque (cantidadEjercicios:1 cada uno)
     // mientras que PlantillaDetailPage crea 1 record con cantidadEjercicios:N.
     // En ambos casos, el total de ejercicios = sum(cantidadEjercicios) por letra.
     const byLetra = new Map<string, { patronMovimiento: PatronMovimientoEnum; count: number }>()
@@ -1708,11 +1734,16 @@ export default function CreateRutinaPage() {
             <div className="flex items-start justify-between gap-3">
               <div className="min-w-0">
                 <p className="text-sm font-black text-gray-900 dark:text-white leading-tight">{p.nombre}</p>
-                <div className="flex items-center gap-2 mt-1.5">
+                <div className="flex items-center gap-2 mt-1.5 flex-wrap">
                   <span className={`text-[10px] px-1.5 py-0.5 rounded-md font-semibold ${TIPO_COLORS[p.tipo]}`}>
                     {TIPO_LABELS[p.tipo]}
                   </span>
                   <span className="text-[10px] text-gray-500">{p.cantidadSesiones} sesiones</span>
+                  {p.especializada && (
+                    <span className="text-[10px] px-1.5 py-0.5 rounded-md font-bold bg-primary/15 text-primary border border-primary/30">
+                      ⚡ Especializada
+                    </span>
+                  )}
                 </div>
               </div>
               {/* Preview difuso — simula la vista de rutina */}

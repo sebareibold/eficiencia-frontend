@@ -1,11 +1,24 @@
 import api from './axiosInstance'
 import type { PlantillaRutinaData, TipoDistribucion, PatronMovimientoEnum } from '../types/rutina.types'
 
+export interface CreatePlantillaEjercicioPayload {
+  catalogoId?: string
+  nombre: string
+  series?: number
+  repeticiones?: string
+  peso?: string
+  rir?: number
+  rpe?: number
+  notas?: string
+  orden?: number
+}
+
 export interface CreateBloquePayload {
   letra: string
   orden: number
   patronMovimiento: PatronMovimientoEnum
   cantidadEjercicios: number
+  ejercicios?: CreatePlantillaEjercicioPayload[]
 }
 
 export interface CreateSesionPayload {
@@ -18,6 +31,7 @@ export interface CreatePlantillaPayload {
   nombre: string
   tipo: TipoDistribucion
   cantidadSesiones: number
+  especializada?: boolean
   sesiones: CreateSesionPayload[]
 }
 

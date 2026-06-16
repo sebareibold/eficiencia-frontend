@@ -34,7 +34,7 @@ const SettingsPage       = lazy(() => import('./pages/SettingsPage'))
 const ExercisesPage      = lazy(() => import('./pages/ExercisesPage'))
 const PlantillasPage     = lazy(() => import('./pages/PlantillasPage'))
 const EjercicioDetailPage = lazy(() => import('./pages/EjercicioDetailPage'))
-const PlantillaDetailPage = lazy(() => import('./pages/PlantillaDetailPage'))
+const PlantillaViewPage   = lazy(() => import('./pages/PlantillaViewPage'))
 const EjecucionPage      = lazy(() => import('./pages/EjecucionPage'))
 const EjecucionRutinaPage = lazy(() => import('./pages/EjecucionRutinaPage'))
 const CreateRutinaPage   = lazy(() => import('./pages/CreateRutinaPage'))
@@ -92,7 +92,8 @@ export default function App() {
               </Route>
 
               <Route element={<PermissionGuard module="plantillas" />}>
-                <Route path={ROUTES.PLANTILLA_DETAIL} element={<PlantillaDetailPage />} />
+                <Route path={ROUTES.PLANTILLA_NEW}    element={<PlantillaViewPage />} />
+                <Route path={ROUTES.PLANTILLA_DETAIL} element={<PlantillaViewPage />} />
               </Route>
 
               <Route element={<PermissionGuard module="rutinas" />}>

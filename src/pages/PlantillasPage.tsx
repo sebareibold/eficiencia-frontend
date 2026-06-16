@@ -1,5 +1,6 @@
 import { useState, useEffect, useCallback } from 'react'
-import { motion } from 'framer-motion'
+import { createPortal } from 'react-dom'
+import { motion, AnimatePresence } from 'framer-motion'
 import { useNavigate } from 'react-router-dom'
 import { Layers, Plus, Edit2, Trash2, Power, X, ChevronLeft, ChevronRight, Search } from 'lucide-react'
 import { plantillasApi } from '../api/plantillas.api'
@@ -63,12 +64,24 @@ interface FilaPlantillaProps {
 }
 
 function FilaPlantilla({ plantilla, isAdmin, onEdit, onToggle, onDelete, loadingToggle, loadingDelete }: FilaPlantillaProps) {
-  const [confirmDelete, setConfirmDelete] = useState(false)
 
   return (
-    <tr className="border-b border-white/20 dark:border-white/[0.06] hover:bg-gray-50/80 dark:hover:bg-white/[0.04] transition-colors">
+    <tr onClick={onEdit} className="border-b border-white/20 dark:border-white/[0.06] hover:bg-gray-50/80 dark:hover:bg-white/[0.04] transition-colors cursor-pointer">
       <td className="px-5 py-3.5">
-        <p className="text-sm font-semibold text-gray-900 dark:text-white">{plantilla.nombre}</p>
+        <span className="text-sm font-semibold text-gray-900 dark:text-white">
+          {plantilla.nombre}
+        </span>
+      </td>
+      <td className="px-5 py-3.5">
+        {plantilla.especializada ? (
+          <span className="inline-flex items-center rounded-full border border-primary/60 bg-primary/40 dark:bg-primary/25 px-2 py-0.5 text-[10px] font-semibold text-amber-800 dark:text-primary">
+            Especializada
+          </span>
+        ) : (
+          <span className="inline-flex items-center rounded-full border border-gray-200 dark:border-white/10 bg-gray-100 dark:bg-white/[0.05] px-2 py-0.5 text-[10px] font-semibold text-gray-500 dark:text-white/40">
+            Básica
+          </span>
+        )}
       </td>
       <td className="px-5 py-3.5">
         <span className={`inline-flex items-center rounded-full border px-2 py-0.5 text-[10px] font-semibold ${TIPO_COLORS[plantilla.tipo]}`}>
@@ -89,7 +102,7 @@ function FilaPlantilla({ plantilla, isAdmin, onEdit, onToggle, onDelete, loading
       </td>
       {isAdmin && (
         <td className="px-5 py-3.5">
-          <div className="flex items-center gap-1 justify-end">
+          <div className="flex items-center gap-1 justify-end" onClick={e => e.stopPropagation()}>
             <button
               onClick={onEdit}
               title="Editar"
@@ -105,31 +118,14 @@ function FilaPlantilla({ plantilla, isAdmin, onEdit, onToggle, onDelete, loading
             >
               <Power size={13} />
             </button>
-            {confirmDelete ? (
-              <div className="flex items-center gap-1">
-                <button
-                  onClick={onDelete}
-                  disabled={loadingDelete}
-                  className="px-2 py-1 rounded-lg text-[10px] font-semibold bg-red-500 text-white hover:bg-red-600 transition-colors disabled:opacity-40"
-                >
-                  Confirmar
-                </button>
-                <button
-                  onClick={() => setConfirmDelete(false)}
-                  className="px-2 py-1 rounded-lg text-[10px] text-gray-500 dark:text-white/40 hover:text-gray-900 dark:hover:text-white border border-gray-200 dark:border-white/[0.1] transition-colors"
-                >
-                  No
-                </button>
-              </div>
-            ) : (
-              <button
-                onClick={() => setConfirmDelete(true)}
-                title="Eliminar"
-                className="p-1.5 rounded-lg text-gray-400 dark:text-white/30 hover:text-red-400 hover:bg-red-500/[0.08] transition-colors"
-              >
-                <Trash2 size={13} />
-              </button>
-            )}
+            <button
+              onClick={onDelete}
+              disabled={loadingDelete}
+              title="Eliminar"
+              className="p-1.5 rounded-lg text-gray-400 dark:text-white/30 hover:text-red-400 hover:bg-red-500/[0.08] transition-colors disabled:opacity-40"
+            >
+              <Trash2 size={13} />
+            </button>
           </div>
         </td>
       )}
@@ -152,16 +148,22 @@ export default function PlantillasPage({ embedded = false }: PlantillasPageProps
   const [plantillas, setPlantillas] = useState<PlantillaRutinaData[]>([])
   const [loading, setLoading]       = useState(true)
 
-  const [filtroTipo, setFiltroTipo]         = useState<TipoDistribucion | ''>('')
-  const [filtroSesiones, setFiltroSesiones] = useState<number | ''>('')
-  const [filtroActivas, setFiltroActivas]   = useState<boolean | undefined>(undefined)
+  const [filtroTipo, setFiltroTipo]               = useState<TipoDistribucion | ''>('')
+  const [filtroSesiones, setFiltroSesiones]       = useState<number | ''>('')
+  const [filtroActivas, setFiltroActivas]         = useState<boolean | undefined>(undefined)
+  const [filtroEspecializada, setFiltroEspecializada] = useState<boolean | undefined>(undefined)
 
   const [search, setSearch] = useState('')
   const [page, setPage] = useState(1)
   const [loadingToggle, setLoadingToggle] = useState<string | null>(null)
   const [loadingDelete, setLoadingDelete] = useState<string | null>(null)
+  const [plantillaToDelete, setPlantillaToDelete] = useState<PlantillaRutinaData | null>(null)
 
-  const filtered   = plantillas.filter(p => !search || p.nombre.toLowerCase().includes(search.toLowerCase()))
+  const filtered   = plantillas.filter(p => {
+    if (search && !p.nombre.toLowerCase().includes(search.toLowerCase())) return false
+    if (filtroEspecializada !== undefined && p.especializada !== filtroEspecializada) return false
+    return true
+  })
   const totalPages = Math.ceil(filtered.length / PAGE_SIZE)
   const pageItems  = filtered.slice((page - 1) * PAGE_SIZE, page * PAGE_SIZE)
 
@@ -254,7 +256,7 @@ export default function PlantillasPage({ embedded = false }: PlantillasPageProps
         {/* Búsqueda + Filtros */}
         <div className="flex flex-col lg:flex-row lg:items-end lg:justify-between gap-4">
           {/* Buscador */}
-          <div className="relative w-full max-w-md shrink-0">
+          <div className="relative w-full max-w-xs shrink-0">
             <Search size={14} className="pointer-events-none absolute left-3.5 top-1/2 -translate-y-1/2 z-10 text-gray-400 dark:text-[#8A8A9A]" />
             <input
               value={search}
@@ -267,6 +269,28 @@ export default function PlantillasPage({ embedded = false }: PlantillasPageProps
           {/* Filtros */}
           <div className="flex flex-col sm:flex-row gap-3 flex-wrap items-end">
           <div className="flex flex-col sm:flex-row gap-3 flex-wrap items-end">
+            {/* Especialidad */}
+            <div className="flex flex-col gap-1.5">
+              <span className="text-[10px] font-bold uppercase tracking-wider text-gray-400 dark:text-gray-500 px-1">Especialidad</span>
+              <div className="flex items-center rounded-full border border-white/50 dark:border-white/10 bg-white/30 dark:bg-black/30 backdrop-blur-xl p-1 shadow-sm gap-1">
+                {([
+                  { value: undefined, label: 'Todos' },
+                  { value: false,     label: 'Básica' },
+                  { value: true,      label: 'Especializada' },
+                ] as { value: boolean | undefined; label: string }[]).map(opt => {
+                  const isActive = filtroEspecializada === opt.value
+                  return (
+                    <button key={String(opt.value)} onClick={() => { setFiltroEspecializada(opt.value); setPage(1) }}
+                      className={`relative inline-flex items-center justify-center rounded-full px-3 py-1.5 text-xs font-bold transition-all duration-300 cursor-pointer ${isActive ? 'text-white dark:text-gray-900' : 'text-gray-500 dark:text-[#8A8A9A] hover:text-gray-900 dark:hover:text-white'}`}
+                    >
+                      {isActive && <div className="absolute inset-0 rounded-full bg-gray-900 dark:bg-white shadow-[0_2px_8px_rgba(0,0,0,0.15)]" style={{ zIndex: 0 }} />}
+                      <span className="relative" style={{ zIndex: 1 }}>{opt.label}</span>
+                    </button>
+                  )
+                })}
+              </div>
+            </div>
+
             {/* Tipo */}
             <div className="flex flex-col gap-1.5">
               <span className="text-[10px] font-bold uppercase tracking-wider text-gray-400 dark:text-gray-500 px-1">Tipo</span>
@@ -321,9 +345,9 @@ export default function PlantillasPage({ embedded = false }: PlantillasPageProps
               </div>
             </div>
 
-            {(filtroTipo || filtroSesiones || filtroActivas !== undefined) && (
+            {(filtroTipo || filtroSesiones || filtroActivas !== undefined || filtroEspecializada !== undefined) && (
               <button
-                onClick={() => { setFiltroTipo(''); setFiltroSesiones(''); setFiltroActivas(undefined) }}
+                onClick={() => { setFiltroTipo(''); setFiltroSesiones(''); setFiltroActivas(undefined); setFiltroEspecializada(undefined) }}
                 className="flex items-center gap-1 h-9 text-xs text-gray-400 dark:text-white/30 hover:text-gray-900 dark:hover:text-white transition-colors"
               >
                 <X size={11} /> Limpiar
@@ -342,6 +366,7 @@ export default function PlantillasPage({ embedded = false }: PlantillasPageProps
                 <thead>
                   <tr className="border-b border-white/20 dark:border-white/10 bg-gray-50/30 dark:bg-black/10">
                     <th className="px-5 py-3 text-left text-[10px] font-bold uppercase tracking-wider text-gray-500 dark:text-white/30">Nombre</th>
+                    <th className="px-5 py-3 text-left text-[10px] font-bold uppercase tracking-wider text-gray-500 dark:text-white/30">Especialidad</th>
                     <th className="px-5 py-3 text-left text-[10px] font-bold uppercase tracking-wider text-gray-500 dark:text-white/30">Tipo</th>
                     <th className="px-5 py-3 text-left text-[10px] font-bold uppercase tracking-wider text-gray-500 dark:text-white/30">Sesiones</th>
                     <th className="px-5 py-3 text-left text-[10px] font-bold uppercase tracking-wider text-gray-500 dark:text-white/30">Estado</th>
@@ -350,7 +375,7 @@ export default function PlantillasPage({ embedded = false }: PlantillasPageProps
                 </thead>
                 <tbody>
                   {Array.from({ length: 5 }).map((_, i) => (
-                    <SkeletonRow key={i} cols={isAdmin ? 5 : 4} />
+                    <SkeletonRow key={i} cols={isAdmin ? 6 : 5} />
                   ))}
                 </tbody>
               </table>
@@ -364,11 +389,20 @@ export default function PlantillasPage({ embedded = false }: PlantillasPageProps
             {/* ── Mobile card grid ── */}
             <div className="sm:hidden grid grid-cols-1 gap-3 p-3">
               {pageItems.map(p => (
-                <div key={p.id} className="rounded-2xl border border-white/50 dark:border-white/10 bg-white/40 dark:bg-white/[0.04] backdrop-blur-xl p-4 flex flex-col gap-3">
+                <div key={p.id} onClick={() => navigate(`/plantillas/${p.id}`)} className="rounded-2xl border border-white/50 dark:border-white/10 bg-white/40 dark:bg-white/[0.04] backdrop-blur-xl p-4 flex flex-col gap-3 cursor-pointer hover:bg-white/60 dark:hover:bg-white/[0.07] transition-colors">
                   <div className="flex items-start justify-between gap-2">
                     <div className="min-w-0">
                       <p className="font-bold text-sm text-gray-900 dark:text-white leading-tight">{p.nombre}</p>
                       <div className="flex items-center gap-2 mt-1.5 flex-wrap">
+                        {p.especializada ? (
+                          <span className="inline-flex items-center gap-1 rounded-full border border-primary/30 bg-primary/10 px-2 py-0.5 text-[11px] font-semibold text-primary">
+                            Especializada
+                          </span>
+                        ) : (
+                          <span className="inline-flex items-center rounded-full border border-gray-200 dark:border-white/10 bg-gray-100 dark:bg-white/[0.05] px-2 py-0.5 text-[11px] font-semibold text-gray-500 dark:text-white/40">
+                            Básica
+                          </span>
+                        )}
                         <span className={`inline-flex items-center rounded-full border px-2 py-0.5 text-[11px] font-semibold ${TIPO_COLORS[p.tipo]}`}>
                           {TIPO_LABELS[p.tipo]}
                         </span>
@@ -379,14 +413,14 @@ export default function PlantillasPage({ embedded = false }: PlantillasPageProps
                       </div>
                     </div>
                     {isAdmin && (
-                      <div className="flex items-center gap-1 shrink-0">
+                      <div className="flex items-center gap-1 shrink-0" onClick={e => e.stopPropagation()}>
                         <button onClick={() => navigate(`/plantillas/${p.id}`)} className="p-1.5 rounded-lg text-gray-400 hover:text-gray-700 dark:hover:text-white hover:bg-gray-100 dark:hover:bg-white/[0.08] transition-all">
                           <Edit2 size={13} />
                         </button>
                         <button onClick={() => handleToggle(p)} disabled={loadingToggle === p.id} className="p-1.5 rounded-lg text-gray-400 hover:text-primary hover:bg-primary/10 transition-all disabled:opacity-40">
                           <Power size={13} />
                         </button>
-                        <button onClick={() => handleDelete(p)} disabled={loadingDelete === p.id} className="p-1.5 rounded-lg text-gray-400 hover:text-red-400 hover:bg-red-500/10 transition-all disabled:opacity-40">
+                        <button onClick={() => setPlantillaToDelete(p)} disabled={loadingDelete === p.id} className="p-1.5 rounded-lg text-gray-400 hover:text-red-400 hover:bg-red-500/10 transition-all disabled:opacity-40">
                           <Trash2 size={13} />
                         </button>
                       </div>
@@ -401,6 +435,7 @@ export default function PlantillasPage({ embedded = false }: PlantillasPageProps
                 <thead>
                   <tr className="border-b border-white/20 dark:border-white/10 bg-gray-50/30 dark:bg-black/10">
                     <th className="px-5 py-3 text-left text-[10px] font-bold uppercase tracking-wider text-gray-500 dark:text-white/30">Nombre</th>
+                    <th className="px-5 py-3 text-left text-[10px] font-bold uppercase tracking-wider text-gray-500 dark:text-white/30">Especialidad</th>
                     <th className="px-5 py-3 text-left text-[10px] font-bold uppercase tracking-wider text-gray-500 dark:text-white/30">Tipo</th>
                     <th className="px-5 py-3 text-left text-[10px] font-bold uppercase tracking-wider text-gray-500 dark:text-white/30">Sesiones</th>
                     <th className="px-5 py-3 text-left text-[10px] font-bold uppercase tracking-wider text-gray-500 dark:text-white/30">Estado</th>
@@ -415,7 +450,7 @@ export default function PlantillasPage({ embedded = false }: PlantillasPageProps
                       isAdmin={isAdmin}
                       onEdit={() => navigate(`/plantillas/${p.id}`)}
                       onToggle={() => handleToggle(p)}
-                      onDelete={() => handleDelete(p)}
+                      onDelete={() => setPlantillaToDelete(p)}
                       loadingToggle={loadingToggle === p.id}
                       loadingDelete={loadingDelete === p.id}
                     />
@@ -483,7 +518,54 @@ export default function PlantillasPage({ embedded = false }: PlantillasPageProps
     </div>
   )
 
-  if (embedded) return contenido
+  const modal = createPortal(
+    <AnimatePresence>
+      {plantillaToDelete && (
+        <motion.div
+          initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
+          className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/50"
+          onClick={() => setPlantillaToDelete(null)}
+        >
+          <motion.div
+            initial={{ opacity: 0, scale: 0.95, y: 8 }} animate={{ opacity: 1, scale: 1, y: 0 }} exit={{ opacity: 0, scale: 0.95, y: 8 }}
+            transition={{ duration: 0.15 }}
+            onClick={e => e.stopPropagation()}
+            className="w-full max-w-sm rounded-2xl border border-white/50 dark:border-white/10 bg-white dark:bg-[#1A1A1A] p-6 shadow-2xl"
+          >
+            <div className="flex items-start gap-3 mb-4">
+              <div className="shrink-0 h-10 w-10 rounded-xl bg-red-500/10 flex items-center justify-center border border-red-500/20">
+                <Trash2 size={18} className="text-red-400" />
+              </div>
+              <div>
+                <h3 className="text-base font-black text-gray-900 dark:text-white">¿Eliminar plantilla?</h3>
+                <p className="text-sm text-gray-500 dark:text-white/40 mt-0.5">
+                  Vas a eliminar <span className="font-semibold text-gray-700 dark:text-white/70">{plantillaToDelete.nombre}</span>. Esta acción no tiene vuelta atrás.
+                </p>
+              </div>
+            </div>
+            <div className="flex gap-3">
+              <button
+                onClick={() => setPlantillaToDelete(null)}
+                className="flex-1 rounded-xl bg-primary py-2.5 text-sm font-black text-black hover:bg-primary-dark transition-colors"
+              >
+                Cancelar
+              </button>
+              <button
+                onClick={() => { handleDelete(plantillaToDelete); setPlantillaToDelete(null) }}
+                disabled={loadingDelete === plantillaToDelete.id}
+                className="flex-1 rounded-xl bg-red-500 py-2.5 text-sm font-black text-white hover:bg-red-600 transition-colors disabled:opacity-40"
+              >
+                Sí, eliminar
+              </button>
+            </div>
+          </motion.div>
+        </motion.div>
+      )}
+    </AnimatePresence>,
+    document.body,
+  )
+
+  if (embedded) return <>{contenido}{modal}</>
 
   return (
     <motion.div
@@ -492,6 +574,7 @@ export default function PlantillasPage({ embedded = false }: PlantillasPageProps
       transition={{ duration: 0.2 }}
     >
       {contenido}
+      {modal}
     </motion.div>
   )
 }

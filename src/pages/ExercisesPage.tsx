@@ -290,7 +290,7 @@ export default function ExercisesPage() {
 
         {/* Tabla / empty state */}
         {loading ? (
-          <div className={`${glass} p-6 space-y-3`}>
+          <div className={`${glass} overflow-hidden p-6 space-y-3`}>
             {[1, 2, 3, 4].map(i => (
               <div
                 key={i}

@@ -200,7 +200,7 @@ export default function Layout() {
       ) : (
         <Navbar />
       )}
-      <main className="flex-1 px-4 py-4 sm:px-5 sm:py-5 md:px-8 md:py-6 lg:px-12 lg:py-7 xl:px-16 xl:py-8 overflow-auto text-gray-800 dark:text-gray-100 relative z-10 w-full max-w-[1600px] mx-auto">
+      <main className="flex-1 px-4 py-4 sm:px-5 sm:py-5 md:px-8 md:py-6 lg:px-12 lg:py-7 xl:px-16 xl:py-8 overflow-y-auto overflow-x-hidden text-gray-800 dark:text-gray-100 relative z-10 w-full max-w-[1600px] mx-auto">
         {isInitializing ? <InitDots /> : (
           <AnimatePresence initial={false}>
             <motion.div
