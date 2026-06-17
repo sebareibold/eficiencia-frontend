@@ -1,10 +1,11 @@
 import { useState, useEffect, useCallback, useRef } from 'react'
 import { useParams, useNavigate, useLocation } from 'react-router-dom'
 import { AnimatePresence, motion } from 'framer-motion'
-import { ArrowLeft, Check, ExternalLink, ChevronLeft, ChevronRight, Save } from 'lucide-react'
+import { ArrowLeft, ExternalLink, ChevronLeft, ChevronRight, ChevronDown, Save, History } from 'lucide-react'
+import { format, parseISO } from 'date-fns'
 import { rutinasApi } from '../api/rutinas.api'
 import { useUiStore } from '../store/uiStore'
-import type { Rutina, EjercicioPlan, EjecucionCliente, CreateEjecucionPayload, PatronMovimientoEnum } from '../types/rutina.types'
+import type { Rutina, EjercicioPlan, EjecucionCliente, CreateEjecucionPayload, UpdateEjercicioPlanPayload, PatronMovimientoEnum } from '../types/rutina.types'
 
 // ─── Constantes ───────────────────────────────────────────────────────────────
 
@@ -80,11 +81,12 @@ export default function EjecucionRutinaPage() {
   const state         = location.state as LocationState | null
   const addToast      = useUiStore(s => s.addToast)
 
-  const [rutina, setRutina]       = useState<Rutina | null>(null)
-  const [loading, setLoading]     = useState(true)
-  const [semanaIdx, setSemanaIdx] = useState(0)
-  const [forms, setForms]         = useState<Record<string, RowState>>({})
-  const [saving, setSaving]       = useState(false)
+  const [rutina, setRutina]           = useState<Rutina | null>(null)
+  const [loading, setLoading]         = useState(true)
+  const [semanaIdx, setSemanaIdx]     = useState(0)
+  const [forms, setForms]             = useState<Record<string, RowState>>({})
+  const [saving, setSaving]           = useState(false)
+  const [historyOpen, setHistoryOpen] = useState<Record<string, boolean>>({})
 
   const clienteName = state?.name && state?.lastName
     ? `${state.name} ${state.lastName}` : 'Cliente'
@@ -143,7 +145,20 @@ export default function EjecucionRutinaPage() {
         })
       )
 
-      // Actualizar última ejecución en el state
+      // Fire-and-forget: actualizar valores del plan con lo ejecutado
+      toSave.forEach(ej => {
+        const form = fs[ej.id]
+        const updatePayload: UpdateEjercicioPlanPayload = {
+          series:       form.series       ? Number(form.series)       : undefined,
+          repeticiones: form.repeticiones || undefined,
+          peso:         form.peso         || undefined,
+          rir:          form.rir          ? Number(form.rir)          : undefined,
+          rpe:          form.rpe          ? Number(form.rpe)          : undefined,
+        }
+        rutinasApi.updateEjercicio(ej.id, updatePayload).catch(() => {})
+      })
+
+      // Actualizar state: prepend ejecución + actualizar valores del plan
       setRutina(prev => {
         if (!prev) return prev
         return {
@@ -155,8 +170,18 @@ export default function EjecucionRutinaPage() {
               bloques: ses.bloques.map(bl => ({
                 ...bl,
                 ejerciciosPlan: bl.ejerciciosPlan.map(ej => {
-                  const res = results.find(r => r.ejId === ej.id)
-                  return res ? { ...ej, ejecuciones: [res.created, ...ej.ejecuciones] } : ej
+                  const res  = results.find(r => r.ejId === ej.id)
+                  const form = fs[ej.id]
+                  if (!res || !form) return ej
+                  return {
+                    ...ej,
+                    ...(form.series       && { series:       Number(form.series)       }),
+                    ...(form.repeticiones && { repeticiones: form.repeticiones }),
+                    ...(form.peso         && { peso:         form.peso }),
+                    ...(form.rir          && { rir:          Number(form.rir) }),
+                    ...(form.rpe          && { rpe:          Number(form.rpe) }),
+                    ejecuciones: [res.created, ...ej.ejecuciones],
+                  }
                 }),
               })),
             })),
@@ -366,6 +391,53 @@ export default function EjecucionRutinaPage() {
                                     )}
                                     {ej.notas && (
                                       <span className="text-[11px] text-gray-400 dark:text-white/40 italic block mt-0.5">{ej.notas}</span>
+                                    )}
+                                    {/* Historial de ejecuciones */}
+                                    {ej.ejecuciones.length > 0 && (
+                                      <>
+                                        <button
+                                          type="button"
+                                          onClick={() => setHistoryOpen(h => ({ ...h, [ej.id]: !h[ej.id] }))}
+                                          className="flex items-center gap-1 mt-2 text-[11px] text-gray-400 dark:text-white/30 hover:text-primary transition-colors"
+                                        >
+                                          <History className="w-3 h-3" />
+                                          <span>{ej.ejecuciones.length} registro{ej.ejecuciones.length !== 1 ? 's' : ''}</span>
+                                          <ChevronDown className={`w-2.5 h-2.5 transition-transform duration-200 ${historyOpen[ej.id] ? 'rotate-180' : ''}`} />
+                                        </button>
+                                        <AnimatePresence>
+                                          {historyOpen[ej.id] && (
+                                            <motion.div
+                                              initial={{ height: 0, opacity: 0 }}
+                                              animate={{ height: 'auto', opacity: 1 }}
+                                              exit={{ height: 0, opacity: 0 }}
+                                              transition={{ duration: 0.2, ease: 'easeInOut' }}
+                                              className="overflow-hidden mt-1.5"
+                                            >
+                                              <table className="w-full text-[10px] border-collapse">
+                                                <thead>
+                                                  <tr className="border-b border-gray-200 dark:border-white/10">
+                                                    {['Fecha', 'Ser', 'Reps', 'Kg', 'RIR', 'RPE'].map(h => (
+                                                      <th key={h} className="py-1 px-0.5 text-center text-gray-400 dark:text-white/25 font-semibold uppercase tracking-wide">{h}</th>
+                                                    ))}
+                                                  </tr>
+                                                </thead>
+                                                <tbody>
+                                                  {ej.ejecuciones.map(e => (
+                                                    <tr key={e.id} className="border-b border-gray-100 dark:border-white/[0.05]">
+                                                      <td className="py-1 px-0.5 text-center text-gray-500 dark:text-white/35 whitespace-nowrap">{format(parseISO(e.fecha), 'dd/MM/yy')}</td>
+                                                      <td className="py-1 px-0.5 text-center text-gray-600 dark:text-white/55">{e.series ?? '—'}</td>
+                                                      <td className="py-1 px-0.5 text-center text-gray-600 dark:text-white/55">{e.repeticiones ?? '—'}</td>
+                                                      <td className="py-1 px-0.5 text-center text-primary/80 font-semibold">{e.peso ?? '—'}</td>
+                                                      <td className="py-1 px-0.5 text-center text-gray-400 dark:text-white/30">{e.rir ?? '—'}</td>
+                                                      <td className="py-1 px-0.5 text-center text-gray-400 dark:text-white/30">{e.rpe ?? '—'}</td>
+                                                    </tr>
+                                                  ))}
+                                                </tbody>
+                                              </table>
+                                            </motion.div>
+                                          )}
+                                        </AnimatePresence>
+                                      </>
                                     )}
                                   </td>
 

@@ -7,7 +7,7 @@ import { z } from 'zod'
 import {
   ArrowLeft, Plus, Copy, Trash2, Pencil, Check, X,
   BookOpen, Dumbbell, ExternalLink, ChevronDown, User2, Search,
-  Save, AlertTriangle, ChevronRight, GripVertical, Trophy, CalendarDays,
+  Save, AlertTriangle, ChevronRight, GripVertical, Trophy, CalendarDays, History,
 } from 'lucide-react'
 import { format, parseISO, differenceInDays } from 'date-fns'
 import { es } from 'date-fns/locale'
@@ -18,7 +18,7 @@ import { clientsApi } from '../api/clients.api'
 import { useAuthStore } from '../store/authStore'
 import { useRutinas } from '../hooks/useRutinas'
 import { useRutinaDraft, type DraftBloque, type DraftEjercicio, type DraftSesion, type DraftSemana, type UpdateEjData } from '../hooks/useRutinaDraft'
-import type { Rutina, EjercicioPlan, PatronMovimientoEnum, FichaEntrenamiento } from '../types/rutina.types'
+import type { Rutina, EjercicioPlan, EjecucionCliente, PatronMovimientoEnum, FichaEntrenamiento } from '../types/rutina.types'
 import type { EjercicioCatalogo } from '../types/ejercicio-catalogo.types'
 import { ROUTES } from '../constants/routes'
 import { useUiStore } from '../store/uiStore'
@@ -1634,6 +1634,7 @@ export default function ClientRutinaPage() {
   const [ficha, setFicha] = useState<FichaEntrenamiento | null>(null)
   const [deleteRutinaTarget, setDeleteRutinaTarget] = useState<string | null>(null)
   const [isDeletingRutina, setIsDeletingRutina] = useState(false)
+  const [histOpenEj, setHistOpenEj] = useState<Record<string, boolean>>({})
 
   useEffect(() => {
     if (!clienteId) return
@@ -2045,6 +2046,53 @@ export default function ClientRutinaPage() {
                                             <span className="text-[11px] text-gray-400 dark:text-white/35 block">
                                               {PATRON_LABELS[ej.catalogo.patronMovimiento] ?? ej.catalogo.patronMovimiento}
                                             </span>
+                                          )}
+                                          {/* Historial de ejecuciones */}
+                                          {ej.ejecuciones.length > 0 && (
+                                            <>
+                                              <button
+                                                type="button"
+                                                onClick={() => setHistOpenEj(h => ({ ...h, [ej.id]: !h[ej.id] }))}
+                                                className="flex items-center gap-1 mt-1.5 text-[11px] text-gray-400 dark:text-white/30 hover:text-primary transition-colors"
+                                              >
+                                                <History className="w-3 h-3" />
+                                                <span>{ej.ejecuciones.length} registro{ej.ejecuciones.length !== 1 ? 's' : ''}</span>
+                                                <ChevronDown className={`w-2.5 h-2.5 transition-transform duration-200 ${histOpenEj[ej.id] ? 'rotate-180' : ''}`} />
+                                              </button>
+                                              <AnimatePresence>
+                                                {histOpenEj[ej.id] && (
+                                                  <motion.div
+                                                    initial={{ height: 0, opacity: 0 }}
+                                                    animate={{ height: 'auto', opacity: 1 }}
+                                                    exit={{ height: 0, opacity: 0 }}
+                                                    transition={{ duration: 0.2, ease: 'easeInOut' }}
+                                                    className="overflow-hidden mt-1.5"
+                                                  >
+                                                    <table className="w-full text-[10px] border-collapse">
+                                                      <thead>
+                                                        <tr className="border-b border-gray-200 dark:border-white/10">
+                                                          {['Fecha', 'Ser', 'Reps', 'Kg', 'RIR', 'RPE'].map(h => (
+                                                            <th key={h} className="py-1 px-0.5 text-center text-gray-400 dark:text-white/25 font-semibold uppercase tracking-wide">{h}</th>
+                                                          ))}
+                                                        </tr>
+                                                      </thead>
+                                                      <tbody>
+                                                        {ej.ejecuciones.map((e: EjecucionCliente) => (
+                                                          <tr key={e.id} className="border-b border-gray-100 dark:border-white/[0.05]">
+                                                            <td className="py-1 px-0.5 text-center text-gray-500 dark:text-white/35 whitespace-nowrap">{format(parseISO(e.fecha), 'dd/MM/yy')}</td>
+                                                            <td className="py-1 px-0.5 text-center text-gray-600 dark:text-white/55">{e.series ?? '—'}</td>
+                                                            <td className="py-1 px-0.5 text-center text-gray-600 dark:text-white/55">{e.repeticiones ?? '—'}</td>
+                                                            <td className="py-1 px-0.5 text-center text-primary/80 font-semibold">{e.peso ?? '—'}</td>
+                                                            <td className="py-1 px-0.5 text-center text-gray-400 dark:text-white/30">{e.rir ?? '—'}</td>
+                                                            <td className="py-1 px-0.5 text-center text-gray-400 dark:text-white/30">{e.rpe ?? '—'}</td>
+                                                          </tr>
+                                                        ))}
+                                                      </tbody>
+                                                    </table>
+                                                  </motion.div>
+                                                )}
+                                              </AnimatePresence>
+                                            </>
                                           )}
                                         </td>
                                         <td className="px-3 py-2.5 text-center">
