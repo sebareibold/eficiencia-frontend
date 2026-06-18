@@ -178,75 +178,104 @@ export function SkeletonDashboardCharts() {
   )
 }
 
-// ── Client profile: hero card + KPI strip + tabs ──────────────────────────────
+// ── Client profile: hero card + section cards ─────────────────────────────────
+const GLASS_CARD = 'rounded-[2rem] border border-gray-200 dark:border-white/10 bg-white/30 dark:bg-black/30 backdrop-blur-3xl shadow-[0_8px_32px_rgba(0,0,0,0.04)] dark:shadow-[0_8px_32px_rgba(0,0,0,0.3)]'
+
 export function SkeletonClientProfile() {
   const navigate = useNavigate()
   return (
     <div className="space-y-4 md:space-y-5">
 
+      {/* Breadcrumb — siempre interactivo */}
       <button
         onClick={() => navigate('/clients')}
         className="group flex items-center gap-2 text-sm text-gray-500 dark:text-[#8A8A9A] hover:text-gray-900 dark:hover:text-white transition-colors"
       >
         <ArrowLeft size={14} className="group-hover:-translate-x-0.5 transition-transform" />
-        <span>Clientes</span>
+        <span>Volver</span>
       </button>
 
-      {/* Hero card — mirrors glassCard from ClientProfilePage */}
-      <div className="rounded-3xl border border-gray-200 dark:border-white/[0.08] bg-white/30 dark:bg-black/30 backdrop-blur-3xl overflow-hidden">
-        <div className="h-1 bg-black/[0.08] dark:bg-white/[0.06]" />
-        <div className="p-5 md:p-7">
-          <div className="flex flex-col sm:flex-row gap-5">
-            <Skeleton className="h-16 w-16 md:h-20 md:w-20 rounded-2xl md:rounded-3xl shrink-0" />
-            <div className="flex-1 space-y-4">
-              <div className="flex items-start justify-between gap-3 flex-wrap">
-                <div className="space-y-2">
-                  <Skeleton className="h-8 w-52" />
-                  <Skeleton className="h-4 w-36" />
+      {/* Hero card — accent bar + header + tabla datos 3 columnas */}
+      <div className={`${GLASS_CARD} overflow-hidden`}>
+        {/* Accent bar */}
+        <div className="h-1 w-full bg-gray-200/80 dark:bg-white/[0.06]" />
+
+        {/* Header: avatar + nombre + badges + botones */}
+        <div className="px-5 md:px-7 pt-5 md:pt-6 pb-4">
+          <div className="flex items-start gap-4 justify-between flex-wrap">
+            <div className="flex items-center gap-4">
+              <Skeleton className="h-16 w-16 md:h-20 md:w-20 rounded-2xl md:rounded-3xl shrink-0" />
+              <div className="space-y-2.5">
+                <Skeleton className="h-7 w-44" />
+                <div className="flex items-center gap-2">
+                  <Skeleton className="h-5 w-20 rounded-lg" />
+                  <Skeleton className="h-5 w-24 rounded-lg" />
+                </div>
+                <div className="flex items-center gap-2">
                   <Skeleton className="h-4 w-28" />
-                </div>
-                <div className="flex items-center gap-2 shrink-0">
-                  <Skeleton className="h-7 w-16 rounded-full" />
-                  <Skeleton className="h-7 w-16 rounded-xl" />
+                  <Skeleton className="h-4 w-20" />
                 </div>
               </div>
-              <div className="flex flex-wrap gap-2">
-                <Skeleton className="h-7 w-24 rounded-full" />
-                <Skeleton className="h-7 w-32 rounded-full" />
-                <Skeleton className="h-7 w-28 rounded-full" />
-              </div>
+            </div>
+            <div className="flex items-center gap-2 shrink-0 pt-1">
+              <Skeleton className="h-7 w-16 rounded-xl" />
+              <Skeleton className="h-7 w-20 rounded-xl" />
+            </div>
+          </div>
+        </div>
+
+        {/* Tabla datos: 3 columnas */}
+        <div className="px-5 md:px-7 pb-5 md:pb-7">
+          <div className="rounded-2xl border border-gray-200/60 dark:border-white/[0.08] overflow-hidden">
+            {/* Header tabla */}
+            <div className="px-4 py-2.5 border-b border-gray-200/60 dark:border-white/[0.06] bg-gray-50/50 dark:bg-white/[0.02]">
+              <Skeleton className="h-3.5 w-32" />
+            </div>
+            {/* 3 columnas */}
+            <div className="grid grid-cols-1 md:grid-cols-3 divide-y md:divide-y-0 md:divide-x divide-gray-100 dark:divide-white/[0.04]">
+              {[5, 5, 4].map((rows, col) => (
+                <div key={col} className="divide-y divide-gray-100 dark:divide-white/[0.04]">
+                  {Array.from({ length: rows }).map((_, i) => (
+                    <div key={i} className="grid grid-cols-[2fr_3fr] gap-3 px-4 py-2.5 items-center">
+                      <Skeleton className="h-3 w-full max-w-[70px]" />
+                      <Skeleton className="h-3 w-full max-w-[100px]" />
+                    </div>
+                  ))}
+                </div>
+              ))}
             </div>
           </div>
         </div>
       </div>
 
-      {/* KPI strip — 3 cards */}
-      <div className="grid grid-cols-3 gap-3">
-        {(['w-16', 'w-12', 'w-20'] as const).map((w, i) => (
-          <div
-            key={i}
-            className="rounded-3xl border border-gray-200 dark:border-white/[0.08] bg-white/30 dark:bg-black/30 backdrop-blur-3xl p-4 flex items-center gap-3"
-          >
-            <Skeleton className="h-10 w-10 rounded-xl shrink-0" />
-            <div className="flex-1 min-w-0 space-y-1.5">
-              <Skeleton className={`h-5 ${w}`} />
-              <Skeleton className="h-3 w-16" />
+      {/* Secciones — Rutinas, Clases, Asistencia, Membresías, Pagos */}
+      {[
+        { rows: 2, wide: true },
+        { rows: 2, wide: false },
+        { rows: 3, wide: false },
+        { rows: 2, wide: false },
+        { rows: 3, wide: true },
+      ].map((s, i) => (
+        <div key={i} className={`${GLASS_CARD} p-6 space-y-4`} style={{ opacity: 1 - i * 0.12 }}>
+          {/* Section header */}
+          <div className="flex items-center justify-between pb-3 border-b border-gray-200 dark:border-white/[0.06]">
+            <div className="flex items-center gap-3">
+              <Skeleton className="h-9 w-9 rounded-xl shrink-0" />
+              <div className="space-y-1.5">
+                <Skeleton className="h-4 w-32" />
+                <Skeleton className="h-3 w-20" />
+              </div>
             </div>
+            <Skeleton className="h-7 w-24 rounded-xl shrink-0" />
           </div>
-        ))}
-      </div>
-
-      {/* Tabs */}
-      <div className="space-y-3">
-        {/* Tab bar */}
-        <div className="flex gap-1 p-1 rounded-2xl bg-black/[0.04] dark:bg-white/[0.03] border border-black/[0.06] dark:border-white/[0.06]">
-          {[1, 2, 3, 4].map(i => <Skeleton key={i} className="flex-1 h-9 rounded-xl" />)}
+          {/* Content rows */}
+          <div className="space-y-2.5">
+            {Array.from({ length: s.rows }).map((_, j) => (
+              <Skeleton key={j} className={`h-14 ${s.wide ? 'w-full' : j === 0 ? 'w-full' : 'w-4/5'} rounded-2xl`} style={{ opacity: 1 - j * 0.25 }} />
+            ))}
+          </div>
         </div>
-        {/* Tab content area */}
-        <div className="rounded-3xl border border-gray-200 dark:border-white/[0.08] bg-white/30 dark:bg-black/30 backdrop-blur-3xl p-5 space-y-3 min-h-[240px]">
-          {[1, 2, 3].map(i => <Skeleton key={i} className="h-14 w-full rounded-2xl" />)}
-        </div>
-      </div>
+      ))}
     </div>
   )
 }

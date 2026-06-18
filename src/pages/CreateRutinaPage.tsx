@@ -1634,7 +1634,7 @@ export default function CreateRutinaPage() {
     return (
       <div className="space-y-5">
         {freq !== null && (
-          <div className="flex items-start gap-2.5 rounded-xl border border-white/[0.08] bg-white/[0.03] px-4 py-3">
+          <div className="flex items-start gap-2.5 rounded-xl border border-gray-200 dark:border-white/[0.08] bg-gray-50 dark:bg-white/[0.03] px-4 py-3">
             <AlertCircle size={14} className="text-gray-400 shrink-0 mt-0.5" />
             <p className="text-xs text-gray-400">
               El plan del cliente permite hasta <strong className="text-gray-900 dark:text-white">{freq}× por semana</strong>.
@@ -1654,10 +1654,10 @@ export default function CreateRutinaPage() {
                 className={[
                   'relative rounded-2xl border p-5 text-center transition-all duration-200',
                   !hab
-                    ? 'border-white/[0.04] bg-white/[0.02] opacity-35 cursor-not-allowed'
+                    ? 'border-gray-100 dark:border-white/[0.04] bg-gray-50/80 dark:bg-white/[0.02] opacity-35 cursor-not-allowed'
                     : state.sesionesSemanales === n
-                    ? 'border-primary/50 bg-gradient-to-br from-[rgba(251,198,8,0.10)] to-transparent shadow-[0_4px_24px_rgba(251,198,8,0.12)]'
-                    : 'border-white/10 bg-white/[0.04] hover:border-white/[0.16] hover:bg-white/[0.07]',
+                    ? 'border-primary/60 dark:border-primary/50 bg-gradient-to-br from-amber-50 to-amber-50/0 dark:from-[rgba(251,198,8,0.10)] dark:to-transparent shadow-[0_4px_28px_rgba(251,198,8,0.22)] dark:shadow-[0_4px_24px_rgba(251,198,8,0.12)]'
+                    : 'bg-white dark:bg-white/[0.04] border-gray-200 dark:border-white/10 shadow-[0_2px_10px_rgba(0,0,0,0.06)] dark:shadow-none hover:border-primary/40 dark:hover:border-white/[0.16] hover:bg-amber-50/40 dark:hover:bg-white/[0.07] hover:shadow-[0_4px_18px_rgba(251,198,8,0.13)] dark:hover:shadow-none',
                 ].join(' ')}
               >
                 {state.sesionesSemanales === n && (
@@ -1665,9 +1665,9 @@ export default function CreateRutinaPage() {
                     <Check size={9} strokeWidth={3} className="text-black" />
                   </span>
                 )}
-                <span className={`text-3xl font-black block ${state.sesionesSemanales === n ? 'text-primary' : 'text-gray-900 dark:text-white'}`}>{n}</span>
-                <span className="text-[10px] font-semibold uppercase tracking-wider text-gray-500 mt-1 block">días/semana</span>
-                <span className="text-[9px] text-gray-400 dark:text-white/30 mt-1 block leading-tight">{SESIONES_DESC[n]}</span>
+                <span className={`text-3xl font-black block ${state.sesionesSemanales === n ? 'text-primary' : 'text-gray-800 dark:text-white'}`}>{n}</span>
+                <span className={`text-[10px] font-semibold uppercase tracking-wider mt-1 block ${state.sesionesSemanales === n ? 'text-amber-700 dark:text-primary/70' : 'text-gray-500 dark:text-white/40'}`}>días/semana</span>
+                <span className={`text-[9px] mt-1 block leading-tight ${state.sesionesSemanales === n ? 'text-amber-600/80 dark:text-white/40' : 'text-gray-400 dark:text-white/25'}`}>{SESIONES_DESC[n]}</span>
               </button>
             )
           })}
@@ -2608,7 +2608,11 @@ export default function CreateRutinaPage() {
       return
     }
     if (state.paso === 2 && clienteIdFromUrl) {
-      navigate(`/clients/${clienteIdFromUrl}/rutina`)
+      if (clienteRutinas.length === 0) {
+        navigate(`/clients/${clienteIdFromUrl}`)
+      } else {
+        navigate(`/clients/${clienteIdFromUrl}/rutina`)
+      }
       return
     }
     if (state.paso === 4 && state.modo === 'mesociclo') {
@@ -2723,8 +2727,14 @@ export default function CreateRutinaPage() {
   if (loadingClienteInit) {
     return (
       <div className="space-y-6">
-        {/* Back button */}
-        <Skeleton className="h-4 w-16" />
+        {/* Back button — siempre interactivo */}
+        <button
+          onClick={() => navigate(-1)}
+          className="group flex items-center gap-2 text-sm text-gray-500 dark:text-[#8A8A9A] hover:text-gray-900 dark:hover:text-white transition-colors"
+        >
+          <ArrowLeft size={14} className="group-hover:-translate-x-0.5 transition-transform" />
+          <span>Volver</span>
+        </button>
 
         {/* Título */}
         <div className="space-y-2">

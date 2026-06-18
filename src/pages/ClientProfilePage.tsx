@@ -499,7 +499,9 @@ export default function ClientProfilePage() {
   const [membresias, setMembresias] = useState<MembresiaCliente[]>([])
   const [loadingMembresias, setLoadingMembresias] = useState(false)
   const [membPage, setMembPage] = useState(1)
-  const MEMB_PAGE_SIZE = 5
+  const MEMB_PAGE_SIZE = 6
+  const PAYMENTS_PAGE_SIZE = 5
+  const [visiblePayments, setVisiblePayments] = useState(PAYMENTS_PAGE_SIZE)
   const [planes, setPlanes] = useState<Plan[]>([])
   const [loadingPlanes, setLoadingPlanes] = useState(false)
   const [newMembresiaOpen, setNewMembresiaOpen] = useState(false)
@@ -851,65 +853,7 @@ export default function ClientProfilePage() {
   }, [attendance])
 
   // ─── Loading skeleton ────────────────────────────────────────────────────────
-  if (loading) {
-    const pulse = 'animate-pulse bg-gray-200/80 dark:bg-white/[0.07] rounded-lg'
-    return (
-      <motion.div
-        initial={{ opacity: 0, y: 10 }}
-        animate={{ opacity: 1, y: 0 }}
-        transition={{ duration: 0.2 }}
-        className="space-y-4 md:space-y-5"
-      >
-        {/* Breadcrumb */}
-        <div className={`h-4 w-16 ${pulse}`} />
-
-        {/* Hero card */}
-        <div className={`${glassCard} overflow-hidden`}>
-          {/* Accent bar */}
-          <div className={`h-1 w-full ${pulse}`} />
-
-          {/* Contenedor 1: Header */}
-          <div className="px-5 md:px-7 pt-5 md:pt-7 pb-3 md:pb-4">
-            <div className="flex gap-5 items-center">
-              <div className={`h-16 w-16 md:h-20 md:w-20 rounded-2xl md:rounded-3xl shrink-0 ${pulse}`} />
-              <div className="flex-1 space-y-2.5 pt-1">
-                <div className={`h-8 w-52 ${pulse}`} />
-                <div className={`h-3.5 w-36 ${pulse}`} />
-              </div>
-              <div className={`h-7 w-20 rounded-lg shrink-0 ${pulse}`} />
-            </div>
-          </div>
-
-          {/* Contenedor 2: Tablas */}
-          <div className="px-5 md:px-7 pt-3 md:pt-4 pb-5 md:pb-7 space-y-6">
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-              <div className={`h-44 rounded-2xl ${pulse}`} />
-              <div className={`h-44 rounded-2xl ${pulse}`} />
-            </div>
-            <div className={`h-36 rounded-2xl ${pulse}`} />
-          </div>
-        </div>
-
-        {/* Secciones */}
-        {[1, 2, 3].map(i => (
-          <div key={i} className={`${glassCard} p-6 space-y-4`} style={{ opacity: 1 - (i - 1) * 0.2 }}>
-            <div className="flex items-center gap-3 pb-3 border-b border-gray-200 dark:border-white/[0.06]">
-              <div className={`h-10 w-10 rounded-xl shrink-0 ${pulse}`} />
-              <div className="space-y-2">
-                <div className={`h-4 w-40 ${pulse}`} />
-                <div className={`h-3 w-28 ${pulse}`} />
-              </div>
-            </div>
-            <div className="space-y-2">
-              {[1, 2].map(j => (
-                <div key={j} className={`h-14 rounded-xl ${pulse}`} style={{ opacity: 1 - (j - 1) * 0.3 }} />
-              ))}
-            </div>
-          </div>
-        ))}
-      </motion.div>
-    )
-  }
+  if (loading) return <SkeletonClientProfile />
 
   if (!client) {
     return (
@@ -1397,11 +1341,14 @@ export default function ClientProfilePage() {
       {/* ─── CONTENEDOR PRINCIPAL CON SIDEBAR INDEX FIJO PEgado a la pared izquierda ──────────────────────── */}
       <div className="relative w-full mt-6">
         {/* Sidebar Index — colapsable desde la izquierda */}
-        <div
+        <motion.div
+          initial={{ opacity: 0 }}
+          animate={{ opacity: 1 }}
+          transition={{ duration: 0.25, delay: 0.15 }}
           className="hidden lg:block fixed left-4 xl:left-6 top-[32vh] z-30 transition-transform duration-300 ease-in-out"
           style={{ transform: navOpen ? 'translateX(0)' : 'translateX(calc(-100% + 12px))' }}
         >
-          <div className="relative w-32 xl:w-40 rounded-2xl border border-gray-200/60 dark:border-white/[0.08] bg-white/70 dark:bg-black/50 backdrop-blur-2xl shadow-lg">
+          <div className="relative w-32 xl:w-40 rounded-2xl border border-gray-200 dark:border-white/10 bg-white/30 dark:bg-black/30 backdrop-blur-3xl shadow-[0_8px_32px_rgba(0,0,0,0.04)] dark:shadow-[0_8px_32px_rgba(0,0,0,0.3)]">
 
             {/* Flecha — borde derecho integrado, sin separador */}
             <button
@@ -1444,7 +1391,7 @@ export default function ClientProfilePage() {
               </div>
             </div>
           </div>
-        </div>
+        </motion.div>
 
         {/* Bloque de Secciones de Contenido (Offset to clear the fixed sidebar) */}
         <div className="w-full space-y-6">
@@ -2071,8 +2018,8 @@ export default function ClientProfilePage() {
                   {payments.length === 0 ? (
                     <EmptyState icon={CreditCard} message="Sin pagos registrados" />
                   ) : (
-                    <div className="space-y-2.5 max-h-[360px] overflow-y-auto pr-1">
-                      {payments.map(p => {
+                    <div className="space-y-2.5">
+                      {payments.slice(0, visiblePayments).map(p => {
                         const cfg = METHOD_CONFIG[p.method] ?? METHOD_CONFIG.cash
                         const MethodIcon = cfg.Icon
                         return (
@@ -2098,6 +2045,14 @@ export default function ClientProfilePage() {
                           </div>
                         )
                       })}
+                      {visiblePayments < payments.length && (
+                        <button
+                          onClick={() => setVisiblePayments(v => v + PAYMENTS_PAGE_SIZE)}
+                          className="w-full py-2.5 rounded-xl border border-gray-200 dark:border-white/[0.06] bg-white/30 dark:bg-white/[0.02] text-xs font-semibold text-gray-500 dark:text-[#8A8A9A] hover:bg-white/60 dark:hover:bg-white/[0.05] hover:text-gray-900 dark:hover:text-white transition-all"
+                        >
+                          Ver más · {payments.length - visiblePayments} restantes
+                        </button>
+                      )}
                     </div>
                   )}
                 </div>

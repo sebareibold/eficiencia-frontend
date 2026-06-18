@@ -101,18 +101,26 @@ function buildPayload(p: PlantillaRutinaData): CreatePlantillaPayload {
 
 // ─── Skeleton ─────────────────────────────────────────────────────────────────
 
-function PlantillaViewSkeleton() {
+function PlantillaViewSkeleton({ onBack }: { onBack: () => void }) {
   return (
-    <div className="flex flex-col gap-6 animate-pulse">
+    <div className="flex flex-col gap-6">
       <div className="flex flex-col gap-3">
-        <Skeleton className="h-4 w-32 rounded-lg" />
-        <Skeleton className="h-9 w-72 rounded-xl" />
-        <div className="flex gap-2">
-          <Skeleton className="h-6 w-20 rounded-full" />
-          <Skeleton className="h-6 w-24 rounded-full" />
+        <button
+          onClick={onBack}
+          className="group flex items-center gap-1.5 text-sm text-gray-500 dark:text-white/40 hover:text-gray-900 dark:hover:text-white transition-colors w-fit"
+        >
+          <ArrowLeft size={14} className="group-hover:-translate-x-0.5 transition-transform" />
+          Volver a ejercicios
+        </button>
+        <div className="animate-pulse flex flex-col gap-3">
+          <Skeleton className="h-9 w-72 rounded-xl" />
+          <div className="flex gap-2">
+            <Skeleton className="h-6 w-20 rounded-full" />
+            <Skeleton className="h-6 w-24 rounded-full" />
+          </div>
         </div>
       </div>
-      <div className={`${glass} overflow-hidden p-5 space-y-2`}>
+      <div className={`${glass} overflow-hidden p-5 space-y-2 animate-pulse`}>
         <Skeleton className="h-8 w-full rounded-lg" />
         {[1, 2, 3, 4, 5].map(i => <Skeleton key={i} className="h-10 w-full rounded-lg" />)}
       </div>
@@ -393,7 +401,7 @@ export default function PlantillaViewPage() {
 
   // ── Render ────────────────────────────────────────────────────────────────
 
-  if (loading) return <PlantillaViewSkeleton />
+  if (loading) return <PlantillaViewSkeleton onBack={() => navigate(ROUTES.EXERCISES)} />
   if (!draft)  return null
 
   // ── Wizard (nueva plantilla) ───────────────────────────────────────────────

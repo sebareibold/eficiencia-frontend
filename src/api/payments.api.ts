@@ -78,7 +78,7 @@ export const paymentsApi = {
         ...(params?.hasta    && { hasta:     params.hasta }),
         ...(params?.clientId && { clienteId: params.clientId }),
         page:     params?.page     ?? 1,
-        pageSize: params?.pageSize ?? 15,
+        pageSize: params?.pageSize ?? 10,
       },
     }).then((r) => {
       const raw = r.data

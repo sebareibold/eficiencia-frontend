@@ -547,11 +547,20 @@ export default function PlantillaDetailPage() {
 
   if (loadingData) {
     return (
-      <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} className={`${glass} p-6 space-y-3`}>
-        {[1, 2, 3].map(i => (
-          <div key={i} className="h-10 rounded-xl bg-black/[0.05] dark:bg-white/[0.06] animate-pulse" style={{ opacity: 1 - i * 0.2 }} />
-        ))}
-      </motion.div>
+      <div className="flex flex-col gap-6">
+        <button
+          onClick={() => navigate(isNew ? ROUTES.EXERCISES : `/plantillas/${id}`)}
+          className="group flex items-center gap-1.5 text-sm text-gray-500 dark:text-white/40 hover:text-gray-900 dark:hover:text-white transition-colors w-fit"
+        >
+          <ArrowLeft size={14} className="group-hover:-translate-x-0.5 transition-transform" />
+          {isNew ? 'Volver a ejercicios' : 'Ver plantilla'}
+        </button>
+        <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} className={`${glass} p-6 space-y-3`}>
+          {[1, 2, 3].map(i => (
+            <div key={i} className="h-10 rounded-xl bg-black/[0.05] dark:bg-white/[0.06] animate-pulse" style={{ opacity: 1 - i * 0.2 }} />
+          ))}
+        </motion.div>
+      </div>
     )
   }
 
