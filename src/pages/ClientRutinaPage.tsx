@@ -1,6 +1,7 @@
 import { useState, useEffect, useCallback } from 'react'
 import { useParams, useNavigate, useSearchParams } from 'react-router-dom'
 import { motion, AnimatePresence } from 'framer-motion'
+import DotsLoader from '../components/ui/DotsLoader'
 import { useForm } from 'react-hook-form'
 import { zodResolver } from '@hookform/resolvers/zod'
 import { z } from 'zod'
@@ -1306,23 +1307,21 @@ function EditCard({ clienteId: _clienteId, rutina, onCancel, onSaved }: EditCard
             </>
           )}
         </div>
-        <button
+        <motion.button
           onClick={handleSave}
           disabled={!hasChanges || saving}
+          whileTap={{ scale: 0.96 }}
           className="flex items-center gap-2 px-5 py-2.5 rounded-xl bg-primary text-black text-sm font-semibold disabled:opacity-40 transition-opacity"
         >
           {saving ? (
-            <>
-              <div className="w-4 h-4 border-2 border-black/20 border-t-black rounded-full animate-spin" />
-              Guardando...
-            </>
+            <DotsLoader size="sm" className="flex items-center gap-1.5" />
           ) : (
             <>
               <Save className="w-4 h-4" />
               Guardar rutina
             </>
           )}
-        </button>
+        </motion.button>
       </div>
     </motion.div>
   )
@@ -1780,7 +1779,7 @@ function InlineEditRutinaTable({ rutina, onCancel, onSaved }: {
           className="flex items-center gap-2 px-5 py-2.5 rounded-xl bg-primary text-black text-sm font-semibold disabled:opacity-40 transition-opacity"
         >
           {saving
-            ? <><div className="w-4 h-4 border-2 border-black/20 border-t-black rounded-full animate-spin" /> Guardando...</>
+            ? <DotsLoader size="sm" className="flex items-center gap-1" />
             : <><Save className="w-4 h-4" /> Guardar rutina</>
           }
         </button>

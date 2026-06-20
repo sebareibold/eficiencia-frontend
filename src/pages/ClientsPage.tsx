@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react'
 import { useNavigate } from 'react-router-dom'
-import { motion } from 'framer-motion'
-import { pageVariants } from '../lib/motion'
+import { motion, AnimatePresence } from 'framer-motion'
+import { pageVariants, staggerContainerFast, fadeUpItem } from '../lib/motion'
 import { Plus, Search, RefreshCw, LayoutList, LayoutGrid, ChevronRight, ChevronLeft, ChevronsRight, ChevronsLeft, Phone, Mail, Users, X, ArrowUpDown } from 'lucide-react'
 import { format, startOfMonth, endOfMonth, addMonths, subMonths, differenceInDays } from 'date-fns'
 import { es } from 'date-fns/locale'
@@ -405,7 +405,7 @@ export default function ClientsPage() {
                   }`}
                 >
                   {isActive && (
-                    <div className="absolute inset-0 rounded-full bg-gray-900 dark:bg-white shadow-[0_2px_8px_rgba(0,0,0,0.15)]" style={{ zIndex: 0 }} />
+                    <motion.div layoutId="clients-view-pill" className="absolute inset-0 rounded-full bg-gray-900 dark:bg-white shadow-[0_2px_8px_rgba(0,0,0,0.15)]" style={{ zIndex: 0 }} transition={{ duration: 0.22, ease: [0.22, 1, 0.36, 1] }} />
                   )}
                   <span className="relative z-10 flex items-center justify-center">
                     {mode === 'table' ? <LayoutList size={14} /> : <LayoutGrid size={14} />}
@@ -474,7 +474,7 @@ export default function ClientsPage() {
                     <button key={mode} onClick={() => { setPeriodMode(mode); setNavDate(today) }}
                       className={`relative inline-flex items-center justify-center rounded-full px-4 py-1.5 text-xs font-bold transition-all duration-300 cursor-pointer ${isActive ? 'text-white dark:text-gray-900' : 'text-gray-500 dark:text-[#8A8A9A] hover:text-gray-900 dark:hover:text-white'}`}
                     >
-                      {isActive && <div className="absolute inset-0 rounded-full bg-gray-900 dark:bg-white shadow-[0_2px_8px_rgba(0,0,0,0.15)]" style={{ zIndex: 0 }} />}
+                      {isActive && <motion.div layoutId="clients-period-pill" className="absolute inset-0 rounded-full bg-gray-900 dark:bg-white shadow-[0_2px_8px_rgba(0,0,0,0.15)]" style={{ zIndex: 0 }} transition={{ duration: 0.22, ease: [0.22, 1, 0.36, 1] }} />}
                       <span className="relative z-10">{label}</span>
                     </button>
                   )
@@ -616,7 +616,12 @@ export default function ClientsPage() {
       ) : clients.length === 0 ? (
         <p className="py-12 text-center text-sm text-gray-400">No se encontraron clientes</p>
       ) : (
-        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
+        <motion.div
+          className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4"
+          variants={staggerContainerFast}
+          initial="initial"
+          animate="animate"
+        >
           {clients.map(c => {
             const initials = `${c.name.charAt(0)}${c.lastName.charAt(0)}`.toUpperCase()
             const avatarColor =
@@ -625,10 +630,13 @@ export default function ClientsPage() {
               c.status === 'debt'     ? 'bg-red-500/20 text-red-600 dark:text-red-400' :
                                         'bg-gray-200/60 dark:bg-gray-700/40 text-gray-500 dark:text-gray-400'
             return (
-              <button
+              <motion.button
                 key={c.id}
+                variants={fadeUpItem}
                 onClick={() => navigate(`/clients/${c.id}`)}
-                className="group text-left w-full bg-white/30 dark:bg-black/30 backdrop-blur-3xl rounded-[1.75rem] border border-white/50 dark:border-white/10 shadow-[0_8px_32px_rgba(0,0,0,0.04)] dark:shadow-[0_8px_32px_rgba(0,0,0,0.3)] p-5 transition-all duration-300 hover:-translate-y-1 hover:shadow-[0_20px_48px_rgba(0,0,0,0.1)] dark:hover:shadow-[0_20px_48px_rgba(0,0,0,0.45)] hover:bg-white/60 dark:hover:bg-black/50 hover:border-white/70 dark:hover:border-white/15"
+                whileHover={{ y: -4, transition: { duration: 0.2, ease: [0.22, 1, 0.36, 1] } }}
+                whileTap={{ scale: 0.97, y: 0, transition: { duration: 0.1 } }}
+                className="group text-left w-full bg-white/30 dark:bg-black/30 backdrop-blur-3xl rounded-[1.75rem] border border-white/50 dark:border-white/10 shadow-[0_8px_32px_rgba(0,0,0,0.04)] dark:shadow-[0_8px_32px_rgba(0,0,0,0.3)] p-5 transition-[box-shadow,background-color,border-color] duration-250 hover:shadow-[0_20px_48px_rgba(0,0,0,0.1)] dark:hover:shadow-[0_20px_48px_rgba(0,0,0,0.45)] hover:bg-white/60 dark:hover:bg-black/50 hover:border-white/70 dark:hover:border-white/15"
               >
                 <div className="flex flex-col gap-4">
                   {/* Top row: avatar + chevron */}
@@ -701,10 +709,10 @@ export default function ClientsPage() {
                     </div>
                   </div>
                 </div>
-              </button>
+              </motion.button>
             )
           })}
-        </div>
+        </motion.div>
       )}
 
       {/* Paginación */}
@@ -759,7 +767,7 @@ export default function ClientsPage() {
                     }`}
                   >
                     {pg === currentPage && (
-                      <div className="absolute inset-0 rounded-full bg-gray-900 dark:bg-white" style={{ zIndex: 0 }} />
+                      <motion.div layoutId="clients-page-pill" className="absolute inset-0 rounded-full bg-gray-900 dark:bg-white" style={{ zIndex: 0 }} transition={{ duration: 0.22, ease: [0.22, 1, 0.36, 1] }} />
                     )}
                     <span className="relative z-10">{pg}</span>
                   </button>
@@ -788,8 +796,14 @@ export default function ClientsPage() {
       )}
 
       {/* Bulk actions bar */}
+      <AnimatePresence>
       {selectedIds.size > 0 && (
-        <div className="fixed bottom-6 left-1/2 -translate-x-1/2 z-50 rounded-2xl border border-white/30 dark:border-white/10 bg-white/95 dark:bg-gray-950/95 backdrop-blur-xl shadow-[0_8px_40px_rgba(0,0,0,0.15)] dark:shadow-[0_8px_40px_rgba(0,0,0,0.6)] overflow-hidden whitespace-nowrap">
+        <motion.div
+          initial={{ opacity: 0, y: 20, scale: 0.96 }}
+          animate={{ opacity: 1, y: 0, scale: 1 }}
+          exit={{ opacity: 0, y: 20, scale: 0.96 }}
+          transition={{ duration: 0.22, ease: [0.22, 1, 0.36, 1] }}
+          className="fixed bottom-6 left-1/2 -translate-x-1/2 z-50 rounded-2xl border border-white/30 dark:border-white/10 bg-white/95 dark:bg-gray-950/95 backdrop-blur-xl shadow-[0_8px_40px_rgba(0,0,0,0.15)] dark:shadow-[0_8px_40px_rgba(0,0,0,0.6)] overflow-hidden whitespace-nowrap">
           <div className="flex items-center gap-3 px-4 py-3">
             <div className="flex items-center gap-2 pr-3 border-r border-gray-200 dark:border-white/10">
               <Users size={14} className="text-gray-500 dark:text-gray-400 shrink-0" />
@@ -827,15 +841,18 @@ export default function ClientsPage() {
           </div>
           {/* Progress bar */}
           {isBulkLoading && (
-            <div className="h-1 bg-gray-100 dark:bg-white/[0.05]">
-              <div
-                className="h-full bg-primary transition-all duration-150 ease-out"
-                style={{ width: bulkTotal > 0 ? `${(bulkProgress / bulkTotal) * 100}%` : '0%' }}
+            <div className="h-1 bg-gray-100 dark:bg-white/[0.05] overflow-hidden">
+              <motion.div
+                className="h-full w-full bg-primary"
+                style={{ transformOrigin: 'left' }}
+                animate={{ scaleX: bulkTotal > 0 ? bulkProgress / bulkTotal : 0 }}
+                transition={{ duration: 0.15, ease: 'easeOut' }}
               />
             </div>
           )}
-        </div>
+        </motion.div>
       )}
+      </AnimatePresence>
     </motion.div>
   )
 }

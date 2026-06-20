@@ -1,6 +1,7 @@
 import { Fragment, useReducer, useState, useEffect, useCallback, useRef } from 'react'
 import { useNavigate, useSearchParams } from 'react-router-dom'
 import { motion, AnimatePresence } from 'framer-motion'
+import { staggerContainerFast, fadeUpItem } from '../lib/motion'
 import { useForm } from 'react-hook-form'
 import { zodResolver } from '@hookform/resolvers/zod'
 import { z } from 'zod'
@@ -688,11 +689,12 @@ function OptionCard({
   className?: string
 }) {
   return (
-    <button
+    <motion.button
       type="button"
       onClick={onClick}
+      whileTap={{ scale: 0.97 }}
       className={[
-        'relative text-left rounded-2xl border p-4 transition-all duration-200 overflow-hidden w-full',
+        'relative text-left rounded-2xl border p-4 transition-[border-color,background-color,box-shadow] duration-200 overflow-hidden w-full',
         selected
           ? 'border-primary/50 dark:border-primary/40 bg-gradient-to-br from-[rgba(251,198,8,0.10)] via-[rgba(251,198,8,0.04)] to-transparent dark:from-[rgba(251,198,8,0.08)] dark:via-[rgba(251,198,8,0.03)] dark:to-transparent shadow-[0_4px_24px_rgba(251,198,8,0.12)]'
           : 'border-white/50 dark:border-white/10 bg-white/40 dark:bg-white/[0.04] backdrop-blur-xl hover:border-white/70 dark:hover:border-white/[0.16] hover:bg-white/60 dark:hover:bg-white/[0.07]',
@@ -700,9 +702,15 @@ function OptionCard({
       ].join(' ')}
     >
       {selected && (
-        <span className="absolute top-2.5 right-2.5 flex h-5 w-5 items-center justify-center rounded-md bg-primary shadow-[0_2px_8px_rgba(251,198,8,0.4)]">
+        <motion.span
+          initial={{ scale: 0, opacity: 0 }}
+          animate={{ scale: 1, opacity: 1 }}
+          exit={{ scale: 0, opacity: 0 }}
+          transition={{ duration: 0.14, ease: [0.22, 1, 0.36, 1] }}
+          className="absolute top-2.5 right-2.5 flex h-5 w-5 items-center justify-center rounded-md bg-primary shadow-[0_2px_8px_rgba(251,198,8,0.4)]"
+        >
           <Check size={11} strokeWidth={3} className="text-black" />
-        </span>
+        </motion.span>
       )}
       {children}
     </button>
@@ -1519,7 +1527,7 @@ export default function CreateRutinaPage() {
                 key={r.id}
                 type="button"
                 onClick={() => void seleccionarCliente(r.id)}
-                className="w-full text-left flex items-center gap-3 rounded-xl border border-white/[0.08] bg-white/[0.03] px-4 py-3 hover:bg-white/[0.07] hover:border-white/[0.14] transition-all"
+                className="w-full text-left flex items-center gap-3 rounded-xl border border-white/[0.08] bg-white/[0.03] px-4 py-3 hover:bg-white/[0.07] hover:border-white/[0.14] transition-[background-color,border-color]"
               >
                 <div className="h-8 w-8 rounded-xl bg-primary/10 flex items-center justify-center shrink-0">
                   <User size={14} className="text-primary" />
@@ -1646,13 +1654,14 @@ export default function CreateRutinaPage() {
           {opciones.map(n => {
             const hab = isHabilitado(n)
             return (
-              <button
+              <motion.button
                 key={n}
                 type="button"
                 disabled={!hab}
+                whileTap={hab ? { scale: 0.95 } : {}}
                 onClick={() => dispatch({ type: 'SET_SESIONES_SEMANALES', cantidad: n })}
                 className={[
-                  'relative rounded-2xl border p-5 text-center transition-all duration-200',
+                  'relative rounded-2xl border p-5 text-center transition-[border-color,background-color,box-shadow] duration-200',
                   !hab
                     ? 'border-gray-100 dark:border-white/[0.04] bg-gray-50/80 dark:bg-white/[0.02] opacity-35 cursor-not-allowed'
                     : state.sesionesSemanales === n
@@ -1668,7 +1677,7 @@ export default function CreateRutinaPage() {
                 <span className={`text-3xl font-black block ${state.sesionesSemanales === n ? 'text-primary' : 'text-gray-800 dark:text-white'}`}>{n}</span>
                 <span className={`text-[10px] font-semibold uppercase tracking-wider mt-1 block ${state.sesionesSemanales === n ? 'text-amber-700 dark:text-primary/70' : 'text-gray-500 dark:text-white/40'}`}>días/semana</span>
                 <span className={`text-[9px] mt-1 block leading-tight ${state.sesionesSemanales === n ? 'text-amber-600/80 dark:text-white/40' : 'text-gray-400 dark:text-white/25'}`}>{SESIONES_DESC[n]}</span>
-              </button>
+              </motion.button>
             )
           })}
         </div>
@@ -1775,7 +1784,7 @@ export default function CreateRutinaPage() {
           type="button"
           onClick={elegirManual}
           className={[
-            'relative text-left rounded-2xl border p-4 transition-all duration-200 w-full',
+            'relative text-left rounded-2xl border p-4 transition-[border-color,background-color,box-shadow] duration-200 w-full',
             state.sinPlantilla
               ? 'border-gray-400/40 bg-white/[0.05]'
               : 'border-white/10 bg-white/[0.04] hover:border-white/[0.16] hover:bg-white/[0.07]',

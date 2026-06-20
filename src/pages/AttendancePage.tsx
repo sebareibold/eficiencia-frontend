@@ -1,5 +1,7 @@
 import { useState, useEffect, useMemo } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
+import { staggerContainerFast, fadeUpItem } from '../lib/motion'
+import DotsLoader from '../components/ui/DotsLoader'
 import { ClipboardCheck, CheckCircle2, AlertTriangle, XCircle, Clock } from 'lucide-react'
 import { format } from 'date-fns'
 import { useShifts } from '../hooks/useShifts'
@@ -282,7 +284,7 @@ export default function AttendancePage() {
               exit={{ opacity: 0 }}
               className="flex items-center gap-2 text-xs text-[#8A8A9A]"
             >
-              <span className="h-3 w-3 animate-spin rounded-full border border-gray-600 border-t-gray-300" />
+              <DotsLoader size="sm" className="flex items-center" />
               Verificando disponibilidad...
             </motion.div>
           )}
@@ -307,17 +309,18 @@ export default function AttendancePage() {
                 </p>
               )}
             </div>
-            <button
+            <motion.button
               onClick={saveAttendance}
               disabled={isSaving || guardadoBloqueado}
+              whileTap={{ scale: 0.96 }}
               className="flex items-center gap-2 rounded-xl btn-action px-4 py-2.5 text-sm disabled:opacity-50 disabled:cursor-not-allowed"
             >
               {isSaving
-                ? <span className="h-4 w-4 animate-spin rounded-full border-2 border-gray-900/30 border-t-gray-900" />
+                ? <DotsLoader size="sm" className="flex items-center" />
                 : <CheckCircle2 size={14} />
               }
               Guardar asistencia
-            </button>
+            </motion.button>
           </div>
 
           {loadingAttendance || loadingClients ? (
@@ -331,23 +334,37 @@ export default function AttendancePage() {
               No hay clientes activos inscriptos en este turno
             </div>
           ) : (
-            <div className="divide-y divide-white/[0.04]">
+            <motion.div className="divide-y divide-white/[0.04]" variants={staggerContainerFast} initial="initial" animate="animate">
               {clients.map(client => {
                 const isPresent = present.has(client.id)
                 return (
-                  <label
+                  <motion.label
                     key={client.id}
+                    variants={fadeUpItem}
                     className="flex cursor-pointer items-center gap-4 px-5 py-3.5 hover:bg-white/[0.04] transition-colors"
                   >
-                    <div className={`flex h-5 w-5 flex-shrink-0 items-center justify-center rounded-md border-2 transition-colors ${
-                      isPresent ? 'border-primary bg-primary' : 'border-white/20 bg-transparent'
-                    }`}>
-                      {isPresent && (
-                        <svg width="10" height="8" viewBox="0 0 10 8" fill="none">
-                          <path d="M1 4L3.5 6.5L9 1" stroke="black" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
-                        </svg>
-                      )}
-                    </div>
+                    <motion.div
+                      animate={{ scale: isPresent ? 1 : 0.9, opacity: isPresent ? 1 : 0.5 }}
+                      transition={{ duration: 0.12, ease: [0.22, 1, 0.36, 1] }}
+                      className={`flex h-5 w-5 flex-shrink-0 items-center justify-center rounded-md border-2 transition-colors ${
+                        isPresent ? 'border-primary bg-primary' : 'border-white/20 bg-transparent'
+                      }`}
+                    >
+                      <AnimatePresence>
+                        {isPresent && (
+                          <motion.svg
+                            key="check"
+                            initial={{ scale: 0, opacity: 0 }}
+                            animate={{ scale: 1, opacity: 1 }}
+                            exit={{ scale: 0, opacity: 0 }}
+                            transition={{ duration: 0.12, ease: [0.22, 1, 0.36, 1] }}
+                            width="10" height="8" viewBox="0 0 10 8" fill="none"
+                          >
+                            <path d="M1 4L3.5 6.5L9 1" stroke="black" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
+                          </motion.svg>
+                        )}
+                      </AnimatePresence>
+                    </motion.div>
                     <input
                       type="checkbox"
                       className="sr-only"
@@ -362,10 +379,10 @@ export default function AttendancePage() {
                     }`}>
                       {isPresent ? 'Presente' : 'Ausente'}
                     </span>
-                  </label>
+                  </motion.label>
                 )
               })}
-            </div>
+            </motion.div>
           )}
         </div>
       )}

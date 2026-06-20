@@ -4,6 +4,7 @@ import { AnimatePresence, motion } from 'framer-motion'
 import { ArrowLeft, ExternalLink, ChevronLeft, ChevronRight, ChevronDown, Save, History } from 'lucide-react'
 import { format, parseISO } from 'date-fns'
 import { rutinasApi } from '../api/rutinas.api'
+import DotsLoader from '../components/ui/DotsLoader'
 import { useUiStore } from '../store/uiStore'
 import type { Rutina, EjercicioPlan, EjecucionCliente, CreateEjecucionPayload, UpdateEjercicioPlanPayload, PatronMovimientoEnum } from '../types/rutina.types'
 
@@ -253,17 +254,7 @@ export default function EjecucionRutinaPage() {
       </div>
 
       {/* Loading */}
-      {loading && (
-        <div className="flex items-center justify-center py-24">
-          <div className="flex items-center gap-2">
-            {[0, 1, 2].map(i => (
-              <motion.span key={i} className="block w-2 h-2 rounded-full bg-primary"
-                animate={{ opacity: [0.15, 1, 0.15], y: [0, -6, 0] }}
-                transition={{ duration: 0.9, repeat: Infinity, delay: i * 0.18, ease: 'easeInOut' }} />
-            ))}
-          </div>
-        </div>
-      )}
+      {loading && <DotsLoader size="md" className="flex items-center justify-center py-24" />}
 
       {/* Sin rutina */}
       {!loading && !rutina && (

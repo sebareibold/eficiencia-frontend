@@ -1,7 +1,7 @@
 import { useState, useMemo } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
 import { useNavigate } from 'react-router-dom'
-import { pageVariants } from '../lib/motion'
+import { pageVariants, staggerContainerFast, fadeUpItem } from '../lib/motion'
 import {
   TrendingUp, TrendingDown, Users, DollarSign, RefreshCw,
   AlertTriangle, Clock, AlertCircle, CheckCircle2,
@@ -77,7 +77,7 @@ function ViewToggle({ value, onChange }: { value: ChartView; onChange: (v: Chart
             }`}
           >
             {isActive && (
-              <div className="absolute inset-0 rounded-full bg-gray-900 dark:bg-white shadow-[0_2px_8px_rgba(0,0,0,0.15)]" style={{ zIndex: 0 }} />
+              <motion.div layoutId="view-toggle-pill" className="absolute inset-0 rounded-full bg-gray-900 dark:bg-white shadow-[0_2px_8px_rgba(0,0,0,0.15)]" style={{ zIndex: 0 }} transition={{ duration: 0.22, ease: [0.22, 1, 0.36, 1] }} />
             )}
             <span className="relative z-10">{label}</span>
           </button>
@@ -93,7 +93,12 @@ function Section({ title, subtitle, children, headerAction }: {
   title: string; subtitle?: string; children: React.ReactNode; headerAction?: React.ReactNode
 }) {
   return (
-    <div className="space-y-3 lg:space-y-4">
+    <motion.div
+      className="space-y-3 lg:space-y-4"
+      initial={{ opacity: 0, y: 12 }}
+      animate={{ opacity: 1, y: 0 }}
+      transition={{ duration: 0.35, ease: [0.22, 1, 0.36, 1] }}
+    >
       <div className="flex flex-col sm:flex-row sm:items-start sm:justify-between gap-2 sm:gap-3">
         <div>
           <h2 className="text-base lg:text-xl font-black tracking-tight text-gray-900 dark:text-white">{title}</h2>
@@ -102,7 +107,7 @@ function Section({ title, subtitle, children, headerAction }: {
         {headerAction}
       </div>
       {children}
-    </div>
+    </motion.div>
   )
 }
 
@@ -112,13 +117,18 @@ function ChartCard({ title, subtitle, children, className = '' }: {
   title: string; subtitle?: string; children: React.ReactNode; className?: string
 }) {
   return (
-    <div className={`rounded-2xl lg:rounded-[2rem] border border-white/50 dark:border-white/10 bg-white/30 dark:bg-black/30 backdrop-blur-3xl shadow-[0_8px_32px_rgba(0,0,0,0.04)] dark:shadow-[0_8px_32px_rgba(0,0,0,0.3)] p-4 lg:p-6 flex flex-col ${className}`}>
+    <motion.div
+      className={`rounded-2xl lg:rounded-[2rem] border border-white/50 dark:border-white/10 bg-white/30 dark:bg-black/30 backdrop-blur-3xl shadow-[0_8px_32px_rgba(0,0,0,0.04)] dark:shadow-[0_8px_32px_rgba(0,0,0,0.3)] p-4 lg:p-6 flex flex-col ${className}`}
+      initial={{ opacity: 0, y: 8 }}
+      animate={{ opacity: 1, y: 0 }}
+      transition={{ duration: 0.3, ease: [0.22, 1, 0.36, 1] }}
+    >
       <div className="mb-3 lg:mb-5">
         <h3 className="text-sm lg:text-base font-bold text-gray-900 dark:text-white">{title}</h3>
         {subtitle && <p className="text-xs font-semibold text-gray-400 dark:text-[#8A8A9A] mt-0.5">{subtitle}</p>}
       </div>
       {children}
-    </div>
+    </motion.div>
   )
 }
 
@@ -126,17 +136,17 @@ function ChartCard({ title, subtitle, children, className = '' }: {
 
 function PieLegend({ items }: { items: { label: string; value: number | string; color: string }[] }) {
   return (
-    <div className="space-y-2 mt-4">
+    <motion.div className="space-y-2 mt-4" variants={staggerContainerFast} initial="initial" animate="animate">
       {items.map(item => (
-        <div key={item.label} className="flex items-center justify-between gap-2">
+        <motion.div key={item.label} variants={fadeUpItem} className="flex items-center justify-between gap-2">
           <div className="flex items-center gap-2 min-w-0">
             <span className="h-2.5 w-2.5 rounded-full shrink-0" style={{ background: item.color }} />
             <span className="text-xs font-semibold text-gray-600 dark:text-gray-300 truncate">{item.label}</span>
           </div>
           <span className="text-xs font-black tabular-nums text-gray-900 dark:text-white shrink-0">{item.value}</span>
-        </div>
+        </motion.div>
       ))}
-    </div>
+    </motion.div>
   )
 }
 
@@ -152,10 +162,11 @@ function FacturacionBar({ facturado, sinFacturar, total }: { facturado: number; 
       </div>
       <div className="h-3 rounded-full bg-white/20 dark:bg-white/10 overflow-hidden">
         <motion.div
-          initial={{ width: 0 }}
-          animate={{ width: `${pctFacturado}%` }}
-          transition={{ duration: 0.8, ease: 'easeOut' }}
-          className="h-full rounded-full bg-primary"
+          className="h-full w-full rounded-full bg-primary"
+          style={{ transformOrigin: 'left' }}
+          initial={{ scaleX: 0 }}
+          animate={{ scaleX: pctFacturado / 100 }}
+          transition={{ duration: 0.8, ease: [0.22, 1, 0.36, 1] }}
         />
       </div>
       <div className="grid grid-cols-2 gap-3 pt-1">
@@ -573,14 +584,14 @@ export default function DashboardPage() {
                 <button
                   key={mode}
                   onClick={() => { setPeriodMode(mode); if (mode !== 'range' && mode !== 'historic') setNavDate(today) }}
-                  className={`relative inline-flex flex-1 sm:flex-none items-center justify-center rounded-full px-4 py-1.5 text-xs font-bold transition-all duration-300 cursor-pointer ${
+                  className={`relative inline-flex flex-1 sm:flex-none items-center justify-center rounded-full px-4 py-1.5 text-xs font-bold transition-colors duration-200 cursor-pointer ${
                     isActive
                       ? 'text-white dark:text-gray-900'
                       : 'text-gray-500 dark:text-[#8A8A9A] hover:text-gray-900 dark:hover:text-white'
                   }`}
                 >
                   {isActive && (
-                    <div className="absolute inset-0 rounded-full bg-gray-900 dark:bg-white shadow-[0_2px_8px_rgba(0,0,0,0.15)]" style={{ zIndex: 0 }} />
+                    <motion.div layoutId="period-pill" className="absolute inset-0 rounded-full bg-gray-900 dark:bg-white shadow-[0_2px_8px_rgba(0,0,0,0.15)]" style={{ zIndex: 0 }} transition={{ duration: 0.22, ease: [0.22, 1, 0.36, 1] }} />
                   )}
                   <span className="relative z-10">{label}</span>
                 </button>
@@ -599,18 +610,31 @@ export default function DashboardPage() {
       </div>
 
       {/* ══ SECCIÓN 1: KPIs — carga con financiero + clientes ══ */}
-      <div className="grid grid-cols-2 lg:grid-cols-4 gap-2 md:gap-4 xl:gap-6">
+      <motion.div
+        className="grid grid-cols-2 lg:grid-cols-4 gap-2 md:gap-4 xl:gap-6"
+        variants={staggerContainerFast}
+        initial="initial"
+        animate="animate"
+      >
         {kpis.map(k => (
-          <KpiCard key={k.label} label={k.label} value={k.value} icon={k.icon} iconColor={k.iconColor} iconBg={k.iconBg} isLoading={kpiLoading} />
+          <motion.div key={k.label} variants={fadeUpItem}>
+            <KpiCard label={k.label} value={k.value} icon={k.icon} iconColor={k.iconColor} iconBg={k.iconBg} isLoading={kpiLoading} />
+          </motion.div>
         ))}
-      </div>
+      </motion.div>
 
       {/* ══ SECCIÓN 2: ALERTAS — carga independientemente ══ */}
       <Section title="Alertas operativas" subtitle="Accionables, requieren atención hoy">
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-3 lg:gap-4">
+        <motion.div
+          className="grid grid-cols-1 md:grid-cols-3 gap-3 lg:gap-4"
+          variants={staggerContainerFast}
+          initial="initial"
+          animate="animate"
+        >
 
           {/* Clientes en deuda */}
           <motion.button
+            variants={fadeUpItem}
             whileHover={{ scale: 1.01 }} whileTap={{ scale: 0.99 }}
             onClick={() => navigate(ROUTES.CLIENTS + '?estado=debt')}
             className={`rounded-2xl lg:rounded-[2rem] border p-4 lg:p-6 text-left transition-all backdrop-blur-3xl flex items-start gap-3 lg:gap-4 ${
@@ -642,6 +666,7 @@ export default function DashboardPage() {
 
           {/* Membresías vencen en 7 días */}
           <motion.button
+            variants={fadeUpItem}
             whileHover={{ scale: 1.01 }} whileTap={{ scale: 0.99 }}
             onClick={() => navigate(ROUTES.CLIENTS + '?estado=expiring')}
             className={`rounded-2xl lg:rounded-[2rem] border p-4 lg:p-6 text-left transition-all backdrop-blur-3xl flex items-start gap-3 lg:gap-4 ${
@@ -673,6 +698,7 @@ export default function DashboardPage() {
 
           {/* Membresías vencen en 30 días */}
           <motion.button
+            variants={fadeUpItem}
             whileHover={{ scale: 1.01 }} whileTap={{ scale: 0.99 }}
             onClick={() => navigate(ROUTES.CLIENTS + '?estado=expiring')}
             className={`rounded-2xl lg:rounded-[2rem] border p-4 lg:p-6 text-left transition-all backdrop-blur-3xl flex items-start gap-3 lg:gap-4 ${
@@ -702,7 +728,7 @@ export default function DashboardPage() {
             </div>
           </motion.button>
 
-        </div>
+        </motion.div>
       </Section>
 
       {/* ══ SECCIÓN 3: FINANCIERO — carga con financiero + histórico ══ */}
@@ -956,9 +982,12 @@ export default function DashboardPage() {
                       <span className="text-sm font-black tabular-nums" style={{ color: d.color }}>{d.value}</span>
                     </div>
                     <div className="h-2.5 w-full rounded-full bg-white/20 dark:bg-white/[0.06] overflow-hidden">
-                      <div
-                        className="h-full rounded-full transition-all duration-700"
-                        style={{ width: `${Math.round((d.value / maxVencimiento) * 100)}%`, backgroundColor: d.color }}
+                      <motion.div
+                        className="h-full w-full rounded-full"
+                        style={{ transformOrigin: 'left', backgroundColor: d.color }}
+                        initial={{ scaleX: 0 }}
+                        animate={{ scaleX: d.value / maxVencimiento }}
+                        transition={{ duration: 0.7, ease: [0.22, 1, 0.36, 1] }}
                       />
                     </div>
                   </div>

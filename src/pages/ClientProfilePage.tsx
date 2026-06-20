@@ -2,6 +2,7 @@ import { useState, useEffect, useMemo } from 'react'
 import { createPortal } from 'react-dom'
 import { useParams, useNavigate } from 'react-router-dom'
 import { motion, AnimatePresence } from 'framer-motion'
+import { staggerContainerFast, fadeUpItem } from '../lib/motion'
 import {
   ArrowLeft, Phone, Mail, CalendarDays, CheckCircle2, XCircle,
   Edit2, CreditCard, Activity, Clock, Hash, Banknote, ArrowLeftRight,
@@ -932,19 +933,20 @@ export default function ClientProfilePage() {
   return (
     <>
     <motion.div
-      initial={{ opacity: 0, y: 10 }}
+      initial={{ opacity: 0, y: 12 }}
       animate={{ opacity: 1, y: 0 }}
-      transition={{ duration: 0.2 }}
+      transition={{ duration: 0.35, ease: [0.22, 1, 0.36, 1] }}
       className="space-y-4 md:space-y-5"
     >
       {/* ── Breadcrumb ──────────────────────────────────────────────────────── */}
-      <button
+      <motion.button
         onClick={() => navigate('/clients')}
+        whileTap={{ scale: 0.96 }}
         className="group flex items-center gap-2 text-sm text-gray-500 dark:text-[#8A8A9A] hover:text-gray-900 dark:hover:text-white transition-colors"
       >
         <ArrowLeft size={14} className="group-hover:-translate-x-0.5 transition-transform" />
         <span>Clientes</span>
-      </button>
+      </motion.button>
 
       {/* ── HERO CARD ───────────────────────────────────────────────────────── */}
       <div id="perfil" className={`${glassCard} overflow-hidden`}>
@@ -1394,9 +1396,9 @@ export default function ClientProfilePage() {
         </motion.div>
 
         {/* Bloque de Secciones de Contenido (Offset to clear the fixed sidebar) */}
-        <div className="w-full space-y-6">
+        <motion.div className="w-full space-y-6" variants={staggerContainerFast} initial="initial" animate="animate">
           {/* ─── SECCIÓN 1: RUTINAS ────────────────────────────────────────── */}
-          <div id="rutinas" className={`${glassCard} p-6 space-y-5 scroll-mt-24`}>
+          <motion.div variants={fadeUpItem} id="rutinas" className={`${glassCard} p-6 space-y-5 scroll-mt-24`}>
             <div className="flex items-center justify-between border-b border-gray-200 dark:border-white/[0.06] pb-3">
               <div className="flex items-center gap-3">
                 <div className="h-10 w-10 rounded-xl bg-primary/10 flex items-center justify-center shrink-0">
@@ -1548,7 +1550,7 @@ export default function ClientProfilePage() {
           </div>
 
           {/* ─── SECCIÓN 2: CLASES ─────────────────────────────────────────── */}
-          <div id="clases" className={`${glassCard} p-6 space-y-5 scroll-mt-24`}>
+          <motion.div variants={fadeUpItem} id="clases" className={`${glassCard} p-6 space-y-5 scroll-mt-24`}>
             <div className="flex items-center justify-between border-b border-gray-200 dark:border-white/[0.06] pb-3">
               <div className="flex items-center gap-3">
                 <div className="h-10 w-10 rounded-xl bg-primary/10 flex items-center justify-center shrink-0">
@@ -1709,7 +1711,7 @@ export default function ClientProfilePage() {
           </div>
 
           {/* ─── SECCIÓN 3: ASISTENCIA ───────────────────────────────────────── */}
-          <div id="asistencia" className={`${glassCard} p-6 space-y-5 scroll-mt-24`}>
+          <motion.div variants={fadeUpItem} id="asistencia" className={`${glassCard} p-6 space-y-5 scroll-mt-24`}>
             <div className="flex items-center justify-between border-b border-gray-200 dark:border-white/[0.06] pb-3">
               <div className="flex items-center gap-3">
                 <div className="h-10 w-10 rounded-xl bg-primary/10 flex items-center justify-center shrink-0">
@@ -1732,7 +1734,7 @@ export default function ClientProfilePage() {
           </div>
 
           {/* ─── SECCIÓN 4: MEMBRESÍAS ──────────────────────────────────────────── */}
-          <div id="membresias" className={`${glassCard} p-6 space-y-5 scroll-mt-24`}>
+          <motion.div variants={fadeUpItem} id="membresias" className={`${glassCard} p-6 space-y-5 scroll-mt-24`}>
             <div className="flex items-center justify-between border-b border-gray-200 dark:border-white/[0.06] pb-3">
               <div className="flex items-center gap-3">
                 <div className="h-10 w-10 rounded-xl bg-primary/10 flex items-center justify-center shrink-0">
@@ -1874,7 +1876,7 @@ export default function ClientProfilePage() {
           </div>
 
           {/* ─── SECCIÓN 5: PAGOS Y FACTURACIÓN ───────────────────────────────────── */}
-          <div id="pagos" className={`${glassCard} p-6 space-y-6 scroll-mt-24`}>
+          <motion.div variants={fadeUpItem} id="pagos" className={`${glassCard} p-6 space-y-6 scroll-mt-24`}>
             <div className="flex items-center justify-between border-b border-gray-200 dark:border-white/[0.06] pb-3">
               <div className="flex items-center gap-3">
                 <div className="h-10 w-10 rounded-xl bg-primary/10 flex items-center justify-center shrink-0">
@@ -2070,7 +2072,7 @@ export default function ClientProfilePage() {
             )}
           </div>
           <div className="h-[35vh]" />
-        </div>
+        </motion.div>
       </div>
 
 

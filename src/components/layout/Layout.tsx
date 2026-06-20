@@ -5,6 +5,7 @@ import { LogOut, Sun, Moon, Clock } from 'lucide-react'
 
 import Navbar from './Navbar'
 import ToastContainer from '../ui/Toast'
+import DotsLoader from '../ui/DotsLoader'
 import ServerDownScreen from '../ui/ServerDownScreen'
 import Modal from '../ui/Modal'
 import Button from '../ui/Button'
@@ -50,22 +51,7 @@ const SESSION_TIMEOUT_MS  = 30 * 60 * 1000
 const SESSION_WARNING_MS  = 28 * 60 * 1000  // Warning 2 min antes del timeout
 const PERMS_INTERVAL_MS   =  5 * 60 * 1000
 
-function InitDots() {
-  return (
-    <div className="flex items-center justify-center h-[calc(100vh-9rem)]">
-      <div className="flex items-center gap-2">
-        {[0, 1, 2].map(i => (
-          <motion.span
-            key={i}
-            className="block w-1.5 h-1.5 rounded-full bg-primary"
-            animate={{ opacity: [0.2, 1, 0.2], scale: [0.8, 1.2, 0.8] }}
-            transition={{ duration: 1.2, repeat: Infinity, delay: i * 0.2, ease: 'easeInOut' }}
-          />
-        ))}
-      </div>
-    </div>
-  )
-}
+
 
 export default function Layout() {
   const setPermissions    = useAuthStore(s => s.setPermissions)
@@ -201,7 +187,7 @@ export default function Layout() {
         <Navbar />
       )}
       <main className="flex-1 px-4 py-4 sm:px-5 sm:py-5 md:px-8 md:py-6 lg:px-12 lg:py-7 xl:px-16 xl:py-8 overflow-y-auto overflow-x-hidden text-gray-800 dark:text-gray-100 relative z-10 w-full max-w-[1600px] mx-auto">
-        {isInitializing ? <InitDots /> : (
+        {isInitializing ? <DotsLoader className="flex items-center justify-center h-[calc(100vh-9rem)]" /> : (
           <AnimatePresence initial={false}>
             <motion.div
               key={location.pathname}
@@ -210,7 +196,7 @@ export default function Layout() {
               exit={{ opacity: 0, position: 'absolute', inset: 0, pointerEvents: 'none' }}
               transition={{ duration: 0.15, ease: 'easeOut' }}
             >
-              <Suspense fallback={<InitDots />}>
+              <Suspense fallback={<DotsLoader className="flex items-center justify-center h-[calc(100vh-9rem)]" />}>
                 <Outlet />
               </Suspense>
             </motion.div>
