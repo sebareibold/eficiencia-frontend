@@ -9,6 +9,7 @@ import { ejerciciosApi } from '../api/ejercicios.api'
 import { patronesApi, type PatronMovimientoConfig } from '../api/patrones.api'
 import { useUiStore } from '../store/uiStore'
 import { ROUTES } from '../constants/routes'
+import DotsLoader from '../components/ui/DotsLoader'
 
 const glass    = 'rounded-[2rem] border border-white/50 dark:border-white/10 bg-white/30 dark:bg-black/30 backdrop-blur-3xl shadow-[0_8px_32px_rgba(0,0,0,0.04)] dark:shadow-[0_8px_32px_rgba(0,0,0,0.3)]'
 const inputCls = 'w-full rounded-xl border border-gray-200 dark:border-white/[0.1] bg-gray-50 dark:bg-white/[0.05] px-3 py-2 text-sm text-gray-900 dark:text-white placeholder-gray-400 dark:placeholder-white/30 focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/10 transition-colors'
@@ -147,16 +148,17 @@ export default function EjercicioDetailPage() {
                 </select>
               </div>
               <div className="flex gap-2 pt-2">
-                <button
+                <motion.button
                   type="submit"
                   disabled={saving}
+                  whileTap={!saving ? { scale: 0.96 } : {}}
                   className="flex items-center gap-2 rounded-xl btn-action px-4 py-2.5 text-sm disabled:opacity-50"
                 >
                   {saving
-                    ? <span className="h-3.5 w-3.5 animate-spin rounded-full border-2 border-gray-900/30 border-t-gray-900" />
+                    ? <DotsLoader size="sm" className="flex items-center" />
                     : <Check size={14} />}
                   {isNew ? 'Crear ejercicio' : 'Guardar cambios'}
-                </button>
+                </motion.button>
                 <button
                   type="button"
                   onClick={() => navigate(ROUTES.EXERCISES)}

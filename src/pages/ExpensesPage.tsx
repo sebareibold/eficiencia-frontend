@@ -1,7 +1,8 @@
 import React, { useState, useMemo, useEffect } from 'react'
-import { motion } from 'framer-motion'
-import { pageVariants } from '../lib/motion'
-import { Plus, Receipt, Wallet, Building, Wrench, RefreshCw, Trash2, Edit2, LayoutGrid, List, ArrowUp, ArrowDown, ArrowUpDown, ChevronLeft, ChevronRight, Search, X } from 'lucide-react'
+import { motion, AnimatePresence } from 'framer-motion'
+import { pageVariants, staggerContainerFast, fadeUpItem } from '../lib/motion'
+import { Plus, Receipt, Wallet, Building, Wrench, Trash2, Edit2, LayoutGrid, List, ArrowUp, ArrowDown, ArrowUpDown, ChevronLeft, ChevronRight, Search, X } from 'lucide-react'
+import DotsLoader from '../components/ui/DotsLoader'
 
 const EXPENSES_PAGE_SIZE = 15
 import { useForm } from 'react-hook-form'
@@ -330,12 +331,12 @@ export default function ExpensesPage() {
                   {(['all', 'year', 'month'] as PeriodMode[]).map((m) => {
                     const isActive = periodMode === m
                     return (
-                      <button key={m} onClick={() => setPeriodMode(m)}
-                        className={`relative inline-flex items-center justify-center rounded-full px-3.5 py-1.5 text-xs font-bold transition-all duration-300 cursor-pointer ${isActive ? 'text-white dark:text-gray-900' : 'text-gray-500 dark:text-[#8A8A9A] hover:text-gray-900 dark:hover:text-white'}`}
+                      <motion.button key={m} onClick={() => setPeriodMode(m)} whileTap={{ scale: 0.94 }}
+                        className={`relative inline-flex items-center justify-center rounded-full px-3.5 py-1.5 text-xs font-bold transition-colors duration-150 cursor-pointer ${isActive ? 'text-white dark:text-gray-900' : 'text-gray-500 dark:text-[#8A8A9A] hover:text-gray-900 dark:hover:text-white'}`}
                       >
-                        {isActive && <div className="absolute inset-0 rounded-full bg-gray-900 dark:bg-white shadow-[0_2px_8px_rgba(0,0,0,0.15)]" style={{ zIndex: 0 }} />}
+                        {isActive && <motion.div layoutId="expenses-period-pill" className="absolute inset-0 rounded-full bg-gray-900 dark:bg-white shadow-[0_2px_8px_rgba(0,0,0,0.15)]" style={{ zIndex: 0 }} transition={{ type: 'spring', stiffness: 400, damping: 35 }} />}
                         <span className="relative z-10">{m === 'month' ? 'Mes' : m === 'year' ? 'Año' : 'Histórico'}</span>
-                      </button>
+                      </motion.button>
                     )
                   })}
                 </div>
@@ -361,13 +362,15 @@ export default function ExpensesPage() {
         </div>
 
         <div className="flex items-center gap-2.5">
-          <button
+          <motion.button
             onClick={refetch}
             title="Actualizar"
-            className="flex h-9 w-9 items-center justify-center rounded-2xl border border-white/50 dark:border-white/10 bg-white/30 dark:bg-black/30 backdrop-blur-xl text-gray-600 dark:text-gray-300 transition-all hover:scale-105 hover:bg-white/50 dark:hover:bg-black/50 shadow-sm"
+            whileTap={{ scale: 0.88, rotate: -45 }}
+            transition={{ type: 'spring', stiffness: 400, damping: 20 }}
+            className="flex h-9 w-9 items-center justify-center rounded-2xl border border-white/50 dark:border-white/10 bg-white/30 dark:bg-black/30 backdrop-blur-xl text-gray-600 dark:text-gray-300 transition-[background-color,border-color] hover:bg-white/50 dark:hover:bg-black/50 shadow-sm"
           >
-            <RefreshCw size={14} />
-          </button>
+            <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M3 12a9 9 0 0 1 9-9 9.75 9.75 0 0 1 6.74 2.74L21 8"/><path d="M21 3v5h-5"/><path d="M21 12a9 9 0 0 1-9 9 9.75 9.75 0 0 1-6.74-2.74L3 16"/><path d="M8 16H3v5"/></svg>
+          </motion.button>
 
           <button
             onClick={() => setCreateOpen(true)}
@@ -432,12 +435,12 @@ export default function ExpensesPage() {
                 {(['all', ...(Object.keys(CATEGORY_LABELS) as ExpenseCategory[])] as CategoryFilter[]).map(c => {
                   const isActive = categoryFilter === c
                   return (
-                    <button key={c} onClick={() => setCategoryFilter(c)}
-                      className={`relative inline-flex items-center justify-center rounded-full px-4 py-1.5 text-xs font-bold transition-all duration-300 cursor-pointer ${isActive ? 'text-white dark:text-gray-900' : 'text-gray-500 dark:text-[#8A8A9A] hover:text-gray-900 dark:hover:text-white'}`}
+                    <motion.button key={c} onClick={() => setCategoryFilter(c)} whileTap={{ scale: 0.94 }}
+                      className={`relative inline-flex items-center justify-center rounded-full px-4 py-1.5 text-xs font-bold transition-colors duration-150 cursor-pointer ${isActive ? 'text-white dark:text-gray-900' : 'text-gray-500 dark:text-[#8A8A9A] hover:text-gray-900 dark:hover:text-white'}`}
                     >
-                      {isActive && <div className="absolute inset-0 rounded-full bg-gray-900 dark:bg-white shadow-[0_2px_8px_rgba(0,0,0,0.15)]" style={{ zIndex: 0 }} />}
+                      {isActive && <motion.div layoutId="expenses-category-pill" className="absolute inset-0 rounded-full bg-gray-900 dark:bg-white shadow-[0_2px_8px_rgba(0,0,0,0.15)]" style={{ zIndex: 0 }} transition={{ type: 'spring', stiffness: 400, damping: 35 }} />}
                       <span className="relative z-10">{c === 'all' ? 'Todos' : CATEGORY_LABELS[c]}</span>
-                    </button>
+                    </motion.button>
                   )
                 })}
               </div>
@@ -450,15 +453,15 @@ export default function ExpensesPage() {
                 {(['date', 'amount', 'category'] as SortKey[]).map(k => {
                   const isActive = sortKey === k
                   return (
-                    <button key={k} onClick={() => toggleSort(k)}
-                      className={`relative inline-flex items-center justify-center rounded-full px-3 py-1.5 text-xs font-bold transition-all duration-300 cursor-pointer ${isActive ? 'text-white dark:text-gray-900' : 'text-gray-500 dark:text-[#8A8A9A] hover:text-gray-900 dark:hover:text-white'}`}
+                    <motion.button key={k} onClick={() => toggleSort(k)} whileTap={{ scale: 0.94 }}
+                      className={`relative inline-flex items-center justify-center rounded-full px-3 py-1.5 text-xs font-bold transition-colors duration-150 cursor-pointer ${isActive ? 'text-white dark:text-gray-900' : 'text-gray-500 dark:text-[#8A8A9A] hover:text-gray-900 dark:hover:text-white'}`}
                     >
-                      {isActive && <div className="absolute inset-0 rounded-full bg-gray-900 dark:bg-white shadow-[0_2px_8px_rgba(0,0,0,0.15)]" style={{ zIndex: 0 }} />}
+                      {isActive && <motion.div layoutId="expenses-sort-pill" className="absolute inset-0 rounded-full bg-gray-900 dark:bg-white shadow-[0_2px_8px_rgba(0,0,0,0.15)]" style={{ zIndex: 0 }} transition={{ type: 'spring', stiffness: 400, damping: 35 }} />}
                       <span className="relative z-10 flex items-center gap-1">
                         {k === 'date' ? 'Fecha' : k === 'amount' ? 'Monto' : 'Tipo'}
                         <SortIcon active={sortKey === k} dir={sortDir} />
                       </span>
-                    </button>
+                    </motion.button>
                   )
                 })}
               </div>
@@ -471,14 +474,14 @@ export default function ExpensesPage() {
                 {(['table', 'grid'] as const).map((mode) => {
                   const isActive = viewMode === mode
                   return (
-                    <button key={mode} onClick={() => setViewMode(mode)} title={mode === 'table' ? 'Vista tabla' : 'Vista tarjetas'}
-                      className={`relative inline-flex items-center justify-center rounded-full px-4 py-1.5 text-xs font-bold transition-all duration-300 cursor-pointer ${isActive ? 'text-white dark:text-gray-900' : 'text-gray-500 dark:text-[#8A8A9A] hover:text-gray-900 dark:hover:text-white'}`}
+                    <motion.button key={mode} onClick={() => setViewMode(mode)} whileTap={{ scale: 0.94 }} title={mode === 'table' ? 'Vista tabla' : 'Vista tarjetas'}
+                      className={`relative inline-flex items-center justify-center rounded-full px-4 py-1.5 text-xs font-bold transition-colors duration-150 cursor-pointer ${isActive ? 'text-white dark:text-gray-900' : 'text-gray-500 dark:text-[#8A8A9A] hover:text-gray-900 dark:hover:text-white'}`}
                     >
-                      {isActive && <div className="absolute inset-0 rounded-full bg-gray-900 dark:bg-white shadow-[0_2px_8px_rgba(0,0,0,0.15)]" style={{ zIndex: 0 }} />}
+                      {isActive && <motion.div layoutId="expenses-view-pill" className="absolute inset-0 rounded-full bg-gray-900 dark:bg-white shadow-[0_2px_8px_rgba(0,0,0,0.15)]" style={{ zIndex: 0 }} transition={{ type: 'spring', stiffness: 400, damping: 35 }} />}
                       <span className="relative z-10 flex items-center justify-center">
                         {mode === 'table' ? <List size={14} /> : <LayoutGrid size={14} />}
                       </span>
-                    </button>
+                    </motion.button>
                   )
                 })}
               </div>
@@ -603,14 +606,19 @@ export default function ExpensesPage() {
                 Sin gastos en este período
               </div>
             ) : (
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                {paginatedExpenses.map((e, idx) => (
+              <motion.div
+                className="grid grid-cols-1 sm:grid-cols-2 gap-4"
+                variants={staggerContainerFast}
+                initial="initial"
+                animate="animate"
+              >
+                {paginatedExpenses.map((e) => (
                   <motion.div
                     key={e.id}
-                    initial={{ opacity: 0, y: 8 }}
-                    animate={{ opacity: 1, y: 0 }}
-                    transition={{ delay: idx * 0.03 }}
-                    className="group relative overflow-hidden rounded-2xl border border-white/50 dark:border-white/10 bg-white/30 dark:bg-black/30 backdrop-blur-3xl p-5 shadow-[0_4px_16px_rgba(0,0,0,0.04)] dark:shadow-[0_4px_16px_rgba(0,0,0,0.3)] transition-all hover:-translate-y-0.5 hover:shadow-md"
+                    variants={fadeUpItem}
+                    whileHover={{ y: -3 }}
+                    whileTap={{ scale: 0.98 }}
+                    className="group relative overflow-hidden rounded-2xl border border-white/50 dark:border-white/10 bg-white/30 dark:bg-black/30 backdrop-blur-3xl p-5 shadow-[0_4px_16px_rgba(0,0,0,0.04)] dark:shadow-[0_4px_16px_rgba(0,0,0,0.3)] transition-shadow hover:shadow-md"
                   >
                     <div className="absolute -right-8 -top-8 h-24 w-24 rounded-full bg-eficiencia-yellow/20 blur-2xl" />
                     <div className="relative z-10">
@@ -643,7 +651,7 @@ export default function ExpensesPage() {
                     </div>
                   </motion.div>
                 ))}
-              </div>
+              </motion.div>
             )
           )}
           {/* Paginación de gastos */}
@@ -783,12 +791,12 @@ export default function ExpensesPage() {
                         </span>
                       </div>
                     </div>
-                    <div className="h-1.5 w-full rounded-full bg-gray-100 dark:bg-white/10">
+                    <div className="h-1.5 w-full rounded-full bg-gray-100 dark:bg-white/10 overflow-hidden">
                       <motion.div
-                        className={`h-full rounded-full ${CATEGORY_BAR_COLORS[cat.category]}`}
-                        initial={{ width: 0 }}
-                        animate={{ width: `${cat.pct}%` }}
-                        transition={{ duration: 0.6, ease: 'easeOut' }}
+                        className={`h-full w-full rounded-full origin-left ${CATEGORY_BAR_COLORS[cat.category]}`}
+                        initial={{ scaleX: 0 }}
+                        animate={{ scaleX: cat.pct / 100 }}
+                        transition={{ duration: 0.6, ease: [0.22, 1, 0.36, 1] }}
                       />
                     </div>
                   </div>
@@ -917,17 +925,18 @@ export default function ExpensesPage() {
             >
               Cancelar
             </button>
-            <button
+            <motion.button
               type="submit"
               disabled={isSubmitting}
+              whileTap={!isSubmitting ? { scale: 0.96 } : {}}
               className="flex items-center gap-2 rounded-xl btn-action px-6 py-2.5 text-sm"
             >
               {isSubmitting
-                ? <RefreshCw size={14} className="animate-spin" />
+                ? <DotsLoader size="sm" className="flex items-center" />
                 : !editExpense && <Plus size={14} strokeWidth={2.5} />
               }
               {isSubmitting ? 'Guardando...' : editExpense ? 'Guardar cambios' : 'Registrar gasto'}
-            </button>
+            </motion.button>
           </div>
 
         </form>

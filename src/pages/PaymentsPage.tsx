@@ -3,7 +3,7 @@ import { useQuery } from '@tanstack/react-query'
 import { QK } from '../lib/queryKeys'
 import { motion, AnimatePresence } from 'framer-motion'
 import { useNavigate } from 'react-router-dom'
-import { pageVariants, cardVariants } from '../lib/motion'
+import { pageVariants, cardVariants, staggerContainerFast, fadeUpItem } from '../lib/motion'
 import {
   Plus, CreditCard, Banknote, ArrowLeftRight, Building2, RefreshCw,
   CheckCircle2, XCircle, Trash2, Search, ChevronLeft, ChevronRight,
@@ -32,6 +32,7 @@ import KpiCard from '../components/ui/KpiCard'
 import Select from '../components/ui/Select'
 import Skeleton from '../components/ui/Skeleton'
 import ConfirmDialog from '../components/ui/ConfirmDialog'
+import DotsLoader from '../components/ui/DotsLoader'
 import { formatCurrency } from '../utils/formatCurrency'
 import { formatDate } from '../utils/formatDate'
 import type { Payment, PaymentMethod } from '../types/payment.types'
@@ -192,7 +193,7 @@ function PrecioRow({
               <button type="submit" disabled={isSaving}
                 className="flex flex-1 items-center justify-center gap-2 rounded-2xl btn-action py-2.5 text-sm font-bold disabled:opacity-60">
                 {isSaving
-                  ? <span className="h-4 w-4 animate-spin rounded-full border-2 border-gray-900/30 border-t-gray-900" />
+                  ? <DotsLoader size="sm" className="flex items-center" />
                   : <Save size={14} />}
                 Guardar
               </button>
@@ -429,7 +430,7 @@ function PlanCard({
                 className="flex flex-1 items-center justify-center gap-2 rounded-2xl btn-action py-3 text-sm font-bold disabled:opacity-60"
               >
                 {isSaving
-                  ? <span className="h-4 w-4 animate-spin rounded-full border-2 border-gray-900/30 border-t-gray-900" />
+                  ? <DotsLoader size="sm" className="flex items-center" />
                   : <Save size={15} />}
                 Guardar cambios
               </button>
@@ -659,15 +660,15 @@ export default function PaymentsPage() {
             {(['list', 'grid'] as const).map((mode) => {
               const isActive = viewMode === mode
               return (
-                <button key={mode} onClick={() => setViewMode(mode)}
+                <motion.button key={mode} onClick={() => setViewMode(mode)} whileTap={{ scale: 0.94 }}
                   title={mode === 'list' ? 'Vista lista' : 'Vista grilla'}
-                  className={`relative inline-flex items-center justify-center rounded-full px-4 py-1.5 text-xs font-bold transition-all duration-300 cursor-pointer ${isActive ? 'text-white dark:text-gray-900' : 'text-gray-500 dark:text-[#8A8A9A] hover:text-gray-900 dark:hover:text-white'}`}
+                  className={`relative inline-flex items-center justify-center rounded-full px-4 py-1.5 text-xs font-bold transition-colors duration-150 cursor-pointer ${isActive ? 'text-white dark:text-gray-900' : 'text-gray-500 dark:text-[#8A8A9A] hover:text-gray-900 dark:hover:text-white'}`}
                 >
-                  {isActive && <div className="absolute inset-0 rounded-full bg-gray-900 dark:bg-white shadow-[0_2px_8px_rgba(0,0,0,0.15)]" style={{ zIndex: 0 }} />}
+                  {isActive && <motion.div layoutId="payments-view-pill" className="absolute inset-0 rounded-full bg-gray-900 dark:bg-white shadow-[0_2px_8px_rgba(0,0,0,0.15)]" style={{ zIndex: 0 }} transition={{ type: 'spring', stiffness: 400, damping: 35 }} />}
                   <span className="relative z-10 flex items-center justify-center">
                     {mode === 'list' ? <LayoutList size={14} /> : <LayoutGrid size={14} />}
                   </span>
-                </button>
+                </motion.button>
               )
             })}
           </div>
@@ -732,12 +733,12 @@ export default function PaymentsPage() {
               {([['day', 'Hoy'], ['month', 'Mes'], ['year', 'Año'], ['all', 'Histórico']] as [PeriodMode, string][]).map(([m, lbl]) => {
                 const isActive = periodMode === m
                 return (
-                  <button key={m} onClick={() => { setPeriodMode(m); setNavDate(today) }}
-                    className={`relative inline-flex items-center justify-center rounded-full px-3.5 py-1.5 text-xs font-bold transition-all duration-300 cursor-pointer ${isActive ? 'text-white dark:text-gray-900' : 'text-gray-500 dark:text-[#8A8A9A] hover:text-gray-900 dark:hover:text-white'}`}
+                  <motion.button key={m} onClick={() => { setPeriodMode(m); setNavDate(today) }} whileTap={{ scale: 0.94 }}
+                    className={`relative inline-flex items-center justify-center rounded-full px-3.5 py-1.5 text-xs font-bold transition-colors duration-150 cursor-pointer ${isActive ? 'text-white dark:text-gray-900' : 'text-gray-500 dark:text-[#8A8A9A] hover:text-gray-900 dark:hover:text-white'}`}
                   >
-                    {isActive && <div className="absolute inset-0 rounded-full bg-gray-900 dark:bg-white shadow-[0_2px_8px_rgba(0,0,0,0.15)]" style={{ zIndex: 0 }} />}
+                    {isActive && <motion.div layoutId="payments-period-pill" className="absolute inset-0 rounded-full bg-gray-900 dark:bg-white shadow-[0_2px_8px_rgba(0,0,0,0.15)]" style={{ zIndex: 0 }} transition={{ type: 'spring', stiffness: 400, damping: 35 }} />}
                     <span className="relative z-10">{lbl}</span>
-                  </button>
+                  </motion.button>
                 )
               })}
             </div>
@@ -751,12 +752,12 @@ export default function PaymentsPage() {
             {([['all', 'Todos'], ['cash', 'Efectivo'], ['transfer', 'Transf.'], ['card', 'Débito']] as [MethodFilter, string][]).map(([val, lbl]) => {
               const isActive = methodFilter === val
               return (
-                <button key={val} onClick={() => setMethodFilter(val)}
-                  className={`relative inline-flex items-center justify-center rounded-full px-3.5 py-1.5 text-xs font-bold transition-all duration-300 cursor-pointer ${isActive ? 'text-white dark:text-gray-900' : 'text-gray-500 dark:text-[#8A8A9A] hover:text-gray-900 dark:hover:text-white'}`}
+                <motion.button key={val} onClick={() => setMethodFilter(val)} whileTap={{ scale: 0.94 }}
+                  className={`relative inline-flex items-center justify-center rounded-full px-3.5 py-1.5 text-xs font-bold transition-colors duration-150 cursor-pointer ${isActive ? 'text-white dark:text-gray-900' : 'text-gray-500 dark:text-[#8A8A9A] hover:text-gray-900 dark:hover:text-white'}`}
                 >
-                  {isActive && <div className="absolute inset-0 rounded-full bg-gray-900 dark:bg-white shadow-[0_2px_8px_rgba(0,0,0,0.15)]" style={{ zIndex: 0 }} />}
+                  {isActive && <motion.div layoutId="payments-method-pill" className="absolute inset-0 rounded-full bg-gray-900 dark:bg-white shadow-[0_2px_8px_rgba(0,0,0,0.15)]" style={{ zIndex: 0 }} transition={{ type: 'spring', stiffness: 400, damping: 35 }} />}
                   <span className="relative z-10">{lbl}</span>
-                </button>
+                </motion.button>
               )
             })}
           </div>
@@ -769,12 +770,12 @@ export default function PaymentsPage() {
             {([['all', 'Todos'], ['yes', 'Facturado'], ['no', 'Sin factura']] as ['all' | 'yes' | 'no', string][]).map(([val, lbl]) => {
               const isActive = invoicedFilter === val
               return (
-                <button key={val} onClick={() => setInvoicedFilter(val)}
-                  className={`relative inline-flex items-center justify-center rounded-full px-3.5 py-1.5 text-xs font-bold transition-all duration-300 cursor-pointer ${isActive ? 'text-white dark:text-gray-900' : 'text-gray-500 dark:text-[#8A8A9A] hover:text-gray-900 dark:hover:text-white'}`}
+                <motion.button key={val} onClick={() => setInvoicedFilter(val)} whileTap={{ scale: 0.94 }}
+                  className={`relative inline-flex items-center justify-center rounded-full px-3.5 py-1.5 text-xs font-bold transition-colors duration-150 cursor-pointer ${isActive ? 'text-white dark:text-gray-900' : 'text-gray-500 dark:text-[#8A8A9A] hover:text-gray-900 dark:hover:text-white'}`}
                 >
-                  {isActive && <div className="absolute inset-0 rounded-full bg-gray-900 dark:bg-white shadow-[0_2px_8px_rgba(0,0,0,0.15)]" style={{ zIndex: 0 }} />}
+                  {isActive && <motion.div layoutId="payments-invoiced-pill" className="absolute inset-0 rounded-full bg-gray-900 dark:bg-white shadow-[0_2px_8px_rgba(0,0,0,0.15)]" style={{ zIndex: 0 }} transition={{ type: 'spring', stiffness: 400, damping: 35 }} />}
                   <span className="relative z-10">{lbl}</span>
-                </button>
+                </motion.button>
               )
             })}
           </div>
@@ -921,13 +922,20 @@ export default function PaymentsPage() {
           ) : filtered.length === 0 ? (
             <p className="py-12 text-center text-sm text-gray-500 dark:text-gray-400">No hay pagos con los filtros actuales</p>
           ) : (
-            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
+            <motion.div
+              className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4"
+              variants={staggerContainerFast}
+              initial="initial"
+              animate="animate"
+            >
               {filtered.map(p => {
                 const MethodIcon = METHOD_ICONS[p.method] ?? CreditCard
                 return (
-                  <motion.div key={p.id} variants={cardVariants} initial="hidden" animate="visible"
+                  <motion.div key={p.id} variants={fadeUpItem}
+                    whileHover={{ y: -3 }}
+                    whileTap={{ scale: 0.97 }}
                     onClick={() => navigate(`/payments/${p.id}`)}
-                    className="group relative rounded-2xl border border-white/50 dark:border-white/10 bg-white/60 dark:bg-black/40 backdrop-blur-xl p-5 shadow-sm hover:shadow-md hover:-translate-y-0.5 transition-all duration-200 cursor-pointer">
+                    className="group relative rounded-2xl border border-white/50 dark:border-white/10 bg-white/60 dark:bg-black/40 backdrop-blur-xl p-5 shadow-sm hover:shadow-md transition-shadow duration-200 cursor-pointer">
                     <div className="flex items-start justify-between mb-3">
                       <div className="flex items-center gap-3">
                         <div className="h-10 w-10 rounded-xl bg-primary/10 flex items-center justify-center shrink-0">
@@ -957,7 +965,7 @@ export default function PaymentsPage() {
                   </motion.div>
                 )
               })}
-            </div>
+            </motion.div>
           )}
         </div>
       )}

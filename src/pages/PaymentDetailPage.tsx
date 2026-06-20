@@ -158,12 +158,13 @@ export default function PaymentDetailPage() {
 
       {/* Back + Header */}
       <div className="flex items-center gap-4">
-        <button
+        <motion.button
           onClick={() => { if (isEditing) cancelEdit(); else navigate(ROUTES.PAYMENTS) }}
-          className="flex h-10 w-10 items-center justify-center rounded-2xl border border-white/50 dark:border-white/10 bg-white/30 dark:bg-black/30 backdrop-blur-xl text-gray-600 dark:text-gray-300 transition-all hover:scale-105 hover:bg-white/50 dark:hover:bg-black/50 shadow-sm shrink-0"
+          whileTap={{ scale: 0.92 }}
+          className="flex h-10 w-10 items-center justify-center rounded-2xl border border-white/50 dark:border-white/10 bg-white/30 dark:bg-black/30 backdrop-blur-xl text-gray-600 dark:text-gray-300 transition-[background-color,border-color] hover:bg-white/50 dark:hover:bg-black/50 shadow-sm shrink-0"
         >
           <ArrowLeft size={18} />
-        </button>
+        </motion.button>
         <div>
           <h1 className="text-2xl md:text-3xl font-black tracking-tighter text-gray-900 dark:text-white">
             {isEditing ? 'Editar pago' : 'Detalle del pago'}
@@ -373,19 +374,21 @@ export default function PaymentDetailPage() {
 
               {/* ── Acciones edición ──────────────────────────────────────── */}
               <div className="flex gap-3">
-                <button
+                <motion.button
                   onClick={cancelEdit}
-                  className="flex-1 flex items-center justify-center gap-2 px-4 py-3 rounded-2xl border border-gray-200 dark:border-white/[0.1] text-sm font-semibold text-gray-600 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-white/[0.04] transition-all"
+                  whileTap={{ scale: 0.97 }}
+                  className="flex-1 flex items-center justify-center gap-2 px-4 py-3 rounded-2xl border border-gray-200 dark:border-white/[0.1] text-sm font-semibold text-gray-600 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-white/[0.04] transition-colors"
                 >
                   <XCircle size={15} /> Cancelar
-                </button>
-                <button
+                </motion.button>
+                <motion.button
                   onClick={handleSaveEdit}
                   disabled={saving || !editForm.amount || !editForm.paidAt}
-                  className="flex-1 flex items-center justify-center gap-2 px-4 py-3 rounded-2xl bg-primary text-black text-sm font-bold hover:bg-primary-dark disabled:opacity-50 transition-all"
+                  whileTap={!saving ? { scale: 0.97 } : {}}
+                  className="flex-1 flex items-center justify-center gap-2 px-4 py-3 rounded-2xl bg-primary text-black text-sm font-bold hover:bg-primary-dark disabled:opacity-50 transition-colors"
                 >
                   <Save size={15} /> {saving ? 'Guardando…' : 'Guardar cambios'}
-                </button>
+                </motion.button>
               </div>
             </motion.div>
           ) : (
@@ -529,19 +532,21 @@ export default function PaymentDetailPage() {
               {/* Acciones admin */}
               {isAdmin && (
                 <div className="flex items-center justify-between pt-1">
-                  <button
+                  <motion.button
                     onClick={openEdit}
-                    className="flex items-center gap-2 rounded-2xl border border-white/50 dark:border-white/10 bg-white/30 dark:bg-black/30 backdrop-blur-xl px-4 py-2.5 text-sm font-semibold text-gray-700 dark:text-gray-200 hover:bg-white/50 dark:hover:bg-black/50 transition-all"
+                    whileTap={{ scale: 0.96 }}
+                    className="flex items-center gap-2 rounded-2xl border border-white/50 dark:border-white/10 bg-white/30 dark:bg-black/30 backdrop-blur-xl px-4 py-2.5 text-sm font-semibold text-gray-700 dark:text-gray-200 hover:bg-white/50 dark:hover:bg-black/50 transition-colors"
                   >
                     <Edit2 size={15} /> Editar pago
-                  </button>
-                  <button
+                  </motion.button>
+                  <motion.button
                     onClick={() => setIsConfirmOpen(true)}
                     disabled={deleting}
-                    className="flex items-center gap-2 rounded-2xl border border-red-500/20 bg-red-500/10 px-4 py-2.5 text-sm font-semibold text-red-600 dark:text-red-400 hover:bg-red-500/20 transition-all disabled:opacity-50"
+                    whileTap={!deleting ? { scale: 0.96 } : {}}
+                    className="flex items-center gap-2 rounded-2xl border border-red-500/20 bg-red-500/10 px-4 py-2.5 text-sm font-semibold text-red-600 dark:text-red-400 hover:bg-red-500/20 transition-colors disabled:opacity-50"
                   >
                     <Trash2 size={15} /> Eliminar pago
-                  </button>
+                  </motion.button>
                 </div>
               )}
             </motion.div>

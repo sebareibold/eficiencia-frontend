@@ -4,6 +4,7 @@ import { motion, AnimatePresence } from 'framer-motion'
 import {
   Plus, GripVertical, X, Check, AlertTriangle, ArrowLeft, Zap, BookOpen,
 } from 'lucide-react'
+import DotsLoader from '../components/ui/DotsLoader'
 import { plantillasApi } from '../api/plantillas.api'
 import type { CreatePlantillaPayload, CreateBloquePayload, CreatePlantillaEjercicioPayload } from '../api/plantillas.api'
 import { patronesApi } from '../api/patrones.api'
@@ -744,18 +745,19 @@ export default function PlantillaDetailPage() {
 
       {/* Acciones */}
       <div className="flex items-center gap-3 pt-2">
-        <button
+        <motion.button
           type="button"
           onClick={handleSave}
           disabled={saving}
+          whileTap={!saving ? { scale: 0.96 } : {}}
           className="flex items-center gap-2 rounded-xl btn-action px-4 py-2.5 text-sm disabled:opacity-60"
         >
           {saving
-            ? <span className="h-4 w-4 animate-spin rounded-full border-2 border-black/30 border-t-black" />
+            ? <DotsLoader size="sm" className="flex items-center" />
             : <Check size={14} />
           }
           {isNew ? 'Crear plantilla' : 'Guardar cambios'}
-        </button>
+        </motion.button>
         <button
           type="button"
           onClick={() => navigate(isNew ? ROUTES.EXERCISES : `/plantillas/${id}`)}

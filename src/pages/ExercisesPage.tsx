@@ -1,5 +1,6 @@
 import { useState, useEffect, useCallback, useMemo, useRef } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
+import { staggerContainerFast, fadeUpItem } from '../lib/motion'
 import { useNavigate } from 'react-router-dom'
 import { Dumbbell, Plus, Edit2, Trash2, ExternalLink, Search, ChevronLeft, ChevronRight, Check, X, ArrowUp, ArrowDown, ArrowUpDown, LayoutGrid, List } from 'lucide-react'
 import { ejerciciosApi } from '../api/ejercicios.api'
@@ -11,6 +12,7 @@ import PlantillasPage from './PlantillasPage'
 import { ROUTES } from '../constants/routes'
 import ConfirmDialog from '../components/ui/ConfirmDialog'
 import Modal from '../components/ui/Modal'
+import DotsLoader from '../components/ui/DotsLoader'
 
 const glass = 'rounded-[2rem] border border-white/50 dark:border-white/10 bg-white/30 dark:bg-black/30 backdrop-blur-3xl shadow-[0_8px_32px_rgba(0,0,0,0.04)] dark:shadow-[0_8px_32px_rgba(0,0,0,0.3)]'
 const thCls = 'py-3 px-4 text-left text-[10px] font-bold uppercase tracking-wider text-gray-500 dark:text-[#6B7280]'
@@ -258,14 +260,14 @@ export default function ExercisesPage() {
                 {(['todos', 'FACIL', 'DIFICIL', 'AVANZADO'] as const).map(d => {
                   const isActive = filterDif === d
                   return (
-                    <button key={d} onClick={() => setFilterDif(d)}
-                      className={`relative inline-flex items-center justify-center rounded-full px-4 py-1.5 text-xs font-bold transition-all duration-300 cursor-pointer ${isActive ? 'text-white dark:text-gray-900' : 'text-gray-500 dark:text-[#8A8A9A] hover:text-gray-900 dark:hover:text-white'}`}
+                    <motion.button key={d} onClick={() => setFilterDif(d)} whileTap={{ scale: 0.94 }}
+                      className={`relative inline-flex items-center justify-center rounded-full px-4 py-1.5 text-xs font-bold transition-colors duration-150 cursor-pointer ${isActive ? 'text-white dark:text-gray-900' : 'text-gray-500 dark:text-[#8A8A9A] hover:text-gray-900 dark:hover:text-white'}`}
                     >
-                      {isActive && <div className="absolute inset-0 rounded-full bg-gray-900 dark:bg-white shadow-[0_2px_8px_rgba(0,0,0,0.15)]" style={{ zIndex: 0 }} />}
+                      {isActive && <motion.div layoutId="exercises-dif-pill" className="absolute inset-0 rounded-full bg-gray-900 dark:bg-white shadow-[0_2px_8px_rgba(0,0,0,0.15)]" style={{ zIndex: 0 }} transition={{ type: 'spring', stiffness: 400, damping: 35 }} />}
                       <span className="relative" style={{ zIndex: 1 }}>
                         {d === 'todos' ? 'Todos' : DIFICULTAD_CONFIG[d as keyof typeof DIFICULTAD_CONFIG].label}
                       </span>
-                    </button>
+                    </motion.button>
                   )
                 })}
               </div>
@@ -327,14 +329,16 @@ export default function ExercisesPage() {
           <div className="flex flex-col gap-4">
 
           {/* ── Mobile card grid ── */}
-          <div className="sm:hidden grid grid-cols-1 gap-3">
-            {pageItems.map((ej, i) => (
+          <motion.div
+            className="sm:hidden grid grid-cols-1 gap-3"
+            variants={staggerContainerFast}
+            initial="initial"
+            animate="animate"
+          >
+            {pageItems.map((ej) => (
               <motion.div
                 key={ej.id}
-                layout
-                initial={{ opacity: 0, y: 6 }}
-                animate={{ opacity: 1, y: 0 }}
-                transition={{ delay: i * 0.03 }}
+                variants={fadeUpItem}
                 className="rounded-2xl border border-white/50 dark:border-white/10 bg-white/30 dark:bg-black/30 backdrop-blur-3xl p-4 flex flex-col gap-3"
               >
                 <div className="flex items-start justify-between gap-2">
@@ -378,7 +382,7 @@ export default function ExercisesPage() {
                 </div>
               </motion.div>
             ))}
-          </div>
+          </motion.div>
 
           {/* ── Desktop table ── */}
           <div className="hidden sm:block rounded-[2rem] border border-white/50 dark:border-white/10 bg-white/30 dark:bg-black/30 backdrop-blur-3xl shadow-[0_8px_32px_rgba(0,0,0,0.04)] dark:shadow-[0_8px_32px_rgba(0,0,0,0.3)]">
@@ -606,7 +610,7 @@ export default function ExercisesPage() {
                   disabled={savingPatron || !newPatronLabel.trim() || !newPatronClave.trim()}
                   className="flex items-center gap-2 rounded-xl btn-action px-4 py-2 text-sm disabled:opacity-40"
                 >
-                  {savingPatron ? <span className="h-3.5 w-3.5 rounded-full border-2 border-current border-t-transparent animate-spin" /> : <Check size={13} />}
+                  {savingPatron ? <DotsLoader size="sm" className="flex items-center" /> : <Check size={13} />}
                   Guardar
                 </button>
               </div>
@@ -778,7 +782,7 @@ export default function ExercisesPage() {
               className="flex flex-1 items-center justify-center gap-2 rounded-xl btn-action py-2.5 text-sm font-bold disabled:opacity-60"
             >
               {savingPatron
-                ? <span className="h-3.5 w-3.5 rounded-full border-2 border-current border-t-transparent animate-spin" />
+                ? <DotsLoader size="sm" className="flex items-center" />
                 : <Check size={13} />}
               Guardar
             </button>
