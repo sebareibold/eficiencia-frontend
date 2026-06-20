@@ -269,6 +269,15 @@ select {
   --sk-shimmer: rgba(251, 198, 8,   0.07);
 }
 
+/* ─── ClientRutinaPage — primary más oscuro en light mode ───────────────────
+   Solo aplica dentro de .rutina-page-wrap cuando NO está en dark mode.
+   En dark mode el selector no matchea, así que el amarillo normal se mantiene.
+────────────────────────────────────────────────────────────────────────────── */
+:root:not(.dark) .rutina-page-wrap {
+  --color-primary: 161 98 7;
+  --color-primary-dark: 120 73 0;
+}
+
 /* ─── Motion System ─────────────────────────────────────────────────────────
    Shimmer skeleton animation used by the <Skeleton> component.
    All CSS animations + transitions are suppressed for users who prefer

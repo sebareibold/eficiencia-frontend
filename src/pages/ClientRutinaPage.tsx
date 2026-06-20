@@ -65,6 +65,77 @@ const countEjRutina = (r: Rutina) =>
 const countEjDraft = (semanas: DraftSemana[]) =>
   semanas.reduce((a, s) => a + s.sesiones.reduce((b, ses) => b + ses.bloques.reduce((c, bl) => c + bl.ejerciciosPlan.length, 0), 0), 0)
 
+// ─── CatalogoSearchInput ──────────────────────────────────────────────────────
+
+function CatalogoSearchInput({
+  value,
+  onChange,
+  catalogo,
+  className = '',
+  autoFocus,
+  onKeyDown,
+}: {
+  value: string
+  onChange: (nombre: string, catalogoId?: string, catalogo?: DraftEjercicio['catalogo']) => void
+  catalogo: EjercicioCatalogo[]
+  className?: string
+  autoFocus?: boolean
+  onKeyDown?: (e: React.KeyboardEvent) => void
+}) {
+  const [q, setQ] = useState(value)
+  const [open, setOpen] = useState(false)
+  const filtered = q.trim().length >= 1
+    ? catalogo.filter(e => e.nombre.toLowerCase().includes(q.toLowerCase())).slice(0, 8)
+    : []
+
+  return (
+    <div className="relative">
+      <input
+        value={q}
+        autoFocus={autoFocus}
+        onChange={e => {
+          const v = e.target.value
+          setQ(v)
+          setOpen(true)
+          onChange(v)
+        }}
+        onFocus={() => setOpen(true)}
+        onBlur={() => setTimeout(() => setOpen(false), 150)}
+        onKeyDown={onKeyDown}
+        placeholder="Buscar ejercicio…"
+        className={className}
+      />
+      {open && filtered.length > 0 && (
+        <div className="absolute top-full left-0 right-0 mt-1 z-50 !bg-white dark:!bg-[#1A1A1A] border border-saas-border dark:border-white/[0.1] rounded-xl shadow-2xl max-h-48 overflow-y-auto">
+          {filtered.map(ej => (
+            <button
+              key={ej.id}
+              type="button"
+              onMouseDown={() => {
+                setQ(ej.nombre)
+                setOpen(false)
+                onChange(ej.nombre, ej.id, {
+                  nombre: ej.nombre,
+                  patronMovimiento: ej.patronMovimiento ?? undefined,
+                  videoUrl: ej.videoUrl ?? undefined,
+                })
+              }}
+              className="w-full text-left flex items-center gap-2 px-3 py-2 hover:bg-primary/[0.06] transition-colors"
+            >
+              <span className="text-sm text-saas-text dark:text-white/90">{ej.nombre}</span>
+              {ej.patronMovimiento && (
+                <span className="text-[10px] text-gray-400 dark:text-white/35 ml-auto shrink-0">
+                  {PATRON_LABELS[ej.patronMovimiento] ?? ej.patronMovimiento}
+                </span>
+              )}
+            </button>
+          ))}
+        </div>
+      )}
+    </div>
+  )
+}
+
 // ─── EjercicioDraftRow ────────────────────────────────────────────────────────
 
 const ejSchema = z.object({
@@ -80,15 +151,18 @@ type EjForm = z.infer<typeof ejSchema>
 
 interface EjercicioDraftRowProps {
   ej: DraftEjercicio
+  catalogo: EjercicioCatalogo[]
   onUpdate: (id: string, data: UpdateEjData) => void
   onDelete: (id: string) => void
 }
 
-function EjercicioDraftRow({ ej, onUpdate, onDelete }: EjercicioDraftRowProps) {
+function EjercicioDraftRow({ ej, catalogo, onUpdate, onDelete }: EjercicioDraftRowProps) {
   const [isEditing, setIsEditing] = useState(false)
   const [confirmDelete, setConfirmDelete] = useState(false)
   const [expanded, setExpanded] = useState(false)
-  const { register, handleSubmit, reset } = useForm<EjForm>({
+  const [selCatalogId, setSelCatalogId] = useState<string | undefined>(ej.catalogoId)
+  const [selCatalog, setSelCatalog] = useState<DraftEjercicio['catalogo'] | undefined>(ej.catalogo)
+  const { register, handleSubmit, reset, setValue } = useForm<EjForm>({
     resolver: zodResolver(ejSchema),
     defaultValues: {
       nombre: ej.nombre,
@@ -104,6 +178,8 @@ function EjercicioDraftRow({ ej, onUpdate, onDelete }: EjercicioDraftRowProps) {
   const onSubmit = (data: EjForm) => {
     onUpdate(ej.id, {
       nombre: data.nombre,
+      catalogoId: selCatalogId,
+      catalogo: selCatalog,
       series: data.series,
       repeticiones: data.repeticiones,
       peso: data.peso,
@@ -120,9 +196,14 @@ function EjercicioDraftRow({ ej, onUpdate, onDelete }: EjercicioDraftRowProps) {
         onSubmit={handleSubmit(onSubmit)}
         className="p-3 bg-gray-50 dark:bg-white/[0.05] rounded-xl border border-gray-300 dark:border-white/[0.1] space-y-2.5 my-1"
       >
-        <input
-          {...register('nombre')}
-          placeholder="Nombre del ejercicio"
+        <CatalogoSearchInput
+          value={ej.nombre}
+          onChange={(nombre, catId, cat) => {
+            setValue('nombre', nombre)
+            setSelCatalogId(catId)
+            setSelCatalog(cat)
+          }}
+          catalogo={catalogo}
           className="w-full bg-gray-100 dark:bg-white/[0.06] border border-gray-300 dark:border-white/[0.1] rounded-lg px-3 py-2 text-sm text-saas-text dark:text-white placeholder-gray-400 dark:placeholder-white/30 focus:outline-none focus:border-primary/60"
         />
         <div className="grid grid-cols-3 gap-2">
@@ -218,7 +299,7 @@ function EjercicioDraftRow({ ej, onUpdate, onDelete }: EjercicioDraftRowProps) {
         {/* Series */}
         <div className="flex justify-center pt-0.5">
           {ej.series != null
-            ? <span className="text-xs tabular-nums bg-gray-100 dark:bg-white/[0.06] px-1.5 py-0.5 rounded-md text-gray-600 dark:text-white/60 font-medium">{ej.series}×</span>
+            ? <span className="text-sm tabular-nums bg-gray-100 dark:bg-white/[0.06] px-1.5 py-0.5 rounded-md text-gray-600 dark:text-white/60 font-medium">{ej.series}×</span>
             : <span className="text-gray-300 dark:text-white/15 text-xs">—</span>}
         </div>
         {/* Reps */}
@@ -445,7 +526,7 @@ function ExerciseViewRow({ ej }: { ej: EjercicioPlan }) {
         {/* Series */}
         <div className="flex justify-center pt-0.5">
           {ej.series != null
-            ? <span className="text-xs tabular-nums bg-gray-100 dark:bg-white/[0.06] px-1.5 py-0.5 rounded-md text-gray-600 dark:text-white/60 font-medium">{ej.series}×</span>
+            ? <span className="text-sm tabular-nums bg-gray-100 dark:bg-white/[0.06] px-1.5 py-0.5 rounded-md text-gray-600 dark:text-white/60 font-medium">{ej.series}×</span>
             : <span className="text-gray-300 dark:text-white/15 text-xs">—</span>}
         </div>
         {/* Reps */}
@@ -513,15 +594,18 @@ function ExerciseViewRow({ ej }: { ej: EjercicioPlan }) {
 // Devuelve un Fragment de <td> para montarse dentro de un <tr>.
 // Alterna entre vista estática y edición inline sin crear filas extra.
 
-function EjInlineCells({ ej, isEditing, onEditStart, onUpdate, onCancelEdit, onDelete }: {
+function EjInlineCells({ ej, isEditing, onEditStart, onUpdate, onCancelEdit, onDelete, catalogo }: {
   ej: DraftEjercicio
   isEditing: boolean
   onEditStart: () => void
   onUpdate: (id: string, data: UpdateEjData) => void
   onCancelEdit: () => void
   onDelete: () => void
+  catalogo: EjercicioCatalogo[]
 }) {
-  const { register, handleSubmit, reset } = useForm<EjForm>({
+  const [selCatalogId, setSelCatalogId] = useState<string | undefined>(ej.catalogoId)
+  const [selCatalog, setSelCatalog] = useState<DraftEjercicio['catalogo'] | undefined>(ej.catalogo)
+  const { register, handleSubmit, reset, setValue } = useForm<EjForm>({
     resolver: zodResolver(ejSchema),
     defaultValues: {
       nombre: ej.nombre,
@@ -530,6 +614,7 @@ function EjInlineCells({ ej, isEditing, onEditStart, onUpdate, onCancelEdit, onD
       peso: ej.peso ?? '',
       rir: ej.rir ?? '',
       rpe: ej.rpe ?? '',
+      notas: ej.notas ?? '',
     },
   })
 
@@ -543,11 +628,14 @@ function EjInlineCells({ ej, isEditing, onEditStart, onUpdate, onCancelEdit, onD
         peso: ej.peso ?? '',
         rir: ej.rir ?? '',
         rpe: ej.rpe ?? '',
+        notas: ej.notas ?? '',
       })
+      setSelCatalogId(ej.catalogoId)
+      setSelCatalog(ej.catalogo)
     }
   }, [isEditing]) // eslint-disable-line
 
-  const submit = handleSubmit(d => onUpdate(ej.id, d))
+  const submit = handleSubmit(d => onUpdate(ej.id, { ...d, catalogoId: selCatalogId, catalogo: selCatalog }))
 
   const inp = 'w-full bg-gray-50 dark:bg-white/[0.07] border border-gray-200 dark:border-white/[0.12] rounded-lg px-1.5 py-1 text-xs text-saas-text dark:text-white placeholder-gray-300 dark:placeholder-white/20 focus:outline-none focus:border-primary/50 transition-colors'
 
@@ -572,8 +660,14 @@ function EjInlineCells({ ej, isEditing, onEditStart, onUpdate, onCancelEdit, onD
             </span>
           )}
         </td>
+        <td className="px-3 py-2.5 max-w-[180px]" onClick={onEditStart} title="Click para editar nota" style={{ cursor: 'pointer' }}>
+          {ej.notas?.trim()
+            ? <p className="text-xs text-gray-500 dark:text-white/55 italic leading-relaxed">{ej.notas}</p>
+            : <span className="text-gray-300 dark:text-white/20 text-xs select-none">—</span>
+          }
+        </td>
         <td className="px-3 py-2.5 text-center">
-          {ej.series != null ? <span className="text-xs tabular-nums bg-gray-100 dark:bg-white/[0.06] px-1.5 py-0.5 rounded-md text-gray-600 dark:text-white/60 font-medium">{ej.series}×</span> : <span className="text-gray-300 dark:text-white/15 text-xs">—</span>}
+          {ej.series != null ? <span className="text-sm tabular-nums bg-gray-100 dark:bg-white/[0.06] px-1.5 py-0.5 rounded-md text-gray-600 dark:text-white/60 font-medium">{ej.series}×</span> : <span className="text-gray-300 dark:text-white/15 text-xs">—</span>}
         </td>
         <td className="px-3 py-2.5 text-center">
           {ej.repeticiones ? <span className="text-xs text-gray-500 dark:text-white/55">{ej.repeticiones}</span> : <span className="text-gray-300 dark:text-white/15 text-xs">—</span>}
@@ -606,12 +700,25 @@ function EjInlineCells({ ej, isEditing, onEditStart, onUpdate, onCancelEdit, onD
   return (
     <>
       <td className="px-2 py-1.5">
-        <input
-          {...register('nombre')}
+        <CatalogoSearchInput
+          value={ej.nombre}
+          onChange={(nombre, catId, cat) => {
+            setValue('nombre', nombre)
+            setSelCatalogId(catId)
+            setSelCatalog(cat)
+          }}
+          catalogo={catalogo}
           autoFocus
-          placeholder="Nombre"
           onKeyDown={e => { if (e.key === 'Escape') onCancelEdit() }}
-          className={`${inp} text-sm px-2 py-1.5`}
+          className={`${inp} text-sm px-2 py-1.5 w-full`}
+        />
+      </td>
+      <td className="px-2 py-1.5 min-w-[120px]">
+        <input
+          {...register('notas')}
+          placeholder="Nota…"
+          onKeyDown={e => { if (e.key === 'Escape') onCancelEdit() }}
+          className={`${inp} text-xs italic placeholder-gray-300 dark:placeholder-white/20`}
         />
       </td>
       <td className="px-1.5 py-1.5">
@@ -648,6 +755,7 @@ function EjInlineCells({ ej, isEditing, onEditStart, onUpdate, onCancelEdit, onD
 interface DraftBloqueCardProps {
   bloque: DraftBloque
   sesionId: string
+  catalogo: EjercicioCatalogo[]
   addingBloqueId: string | null
   onSetAdding: (id: string | null) => void
   onDeleteBloque: (sesionId: string, bloqueId: string) => void
@@ -656,7 +764,7 @@ interface DraftBloqueCardProps {
   onAddEj: (bloqueId: string, nombre: string, catalogoId?: string, catalogo?: DraftEjercicio['catalogo']) => void
 }
 
-function DraftBloqueCard({ bloque, sesionId, addingBloqueId, onSetAdding, onDeleteBloque, onDeleteEj, onUpdateEj, onAddEj }: DraftBloqueCardProps) {
+function DraftBloqueCard({ bloque, sesionId, catalogo, addingBloqueId, onSetAdding, onDeleteBloque, onDeleteEj, onUpdateEj, onAddEj }: DraftBloqueCardProps) {
   const [confirmDelete, setConfirmDelete] = useState(false)
   const isAdding = addingBloqueId === bloque.id
 
@@ -704,6 +812,7 @@ function DraftBloqueCard({ bloque, sesionId, addingBloqueId, onSetAdding, onDele
             <EjercicioDraftRow
               key={ej.id}
               ej={ej}
+              catalogo={catalogo}
               onUpdate={onUpdateEj}
               onDelete={onDeleteEj}
             />
@@ -940,6 +1049,9 @@ function EditCard({ clienteId: _clienteId, rutina, onCancel, onSaved }: EditCard
 
   const [selectedSesionId, setSelectedSesionId] = useState<string | null>(null)
   const [addingBloqueId, setAddingBloqueId] = useState<string | null>(null)
+  const [catalogoEditCard, setCatalogoEditCard] = useState<EjercicioCatalogo[]>([])
+
+  useEffect(() => { ejerciciosApi.getAll().then(setCatalogoEditCard).catch(() => {}) }, [])
 
   // Inicializar draft al montar
   useEffect(() => {
@@ -1034,7 +1146,7 @@ function EditCard({ clienteId: _clienteId, rutina, onCancel, onSaved }: EditCard
 
         {/* ── Nivel 1: Datos generales ──────────────────────────────────── */}
         <div className={subSection}>
-          <p className="text-[10px] font-semibold text-gray-400 dark:text-white/35 uppercase tracking-widest mb-3">Datos generales</p>
+          <p className="text-xs font-semibold text-gray-400 dark:text-white/35 uppercase tracking-widest mb-3">Datos generales</p>
           <div className="space-y-3">
             <div>
               <label className="text-[10px] text-gray-400 dark:text-white/35 font-medium uppercase tracking-wider block mb-1">Nombre</label>
@@ -1074,7 +1186,7 @@ function EditCard({ clienteId: _clienteId, rutina, onCancel, onSaved }: EditCard
         {/* ── Nivel 2: Árbol semanas / días ────────────────────────────── */}
         <div className={subSection}>
           <div className="flex items-center gap-2 mb-4">
-            <p className="text-[10px] font-semibold text-gray-400 dark:text-white/35 uppercase tracking-widest">Semanas y días</p>
+            <p className="text-xs font-semibold text-gray-400 dark:text-white/35 uppercase tracking-widest">Semanas y días</p>
             <div className="flex-1 h-px bg-white/[0.04]" />
             <button
               onClick={addSemana}
@@ -1123,7 +1235,7 @@ function EditCard({ clienteId: _clienteId, rutina, onCancel, onSaved }: EditCard
               className={subSection}
             >
               <div className="flex items-center gap-2 mb-4">
-                <p className="text-[10px] font-semibold text-gray-400 dark:text-white/35 uppercase tracking-widest">Bloques</p>
+                <p className="text-xs font-semibold text-gray-400 dark:text-white/35 uppercase tracking-widest">Bloques</p>
                 <div className="flex items-center gap-1 text-[11px] text-gray-400 dark:text-white/30">
                   <ChevronRight className="w-3 h-3" />
                   <span>{selectedSemana?.nombre?.trim() ? selectedSemana.nombre : `Semana ${selectedSemana?.numero}`}</span>
@@ -1149,6 +1261,7 @@ function EditCard({ clienteId: _clienteId, rutina, onCancel, onSaved }: EditCard
                       key={bl.id}
                       bloque={bl}
                       sesionId={selectedSesion.id}
+                      catalogo={catalogoEditCard}
                       addingBloqueId={addingBloqueId}
                       onSetAdding={setAddingBloqueId}
                       onDeleteBloque={deleteBloque}
@@ -1225,7 +1338,7 @@ function InlineEditRutinaTable({ rutina, onCancel, onSaved }: {
   const {
     draft, hasChanges, saving, initDraft, saveDraft, setMeta,
     addSemana, cloneSemana, deleteSemana, renameSemana, reorderSemanas,
-    addSesion, deleteSesion,
+    addSesion, renameSesion, setSesionNota, deleteSesion,
     addBloque, deleteBloque,
     addEjercicio, updateEjercicio, deleteEjercicio,
   } = useRutinaDraft()
@@ -1237,10 +1350,16 @@ function InlineEditRutinaTable({ rutina, onCancel, onSaved }: {
   const [renameVal, setRenameVal] = useState('')
   const [renamingSemanaId, setRenamingSemanaId] = useState<string | null>(null)
   const [renameSemanaVal, setRenameSemanaVal] = useState('')
+  const [renamingSesionId, setRenamingSesionId] = useState<string | null>(null)
+  const [renameSesionVal, setRenameSesionVal] = useState('')
+  const [editingNotaSesionId, setEditingNotaSesionId] = useState<string | null>(null)
+  const [notaSesionVal, setNotaSesionVal] = useState('')
   const [dragSemanaId, setDragSemanaId] = useState<string | null>(null)
   const [dragOverSemanaId, setDragOverSemanaId] = useState<string | null>(null)
+  const [catalogoTable, setCatalogoTable] = useState<EjercicioCatalogo[]>([])
 
   useEffect(() => { initDraft(rutina) }, [rutina.id]) // eslint-disable-line
+  useEffect(() => { ejerciciosApi.getAll().then(setCatalogoTable).catch(() => {}) }, [])
 
   if (!draft) return <div className={`${glassCard} p-6`}><SkeletonRutinaPanel /></div>
 
@@ -1294,11 +1413,11 @@ function InlineEditRutinaTable({ rutina, onCancel, onSaved }: {
 
       {/* ── Table ──────────────────────────────────────────────────── */}
       <div className="overflow-x-auto overflow-y-auto" style={{ maxHeight: 'calc(100vh - 280px)' }}>
-        <table className="w-full border-collapse text-sm">
+        <table className="w-full border-collapse text-base">
           <thead className="sticky top-0 z-10">
             <tr className="border-b border-white/40 dark:border-white/[0.08] bg-white/50 dark:bg-black/20 backdrop-blur-sm">
-              {(['Semana', 'Día', 'Bloque', 'Ejercicio', 'Ser.', 'Reps', 'Peso', 'RIR/RPE', ''] as const).map((h, i) => (
-                <th key={`h${i}`} className={`py-2.5 text-[10px] font-semibold text-gray-400 dark:text-white/35 uppercase tracking-widest whitespace-nowrap ${i < 3 ? 'px-3 text-left' : i === 3 ? 'px-4 text-left' : 'px-3 text-center'}`}>{h}</th>
+              {(['Semana', 'Día', 'Bloque', 'Ejercicio', 'Nota', 'Ser.', 'Reps', 'Peso', 'RIR/RPE', ''] as const).map((h, i) => (
+                <th key={`h${i}`} className={`py-2.5 text-xs font-semibold text-gray-400 dark:text-white/35 uppercase tracking-widest whitespace-nowrap ${i < 3 ? 'px-3 text-left' : i <= 4 ? 'px-4 text-left' : 'px-3 text-center'}`}>{h}</th>
               ))}
             </tr>
           </thead>
@@ -1366,7 +1485,7 @@ function InlineEditRutinaTable({ rutina, onCancel, onSaved }: {
                         </form>
                       ) : (
                         <span
-                          className="px-2 py-0.5 bg-primary/10 border border-primary/20 rounded-lg text-primary/90 text-[11px] font-bold whitespace-nowrap cursor-pointer hover:bg-primary/20 transition-colors"
+                          className="px-2 py-0.5 bg-primary/10 border border-primary/20 rounded-lg text-primary/90 text-xs font-bold whitespace-nowrap cursor-pointer hover:bg-primary/20 transition-colors"
                           title="Click para renombrar"
                           onClick={() => { setRenamingSemanaId(sem.id); setRenameSemanaVal(sem.nombre ?? '') }}
                         >
@@ -1399,7 +1518,7 @@ function InlineEditRutinaTable({ rutina, onCancel, onSaved }: {
                 rows.push(
                   <tr key={`${sem.id}-empty`} data-sem-id={sem.id} className={semIdx > 0 ? 'border-t-2 border-saas-border dark:border-white/[0.1]' : ''}>
                     {semCell()}
-                    <td colSpan={7} className="px-4 py-2.5">
+                    <td colSpan={8} className="px-4 py-2.5">
                       <div className="relative flex items-center gap-3">
                         <span className="text-xs text-gray-400 dark:text-white/30">Sin días</span>
                         <button onClick={() => setShowDiaPicker(sem.id)} className="flex items-center gap-1 text-xs text-primary/70 hover:text-primary transition-colors">
@@ -1418,7 +1537,7 @@ function InlineEditRutinaTable({ rutina, onCancel, onSaved }: {
                 rows.push(
                   <tr key={`${sem.id}-adddia`} data-sem-id={sem.id} className="border-t-2 border-saas-border dark:border-white/[0.08]">
                     <td className={`w-[120px] ${C}`} />
-                    <td colSpan={8} className="px-4 py-2.5" />
+                    <td colSpan={9} className="px-4 py-2.5" />
                   </tr>
                 )
                 return rows
@@ -1430,14 +1549,61 @@ function InlineEditRutinaTable({ rutina, onCancel, onSaved }: {
                 const diaCell = () => {
                   const shown = diaShown
                   diaShown = true
-                  return shown ? <td key="dc" className={`w-[90px] ${C}`} /> : (
-                    <td key="dc" className="px-3 py-2.5 w-[90px] align-top">
-                      <div className="flex items-center gap-1 group/dia">
-                        <span className="text-sm text-gray-700 dark:text-white/70 font-semibold whitespace-nowrap">{ses.dia}</span>
-                        <button onClick={() => deleteSesion(sem.id, ses.id)} className="p-1 rounded text-gray-400 dark:text-white/45 hover:text-red-400 opacity-0 group-hover/dia:opacity-100 transition-all">
-                          <X className="w-2.5 h-2.5" />
+                  if (shown) return <td key="dc" className={`w-[110px] ${C}`} />
+                  const diaLabel = ses.nombre?.trim() ? ses.nombre : ses.dia
+                  const isRenamingSes = renamingSesionId === ses.id
+                  return (
+                    <td key="dc" className="px-3 py-2.5 w-[110px] align-top">
+                      {isRenamingSes ? (
+                        <form onSubmit={e => { e.preventDefault(); renameSesion(ses.id, renameSesionVal.trim() || ses.dia); setRenamingSesionId(null) }} className="flex items-center gap-1">
+                          <input
+                            autoFocus
+                            value={renameSesionVal}
+                            onChange={e => setRenameSesionVal(e.target.value)}
+                            onBlur={() => { renameSesion(ses.id, renameSesionVal.trim() || ses.dia); setRenamingSesionId(null) }}
+                            placeholder={ses.dia}
+                            className="w-[80px] bg-white dark:bg-white/[0.08] border border-primary/40 rounded-md px-1.5 py-0.5 text-xs text-saas-text dark:text-white focus:outline-none"
+                          />
+                          <button type="submit" className="p-0.5 rounded text-primary shrink-0"><Check className="w-3 h-3" /></button>
+                        </form>
+                      ) : (
+                        <div className="flex items-center gap-1 group/dia">
+                          <span
+                            className="text-base text-gray-700 dark:text-white/70 font-semibold whitespace-nowrap cursor-pointer hover:text-primary transition-colors"
+                            title="Click para renombrar"
+                            onClick={() => { setRenamingSesionId(ses.id); setRenameSesionVal(ses.nombre ?? '') }}
+                          >
+                            {diaLabel}
+                          </span>
+                          <button onClick={() => deleteSesion(sem.id, ses.id)} className="p-1 rounded text-gray-400 dark:text-white/45 hover:text-red-400 opacity-0 group-hover/dia:opacity-100 transition-all">
+                            <X className="w-2.5 h-2.5" />
+                          </button>
+                        </div>
+                      )}
+                      {/* Nota de sesión */}
+                      {editingNotaSesionId === ses.id ? (
+                        <textarea
+                          autoFocus
+                          value={notaSesionVal}
+                          onChange={e => setNotaSesionVal(e.target.value)}
+                          onBlur={() => { setSesionNota(ses.id, notaSesionVal); setEditingNotaSesionId(null) }}
+                          onKeyDown={e => { if (e.key === 'Escape') { setSesionNota(ses.id, notaSesionVal); setEditingNotaSesionId(null) } }}
+                          rows={2}
+                          placeholder="Nota del día…"
+                          className="mt-1.5 w-full resize-none bg-white dark:bg-white/[0.06] border border-primary/30 rounded-lg px-2 py-1 text-xs text-saas-text dark:text-white/80 placeholder-gray-300 dark:placeholder-white/20 focus:outline-none focus:border-primary/60"
+                        />
+                      ) : (
+                        <button
+                          onClick={() => { setEditingNotaSesionId(ses.id); setNotaSesionVal(ses.nota ?? '') }}
+                          className="mt-1.5 flex items-start gap-1 text-left w-full"
+                        >
+                          {ses.nota?.trim() ? (
+                            <span className="text-[11px] text-gray-500 dark:text-white/40 italic leading-relaxed">{ses.nota}</span>
+                          ) : (
+                            <span className="text-[11px] text-gray-300 dark:text-white/25 hover:text-primary transition-colors">+ nota del día</span>
+                          )}
                         </button>
-                      </div>
+                      )}
                     </td>
                   )
                 }
@@ -1448,7 +1614,7 @@ function InlineEditRutinaTable({ rutina, onCancel, onSaved }: {
                   rows.push(
                     <tr key={`${ses.id}-empty`} data-sem-id={sem.id} className={diaBorder}>
                       {semCell()}{diaCell()}
-                      <td colSpan={6} className="px-4 py-2.5">
+                      <td colSpan={7} className="px-4 py-2.5">
                         <div className="flex items-center gap-3">
                           <span className="text-xs text-gray-400 dark:text-white/30">Sin bloques</span>
                           <button onClick={() => addBloque(ses.id)} className="flex items-center gap-1 text-xs text-primary/70 hover:text-primary transition-colors">
@@ -1471,11 +1637,18 @@ function InlineEditRutinaTable({ rutina, onCancel, onSaved }: {
                     blShown = true
                     return shown ? <td key="bc" className={`w-[60px] ${C}`} /> : (
                       <td key="bc" className="px-2 py-2.5 w-[60px] text-center align-top">
-                        <div className="flex items-center justify-center gap-0.5 group/bl">
-                          <span className="w-6 h-6 rounded-lg bg-primary/15 border border-primary/25 text-primary text-xs font-bold flex items-center justify-center">{bl.letra}</span>
-                          <button onClick={() => deleteBloque(ses.id, bl.id)} className="p-1 rounded text-gray-400 dark:text-white/45 hover:text-red-400 opacity-0 group-hover/bl:opacity-100 transition-all">
-                            <Trash2 className="w-2.5 h-2.5" />
-                          </button>
+                        <div className="flex flex-col items-center gap-0.5">
+                          <div className="flex items-center justify-center gap-0.5 group/bl">
+                            <span className="w-7 h-7 rounded-lg bg-primary/15 border border-primary/25 text-primary text-sm font-bold flex items-center justify-center">{bl.letra}</span>
+                            <button onClick={() => deleteBloque(ses.id, bl.id)} className="p-1 rounded text-gray-400 dark:text-white/45 hover:text-red-400 opacity-0 group-hover/bl:opacity-100 transition-all">
+                              <Trash2 className="w-2.5 h-2.5" />
+                            </button>
+                          </div>
+                          {bl.patronMovimiento && (
+                            <span className="text-xs leading-tight text-gray-400 dark:text-white/35 text-center whitespace-nowrap">
+                              {PATRON_LABELS[bl.patronMovimiento] ?? bl.patronMovimiento}
+                            </span>
+                          )}
                         </div>
                       </td>
                     )
@@ -1488,7 +1661,7 @@ function InlineEditRutinaTable({ rutina, onCancel, onSaved }: {
                     rows.push(
                       <tr key={`${bl.id}-empty`} data-sem-id={sem.id} className={bt}>
                         {semCell()}{diaCell()}{blCell()}
-                        <td colSpan={5} className="px-4 py-2">
+                        <td colSpan={6} className="px-4 py-2">
                           {addingEjBloqueId === bl.id
                             ? <AddEjercicioPanel bloqueId={bl.id} onAdd={addEjercicio} onClose={() => setAddingEjBloqueId(null)} />
                             : <button onClick={() => setAddingEjBloqueId(bl.id)} className="flex items-center gap-1.5 text-xs text-gray-400 dark:text-white/40 hover:text-primary transition-colors py-0.5"><Plus className="w-3 h-3" /> Agregar ejercicio</button>
@@ -1519,6 +1692,7 @@ function InlineEditRutinaTable({ rutina, onCancel, onSaved }: {
                           onUpdate={(id, data) => { updateEjercicio(id, data); setEditingEjId(null) }}
                           onCancelEdit={() => setEditingEjId(null)}
                           onDelete={() => deleteEjercicio(ej.id)}
+                          catalogo={catalogoTable}
                         />
                       </tr>
                     )
@@ -1529,7 +1703,7 @@ function InlineEditRutinaTable({ rutina, onCancel, onSaved }: {
                   rows.push(
                     <tr key={`${bl.id}-addej`} data-sem-id={sem.id}>
                       <td className={`w-[120px] ${C}`} /><td className={`w-[90px] ${C}`} /><td className={`w-[60px] ${C}`} />
-                      <td colSpan={5} className="px-4 py-1.5">
+                      <td colSpan={6} className="px-4 py-1.5">
                         <AnimatePresence>
                           {addingEjBloqueId === bl.id
                             ? <AddEjercicioPanel bloqueId={bl.id} onAdd={addEjercicio} onClose={() => setAddingEjBloqueId(null)} />
@@ -1546,9 +1720,9 @@ function InlineEditRutinaTable({ rutina, onCancel, onSaved }: {
                 rows.push(
                   <tr key={`${ses.id}-addbl`} data-sem-id={sem.id} className="border-t border-saas-border dark:border-white/[0.06]">
                     <td className={`w-[120px] ${C}`} /><td className={`w-[90px] ${C}`} />
-                    <td colSpan={6} className="px-4 py-2">
+                    <td colSpan={7} className="px-4 py-2">
                       <button onClick={() => addBloque(ses.id)} className="flex items-center gap-1.5 text-[11px] text-gray-400 dark:text-white/40 hover:text-primary transition-colors">
-                        <Plus className="w-3.5 h-3.5" /> bloque en {ses.dia}
+                        <Plus className="w-3.5 h-3.5" /> bloque en {ses.nombre?.trim() ? ses.nombre : ses.dia}
                       </button>
                     </td>
                     <td className="w-[56px]" />
@@ -1560,7 +1734,7 @@ function InlineEditRutinaTable({ rutina, onCancel, onSaved }: {
               rows.push(
                 <tr key={`${sem.id}-adddia`} data-sem-id={sem.id} className="border-t-2 border-saas-border dark:border-white/[0.08]">
                   <td className={`w-[120px] ${C}`} />
-                  <td colSpan={7} className="px-4 py-2.5 relative">
+                  <td colSpan={8} className="px-4 py-2.5 relative">
                     <button onClick={() => setShowDiaPicker(v => v === sem.id ? null : sem.id)} className="flex items-center gap-1.5 text-xs text-gray-400 dark:text-white/40 hover:text-primary transition-colors">
                       <Plus className="w-3.5 h-3.5" /> día en {semLabel}
                       <ChevronDown className="w-3 h-3" />
@@ -1580,7 +1754,7 @@ function InlineEditRutinaTable({ rutina, onCancel, onSaved }: {
 
             {/* Fila para agregar semana */}
             <tr className="border-t-2 border-saas-border dark:border-white/[0.1]">
-              <td colSpan={9} className="px-4 py-3">
+              <td colSpan={10} className="px-4 py-3">
                 <button onClick={addSemana} className="flex items-center gap-1.5 text-xs text-gray-400 dark:text-white/30 hover:text-primary transition-colors">
                   <Plus className="w-3.5 h-3.5" /> nueva semana
                 </button>
@@ -1623,9 +1797,8 @@ export default function ClientRutinaPage() {
   const [searchParams] = useSearchParams()
   const user = useAuthStore(s => s.user)
 
-  // rid: viene del perfil del cliente al clickear una rutina específica
+  // rid: pre-selecciona una rutina específica al entrar desde el perfil
   const rid = searchParams.get('rid')
-  const singleMode = !!rid
 
   const { rutinas, isLoading, refetch } = useRutinas(clienteId)
   const [selectedRutinaId, setSelectedRutinaId] = useState<string | null>(rid)
@@ -1698,13 +1871,20 @@ export default function ClientRutinaPage() {
   if (isLoading) {
     return (
       <div className="p-4 lg:p-6 xl:p-8">
+        <button
+          onClick={() => navigate(ROUTES.CLIENT_PROFILE.replace(':id', clienteId!))}
+          className="flex items-center gap-2 text-gray-500 dark:text-white/50 hover:text-gray-900 dark:hover:text-white transition-colors mb-6"
+        >
+          <ArrowLeft className="w-4 h-4" />
+          <span className="text-sm">Volver al perfil</span>
+        </button>
         <SkeletonRutinaPanel />
       </div>
     )
   }
 
   return (
-    <div className="p-4 lg:p-6 xl:p-8 min-h-full">
+    <div className="rutina-page-wrap p-4 lg:p-6 xl:p-8 min-h-full">
 
       {/* Volver */}
       <button
@@ -1715,11 +1895,10 @@ export default function ClientRutinaPage() {
         <span className="text-sm">Volver al perfil</span>
       </button>
 
-      <div className="flex flex-col lg:flex-row gap-5 lg:gap-6 items-start">
+      <div className="space-y-4">
 
-        {/* ── Sidebar: lista de rutinas (oculta en edit mode o singleMode) ── */}
-        <AnimatePresence>
-          {!editMode && !singleMode && (
+        {/* Sidebar eliminado — se accede a cada rutina desde el perfil del cliente */}
+        {false && (
             <motion.div
               key="sidebar"
               initial={{ opacity: 0, x: -16 }}
@@ -1866,10 +2045,9 @@ export default function ClientRutinaPage() {
               )}
             </motion.div>
           )}
-        </AnimatePresence>
 
         {/* ── Contenido principal ───────────────────────────────────────── */}
-        <motion.div layout className="flex-1 min-w-0 space-y-4">
+        <div>
 
           {/* Modo edición: tabla editable inline */}
           <AnimatePresence mode="wait">
@@ -1883,9 +2061,15 @@ export default function ClientRutinaPage() {
             ) : !rutina ? (
               <motion.div key="empty" className={`${glassCard} flex flex-col items-center justify-center py-24 text-center`}>
                 <BookOpen className="w-12 h-12 text-gray-200 dark:text-white/15 mb-4" />
-                <p className="text-gray-400 dark:text-white/35 text-sm">
-                  {rutinas.length > 0 ? 'Seleccioná una rutina' : 'No hay rutinas para este cliente'}
-                </p>
+                <p className="text-gray-400 dark:text-white/35 text-sm mb-4">No hay rutinas para este cliente</p>
+                {canEdit && (
+                  <button
+                    onClick={() => navigate(`${ROUTES.RUTINA_CREAR}?clienteId=${clienteId}`)}
+                    className="flex items-center gap-1.5 px-4 py-2 rounded-xl bg-primary text-black text-sm font-semibold"
+                  >
+                    <Plus className="w-4 h-4" /> Nueva rutina
+                  </button>
+                )}
               </motion.div>
             ) : (
               /* ── Modo lectura: nav card + bloques ─────────────────────── */
@@ -1923,12 +2107,20 @@ export default function ClientRutinaPage() {
                       </div>
                     </div>
                     {canEdit && (
-                      <button
-                        onClick={handleEnterEdit}
-                        className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl border border-saas-border dark:border-white/[0.08] text-sm text-saas-muted dark:text-white/45 hover:text-gray-900 dark:hover:text-white hover:border-gray-400 dark:hover:border-white/20 transition-colors shrink-0"
-                      >
-                        <Pencil className="w-3.5 h-3.5" /> Editar rutina
-                      </button>
+                      <div className="flex items-center gap-2 shrink-0">
+                        <button
+                          onClick={handleEnterEdit}
+                          className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl border border-saas-border dark:border-white/[0.08] text-base text-saas-muted dark:text-white/45 hover:text-gray-900 dark:hover:text-white hover:border-gray-400 dark:hover:border-white/20 transition-colors"
+                        >
+                          <Pencil className="w-4 h-4" /> Editar rutina
+                        </button>
+                        <button
+                          onClick={() => navigate(`${ROUTES.RUTINA_CREAR}?clienteId=${clienteId}`)}
+                          className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-primary/10 border border-primary/25 text-base text-primary hover:bg-primary/20 transition-colors"
+                        >
+                          <Plus className="w-3.5 h-3.5" /> Nueva rutina
+                        </button>
+                      </div>
                     )}
                   </div>
 
@@ -1949,15 +2141,15 @@ export default function ClientRutinaPage() {
                       <>
                         <div className="border-t border-saas-border dark:border-white/[0.06] -mx-5 mb-4" />
                         <div className="overflow-x-auto">
-                          <table className="w-full border-collapse text-sm">
+                          <table className="w-full border-collapse text-base">
                             <thead>
                               <tr className="border-b border-saas-border dark:border-white/[0.08] bg-gray-50/50 dark:bg-white/[0.02]">
-                                {(['Semana', 'Día', 'Bloque', 'Ejercicio', 'Ser.', 'Reps', 'Peso', 'RIR / RPE'] as const).map((h, i) => (
+                                {(['Semana', 'Día', 'Bloque', 'Ejercicio', 'Nota', 'Ser.', 'Reps', 'Peso', 'RIR / RPE'] as const).map((h, i) => (
                                   <th
                                     key={h}
-                                    className={`py-3 text-[10px] font-semibold text-gray-400 dark:text-white/35 uppercase tracking-widest whitespace-nowrap ${
+                                    className={`py-3 text-xs font-semibold text-gray-400 dark:text-white/35 uppercase tracking-widest whitespace-nowrap ${
                                       i < 3 ? 'px-4 text-left border-r border-saas-border dark:border-white/[0.06]'
-                                      : i === 3 ? 'px-4 text-left'
+                                      : i <= 4 ? 'px-4 text-left'
                                       : 'px-3 text-center'
                                     }`}
                                   >
@@ -1972,7 +2164,7 @@ export default function ClientRutinaPage() {
                                 const sRS = semRS(sem)
                                 const semanaCell = (
                                   <td rowSpan={sRS} className="px-4 py-3 align-top border-r border-saas-border dark:border-white/[0.06] max-w-[160px]">
-                                    <span className="px-2 py-1 bg-primary/10 border border-primary/20 rounded-lg text-primary/90 text-xs font-bold whitespace-nowrap">
+                                    <span className="px-2 py-1 bg-primary/10 border border-primary/20 rounded-lg text-primary/90 text-sm font-bold whitespace-nowrap">
                                       {sLabel}
                                     </span>
                                     {sem.observaciones && (
@@ -1986,15 +2178,20 @@ export default function ClientRutinaPage() {
                                   return [(
                                     <tr key={`${sem.id}-empty`} className="border-b border-saas-border dark:border-white/[0.05]">
                                       {semanaCell}
-                                      <td colSpan={7} className="px-4 py-3 text-xs text-gray-400 dark:text-white/25">Sin días asignados</td>
+                                      <td colSpan={8} className="px-4 py-3 text-xs text-gray-400 dark:text-white/25">Sin días asignados</td>
                                     </tr>
                                   )]
                                 }
                                 return sem.sesiones.flatMap((ses, sesIdx) => {
                                   const sRS_ = sesRS(ses)
                                   const diaCell = (
-                                    <td rowSpan={sRS_} className="px-4 py-3 align-top border-r border-saas-border dark:border-white/[0.06] whitespace-nowrap">
-                                      <span className="text-sm text-gray-700 dark:text-white/70 font-semibold">{ses.dia}</span>
+                                    <td rowSpan={sRS_} className="px-4 py-3 align-top border-r border-saas-border dark:border-white/[0.06] min-w-[110px] max-w-[160px]">
+                                      <span className="text-base text-gray-700 dark:text-white/70 font-semibold whitespace-nowrap">{ses.nombre?.trim() ? ses.nombre : ses.dia}</span>
+                                      {ses.nota?.trim() && (
+                                        <div className="mt-2 px-2 py-1.5 rounded-lg bg-gray-50 dark:bg-white/[0.04] border border-gray-200 dark:border-white/[0.06]">
+                                          <p className="text-[11px] text-gray-500 dark:text-white/45 italic leading-relaxed whitespace-normal break-words">{ses.nota}</p>
+                                        </div>
+                                      )}
                                     </td>
                                   )
                                   if (ses.bloques.length === 0) {
@@ -2002,7 +2199,7 @@ export default function ClientRutinaPage() {
                                       <tr key={`${ses.id}-empty`} className="border-b border-saas-border dark:border-white/[0.05]">
                                         {sesIdx === 0 && semanaCell}
                                         {diaCell}
-                                        <td colSpan={6} className="px-4 py-3 text-xs text-gray-400 dark:text-white/25">Sin bloques</td>
+                                        <td colSpan={7} className="px-4 py-3 text-xs text-gray-400 dark:text-white/25">Sin bloques</td>
                                       </tr>
                                     )]
                                   }
@@ -2010,9 +2207,16 @@ export default function ClientRutinaPage() {
                                     const blRS = Math.max(1, bl.ejerciciosPlan.length)
                                     const bloqueCell = (
                                       <td rowSpan={blRS} className="px-3 py-3 text-center align-top border-r border-saas-border dark:border-white/[0.06]">
-                                        <span className="w-7 h-7 rounded-xl bg-primary/15 border border-primary/25 text-primary text-xs font-bold flex items-center justify-center mx-auto">
-                                          {bl.letra}
-                                        </span>
+                                        <div className="flex flex-col items-center gap-0.5">
+                                          <span className="w-8 h-8 rounded-xl bg-primary/15 border border-primary/25 text-primary text-sm font-bold flex items-center justify-center mx-auto">
+                                            {bl.letra}
+                                          </span>
+                                          {bl.patronMovimiento && (
+                                            <span className="text-xs leading-tight text-gray-400 dark:text-white/35 text-center whitespace-nowrap">
+                                              {PATRON_LABELS[bl.patronMovimiento] ?? bl.patronMovimiento}
+                                            </span>
+                                          )}
+                                        </div>
                                       </td>
                                     )
                                     if (bl.ejerciciosPlan.length === 0) {
@@ -2021,7 +2225,7 @@ export default function ClientRutinaPage() {
                                           {sesIdx === 0 && blqIdx === 0 && semanaCell}
                                           {blqIdx === 0 && diaCell}
                                           {bloqueCell}
-                                          <td colSpan={5} className="px-4 py-3 text-xs text-gray-400 dark:text-white/25">Sin ejercicios</td>
+                                          <td colSpan={6} className="px-4 py-3 text-xs text-gray-400 dark:text-white/25">Sin ejercicios</td>
                                         </tr>
                                       )]
                                     }
@@ -2032,7 +2236,7 @@ export default function ClientRutinaPage() {
                                         {ejIdx === 0 && bloqueCell}
                                         <td className="px-4 py-2.5">
                                           <div className="flex items-center gap-1.5 min-w-0">
-                                            <span className="text-sm text-saas-text dark:text-white/90 font-medium truncate">{ej.nombre}</span>
+                                            <span className="text-base text-saas-text dark:text-white/90 font-medium truncate">{ej.nombre}</span>
                                             {ej.catalogo?.videoUrl && (
                                               <a href={ej.catalogo.videoUrl} target="_blank" rel="noreferrer"
                                                 className="shrink-0 p-0.5 rounded text-gray-300 dark:text-white/25 hover:text-primary transition-colors"
@@ -2043,7 +2247,7 @@ export default function ClientRutinaPage() {
                                             )}
                                           </div>
                                           {ej.catalogo?.patronMovimiento && (
-                                            <span className="text-[11px] text-gray-400 dark:text-white/35 block">
+                                            <span className="text-xs text-gray-400 dark:text-white/35 block">
                                               {PATRON_LABELS[ej.catalogo.patronMovimiento] ?? ej.catalogo.patronMovimiento}
                                             </span>
                                           )}
@@ -2053,7 +2257,7 @@ export default function ClientRutinaPage() {
                                               <button
                                                 type="button"
                                                 onClick={() => setHistOpenEj(h => ({ ...h, [ej.id]: !h[ej.id] }))}
-                                                className="flex items-center gap-1 mt-1.5 text-[11px] text-gray-400 dark:text-white/30 hover:text-primary transition-colors"
+                                                className="flex items-center gap-1 mt-1.5 text-xs text-gray-400 dark:text-white/30 hover:text-primary transition-colors"
                                               >
                                                 <History className="w-3 h-3" />
                                                 <span>{ej.ejecuciones.length} registro{ej.ejecuciones.length !== 1 ? 's' : ''}</span>
@@ -2068,7 +2272,7 @@ export default function ClientRutinaPage() {
                                                     transition={{ duration: 0.2, ease: 'easeInOut' }}
                                                     className="overflow-hidden mt-1.5"
                                                   >
-                                                    <table className="w-full text-[10px] border-collapse">
+                                                    <table className="w-full text-xs border-collapse">
                                                       <thead>
                                                         <tr className="border-b border-gray-200 dark:border-white/10">
                                                           {['Fecha', 'Ser', 'Reps', 'Kg', 'RIR', 'RPE'].map(h => (
@@ -2095,9 +2299,15 @@ export default function ClientRutinaPage() {
                                             </>
                                           )}
                                         </td>
+                                        <td className="px-4 py-2.5 max-w-[180px]">
+                                          {ej.notas?.trim()
+                                            ? <p className="text-xs text-gray-500 dark:text-white/55 italic leading-relaxed">{ej.notas}</p>
+                                            : <span className="text-gray-300 dark:text-white/20 text-xs">—</span>
+                                          }
+                                        </td>
                                         <td className="px-3 py-2.5 text-center">
                                           {ej.series != null
-                                            ? <span className="text-xs tabular-nums bg-gray-100 dark:bg-white/[0.06] px-1.5 py-0.5 rounded-md text-gray-600 dark:text-white/60 font-medium">{ej.series}×</span>
+                                            ? <span className="text-sm tabular-nums bg-gray-100 dark:bg-white/[0.06] px-1.5 py-0.5 rounded-md text-gray-600 dark:text-white/60 font-medium">{ej.series}×</span>
                                             : <span className="text-gray-300 dark:text-white/15 text-xs">—</span>}
                                         </td>
                                         <td className="px-3 py-2.5 text-center">
@@ -2134,7 +2344,54 @@ export default function ClientRutinaPage() {
             )}
           </AnimatePresence>
 
-        </motion.div>
+          {/* ── Contexto deportivo (ficha del cliente) ──────────────── */}
+          {ficha && (ficha.eventos.length > 0 || ficha.objetivos || ficha.deportePractica) && (
+            <div className={`${glassCard} p-4`}>
+              <div className="flex items-center gap-2 mb-3">
+                <Trophy className="w-3.5 h-3.5 text-primary/70" />
+                <h2 className="text-[10px] font-semibold text-gray-400 dark:text-white/40 uppercase tracking-widest">Contexto deportivo</h2>
+              </div>
+              {(ficha.objetivos || ficha.deportePractica) && (
+                <div className="flex flex-wrap gap-1.5 mb-3">
+                  {ficha.objetivos && (
+                    <span className="px-2 py-0.5 rounded-lg bg-primary/10 border border-primary/20 text-[11px] text-primary/80 font-medium">{ficha.objetivos}</span>
+                  )}
+                  {ficha.deportePractica && (
+                    <span className="px-2 py-0.5 rounded-lg bg-gray-100 dark:bg-white/[0.05] border border-gray-200 dark:border-white/[0.08] text-[11px] text-gray-600 dark:text-white/55 font-medium">{ficha.deportePractica}</span>
+                  )}
+                </div>
+              )}
+              {ficha.eventos.length > 0 && (
+                <div className="space-y-1.5">
+                  <p className="text-[10px] font-semibold text-gray-400 dark:text-white/30 uppercase tracking-widest flex items-center gap-1.5 mb-2">
+                    <CalendarDays className="w-3 h-3" /> Competencias
+                  </p>
+                  {ficha.eventos.map(ev => {
+                    const fecha = parseISO(ev.fecha)
+                    const diasRestantes = differenceInDays(fecha, new Date())
+                    const esPasada = diasRestantes < 0
+                    const esProxima = diasRestantes >= 0 && diasRestantes <= 30
+                    return (
+                      <div key={ev.id} className={`rounded-xl px-3 py-2 border text-xs ${esPasada ? 'bg-gray-50 dark:bg-white/[0.02] border-gray-200 dark:border-white/[0.05]' : esProxima ? 'bg-amber-500/[0.06] border-amber-500/20' : 'bg-primary/[0.04] border-primary/15'}`}>
+                        <div className="flex items-center justify-between gap-2">
+                          <span className={`font-semibold ${esPasada ? 'text-gray-400 dark:text-white/30' : 'text-gray-800 dark:text-white/85'}`}>{ev.nombre}</span>
+                          {!esPasada && (
+                            <span className={`shrink-0 px-1.5 py-0.5 rounded-md text-[10px] font-bold ${esProxima ? 'bg-amber-500/15 text-amber-600 dark:text-amber-400' : 'bg-primary/15 text-primary'}`}>
+                              {diasRestantes === 0 ? '¡Hoy!' : `${diasRestantes}d`}
+                            </span>
+                          )}
+                        </div>
+                        <p className={`mt-0.5 ${esPasada ? 'text-gray-400 dark:text-white/25' : 'text-gray-500 dark:text-white/45'}`}>{format(fecha, 'd MMM yyyy', { locale: es })}</p>
+                        {ev.observacion && <p className="text-[10px] text-gray-400 dark:text-white/30 mt-0.5 italic">{ev.observacion}</p>}
+                      </div>
+                    )
+                  })}
+                </div>
+              )}
+            </div>
+          )}
+
+        </div>
       </div>
 
       <ConfirmDialog

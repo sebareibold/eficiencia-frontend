@@ -31,6 +31,7 @@ export interface Bloque {
   sesionId: string
   letra: string
   orden: number
+  patronMovimiento?: string
   ejerciciosPlan: EjercicioPlan[]
 }
 
@@ -39,6 +40,7 @@ export interface Sesion {
   semanaId: string
   dia: string
   nombre?: string
+  nota?: string
   orden: number
   bloques: Bloque[]
 }
@@ -94,6 +96,7 @@ export interface CreateEjercicioPlanPayload {
 
 export interface UpdateEjercicioPlanPayload {
   nombre?: string
+  catalogoId?: string
   series?: number
   repeticiones?: string
   peso?: string

@@ -286,46 +286,11 @@ const GLASS = 'rounded-[2rem] border border-gray-200 dark:border-white/10 bg-whi
 
 export function SkeletonRutinaPanel() {
   return (
-    <div className="space-y-6">
+    <div className="space-y-4">
 
-      {/* Back button */}
-      <Skeleton className="h-4 w-28" />
-
-      {/* Layout: sidebar + main panel */}
-      <div className="flex flex-col lg:flex-row gap-5 lg:gap-6 items-start">
-
-        {/* Sidebar — matches w-full lg:w-64 xl:w-72 */}
-        <div className={`${GLASS} p-4 w-full lg:w-64 xl:w-72 shrink-0`}>
-          {/* Header "Rutinas" */}
-          <div className="flex items-center gap-2 mb-4">
-            <Skeleton className="h-3 w-3 rounded" />
-            <Skeleton className="h-3 w-16" />
-          </div>
-          {/* Rutina items */}
-          <div className="space-y-1.5">
-            {[1, 2, 3].map(i => (
-              <div
-                key={i}
-                className="rounded-2xl border border-gray-200/80 dark:border-white/[0.05] bg-white/20 dark:bg-white/[0.02] p-3 space-y-2"
-              >
-                <div className="flex items-start justify-between gap-2">
-                  <Skeleton className={`h-4 ${i === 1 ? 'w-28' : i === 2 ? 'w-36' : 'w-32'}`} />
-                  <Skeleton className="h-4 w-12 rounded-md shrink-0" />
-                </div>
-                <div className="flex items-center gap-2">
-                  <Skeleton className="h-3 w-10" />
-                  <Skeleton className="h-2 w-1 rounded-full" />
-                  <Skeleton className="h-3 w-8" />
-                </div>
-              </div>
-            ))}
-            {/* Nueva rutina button */}
-            <Skeleton className="h-9 w-full rounded-2xl mt-1" />
-          </div>
-        </div>
-
-        {/* Main panel */}
-        <div className={`${GLASS} p-5 flex-1 space-y-5`}>
+      {/* Main panel */}
+      <div className="space-y-4">
+        <div className={`${GLASS} p-5 space-y-5`}>
           {/* Header: título + descripción + botones */}
           <div className="flex items-start justify-between gap-3">
             <div className="space-y-2 flex-1">

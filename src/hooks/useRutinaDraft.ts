@@ -10,6 +10,8 @@ export const isTemp = (id: string) => id.startsWith('temp-')
 
 export interface UpdateEjData {
   nombre?: string
+  catalogoId?: string
+  catalogo?: { nombre: string; patronMovimiento?: string; videoUrl?: string }
   series?: number | ''
   repeticiones?: string
   peso?: string
@@ -29,6 +31,7 @@ export interface DraftBloque {
   sesionId: string
   letra: string
   orden: number
+  patronMovimiento?: string
   ejerciciosPlan: DraftEjercicio[]
   _isNew: boolean
 }
@@ -37,9 +40,13 @@ export interface DraftSesion {
   id: string
   semanaId: string
   dia: string
+  nombre?: string
+  nota?: string
   orden: number
   bloques: DraftBloque[]
   _isNew: boolean
+  _renamed: boolean
+  _notaChanged: boolean
 }
 
 export interface DraftSemana {
@@ -76,6 +83,8 @@ type Action =
   | { type: 'RENAME_SEMANA'; semanaId: string; nombre: string }
   | { type: 'UPDATE_SEMANA_OBS'; semanaId: string; observaciones: string }
   | { type: 'ADD_SESION'; semanaId: string; dia: string }
+  | { type: 'RENAME_SESION'; sesionId: string; nombre: string }
+  | { type: 'SET_SESION_NOTA'; sesionId: string; nota: string }
   | { type: 'DELETE_SESION'; semanaId: string; sesionId: string }
   | { type: 'ADD_BLOQUE'; sesionId: string }
   | { type: 'DELETE_BLOQUE'; sesionId: string; bloqueId: string }
@@ -97,6 +106,8 @@ const toDraft = (r: Rutina): DraftRutina => ({
     sesiones: s.sesiones.map(ses => ({
       ...ses,
       _isNew: false,
+      _renamed: false,
+      _notaChanged: false,
       bloques: ses.bloques.map(bl => ({
         ...bl,
         _isNew: false,
@@ -128,8 +139,10 @@ const cloneSemana = (src: DraftSemana, nextNumero: number): DraftSemana => ({
     id: mkTempId(),
     semanaId: 'temp',
     dia: ses.dia,
+    nombre: ses.nombre,
     orden: ses.orden,
     _isNew: true,
+    _renamed: !!ses.nombre,
     bloques: ses.bloques.map(bl => ({
       id: mkTempId(),
       sesionId: 'temp',
@@ -200,9 +213,31 @@ function reducer(state: DraftState, action: Action): DraftState {
         ...d,
         semanas: d.semanas.map(s =>
           s.id === action.semanaId
-            ? { ...s, sesiones: [...s.sesiones, { id: mkTempId(), semanaId: s.id, dia: action.dia, orden: s.sesiones.length, _isNew: true, bloques: [] }] }
+            ? { ...s, sesiones: [...s.sesiones, { id: mkTempId(), semanaId: s.id, dia: action.dia, nombre: undefined, nota: undefined, orden: s.sesiones.length, _isNew: true, _renamed: false, _notaChanged: false, bloques: [] }] }
             : s,
         ),
+      })
+
+    case 'RENAME_SESION':
+      return save({
+        ...d,
+        semanas: d.semanas.map(s => ({
+          ...s,
+          sesiones: s.sesiones.map(ses =>
+            ses.id === action.sesionId ? { ...ses, nombre: action.nombre, _renamed: true } : ses,
+          ),
+        })),
+      })
+
+    case 'SET_SESION_NOTA':
+      return save({
+        ...d,
+        semanas: d.semanas.map(s => ({
+          ...s,
+          sesiones: s.sesiones.map(ses =>
+            ses.id === action.sesionId ? { ...ses, nota: action.nota, _notaChanged: true } : ses,
+          ),
+        })),
       })
 
     case 'DELETE_SESION':
@@ -370,8 +405,20 @@ async function persistDraft(original: Rutina, draft: DraftRutina): Promise<void>
         const created = await rutinasApi.createSesion(realSemanaId, dses.dia)
         idMap.set(dses.id, created.id)
         realSesionId = created.id
+        const newSesionPatch: { nombre?: string; nota?: string } = {}
+        if (dses.nombre?.trim()) newSesionPatch.nombre = dses.nombre.trim()
+        if (dses.nota?.trim()) newSesionPatch.nota = dses.nota.trim()
+        if (Object.keys(newSesionPatch).length > 0) {
+          await rutinasApi.updateSesion(realSesionId, newSesionPatch)
+        }
       } else {
         realSesionId = dses.id
+        const patch: { nombre?: string; nota?: string } = {}
+        if (dses._renamed) patch.nombre = dses.nombre?.trim() ?? ''
+        if (dses._notaChanged) patch.nota = dses.nota?.trim() ?? ''
+        if (Object.keys(patch).length > 0) {
+          await rutinasApi.updateSesion(realSesionId, patch)
+        }
       }
 
       const origSesion = origSemana?.sesiones.find(s => s.id === dses.id) ?? null
@@ -418,6 +465,7 @@ async function persistDraft(original: Rutina, draft: DraftRutina): Promise<void>
           } else if (dej._changed) {
             await rutinasApi.updateEjercicio(dej.id, {
               nombre: dej.nombre,
+              catalogoId: dej.catalogoId || undefined,
               series: toNum(dej.series),
               repeticiones: toStr(dej.repeticiones),
               peso: toStr(dej.peso),
@@ -478,6 +526,10 @@ export function useRutinaDraft() {
       dispatch({ type: 'UPDATE_SEMANA_OBS', semanaId, observaciones }),
     addSesion: (semanaId: string, dia: string) =>
       dispatch({ type: 'ADD_SESION', semanaId, dia }),
+    renameSesion: (sesionId: string, nombre: string) =>
+      dispatch({ type: 'RENAME_SESION', sesionId, nombre }),
+    setSesionNota: (sesionId: string, nota: string) =>
+      dispatch({ type: 'SET_SESION_NOTA', sesionId, nota }),
     deleteSesion: (semanaId: string, sesionId: string) =>
       dispatch({ type: 'DELETE_SESION', semanaId, sesionId }),
     addBloque: (sesionId: string) => dispatch({ type: 'ADD_BLOQUE', sesionId }),

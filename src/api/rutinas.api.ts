@@ -64,8 +64,8 @@ export const rutinasApi = {
     return r.data
   },
 
-  updateSesion: async (sesionId: string, dia: string): Promise<Sesion> => {
-    const r = await api.patch(`/rutinas/sesiones/${sesionId}`, { dia })
+  updateSesion: async (sesionId: string, data: { dia?: string; nombre?: string; nota?: string }): Promise<Sesion> => {
+    const r = await api.patch(`/rutinas/sesiones/${sesionId}`, data)
     return r.data
   },
 
