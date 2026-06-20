@@ -335,7 +335,7 @@ export default function ExercisesPage() {
             initial="initial"
             animate="animate"
           >
-            {pageItems.map((ej) => (
+            {pageItems.map((ej, i) => (
               <motion.div
                 key={ej.id}
                 variants={fadeUpItem}

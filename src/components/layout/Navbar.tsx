@@ -1,6 +1,5 @@
 import { NavLink, useNavigate, useLocation } from 'react-router-dom'
 import { motion, AnimatePresence } from 'framer-motion'
-import { ease, duration } from '../../lib/motion'
 import {
   Settings, LogOut, Users, CreditCard, LayoutDashboard,
   MoreHorizontal, Dumbbell, Tag, Wallet, Menu, X, UserCog, BookOpen,
@@ -212,9 +211,10 @@ export default function Navbar() {
                     <>
                       {isActive && (
                         <motion.div
-                          layoutId="active-nav-pill"
+                          initial={{ opacity: 0 }}
+                          animate={{ opacity: 1 }}
+                          transition={{ duration: 0.15, ease: 'easeOut' }}
                           className="absolute inset-0 rounded-full bg-white/30 dark:bg-black/30 backdrop-blur-3xl border border-white/50 dark:border-white/10 shadow-[0_8px_32px_rgba(0,0,0,0.04),0_0_16px_rgba(251,198,8,0.18)] dark:shadow-[0_8px_32px_rgba(0,0,0,0.3),0_0_20px_rgba(251,198,8,0.22)]"
-                          transition={{ type: 'spring', stiffness: 380, damping: 30, duration: duration.base }}
                           style={{ zIndex: -1 }}
                         />
                       )}
@@ -241,9 +241,10 @@ export default function Navbar() {
                 >
                   {(isHiddenItemActive || isDropdownOpen) && (
                     <motion.div
-                      layoutId="active-nav-pill"
+                      initial={{ opacity: 0 }}
+                      animate={{ opacity: 1 }}
+                      transition={{ duration: 0.15, ease: 'easeOut' }}
                       className="absolute inset-0 rounded-full bg-white/30 dark:bg-black/30 backdrop-blur-3xl border border-white/50 dark:border-white/10 shadow-[0_8px_32px_rgba(0,0,0,0.04),0_0_16px_rgba(251,198,8,0.18)] dark:shadow-[0_8px_32px_rgba(0,0,0,0.3),0_0_20px_rgba(251,198,8,0.22)]"
-                      transition={{ type: 'spring', stiffness: 300, damping: 30 }}
                       style={{ zIndex: -1 }}
                     />
                   )}
@@ -303,9 +304,10 @@ export default function Navbar() {
                 <>
                   {isActive && (
                     <motion.div
-                      layoutId="active-nav-pill"
+                      initial={{ opacity: 0 }}
+                      animate={{ opacity: 1 }}
+                      transition={{ duration: 0.15, ease: 'easeOut' }}
                       className="absolute inset-0 rounded-full bg-white/30 dark:bg-black/30 backdrop-blur-3xl border border-white/50 dark:border-white/10 shadow-[0_8px_32px_rgba(0,0,0,0.04),0_0_16px_rgba(251,198,8,0.18)] dark:shadow-[0_8px_32px_rgba(0,0,0,0.3),0_0_20px_rgba(251,198,8,0.22)]"
-                      transition={{ type: 'spring', stiffness: 380, damping: 30 }}
                       style={{ zIndex: 0 }}
                     />
                   )}

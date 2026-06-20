@@ -935,7 +935,7 @@ export default function ShiftsPage() {
                   <p className="text-sm font-medium">No hay días seleccionados para visualizar</p>
                 </div>
               ) : (
-                <div className="flex flex-1 overflow-hidden">
+                <div className="flex">
                   {/* Y-axis Left Column */}
                   <div className="w-16 flex-shrink-0 border-r border-gray-200 dark:border-white/[0.06] bg-white/50 dark:bg-black/20 z-10">
                     <div className="h-14 border-b border-gray-200 dark:border-white/[0.06]" />

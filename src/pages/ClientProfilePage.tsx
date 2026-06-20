@@ -1547,7 +1547,7 @@ export default function ClientProfilePage() {
                 </div>
               )
             })()}
-          </div>
+          </motion.div>
 
           {/* ─── SECCIÓN 2: CLASES ─────────────────────────────────────────── */}
           <motion.div variants={fadeUpItem} id="clases" className={`${glassCard} p-6 space-y-5 scroll-mt-24`}>
@@ -1708,7 +1708,7 @@ export default function ClientProfilePage() {
                 </div>
               )
             })()}
-          </div>
+          </motion.div>
 
           {/* ─── SECCIÓN 3: ASISTENCIA ───────────────────────────────────────── */}
           <motion.div variants={fadeUpItem} id="asistencia" className={`${glassCard} p-6 space-y-5 scroll-mt-24`}>
@@ -1731,7 +1731,7 @@ export default function ClientProfilePage() {
             ) : (
               <AttendanceTabContent attendance={attendance} />
             )}
-          </div>
+          </motion.div>
 
           {/* ─── SECCIÓN 4: MEMBRESÍAS ──────────────────────────────────────────── */}
           <motion.div variants={fadeUpItem} id="membresias" className={`${glassCard} p-6 space-y-5 scroll-mt-24`}>
@@ -1873,7 +1873,7 @@ export default function ClientProfilePage() {
                 )
               })()
             )}
-          </div>
+          </motion.div>
 
           {/* ─── SECCIÓN 5: PAGOS Y FACTURACIÓN ───────────────────────────────────── */}
           <motion.div variants={fadeUpItem} id="pagos" className={`${glassCard} p-6 space-y-6 scroll-mt-24`}>
@@ -2070,7 +2070,7 @@ export default function ClientProfilePage() {
                 </div>
               </div>
             )}
-          </div>
+          </motion.div>
           <div className="h-[35vh]" />
         </motion.div>
       </div>

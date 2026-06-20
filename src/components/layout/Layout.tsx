@@ -142,7 +142,7 @@ export default function Layout() {
   }, [accessToken, setPermissions])
 
   return (
-    <div className="min-h-screen w-full flex flex-col relative overflow-hidden bg-[#E8E6E3] dark:bg-[#050505] transition-colors duration-300">
+    <div className="min-h-screen w-full flex flex-col relative overflow-x-hidden bg-[#E8E6E3] dark:bg-[#050505] transition-colors duration-300">
 
       {/* 1. Subtle Grid Pattern */}
       <div className="absolute inset-0 bg-[linear-gradient(to_right,#8080800a_1px,transparent_1px),linear-gradient(to_bottom,#8080800a_1px,transparent_1px)] bg-[size:40px_40px] dark:bg-[linear-gradient(to_right,#ffffff05_1px,transparent_1px),linear-gradient(to_bottom,#ffffff05_1px,transparent_1px)]"></div>
@@ -186,7 +186,7 @@ export default function Layout() {
       ) : (
         <Navbar />
       )}
-      <main className="flex-1 px-4 py-4 sm:px-5 sm:py-5 md:px-8 md:py-6 lg:px-12 lg:py-7 xl:px-16 xl:py-8 overflow-y-auto overflow-x-hidden text-gray-800 dark:text-gray-100 relative z-10 w-full max-w-[1600px] mx-auto">
+      <main className="flex-1 min-h-[calc(100vh-5rem)] px-4 py-4 sm:px-5 sm:py-5 md:px-8 md:py-6 lg:px-12 lg:py-7 xl:px-16 xl:py-8 overflow-x-hidden text-gray-800 dark:text-gray-100 relative z-10 w-full max-w-[1600px] mx-auto">
         {isInitializing ? <DotsLoader className="flex items-center justify-center h-[calc(100vh-9rem)]" /> : (
           <AnimatePresence initial={false}>
             <motion.div

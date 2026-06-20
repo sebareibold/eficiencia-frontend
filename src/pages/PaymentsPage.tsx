@@ -1,12 +1,12 @@
 import { useState, useMemo, useEffect } from 'react'
-import { useQuery } from '@tanstack/react-query'
+import { useQuery, useQueryClient } from '@tanstack/react-query'
 import { QK } from '../lib/queryKeys'
 import { motion, AnimatePresence } from 'framer-motion'
 import { useNavigate } from 'react-router-dom'
 import { pageVariants, cardVariants, staggerContainerFast, fadeUpItem } from '../lib/motion'
 import {
   Plus, CreditCard, Banknote, ArrowLeftRight, Building2, RefreshCw,
-  CheckCircle2, XCircle, Trash2, Search, ChevronLeft, ChevronRight,
+  Trash2, Search, ChevronLeft, ChevronRight,
   Layers, LayoutList, LayoutGrid, Edit2, X, Save, Pencil,
   ArrowUp, ArrowDown, ArrowUpDown,
 } from 'lucide-react'
@@ -463,6 +463,7 @@ const MONTH_NAMES_PAY = ['Enero','Febrero','Marzo','Abril','Mayo','Junio','Julio
 export default function PaymentsPage() {
   const today = new Date()
   const navigate = useNavigate()
+  const queryClient = useQueryClient()
 
   // ── Estado pagos ──
   const [viewMode, setViewMode] = useState<'list' | 'grid'>('list')
@@ -478,6 +479,7 @@ export default function PaymentsPage() {
   const [deletePaymentTarget, setDeletePaymentTarget] = useState<number | null>(null)
   const [deletePlanTarget, setDeletePlanTarget] = useState<Plan | null>(null)
   const [removedPaymentIds, setRemovedPaymentIds] = useState<Set<number>>(new Set())
+  const [togglingIds, setTogglingIds] = useState<Set<number>>(new Set())
   const [isDeletingPlan, setIsDeletingPlan] = useState(false)
 
   // ── Derivados de período ──
@@ -581,12 +583,32 @@ export default function PaymentsPage() {
   }
 
   // ── Handlers pagos ──
+  function patchInvoicedInCache(id: number, invoiced: boolean) {
+    queryClient.setQueriesData<{ data: Payment[]; total: number; totalPages: number }>(
+      { queryKey: ['payments'] },
+      old => {
+        if (!old?.data || !Array.isArray(old.data)) return old
+        return { ...old, data: old.data.map(x => x.id === id ? { ...x, invoiced } : x) }
+      },
+    )
+  }
+
   async function toggleInvoiced(p: Payment) {
+    setTogglingIds(prev => new Set([...prev, p.id]))
+    const nuevoEstado = !p.invoiced
+    patchInvoicedInCache(p.id, nuevoEstado)
     try {
       await paymentsApi.toggleInvoiced(p.id)
-      addToast(`Marcado como ${p.invoiced ? 'no facturado' : 'facturado'}`, 'success')
-      refetch()
-    } catch { addToast('Error al actualizar', 'error') }
+      addToast(
+        `${nuevoEstado ? 'Facturado' : 'Sin factura'} — ${p.clientName} · ${formatCurrency(p.amount)} · ${formatDate(p.paidAt)}`,
+        'success',
+      )
+    } catch {
+      patchInvoicedInCache(p.id, p.invoiced)
+      addToast('Error al actualizar el estado de facturación', 'error')
+    } finally {
+      setTogglingIds(prev => { const s = new Set(prev); s.delete(p.id); return s })
+    }
   }
 
   async function deletePayment(id: number) {
@@ -816,10 +838,19 @@ export default function PaymentsPage() {
                   </div>
                   <div className="flex flex-col items-end gap-1.5 shrink-0">
                     <span className="text-sm font-black text-emerald-600 dark:text-emerald-400 tabular-nums">{formatCurrency(p.amount)}</span>
-                    <span className={`inline-flex items-center gap-1 rounded-lg border px-2 py-0.5 text-[10px] font-bold ${p.invoiced ? 'text-emerald-600 dark:text-emerald-400 bg-emerald-500/10 border-emerald-500/20' : 'text-gray-500 dark:text-[#8A8A9A] bg-white/50 dark:bg-white/[0.05] border-white/50 dark:border-white/10'}`}>
-                      {p.invoiced ? <CheckCircle2 size={10} /> : <XCircle size={10} />}
-                      {p.invoiced ? 'Facturado' : 'Sin factura'}
-                    </span>
+                    <button
+                      onClick={e => { e.stopPropagation(); if (!togglingIds.has(p.id)) toggleInvoiced(p) }}
+                      disabled={togglingIds.has(p.id)}
+                      title={p.invoiced ? 'Quitar facturado' : 'Marcar como facturado'}
+                      className="flex items-center gap-1.5 disabled:opacity-50 disabled:cursor-not-allowed"
+                    >
+                      <span className={`relative inline-flex h-4 w-7 shrink-0 items-center rounded-full transition-colors duration-200 ${p.invoiced ? 'bg-emerald-500' : 'bg-gray-200 dark:bg-white/20'}`}>
+                        <span className={`pointer-events-none inline-block h-3 w-3 transform rounded-full bg-white shadow-md transition-transform duration-200 ${p.invoiced ? 'translate-x-3.5' : 'translate-x-0.5'}`} />
+                      </span>
+                      <span className={`text-[10px] font-bold ${p.invoiced ? 'text-emerald-500 dark:text-emerald-400' : 'text-gray-400 dark:text-[#8A8A9A]'}`}>
+                        {p.invoiced ? 'Facturado' : 'Sin factura'}
+                      </span>
+                    </button>
                   </div>
                   {can('payments', 'delete') && (<button onClick={e => { e.stopPropagation(); setDeletePaymentTarget(p.id) }}
                     className="rounded-xl p-2 text-gray-400 dark:text-gray-600 opacity-0 group-hover:opacity-100 hover:bg-red-50 dark:hover:bg-red-500/10 hover:text-red-600 dark:hover:text-red-400 transition-all">
@@ -887,10 +918,19 @@ export default function PaymentsPage() {
                         </div>
                       </td>
                       <td className="px-6 py-4">
-                        <span className={`inline-flex items-center gap-1.5 rounded-xl border px-3 py-1.5 text-[11px] font-bold shadow-sm ${p.invoiced ? 'text-emerald-600 dark:text-emerald-400 bg-emerald-500/10 border-emerald-500/20' : 'text-gray-500 dark:text-[#8A8A9A] bg-white/50 dark:bg-white/[0.05] border-white/50 dark:border-white/10'}`}>
-                          {p.invoiced ? <CheckCircle2 size={11} /> : <XCircle size={11} />}
-                          {p.invoiced ? 'Facturado' : 'Sin factura'}
-                        </span>
+                        <button
+                          onClick={e => { e.stopPropagation(); if (!togglingIds.has(p.id)) toggleInvoiced(p) }}
+                          disabled={togglingIds.has(p.id)}
+                          title={p.invoiced ? 'Quitar facturado' : 'Marcar como facturado'}
+                          className="flex items-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed hover:opacity-75 transition-opacity active:scale-95"
+                        >
+                          <span className={`relative inline-flex h-5 w-9 shrink-0 items-center rounded-full transition-colors duration-200 ${p.invoiced ? 'bg-emerald-500' : 'bg-gray-200 dark:bg-white/20'}`}>
+                            <span className={`pointer-events-none inline-block h-3.5 w-3.5 transform rounded-full bg-white shadow-md transition-transform duration-200 ${p.invoiced ? 'translate-x-4' : 'translate-x-0.5'}`} />
+                          </span>
+                          <span className={`text-[11px] font-bold ${p.invoiced ? 'text-emerald-500 dark:text-emerald-400' : 'text-gray-400 dark:text-[#8A8A9A]'}`}>
+                            {p.invoiced ? 'Facturado' : 'Sin factura'}
+                          </span>
+                        </button>
                       </td>
                       <td className="px-4 py-4 text-right">
                         {can('payments', 'delete') && (<button onClick={e => { e.stopPropagation(); setDeletePaymentTarget(p.id) }}
@@ -957,9 +997,16 @@ export default function PaymentsPage() {
                         <span className="inline-flex items-center rounded-lg border border-white/50 dark:border-white/10 bg-white/60 dark:bg-white/5 px-2.5 py-1 text-[11px] font-bold text-gray-700 dark:text-gray-300">
                           {METHOD_LABELS[p.method] ?? p.method}
                         </span>
-                        <span>
-                          {p.invoiced ? <CheckCircle2 size={18} className="text-emerald-500" /> : <XCircle size={18} className="text-gray-300 dark:text-gray-600" />}
-                        </span>
+                        <button
+                          onClick={e => { e.stopPropagation(); if (!togglingIds.has(p.id)) toggleInvoiced(p) }}
+                          disabled={togglingIds.has(p.id)}
+                          title={p.invoiced ? 'Quitar facturado' : 'Marcar como facturado'}
+                          className="flex items-center gap-1.5 disabled:opacity-50 disabled:cursor-not-allowed hover:opacity-75 transition-opacity active:scale-95"
+                        >
+                          <span className={`relative inline-flex h-5 w-9 shrink-0 items-center rounded-full transition-colors duration-200 ${p.invoiced ? 'bg-emerald-500' : 'bg-gray-200 dark:bg-white/20'}`}>
+                            <span className={`pointer-events-none inline-block h-3.5 w-3.5 transform rounded-full bg-white shadow-md transition-transform duration-200 ${p.invoiced ? 'translate-x-4' : 'translate-x-0.5'}`} />
+                          </span>
+                        </button>
                       </div>
                     </div>
                   </motion.div>
