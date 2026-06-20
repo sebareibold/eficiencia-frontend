@@ -1,5 +1,6 @@
 import { useState, useMemo, useEffect } from 'react'
 import { useNavigate } from 'react-router-dom'
+import { useQueryClient } from '@tanstack/react-query'
 import { motion, AnimatePresence } from 'framer-motion'
 import { pageVariants } from '../lib/motion'
 import {
@@ -35,6 +36,7 @@ import Skeleton from '../components/ui/Skeleton'
 import EmptyState from '../components/ui/EmptyState'
 import type { Shift, WeekDay } from '../types/shift.types'
 import { ROUTES } from '../constants/routes'
+import { QK } from '../lib/queryKeys'
 
 // ─── Constants ────────────────────────────────────────────────────────────────
 
@@ -180,8 +182,9 @@ function computeColumnLayout(shifts: Shift[]): ShiftLayout[] {
 export default function ShiftsPage() {
   const { shifts, isLoading, error, refetch } = useShifts()
   const { clients } = useClients()
-  const addToast = useUiStore(s => s.addToast)
-  const user     = useAuthStore(s => s.user)
+  const addToast   = useUiStore(s => s.addToast)
+  const user       = useAuthStore(s => s.user)
+  const queryClient = useQueryClient()
   const { can } = usePermissions()
   const canCreate = can('shifts', 'create')
   const canUpdate = can('shifts', 'update')
@@ -463,10 +466,11 @@ export default function ShiftsPage() {
     setIsDeleting(id)
     try {
       await shiftsApi.remove(id)
+      queryClient.setQueryData<Shift[]>(QK.shifts.all(), old => (old ?? []).filter(s => String(s.id) !== String(id)))
       addToast('Turno eliminado', 'success')
-      refetch()
     } catch {
       addToast('Error al eliminar', 'error')
+      refetch()
     } finally {
       setIsDeleting(null)
       setDeleteTarget(null)
@@ -1045,8 +1049,11 @@ export default function ShiftsPage() {
                               )
 
                               return (
-                                <button
+                                <motion.button
                                   key={shift.id}
+                                  initial={{ opacity: 0, scale: 0.92 }}
+                                  animate={{ opacity: isBlocked ? 0.4 : 1, scale: 1 }}
+                                  transition={{ duration: 0.18, ease: 'easeOut' }}
                                   onClick={(e) => { e.stopPropagation(); if (!isBlocked) navigate(`/shifts/${shift.id}`); }}
                                   tabIndex={isBlocked ? -1 : 0}
                                   style={{
@@ -1055,7 +1062,7 @@ export default function ShiftsPage() {
                                     left:  `calc(${leftPercent}% + ${leftPx}px)`,
                                     width: `calc(${widthPercent}% + ${widthPx}px)`,
                                   }}
-                                  className={`absolute rounded-xl border p-2 text-left overflow-hidden transition-all ${!isBlocked ? 'hover:z-10 hover:shadow-md' : 'blur-[1.5px] opacity-40 pointer-events-none'} ${getOccupancyStyle(shift.enrolled, shift.capacity)}`}
+                                  className={`absolute rounded-xl border p-2 text-left overflow-hidden transition-[filter,box-shadow] ${!isBlocked ? 'hover:z-10 hover:shadow-md' : 'blur-[1.5px] pointer-events-none'} ${getOccupancyStyle(shift.enrolled, shift.capacity)}`}
                                 >
                                   <p className="text-[11px] font-bold text-gray-900 dark:text-white leading-tight truncate">
                                     {shift.startTime} – {shift.endTime}
@@ -1070,23 +1077,37 @@ export default function ShiftsPage() {
                                     <span className="text-gray-400 mx-1">·</span>
                                     <span className="text-purple-500 dark:text-purple-400">B: {shift.inscritosB}/{shift.cupoMaximoSalaB}</span>
                                   </p>
-                                </button>
+                                </motion.button>
                               )
                             })}
 
-                            {/* Overlay cierre total — cubre toda la columna */}
+                            {/* Overlay cierre total — clip-path revela de arriba hacia abajo */}
+                            <AnimatePresence>
                             {diaEspCol?.tipo === 'CIERRE_TOTAL' && (
-                              <div className="absolute inset-0 pointer-events-none flex flex-col items-center justify-center gap-2 z-10 bg-red-500/[0.08] dark:bg-red-500/[0.12]">
-                                <div className="flex flex-col items-center gap-1 px-3 py-2 rounded-2xl backdrop-blur-md bg-red-500/20 border border-red-500/30">
+                              <motion.div
+                                key={`cierre-${diaEspCol.id ?? 'total'}`}
+                                className="absolute inset-0 pointer-events-none flex flex-col items-center justify-center gap-2 z-10 bg-red-500/[0.08] dark:bg-red-500/[0.12]"
+                                initial={{ clipPath: 'inset(0 0 100% 0)' }}
+                                animate={{ clipPath: 'inset(0 0 0% 0)' }}
+                                exit={{ clipPath: 'inset(0 0 100% 0)' }}
+                                transition={{ duration: 0.5, ease: [0.22, 1, 0.36, 1] }}
+                              >
+                                <motion.div
+                                  className="flex flex-col items-center gap-1 px-3 py-2 rounded-2xl backdrop-blur-md bg-red-500/20 border border-red-500/30"
+                                  initial={{ opacity: 0, scale: 0.9 }}
+                                  animate={{ opacity: 1, scale: 1 }}
+                                  transition={{ duration: 0.2, delay: 0.35, ease: [0.22, 1, 0.36, 1] }}
+                                >
                                   <CalendarX size={18} className="text-red-400" />
                                   <p className="text-[10px] font-bold text-center leading-snug text-red-400">
                                     {diaEspCol.motivo ?? 'Sin clases'}
                                   </p>
-                                </div>
-                              </div>
+                                </motion.div>
+                              </motion.div>
                             )}
+                            </AnimatePresence>
 
-                            {/* Overlay horario reducido — solo franjas fuera del horario activo */}
+                            {/* Overlay horario reducido — franjas con clip-path */}
                             {diaEspCol?.tipo === 'HORARIO_REDUCIDO' && diaEspCol.horaDesde && diaEspCol.horaHasta && (() => {
                               const yDesde = getTimeY(diaEspCol.horaDesde)
                               const yHasta = getTimeY(diaEspCol.horaHasta)
@@ -1094,29 +1115,35 @@ export default function ShiftsPage() {
                                 <>
                                   {/* Franja antes del horario reducido */}
                                   {yDesde > 0 && (
-                                    <div
+                                    <motion.div
                                       className="absolute left-0 right-0 z-10 bg-amber-500/[0.10] dark:bg-amber-500/[0.14] border-r-2 border-amber-400/50"
                                       style={{ top: 0, height: yDesde }}
+                                      initial={{ clipPath: 'inset(0 0 100% 0)' }}
+                                      animate={{ clipPath: 'inset(0 0 0% 0)' }}
+                                      transition={{ duration: 0.45, ease: [0.22, 1, 0.36, 1] }}
                                     >
                                       <div className="flex items-center justify-center h-full pointer-events-none">
                                         <span className="text-[9px] font-bold text-amber-500 dark:text-amber-400 bg-amber-500/10 px-1.5 py-0.5 rounded-md">
                                           Sin clases
                                         </span>
                                       </div>
-                                    </div>
+                                    </motion.div>
                                   )}
                                   {/* Franja después del horario reducido */}
                                   {yHasta < totalHeight && (
-                                    <div
+                                    <motion.div
                                       className="absolute left-0 right-0 z-10 bg-amber-500/[0.10] dark:bg-amber-500/[0.14] border-r-2 border-amber-400/50"
                                       style={{ top: yHasta, height: totalHeight - yHasta }}
+                                      initial={{ clipPath: 'inset(0 0 100% 0)' }}
+                                      animate={{ clipPath: 'inset(0 0 0% 0)' }}
+                                      transition={{ duration: 0.45, ease: [0.22, 1, 0.36, 1], delay: 0.05 }}
                                     >
                                       <div className="flex items-center justify-center h-full pointer-events-none">
                                         <span className="text-[9px] font-bold text-amber-500 dark:text-amber-400 bg-amber-500/10 px-1.5 py-0.5 rounded-md">
                                           Sin clases
                                         </span>
                                       </div>
-                                    </div>
+                                    </motion.div>
                                   )}
                                 </>
                               )

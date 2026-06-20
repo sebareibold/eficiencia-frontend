@@ -1,6 +1,7 @@
 import { useState, useEffect, useMemo } from 'react'
 import { useParams, useNavigate } from 'react-router-dom'
 import { motion, AnimatePresence } from 'framer-motion'
+import { pageVariants, tabContentVariants, staggerContainerFast, fadeUpItem } from '../lib/motion'
 import {
   ArrowLeft, Users, Clock, Dumbbell, UserPlus, ListPlus,
   X, Bell, Check, Trash2, Search, AlertTriangle, CheckCircle2, Pencil, Save,
@@ -532,9 +533,7 @@ export default function ShiftDetailPage() {
 
   return (
     <motion.div
-      initial={{ opacity: 0, y: 10 }}
-      animate={{ opacity: 1, y: 0 }}
-      transition={{ duration: 0.2 }}
+      {...pageVariants}
       className="space-y-4 md:space-y-5"
     >
       {/* Breadcrumb */}
@@ -559,10 +558,10 @@ export default function ShiftDetailPage() {
             /* ── Vista normal ── */
             <motion.div
               key="view"
-              initial={{ opacity: 0 }}
-              animate={{ opacity: 1 }}
-              exit={{ opacity: 0 }}
-              transition={{ duration: 0.15 }}
+              initial={{ opacity: 0, scale: 0.99, y: 4 }}
+              animate={{ opacity: 1, scale: 1, y: 0 }}
+              exit={{ opacity: 0, scale: 0.99, y: -2 }}
+              transition={{ duration: 0.18, ease: [0.22, 1, 0.36, 1] }}
               className="p-5 md:p-7"
             >
               <div className="flex flex-col sm:flex-row gap-5 sm:items-start">
@@ -600,8 +599,14 @@ export default function ShiftDetailPage() {
                         <span className="h-2 w-2 rounded-full bg-blue-400" />
                         <span className="text-xs font-bold text-gray-500 dark:text-[#8A8A9A]">Sala A</span>
                       </div>
-                      <div className="flex-1 h-1.5 rounded-full bg-white/[0.08] overflow-hidden">
-                        <div className={`h-full rounded-full ${getOccupancyColor(shift.inscritosA, shift.cupoMaximoSalaA)} transition-all duration-500`} style={{ width: `${pctA}%` }} />
+                      <div className="flex-1 h-1.5 rounded-full bg-black/[0.06] dark:bg-white/[0.08] overflow-hidden">
+                        <motion.div
+                          className={`h-full w-full rounded-full ${getOccupancyColor(shift.inscritosA, shift.cupoMaximoSalaA)}`}
+                          style={{ transformOrigin: 'left' }}
+                          initial={{ scaleX: 0 }}
+                          animate={{ scaleX: pctA / 100 }}
+                          transition={{ duration: 0.7, ease: [0.22, 1, 0.36, 1], delay: 0.2 }}
+                        />
                       </div>
                       <span className="text-xs font-bold tabular-nums text-gray-900 dark:text-white w-14 text-right">
                         {shift.inscritosA}/{shift.cupoMaximoSalaA}
@@ -612,8 +617,14 @@ export default function ShiftDetailPage() {
                         <span className="h-2 w-2 rounded-full bg-purple-400" />
                         <span className="text-xs font-bold text-gray-500 dark:text-[#8A8A9A]">Sala B</span>
                       </div>
-                      <div className="flex-1 h-1.5 rounded-full bg-white/[0.08] overflow-hidden">
-                        <div className={`h-full rounded-full ${getOccupancyColor(shift.inscritosB, shift.cupoMaximoSalaB)} transition-all duration-500`} style={{ width: `${pctB}%` }} />
+                      <div className="flex-1 h-1.5 rounded-full bg-black/[0.06] dark:bg-white/[0.08] overflow-hidden">
+                        <motion.div
+                          className={`h-full w-full rounded-full ${getOccupancyColor(shift.inscritosB, shift.cupoMaximoSalaB)}`}
+                          style={{ transformOrigin: 'left' }}
+                          initial={{ scaleX: 0 }}
+                          animate={{ scaleX: pctB / 100 }}
+                          transition={{ duration: 0.7, ease: [0.22, 1, 0.36, 1], delay: 0.3 }}
+                        />
                       </div>
                       <span className="text-xs font-bold tabular-nums text-gray-900 dark:text-white w-14 text-right">
                         {shift.inscritosB}/{shift.cupoMaximoSalaB}
@@ -627,10 +638,10 @@ export default function ShiftDetailPage() {
             /* ── Modo edición inline ── */
             <motion.div
               key="edit"
-              initial={{ opacity: 0 }}
-              animate={{ opacity: 1 }}
-              exit={{ opacity: 0 }}
-              transition={{ duration: 0.15 }}
+              initial={{ opacity: 0, scale: 0.99, y: 4 }}
+              animate={{ opacity: 1, scale: 1, y: 0 }}
+              exit={{ opacity: 0, scale: 0.99, y: -2 }}
+              transition={{ duration: 0.18, ease: [0.22, 1, 0.36, 1] }}
               className="p-5 md:p-7"
             >
               <div className="flex items-center justify-between mb-5">
@@ -797,9 +808,11 @@ export default function ShiftDetailPage() {
 
         {/* Contenido del tab */}
         <div className={`${glassCard} overflow-hidden min-h-[300px]`}>
+        <AnimatePresence mode="wait">
 
           {/* ══ RESUMEN ══ */}
           {tab === 'resumen' && (
+          <motion.div key="resumen" {...tabContentVariants}>
             <div className="p-5 space-y-4">
               {!loadingInscrip && activeInscrip.length > 0 && (
                 <p className="text-sm font-semibold text-gray-900 dark:text-white">
@@ -869,6 +882,7 @@ export default function ShiftDetailPage() {
                 </div>
               )}
             </div>
+          </motion.div>
           )}
 
           {/* ══ INSCRIPCIONES ══ */}
@@ -881,6 +895,7 @@ export default function ShiftDetailPage() {
               .filter(c => !addClientSearch || `${c.name} ${c.lastName}`.toLowerCase().includes(addClientSearch.toLowerCase()))
               .slice(0, 8)
             return (
+            <motion.div key="inscripciones" {...tabContentVariants}>
               <div className="p-5 space-y-4">
                 {/* Toolbar */}
                 <div className="flex items-center justify-between">
@@ -1078,11 +1093,13 @@ export default function ShiftDetailPage() {
                   )}
                 </AnimatePresence>
               </div>
+            </motion.div>
             )
           })()}
 
           {/* ══ ASISTENCIA ══ */}
           {tab === 'asistencia' && (
+          <motion.div key="asistencia" {...tabContentVariants}>
             <div className="p-5 space-y-5">
               <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 pb-4 border-b border-gray-200/50 dark:border-white/[0.06]">
                 <div className="flex items-center gap-3">
@@ -1174,10 +1191,12 @@ export default function ShiftDetailPage() {
                 )
               })())}
             </div>
+          </motion.div>
           )}
 
           {/* ══ LISTA DE ESPERA ══ */}
           {tab === 'espera' && (
+          <motion.div key="espera" {...tabContentVariants}>
             <div className="p-5 space-y-4">
               <div className="flex items-center justify-between">
                 <p className="text-sm font-semibold text-gray-900 dark:text-white">
@@ -1343,10 +1362,12 @@ export default function ShiftDetailPage() {
                 )
               })()}
             </div>
+          </motion.div>
           )}
 
           {/* ══ CANCELACIONES ══ */}
           {tab === 'cancelaciones' && (
+          <motion.div key="cancelaciones" {...tabContentVariants}>
             <div className="p-5 space-y-4">
               <div className="flex items-center justify-between">
                 <div className="flex items-center gap-2">
@@ -1460,8 +1481,10 @@ export default function ShiftDetailPage() {
                 </div>
               )}
             </div>
+          </motion.div>
           )}
 
+        </AnimatePresence>
         </div>
       </div>
 

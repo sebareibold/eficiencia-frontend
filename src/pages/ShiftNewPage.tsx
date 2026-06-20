@@ -1,7 +1,14 @@
 import { useState, useEffect } from 'react'
 import { useNavigate, useSearchParams } from 'react-router-dom'
+import { useQueryClient } from '@tanstack/react-query'
 import { motion } from 'framer-motion'
 import { pageVariants } from '../lib/motion'
+
+const ease = [0.22, 1, 0.36, 1] as const
+const cardAnim = (delay: number) => ({
+  initial: { opacity: 0, y: 20 },
+  animate: { opacity: 1, y: 0, transition: { duration: 0.35, ease, delay } },
+})
 import { ArrowLeft, Calendar, Users, ChevronRight, X, Check } from 'lucide-react'
 import { useForm } from 'react-hook-form'
 import { zodResolver } from '@hookform/resolvers/zod'
@@ -11,6 +18,7 @@ import { inscripcionesApi } from '../api/inscripciones.api'
 import { useClients } from '../hooks/useClients'
 import { useUiStore } from '../store/uiStore'
 import { ROUTES } from '../constants/routes'
+import { QK } from '../lib/queryKeys'
 import Input from '../components/ui/Input'
 import Select from '../components/ui/Select'
 import type { WeekDay } from '../types/shift.types'
@@ -147,10 +155,11 @@ function ClientList({
 // ── Página principal ──────────────────────────────────────────────────────────
 
 export default function ShiftNewPage() {
-  const navigate    = useNavigate()
-  const [params]    = useSearchParams()
-  const addToast    = useUiStore(s => s.addToast)
-  const { clients } = useClients()
+  const navigate      = useNavigate()
+  const [params]      = useSearchParams()
+  const addToast      = useUiStore(s => s.addToast)
+  const queryClient   = useQueryClient()
+  const { clients }   = useClients()
 
   const [isSubmitting, setIsSubmitting] = useState(false)
   const [professors,   setProfessors]   = useState<{ id: string; name: string }[]>([])
@@ -204,6 +213,8 @@ export default function ShiftNewPage() {
         ...data.clientIdsB.map(id => inscripcionesApi.enroll(id, String(turno.id), 'B')),
       ])
 
+      queryClient.setQueryData<import('../types/shift.types').Shift[]>(QK.shifts.all(), old => [...(old ?? []), turno])
+      queryClient.invalidateQueries({ queryKey: QK.shifts.all() })
       addToast('Turno creado exitosamente', 'success')
       navigate(`/shifts/${turno.id}`)
     } catch {
@@ -242,7 +253,7 @@ export default function ShiftNewPage() {
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
 
           {/* ── Col 1: Datos del turno ── */}
-          <div className={`${cardCls} p-6 lg:p-8 space-y-6`}>
+          <motion.div {...cardAnim(0)} className={`${cardCls} p-6 lg:p-8 space-y-6`}>
             <div className="flex items-center gap-3">
               <div className="flex h-10 w-10 items-center justify-center rounded-2xl bg-primary/10">
                 <Calendar size={18} className="text-primary" />
@@ -264,19 +275,21 @@ export default function ShiftNewPage() {
                 {DAYS.map(d => {
                   const selected = formDays.includes(d)
                   return (
-                    <button key={d} type="button"
+                    <motion.button key={d} type="button"
+                      whileTap={{ scale: 0.94 }}
+                      transition={{ duration: 0.1 }}
                       onClick={() => {
                         if (selected) setValue('days', formDays.filter(x => x !== d), { shouldValidate: true })
                         else setValue('days', [...formDays, d], { shouldValidate: true })
                       }}
-                      className={`rounded-xl px-3.5 py-2 text-xs font-bold transition-all ${
+                      className={`rounded-xl px-3.5 py-2 text-xs font-bold transition-colors ${
                         selected
                           ? 'bg-primary text-gray-900 shadow-sm shadow-primary/30'
                           : 'border border-white/30 dark:border-white/10 bg-white/40 dark:bg-white/[0.04] text-gray-500 dark:text-[#8A8A9A] hover:border-primary/40 hover:text-gray-900 dark:hover:text-white'
                       }`}
                     >
                       {DAY_LABELS[d].slice(0, 3)}
-                    </button>
+                    </motion.button>
                   )
                 })}
               </div>
@@ -326,10 +339,10 @@ export default function ShiftNewPage() {
                 <div className={`absolute top-1 w-4 h-4 bg-white rounded-full shadow transition-transform ${formRecurrente ? 'translate-x-6' : 'translate-x-1'}`} />
               </div>
             </label>
-          </div>
+          </motion.div>
 
           {/* ── Col 2: Sala A ── */}
-          <div className={`${cardCls} p-6 lg:p-8 flex flex-col gap-4`}>
+          <motion.div {...cardAnim(0.08)} className={`${cardCls} p-6 lg:p-8 flex flex-col gap-4`}>
             <div className="flex items-center justify-between">
               <div className="flex items-center gap-3">
                 <div className="flex h-10 w-10 items-center justify-center rounded-2xl bg-primary/10">
@@ -356,10 +369,10 @@ export default function ShiftNewPage() {
                 setValue('clientIdsA', checked ? [...clientIdsA, id] : clientIdsA.filter(x => x !== id))
               }
             />
-          </div>
+          </motion.div>
 
           {/* ── Col 3: Sala B ── */}
-          <div className={`${cardCls} p-6 lg:p-8 flex flex-col gap-4`}>
+          <motion.div {...cardAnim(0.16)} className={`${cardCls} p-6 lg:p-8 flex flex-col gap-4`}>
             <div className="flex items-center justify-between">
               <div className="flex items-center gap-3">
                 <div className="flex h-10 w-10 items-center justify-center rounded-2xl bg-blue-500/10">
@@ -386,7 +399,7 @@ export default function ShiftNewPage() {
                 setValue('clientIdsB', checked ? [...clientIdsB, id] : clientIdsB.filter(x => x !== id))
               }
             />
-          </div>
+          </motion.div>
 
         </div>
 
@@ -399,16 +412,18 @@ export default function ShiftNewPage() {
           >
             Cancelar
           </button>
-          <button
+          <motion.button
             type="submit"
             disabled={isSubmitting}
+            whileTap={!isSubmitting ? { scale: 0.97 } : undefined}
+            transition={{ duration: 0.1 }}
             className="flex items-center gap-2 rounded-2xl btn-action px-8 py-3 text-sm font-bold disabled:opacity-60"
           >
             {isSubmitting
               ? <span className="h-4 w-4 animate-spin rounded-full border-2 border-gray-900/30 border-t-gray-900" />
               : <ChevronRight size={16} />}
             {isSubmitting ? 'Creando...' : 'Crear turno'}
-          </button>
+          </motion.button>
         </div>
       </form>
     </motion.div>

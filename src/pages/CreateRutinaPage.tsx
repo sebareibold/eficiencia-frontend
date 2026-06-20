@@ -1976,12 +1976,9 @@ export default function CreateRutinaPage() {
                     return (
                       <td key="dc" className="px-3 py-2.5 w-[110px] align-top">
                         <div className="flex flex-col gap-0.5 group/dia">
-                          <div className="flex items-center gap-1">
+                          {ses.nombre?.trim() && (
                             <span className="text-[10px] text-gray-500 dark:text-white/40 font-medium whitespace-nowrap">{ses.dia}</span>
-                            <button onClick={() => dispatch({ type: 'DELETE_SESION_W', semanaId: sem._id, sesionId: ses._id })} className="p-0.5 rounded text-gray-400 dark:text-white/45 hover:text-red-400 opacity-0 group-hover/dia:opacity-100 transition-all">
-                              <X className="w-2 h-2" />
-                            </button>
-                          </div>
+                          )}
                           {isRenamingSes ? (
                             <form
                               onSubmit={e => { e.preventDefault(); dispatch({ type: 'RENAME_SESION_W', semanaId: sem._id, sesionId: ses._id, nombre: renameSesionVal.trim() }); setRenamingSesionId(null) }}
@@ -2000,13 +1997,18 @@ export default function CreateRutinaPage() {
                               </button>
                             </form>
                           ) : (
-                            <span
-                              className="text-sm text-gray-700 dark:text-white/70 font-semibold whitespace-nowrap cursor-pointer hover:text-primary dark:hover:text-primary transition-colors"
-                              title="Click para personalizar nombre"
-                              onClick={() => { setRenamingSesionId(ses._id); setRenameSesionVal(ses.nombre ?? '') }}
-                            >
-                              {ses.nombre?.trim() ? ses.nombre : ses.dia}
-                            </span>
+                            <div className="flex items-center gap-1">
+                              <span
+                                className="text-sm text-gray-700 dark:text-white/70 font-semibold whitespace-nowrap cursor-pointer hover:text-primary dark:hover:text-primary transition-colors"
+                                title="Click para personalizar nombre"
+                                onClick={() => { setRenamingSesionId(ses._id); setRenameSesionVal(ses.nombre ?? '') }}
+                              >
+                                {ses.nombre?.trim() ? ses.nombre : ses.dia}
+                              </span>
+                              <button onClick={() => dispatch({ type: 'DELETE_SESION_W', semanaId: sem._id, sesionId: ses._id })} className="p-0.5 rounded text-gray-400 dark:text-white/45 hover:text-red-400 opacity-0 group-hover/dia:opacity-100 transition-all">
+                                <X className="w-2 h-2" />
+                              </button>
+                            </div>
                           )}
                         </div>
                       </td>

@@ -142,3 +142,33 @@ export const alertVariants = {
     transition: { duration: duration.fast, ease: ease.overshoot },
   },
 }
+
+/** Tab content — fade + slight y on switch */
+export const tabContentVariants = {
+  initial: { opacity: 0, y: 5 },
+  animate: {
+    opacity: 1,
+    y: 0,
+    transition: { duration: 0.2, ease: ease.spring },
+  },
+  exit: {
+    opacity: 0,
+    y: -3,
+    transition: { duration: 0.1, ease: ease.inOut },
+  },
+}
+
+/** Stagger container — 50ms between children */
+export const staggerContainerFast = {
+  animate: { transition: { staggerChildren: 0.05 } },
+}
+
+/** Stagger item — fade up */
+export const fadeUpItem = {
+  initial: { opacity: 0, y: 6 },
+  animate: {
+    opacity: 1,
+    y: 0,
+    transition: { duration: 0.18, ease: ease.spring },
+  },
+}
