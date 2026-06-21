@@ -47,8 +47,12 @@ function KioskHeader({ onLogout }: { onLogout: () => void }) {
   )
 }
 
-const SESSION_TIMEOUT_MS  = 30 * 60 * 1000
-const SESSION_WARNING_MS  = 28 * 60 * 1000  // Warning 2 min antes del timeout
+// Timeouts diferenciados por rol:
+// - admin: 2 horas (seguridad)
+// - staff/profesor/cliente_comun: 8 horas (comodidad operativa)
+const ADMIN_TIMEOUT_MS    =  2 * 60 * 60 * 1000  // 2 horas
+const DEFAULT_TIMEOUT_MS  =  8 * 60 * 60 * 1000  // 8 horas
+const WARNING_BEFORE_MS   =  2 * 60 * 1000       // Warning 2 min antes
 const PERMS_INTERVAL_MS   =  5 * 60 * 1000
 
 
@@ -78,14 +82,17 @@ export default function Layout() {
     navigate('/login', { replace: true })
   }, [logout, navigate])
 
-  // ── Timeout de inactividad — 30 min con warning a los 28 min ──────────────
+  // ── Timeout de inactividad — diferenciado por rol ────────────────────────
+  const sessionTimeoutMs = user?.role === 'admin' ? ADMIN_TIMEOUT_MS : DEFAULT_TIMEOUT_MS
+  const sessionWarningMs = sessionTimeoutMs - WARNING_BEFORE_MS
+
   const resetTimers = useCallback(() => {
     if (warningTimer.current) clearTimeout(warningTimer.current)
     if (inactivityTimer.current) clearTimeout(inactivityTimer.current)
     setShowSessionWarning(false)
-    warningTimer.current = setTimeout(() => setShowSessionWarning(true), SESSION_WARNING_MS)
-    inactivityTimer.current = setTimeout(doLogout, SESSION_TIMEOUT_MS)
-  }, [doLogout])
+    warningTimer.current = setTimeout(() => setShowSessionWarning(true), sessionWarningMs)
+    inactivityTimer.current = setTimeout(doLogout, sessionTimeoutMs)
+  }, [doLogout, sessionTimeoutMs, sessionWarningMs])
 
   useEffect(() => {
     if (!accessToken) return
