@@ -713,7 +713,7 @@ function OptionCard({
         </motion.span>
       )}
       {children}
-    </button>
+    </motion.button>
   )
 }
 
