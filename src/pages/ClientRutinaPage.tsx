@@ -1788,7 +1788,12 @@ export default function ClientRutinaPage() {
   const rid = searchParams.get('rid')
 
   const { rutinas, isLoading, refetch } = useRutinas(clienteId)
-  const [selectedRutinaId, setSelectedRutinaId] = useState<string | null>(rid)
+  // Lazy init: si hay datos en cache al montar (2ª visita), seleccionar la rutina
+  // activa de inmediato para evitar el flash de estado "vacío" en AnimatePresence.
+  const [selectedRutinaId, setSelectedRutinaId] = useState<string | null>(() => {
+    if (rid) return rid
+    return rutinas.find(r => r.activa)?.id ?? rutinas[0]?.id ?? null
+  })
   const [editMode, setEditMode] = useState(false)
   const [confirmDeleteSemana, setConfirmDeleteSemana] = useState(false)
   const [ficha, setFicha] = useState<FichaEntrenamiento | null>(null)
@@ -2220,7 +2225,7 @@ export default function ClientRutinaPage() {
         <div>
 
           {/* Modo edición: tabla editable inline */}
-          <AnimatePresence mode="wait">
+          <AnimatePresence>
             {editMode && rutina ? (
               <InlineEditRutinaTable
                 key="inline-edit"

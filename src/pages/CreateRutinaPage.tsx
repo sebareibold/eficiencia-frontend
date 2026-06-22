@@ -1817,16 +1817,86 @@ export default function CreateRutinaPage() {
     const [renameSesionVal, setRenameSesionVal] = useState('')
     const [dragSemanaId, setDragSemanaId] = useState<string | null>(null)
     const [dragOverSemanaId, setDragOverSemanaId] = useState<string | null>(null)
+    const [guiaExpanded, setGuiaExpanded] = useState(false)
 
     return (
       <div className="space-y-3">
-      <div className="flex items-start gap-2.5 rounded-xl border border-primary/20 bg-primary/[0.04] px-3 py-2.5">
-        <AlertCircle size={13} className="text-primary/60 shrink-0 mt-0.5" />
-        <p className="text-xs text-gray-600 dark:text-white/50 leading-relaxed">
-          <strong className="text-gray-800 dark:text-white/80">Estructura:</strong> Semana → Día → Bloque → Ejercicio.
-          Hacé click en el nombre de semana o día para renombrarlo.
-          Los campos <span className="font-semibold text-primary/80">RIR</span> y <span className="font-semibold text-primary/80">RPE</span> son opcionales (pasá el cursor sobre los encabezados para ver ayuda).
-        </p>
+      {/* ── Guía desplegable ── */}
+      <div className="rounded-xl border border-primary/20 bg-primary/[0.04] overflow-hidden">
+        <button
+          type="button"
+          onClick={() => setGuiaExpanded(v => !v)}
+          className="w-full flex items-center gap-2.5 px-3 py-2.5 hover:bg-primary/[0.03] transition-colors text-left"
+        >
+          <AlertCircle size={13} className="text-primary/60 shrink-0" />
+          <span className="text-xs font-semibold text-gray-700 dark:text-white/70 flex-1">
+            ¿Cómo leer esta tabla?
+          </span>
+          <ChevronDown size={13} className={`text-primary/50 shrink-0 transition-transform duration-200 ${guiaExpanded ? 'rotate-180' : ''}`} />
+        </button>
+        <AnimatePresence>
+          {guiaExpanded && (
+            <motion.div
+              initial={{ height: 0 }}
+              animate={{ height: 'auto' }}
+              exit={{ height: 0 }}
+              transition={{ duration: 0.2, ease: [0.22, 1, 0.36, 1] }}
+              className="overflow-hidden"
+            >
+              <div className="px-3 pb-3 border-t border-primary/10 space-y-3 pt-2.5">
+                {/* Estructura jerárquica */}
+                <div>
+                  <p className="text-[11px] font-semibold text-gray-700 dark:text-white/60 uppercase tracking-wide mb-1.5">Estructura</p>
+                  <div className="flex items-center gap-1.5 flex-wrap">
+                    {(['Semana', 'Día', 'Bloque', 'Ejercicio'] as const).map((nivel, i, arr) => (
+                      <span key={nivel} className="flex items-center gap-1.5">
+                        <span className="text-[11px] font-semibold px-2 py-0.5 rounded-md bg-white/10 dark:bg-white/[0.07] text-gray-800 dark:text-white/80">{nivel}</span>
+                        {i < arr.length - 1 && <span className="text-gray-400 dark:text-white/20 text-xs">→</span>}
+                      </span>
+                    ))}
+                  </div>
+                  <p className="text-[11px] text-gray-500 dark:text-white/40 mt-1.5 leading-relaxed">
+                    Cada semana tiene días, cada día tiene bloques y cada bloque agrupa ejercicios. Hacé click en el nombre de semana o día para renombrarlo.
+                  </p>
+                </div>
+                {/* Columnas */}
+                <div>
+                  <p className="text-[11px] font-semibold text-gray-700 dark:text-white/60 uppercase tracking-wide mb-1.5">Columnas</p>
+                  <div className="space-y-1.5">
+                    {[
+                      { col: 'Bloque', desc: 'Letra del bloque (A, B, C…). Los ejercicios de un mismo bloque se ejecutan en circuito, uno tras otro sin descanso entre ellos.' },
+                      { col: 'Ser.', desc: 'Cantidad de series a realizar.' },
+                      { col: 'Reps', desc: 'Repeticiones por serie. Podés escribir un rango (ej: 8–12) o un número fijo.' },
+                      { col: 'Peso', desc: 'Carga a utilizar (en kg). Podés dejarlo en blanco si el ejercicio no lleva carga fija.' },
+                      { col: 'RIR', desc: 'Repeticiones en reserva — cuántas repeticiones te quedaban antes del fallo. 0 = hasta el fallo, 2 = te quedaban 2. Campo opcional.' },
+                      { col: 'RPE', desc: 'Esfuerzo percibido del 1 al 10 (1 = sin esfuerzo, 10 = máximo esfuerzo). Alternativa al RIR. Campo opcional.' },
+                      { col: 'Nota', desc: 'Indicaciones extras para el ejercicio (tempo, agarre, variante, etc.).' },
+                    ].map(({ col, desc }) => (
+                      <div key={col} className="flex gap-2">
+                        <span className="text-[11px] font-semibold text-primary/80 shrink-0 w-14">{col}</span>
+                        <span className="text-[11px] text-gray-500 dark:text-white/40 leading-relaxed">{desc}</span>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+                {/* Atajos */}
+                <div>
+                  <p className="text-[11px] font-semibold text-gray-700 dark:text-white/60 uppercase tracking-wide mb-1.5">Atajos</p>
+                  <div className="space-y-1">
+                    {[
+                      'Arrastrá el ícono ⠿ de una semana para reordenarla.',
+                      'Pasá el cursor sobre cualquier encabezado subrayado para ver su descripción.',
+                    ].map((tip, i) => (
+                      <p key={i} className="text-[11px] text-gray-500 dark:text-white/40 leading-relaxed flex gap-1.5">
+                        <span className="text-primary/50 shrink-0">•</span>{tip}
+                      </p>
+                    ))}
+                  </div>
+                </div>
+              </div>
+            </motion.div>
+          )}
+        </AnimatePresence>
       </div>
       <div className="rounded-2xl border border-white/40 dark:border-white/[0.08] overflow-hidden">
         <div
