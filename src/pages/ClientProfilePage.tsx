@@ -469,6 +469,9 @@ function AttendanceTabContent({ attendance }: { attendance: AttendanceRecord[] }
   )
 }
 
+// Clientes cargados al menos una vez en esta sesión (sobrevive a unmount/remount)
+const loadedClientIds = new Set<string>()
+
 // ─── Página principal ─────────────────────────────────────────────────────────
 export default function ClientProfilePage() {
   const { id } = useParams<{ id: string }>()
@@ -476,6 +479,9 @@ export default function ClientProfilePage() {
   const addToast = useUiStore(s => s.addToast)
   const user = useAuthStore(s => s.user)
   const isAdmin = user?.role === 'admin'
+
+  // Visita de regreso → no animar desde opacity:0 para evitar flash "solo navbar"
+  const isReturnVisit = Boolean(id && loadedClientIds.has(id))
 
   const [navOpen, setNavOpen] = useState(false)
   const [deleteRutinaId, setDeleteRutinaId] = useState<string | null>(null)
@@ -603,7 +609,7 @@ export default function ClientProfilePage() {
       if (membresiasRes.status === 'fulfilled') {
         setMembresias([...membresiasRes.value].sort((a, b) => b.fechaInicio.localeCompare(a.fechaInicio)))
       }
-    }).finally(() => { setLoading(false); setLoadingMembresias(false) })
+    }).finally(() => { setLoading(false); setLoadingMembresias(false); if (id) loadedClientIds.add(id) })
   }, [id])
 
   useEffect(() => {
@@ -933,7 +939,7 @@ export default function ClientProfilePage() {
   return (
     <>
     <motion.div
-      initial={{ opacity: 0, y: 12 }}
+      initial={isReturnVisit ? false : { opacity: 0, y: 12 }}
       animate={{ opacity: 1, y: 0 }}
       transition={{ duration: 0.35, ease: [0.22, 1, 0.36, 1] }}
       className="space-y-4 md:space-y-5"
@@ -1458,12 +1464,24 @@ export default function ClientProfilePage() {
                     {activa ? (
                       <div
                         onClick={() => navigate(`/clients/${id}/rutina?rid=${activa.id}`)}
-                        className="group relative flex flex-col justify-between p-5 rounded-2xl border border-primary/20 bg-primary/[0.02] hover:bg-primary/[0.04] transition-all cursor-pointer overflow-hidden min-h-[140px]"
+                        className="group relative flex flex-col justify-between p-5 rounded-2xl border border-white/50 dark:border-white/10 bg-white/30 dark:bg-black/30 backdrop-blur-3xl shadow-[0_8px_32px_rgba(0,0,0,0.04)] dark:shadow-[0_8px_32px_rgba(0,0,0,0.3)] hover:border-primary/30 dark:hover:border-primary/20 hover:shadow-[0_8px_40px_rgba(0,0,0,0.08)] dark:hover:shadow-[0_8px_40px_rgba(251,198,8,0.06)] transition-all duration-300 cursor-pointer overflow-hidden min-h-[148px] active:scale-[0.97]"
                       >
-                        <div className="absolute inset-y-0 left-0 w-[4px] bg-primary rounded-full" />
-                        <div>
+                        {/* Sutil glow de acento en la esquina superior */}
+                        <div className="pointer-events-none absolute -top-10 -right-10 h-32 w-32 rounded-full bg-primary/[0.07] blur-3xl" />
+
+                        <div className="relative">
                           <div className="flex items-start justify-between gap-3">
-                            <h5 className="text-base font-black text-gray-900 dark:text-white group-hover:text-primary transition-colors">{activa.nombre}</h5>
+                            <div className="flex items-center gap-3">
+                              <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-2xl bg-primary/15 border border-primary/25">
+                                <BookOpen size={17} className="text-primary" />
+                              </div>
+                              <div>
+                                <h5 className="text-base font-black text-gray-900 dark:text-white group-hover:text-primary transition-colors duration-200 leading-tight">{activa.nombre}</h5>
+                                {activa.descripcion && (
+                                  <p className="text-[11px] text-gray-500 dark:text-[#8A8A9A] mt-0.5 line-clamp-1">{activa.descripcion}</p>
+                                )}
+                              </div>
+                            </div>
                             <div className="flex items-center gap-2 shrink-0">
                               <span className="px-2.5 py-0.5 rounded-full text-[10px] font-bold bg-green-500/10 text-green-600 dark:text-green-400 border border-green-500/25">
                                 Activa
@@ -1480,21 +1498,24 @@ export default function ClientProfilePage() {
                               )}
                             </div>
                           </div>
-                          {activa.descripcion && (
-                            <p className="text-xs text-gray-500 dark:text-[#8A8A9A] mt-2 line-clamp-2">{activa.descripcion}</p>
-                          )}
                         </div>
-                        <div className="flex items-center justify-between text-xs text-gray-500 dark:text-[#8A8A9A] pt-4 mt-4 border-t border-gray-100 dark:border-white/[0.05]">
-                          <span>
-                            {(activa.semanas ?? []).reduce((acc, s) => acc + (s.sesiones ?? []).reduce((a, ses) => a + (ses.bloques ?? []).reduce((b, bl) => b + (bl.ejerciciosPlan ?? []).length, 0), 0), 0)} ejercicios
-                          </span>
-                          <span>
-                            {(activa.semanas ?? []).length} semana{(activa.semanas ?? []).length !== 1 ? 's' : ''}
-                          </span>
+
+                        <div className="relative flex items-center justify-between text-xs text-gray-500 dark:text-[#8A8A9A] pt-4 mt-4 border-t border-white/50 dark:border-white/[0.06]">
+                          <div className="flex items-center gap-4">
+                            <span className="flex items-center gap-1.5">
+                              <Dumbbell size={11} className="text-gray-400" />
+                              {(activa.semanas ?? []).reduce((acc, s) => acc + (s.sesiones ?? []).reduce((a, ses) => a + (ses.bloques ?? []).reduce((b, bl) => b + (bl.ejerciciosPlan ?? []).length, 0), 0), 0)} ejercicios
+                            </span>
+                            <span className="flex items-center gap-1.5">
+                              <CalendarDays size={11} className="text-gray-400" />
+                              {(activa.semanas ?? []).length} semana{(activa.semanas ?? []).length !== 1 ? 's' : ''}
+                            </span>
+                          </div>
+                          <span className="text-[10px] text-primary/70 font-semibold group-hover:text-primary transition-colors">Ver rutina →</span>
                         </div>
                       </div>
                     ) : (
-                      <div className="flex flex-col items-center justify-center p-6 border border-dashed border-gray-200 dark:border-white/10 rounded-2xl min-h-[140px] text-center text-gray-400 dark:text-[#8A8A9A]">
+                      <div className="flex flex-col items-center justify-center p-6 border border-dashed border-gray-200 dark:border-white/10 rounded-2xl min-h-[148px] text-center text-gray-400 dark:text-[#8A8A9A]">
                         <AlertTriangle size={20} className="mb-2 text-amber-500/80" />
                         <p className="text-xs font-semibold">No hay una rutina activa</p>
                         <p className="text-[10px] opacity-60">Activá una rutina desde el gestor o creá una nueva.</p>
@@ -1508,15 +1529,15 @@ export default function ClientProfilePage() {
                     {inactivas.length === 0 ? (
                       <p className="text-xs text-gray-400 dark:text-[#6A6A7A] italic px-1">No hay rutinas inactivas.</p>
                     ) : (
-                      <div className="space-y-2.5 max-h-[220px] overflow-y-auto pr-1">
+                      <div className="space-y-2 max-h-[220px] overflow-y-auto pr-1">
                         {inactivas.map((rutina: Rutina) => (
                           <div
                             key={rutina.id}
                             onClick={() => navigate(`/clients/${id}/rutina?rid=${rutina.id}`)}
-                            className="w-full flex items-center gap-3 px-3 py-2.5 rounded-xl border border-gray-200 dark:border-white/[0.05] bg-white/40 dark:bg-white/[0.01] hover:bg-white/70 dark:hover:bg-white/[0.04] transition-all text-left cursor-pointer group"
+                            className="w-full flex items-center gap-3 px-3 py-2.5 rounded-xl border border-white/50 dark:border-white/[0.06] bg-white/20 dark:bg-white/[0.02] backdrop-blur-sm hover:bg-white/40 dark:hover:bg-white/[0.05] hover:border-white/70 dark:hover:border-white/[0.10] transition-all duration-200 text-left cursor-pointer group active:scale-[0.98]"
                           >
-                            <div className="h-8 w-8 rounded-lg bg-gray-500/10 flex items-center justify-center shrink-0">
-                              <BookOpen size={13} className="text-gray-400" />
+                            <div className="h-8 w-8 rounded-lg bg-gray-500/10 border border-gray-200 dark:border-white/[0.06] flex items-center justify-center shrink-0">
+                              <BookOpen size={13} className="text-gray-400 dark:text-[#8A8A9A]" />
                             </div>
                             <div className="flex-1 min-w-0">
                               <p className="text-xs font-bold text-gray-700 dark:text-gray-300 truncate group-hover:text-gray-900 dark:group-hover:text-white transition-colors">{rutina.nombre}</p>
@@ -1525,9 +1546,6 @@ export default function ClientProfilePage() {
                               </p>
                             </div>
                             <div className="flex items-center gap-1.5 shrink-0">
-                              <span className="text-[10px] px-1.5 py-0.5 rounded bg-gray-500/10 text-gray-500 dark:text-[#8A8A9A]">
-                                Inactiva
-                              </span>
                               {(isAdmin || user?.role === 'profesor') && (
                                 <button
                                   type="button"
@@ -1538,6 +1556,7 @@ export default function ClientProfilePage() {
                                   <Trash2 size={12} />
                                 </button>
                               )}
+                              <ChevronRight size={13} className="text-gray-300 dark:text-white/20 group-hover:text-gray-400 dark:group-hover:text-white/40 transition-colors" />
                             </div>
                           </div>
                         ))}
