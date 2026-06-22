@@ -8,6 +8,9 @@ import { inscripcionesApi } from '../api/inscripciones.api'
 import type { Client } from '../types/client.types'
 import type { WeekDay } from '../types/shift.types'
 
+// Emil: ease-out fuerte para entradas de UI
+const EASE_OUT: [number, number, number, number] = [0.23, 1, 0.32, 1]
+
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 
 const JS_DAY_TO_WEEKDAY: WeekDay[] = [
@@ -104,6 +107,9 @@ export default function EjecucionPage() {
     return () => { cancelled = true }
   }, [])
 
+  // ── Scroll al top al montar ───────────────────────────────────────────────
+  useEffect(() => { window.scrollTo({ top: 0, behavior: 'instant' as ScrollBehavior }) }, [])
+
   // ── Buscador con debounce ─────────────────────────────────────────────────
   useEffect(() => {
     if (!search.trim()) { setResults([]); return }
@@ -143,13 +149,23 @@ export default function EjecucionPage() {
       <div className="w-full max-w-xl space-y-6">
 
         {/* Título */}
-        <div className="text-center space-y-1">
+        <motion.div
+          initial={{ opacity: 0, y: 10 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ duration: 0.26, ease: EASE_OUT }}
+          className="text-center space-y-1"
+        >
           <h1 className="text-2xl font-bold text-gray-900 dark:text-white">Registrar Entrenamiento</h1>
           <p className="text-sm text-gray-500 dark:text-white/40">Buscá tu nombre para ver tu rutina</p>
-        </div>
+        </motion.div>
 
         {/* Buscador */}
-        <div className="relative rounded-2xl bg-white/30 dark:bg-white/[0.05] backdrop-blur-3xl border border-white/50 dark:border-white/[0.12] shadow-[0_8px_32px_rgba(0,0,0,0.04)] dark:shadow-[0_8px_32px_rgba(0,0,0,0.3)] transition-colors focus-within:border-primary/50 focus-within:bg-white/50 dark:focus-within:bg-white/[0.07]">
+        <motion.div
+          initial={{ opacity: 0, y: 10 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ duration: 0.26, delay: 0.06, ease: EASE_OUT }}
+          className="relative rounded-2xl bg-white/30 dark:bg-white/[0.05] backdrop-blur-3xl border border-white/50 dark:border-white/[0.12] shadow-[0_8px_32px_rgba(0,0,0,0.04)] dark:shadow-[0_8px_32px_rgba(0,0,0,0.3)] transition-colors focus-within:border-primary/50 focus-within:bg-white/50 dark:focus-within:bg-white/[0.07]"
+        >
           <Search className="absolute left-4 top-1/2 -translate-y-1/2 w-5 h-5 text-gray-400 dark:text-white/30 pointer-events-none" />
           <input
             ref={searchRef}
@@ -167,9 +183,10 @@ export default function EjecucionPage() {
           <AnimatePresence>
             {results.length > 0 && (
               <motion.div
-                initial={{ opacity: 0, y: -4 }}
-                animate={{ opacity: 1, y: 0 }}
-                exit={{ opacity: 0, y: -4 }}
+                initial={{ opacity: 0, y: -6, scale: 0.98 }}
+                animate={{ opacity: 1, y: 0, scale: 1 }}
+                exit={{ opacity: 0, y: -4, scale: 0.98 }}
+                transition={{ duration: 0.18, ease: EASE_OUT }}
                 className="absolute top-full left-0 right-0 mt-2 bg-white/50 dark:bg-black/30 backdrop-blur-3xl border border-white/60 dark:border-white/[0.10] rounded-2xl overflow-hidden z-20 shadow-2xl"
               >
                 {results.map((c, i) => (
@@ -177,7 +194,7 @@ export default function EjecucionPage() {
                     key={c.id}
                     onClick={() => goToRutina(c.id, c.name, c.lastName ?? '')}
                     onMouseEnter={() => setActiveIdx(i)}
-                    className={`w-full text-left px-5 py-4 transition-colors border-b border-white/30 dark:border-white/[0.05] last:border-0 flex items-center gap-4 ${i === activeIdx ? 'bg-white/40 dark:bg-white/[0.10]' : 'hover:bg-white/30 dark:hover:bg-white/[0.06]'}`}
+                    className={`w-full text-left px-5 py-4 transition-colors border-b border-white/30 dark:border-white/[0.05] last:border-0 flex items-center gap-4 active:scale-[0.99] ${i === activeIdx ? 'bg-white/40 dark:bg-white/[0.10]' : 'hover:bg-white/30 dark:hover:bg-white/[0.06]'}`}
                   >
                     <span className={`w-10 h-10 rounded-xl text-base font-bold flex items-center justify-center shrink-0 ${i === activeIdx ? 'bg-primary/25 text-primary' : 'bg-primary/15 text-primary'}`}>
                       {c.name.charAt(0).toUpperCase()}
@@ -188,11 +205,16 @@ export default function EjecucionPage() {
               </motion.div>
             )}
           </AnimatePresence>
-        </div>
+        </motion.div>
 
         {/* Recomendados */}
         {!search && (
-          <div className="space-y-3">
+          <motion.div
+            initial={{ opacity: 0, y: 8 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ duration: 0.24, delay: 0.12, ease: EASE_OUT }}
+            className="space-y-3"
+          >
             <div className="flex items-center gap-2">
               <Users className="w-3.5 h-3.5 text-gray-400 dark:text-white/25" />
               <span className="text-xs font-semibold text-gray-400 dark:text-white/25 uppercase tracking-wider">
@@ -215,16 +237,15 @@ export default function EjecucionPage() {
                 No hay turnos activos en este momento
               </p>
             ) : (
-              <motion.div
-                initial={{ opacity: 0 }}
-                animate={{ opacity: 1 }}
-                className="flex flex-wrap gap-2"
-              >
-                {recomendados.map(c => (
-                  <button
+              <div className="flex flex-wrap gap-2">
+                {recomendados.map((c, i) => (
+                  <motion.button
                     key={c.clienteId}
+                    initial={{ opacity: 0, scale: 0.95 }}
+                    animate={{ opacity: 1, scale: 1 }}
+                    transition={{ duration: 0.18, delay: i * 0.04, ease: EASE_OUT }}
                     onClick={() => goToRutina(c.clienteId, c.name, c.lastName)}
-                    className="flex items-center gap-2.5 px-4 py-2.5 rounded-xl bg-white/20 dark:bg-white/[0.05] backdrop-blur-sm border border-white/50 dark:border-white/[0.08] hover:bg-white/40 dark:hover:bg-white/[0.09] hover:border-white/70 dark:hover:border-white/[0.16] transition-all group"
+                    className="flex items-center gap-2.5 px-4 py-2.5 rounded-xl bg-white/20 dark:bg-white/[0.05] backdrop-blur-sm border border-white/50 dark:border-white/[0.08] hover:bg-white/40 dark:hover:bg-white/[0.09] hover:border-white/70 dark:hover:border-white/[0.16] transition-all active:scale-[0.97] group"
                   >
                     <span className="w-6 h-6 rounded-lg bg-primary/15 text-primary text-xs font-bold flex items-center justify-center shrink-0 group-hover:bg-primary/25 transition-colors">
                       {c.name.charAt(0).toUpperCase()}
@@ -232,11 +253,11 @@ export default function EjecucionPage() {
                     <span className="text-sm font-medium text-gray-600 dark:text-white/70 group-hover:text-gray-900 dark:group-hover:text-white transition-colors">
                       {c.name} {c.lastName}
                     </span>
-                  </button>
+                  </motion.button>
                 ))}
-              </motion.div>
+              </div>
             )}
-          </div>
+          </motion.div>
         )}
 
       </div>

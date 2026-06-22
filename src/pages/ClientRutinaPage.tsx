@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback } from 'react'
+import { useState, useEffect, useCallback, useRef } from 'react'
 import { useParams, useNavigate, useSearchParams } from 'react-router-dom'
 import { motion, AnimatePresence } from 'framer-motion'
 import DotsLoader from '../components/ui/DotsLoader'
@@ -8,8 +8,9 @@ import { z } from 'zod'
 import {
   ArrowLeft, Plus, Copy, Trash2, Pencil, Check, X,
   BookOpen, Dumbbell, ExternalLink, ChevronDown, User2, Search,
-  Save, AlertTriangle, ChevronRight, GripVertical, Trophy, CalendarDays, History,
+  Save, AlertTriangle, ChevronLeft, ChevronRight, GripVertical, Trophy, CalendarDays, Download, Info,
 } from 'lucide-react'
+import ExcelJS from 'exceljs'
 import { format, parseISO, differenceInDays } from 'date-fns'
 import { es } from 'date-fns/locale'
 import { DIFICULTAD_LABELS } from '../types/ejercicio-catalogo.types'
@@ -207,24 +208,12 @@ function EjercicioDraftRow({ ej, catalogo, onUpdate, onDelete }: EjercicioDraftR
           catalogo={catalogo}
           className="w-full bg-gray-100 dark:bg-white/[0.06] border border-gray-300 dark:border-white/[0.1] rounded-lg px-3 py-2 text-sm text-saas-text dark:text-white placeholder-gray-400 dark:placeholder-white/30 focus:outline-none focus:border-primary/60"
         />
-        <div className="grid grid-cols-3 gap-2">
+        <p className="text-[10px] text-gray-400 dark:text-white/30 uppercase tracking-widest font-semibold pt-1">Plan prescrito</p>
+        <div className="grid grid-cols-5 gap-2">
           {([
             { name: 'series' as const, label: 'Series', placeholder: '3' },
             { name: 'repeticiones' as const, label: 'Reps', placeholder: '10-12' },
             { name: 'peso' as const, label: 'Peso', placeholder: '60 kg' },
-          ] as const).map(f => (
-            <div key={f.name}>
-              <label className="text-[10px] text-gray-400 dark:text-white/35 block mb-1 font-medium uppercase tracking-wider">{f.label}</label>
-              <input
-                {...register(f.name)}
-                placeholder={f.placeholder}
-                className="w-full bg-gray-100 dark:bg-white/[0.06] border border-saas-border dark:border-white/[0.08] rounded-lg px-2.5 py-1.5 text-sm text-saas-text dark:text-white placeholder-gray-400 dark:placeholder-white/25 focus:outline-none focus:border-primary/60 text-center"
-              />
-            </div>
-          ))}
-        </div>
-        <div className="grid grid-cols-2 gap-2">
-          {([
             { name: 'rir' as const, label: 'RIR', placeholder: '2' },
             { name: 'rpe' as const, label: 'RPE', placeholder: '8' },
           ] as const).map(f => (
@@ -239,7 +228,7 @@ function EjercicioDraftRow({ ej, catalogo, onUpdate, onDelete }: EjercicioDraftR
           ))}
         </div>
         <div>
-          <label className="text-[10px] text-gray-400 dark:text-white/35 block mb-1 font-medium uppercase tracking-wider">Nota de rutina</label>
+          <label className="text-[10px] text-gray-400 dark:text-white/35 block mb-1 font-medium uppercase tracking-wider">Nota</label>
           <input
             {...register('notas')}
             placeholder="Indicaciones específicas para esta rutina..."
@@ -806,7 +795,7 @@ function DraftBloqueCard({ bloque, sesionId, catalogo, addingBloqueId, onSetAddi
               <span className="text-center">Ser.</span>
               <span className="text-center">Reps</span>
               <span className="text-center">Peso</span>
-              <span />
+              <span className="text-right text-gray-300 dark:text-white/15 normal-case tracking-normal">plan</span>
             </div>
           )}
           {bloque.ejerciciosPlan.map(ej => (
@@ -1329,14 +1318,16 @@ function EditCard({ clienteId: _clienteId, rutina, onCancel, onSaved }: EditCard
 
 // ─── InlineEditRutinaTable ────────────────────────────────────────────────────
 
-function InlineEditRutinaTable({ rutina, onCancel, onSaved }: {
+function InlineEditRutinaTable({ rutina, onCancel, onSaved, selectedSemanaId, onSemanaChange }: {
   rutina: Rutina
   onCancel: () => void
   onSaved: () => void
+  selectedSemanaId: string | null
+  onSemanaChange: (id: string | null) => void
 }) {
   const {
     draft, hasChanges, saving, initDraft, saveDraft, setMeta,
-    addSemana, cloneSemana, deleteSemana, renameSemana, reorderSemanas,
+    addSemana, cloneSemana, deleteSemana, renameSemana,
     addSesion, renameSesion, setSesionNota, deleteSesion,
     addBloque, deleteBloque,
     addEjercicio, updateEjercicio, deleteEjercicio,
@@ -1353,16 +1344,69 @@ function InlineEditRutinaTable({ rutina, onCancel, onSaved }: {
   const [renameSesionVal, setRenameSesionVal] = useState('')
   const [editingNotaSesionId, setEditingNotaSesionId] = useState<string | null>(null)
   const [notaSesionVal, setNotaSesionVal] = useState('')
-  const [dragSemanaId, setDragSemanaId] = useState<string | null>(null)
-  const [dragOverSemanaId, setDragOverSemanaId] = useState<string | null>(null)
   const [catalogoTable, setCatalogoTable] = useState<EjercicioCatalogo[]>([])
 
   useEffect(() => { initDraft(rutina) }, [rutina.id]) // eslint-disable-line
   useEffect(() => { ejerciciosApi.getAll().then(setCatalogoTable).catch(() => {}) }, [])
 
+  // Navegación automática al agregar/eliminar semanas
+  const semCountRef = useRef(0)
+  useEffect(() => {
+    if (!draft) return
+    const count = draft.semanas.length
+    const prev = semCountRef.current
+    semCountRef.current = count
+    if (count === 0) return
+    if (prev === 0 && count > 0) {
+      // Carga inicial — validar selección
+      if (!draft.semanas.find(s => s.id === selectedSemanaId))
+        onSemanaChange(draft.semanas[0].id)
+      return
+    }
+    if (count > prev) {
+      // Nueva semana agregada — navegar a ella
+      onSemanaChange(draft.semanas[count - 1].id)
+    } else if (!draft.semanas.find(s => s.id === selectedSemanaId)) {
+      // Semana eliminada — fallback a primera
+      onSemanaChange(draft.semanas[0].id)
+    }
+  }, [draft?.semanas.length]) // eslint-disable-line
+
   if (!draft) return <div className={`${glassCard} p-6`}><SkeletonRutinaPanel /></div>
 
-  const C = 'px-3 py-0 align-middle' // empty cell class shorthand
+  const activeSem = draft.semanas.find(s => s.id === selectedSemanaId) ?? draft.semanas[0]
+
+  // Mapa de ejecuciones originales para la columna Última (read-only)
+  const origEjMap = new Map<string, EjercicioPlan>()
+  for (const s of rutina.semanas)
+    for (const ses of s.sesiones)
+      for (const bl of ses.bloques)
+        for (const ej of bl.ejerciciosPlan)
+          origEjMap.set(ej.id, ej)
+
+  const dash = <span className="text-gray-300 dark:text-white/15">—</span>
+  const ultCls = 'px-2 py-2.5 text-center text-[11px] text-gray-400 dark:text-white/40 tabular-nums'
+
+  const renderUlt = (ejId: string) => {
+    const orig = origEjMap.get(ejId)
+    const u = orig?.ejecuciones?.[0]
+    return (
+      <>
+        <td className={ultCls}>{u?.series != null ? `${u.series}×` : dash}</td>
+        <td className={ultCls}>{u?.repeticiones ?? dash}</td>
+        <td className={ultCls}>
+          {u?.peso != null
+            ? <span className="px-1.5 py-0.5 bg-primary/10 text-primary/80 rounded text-[11px] font-medium">{u.peso}</span>
+            : dash}
+        </td>
+        <td className={ultCls}>{u?.rir != null ? u.rir : dash}</td>
+        <td className={ultCls}>{u?.rpe != null ? u.rpe : dash}</td>
+      </>
+    )
+  }
+
+  const C = 'px-3 py-0 align-middle'
+  const thBase = 'py-1 px-2 text-xs font-medium text-gray-500 dark:text-white/55 uppercase tracking-wide'
 
   return (
     <motion.div
@@ -1374,20 +1418,22 @@ function InlineEditRutinaTable({ rutina, onCancel, onSaved }: {
       {/* ── Header ─────────────────────────────────────────────────── */}
       <div className="flex flex-wrap items-center gap-3 px-6 py-4 border-b border-white/40 dark:border-white/[0.06]">
         <div className="flex items-center gap-2.5 flex-1 min-w-0">
-          <div className="w-7 h-7 rounded-xl bg-primary/15 border border-primary/25 flex items-center justify-center shrink-0">
-            <Pencil className="w-3.5 h-3.5 text-primary" />
-          </div>
           {renamingName ? (
             <form onSubmit={e => { e.preventDefault(); setMeta(renameVal, draft.descripcion ?? '', draft.activa); setRenamingName(false) }} className="flex items-center gap-1.5 flex-1 min-w-0">
               <input autoFocus value={renameVal} onChange={e => setRenameVal(e.target.value)}
-                className="flex-1 bg-gray-100 dark:bg-white/[0.08] border border-primary/40 rounded-lg px-2.5 py-1 text-sm text-saas-text dark:text-white focus:outline-none min-w-0" />
+                className="flex-1 bg-gray-100 dark:bg-white/[0.08] border border-primary/40 rounded-lg px-2.5 py-1 text-sm font-semibold text-saas-text dark:text-white focus:outline-none min-w-0" />
               <button type="submit" className="p-1.5 rounded-lg text-primary hover:bg-primary/10"><Check className="w-3.5 h-3.5" /></button>
               <button type="button" onClick={() => setRenamingName(false)} className="p-1.5 rounded-lg text-gray-400 dark:text-white/30"><X className="w-3.5 h-3.5" /></button>
             </form>
           ) : (
-            <button onClick={() => { setRenameVal(draft.nombre); setRenamingName(true) }} className="group/n flex items-center gap-1.5 flex-1 min-w-0 text-left">
+            <button
+              onClick={() => { setRenameVal(draft.nombre); setRenamingName(true) }}
+              className="group/n flex items-center gap-2 flex-1 min-w-0 text-left"
+            >
               <span className="text-sm font-semibold text-saas-text dark:text-white truncate">{draft.nombre}</span>
-              <Pencil className="w-3 h-3 text-gray-400 dark:text-white/25 opacity-0 group-hover/n:opacity-100 transition-opacity shrink-0" />
+              <span className="text-[10px] text-gray-400 dark:text-white/40 border border-dashed border-gray-300 dark:border-white/[0.15] px-1.5 py-0.5 rounded group-hover/n:border-primary/40 group-hover/n:text-primary transition-all shrink-0 whitespace-nowrap">
+                renombrar
+              </span>
             </button>
           )}
           {hasChanges && (
@@ -1410,140 +1456,120 @@ function InlineEditRutinaTable({ rutina, onCancel, onSaved }: {
         </div>
       </div>
 
+      {/* ── Pill nav de semanas ──────────────────────────────────────── */}
+      <div className="flex items-center gap-1.5 px-5 py-3 border-b border-white/40 dark:border-white/[0.05] flex-wrap">
+        {draft.semanas.map(sem => {
+          const isActive = activeSem?.id === sem.id
+          const label = sem.nombre?.trim() ? sem.nombre : `S${sem.numero}`
+          const isRen = renamingSemanaId === sem.id
+          return (
+            <span key={sem.id} className="flex items-center gap-0.5 shrink-0">
+              {isRen ? (
+                <form
+                  onSubmit={e => { e.preventDefault(); renameSemana(sem.id, renameSemanaVal.trim() || `S${sem.numero}`); setRenamingSemanaId(null) }}
+                  className="flex items-center gap-1"
+                >
+                  <input
+                    autoFocus value={renameSemanaVal} onChange={e => setRenameSemanaVal(e.target.value)}
+                    onBlur={() => { renameSemana(sem.id, renameSemanaVal.trim() || `S${sem.numero}`); setRenamingSemanaId(null) }}
+                    className="w-16 bg-white dark:bg-white/[0.08] border border-primary/40 rounded-md px-1.5 py-0.5 text-[11px] text-saas-text dark:text-white focus:outline-none"
+                  />
+                  <button type="submit" className="p-0.5 rounded text-primary shrink-0"><Check className="w-3 h-3" /></button>
+                </form>
+              ) : (
+                <>
+                  <button
+                    onClick={() => onSemanaChange(sem.id)}
+                    onDoubleClick={() => { setRenamingSemanaId(sem.id); setRenameSemanaVal(sem.nombre ?? '') }}
+                    title="Doble click para renombrar"
+                    className={`px-3 py-1 rounded-lg text-xs font-semibold transition-all ${
+                      isActive
+                        ? 'bg-primary/15 border border-primary/25 text-primary'
+                        : 'border border-saas-border dark:border-white/[0.08] text-saas-muted dark:text-white/40 hover:border-primary/20 hover:text-primary'
+                    }`}
+                  >
+                    {label}
+                  </button>
+                  {isActive && (
+                    <>
+                      <button onClick={() => cloneSemana(sem.id)} title="Duplicar semana" className="p-1 rounded text-gray-400 dark:text-white/30 hover:text-primary transition-colors">
+                        <Copy className="w-2.5 h-2.5" />
+                      </button>
+                      <button onClick={() => deleteSemana(sem.id)} title="Eliminar semana" className="p-1 rounded text-gray-400 dark:text-white/30 hover:text-red-400 transition-colors">
+                        <Trash2 className="w-2.5 h-2.5" />
+                      </button>
+                    </>
+                  )}
+                </>
+              )}
+            </span>
+          )
+        })}
+        <button
+          onClick={addSemana}
+          className="flex items-center gap-1 px-2.5 py-1 rounded-lg text-xs text-gray-400 dark:text-white/40 hover:text-primary border border-dashed border-gray-300 dark:border-white/[0.12] hover:border-primary/40 transition-all"
+        >
+          <Plus className="w-3 h-3" /> semana
+        </button>
+      </div>
+
+      {/* ── Agregar día ─────────────────────────────────────────────── */}
+      <div className="px-5 py-2 border-b border-white/40 dark:border-white/[0.03] bg-white/[0.01]">
+        <div className="relative inline-block">
+          <button
+            onClick={() => setShowDiaPicker(v => v === (activeSem?.id ?? null) ? null : (activeSem?.id ?? null))}
+            className="flex items-center gap-1.5 text-xs text-gray-400 dark:text-white/40 hover:text-primary transition-colors"
+          >
+            <Plus className="w-3 h-3" /> Agregar día
+            <ChevronDown className="w-3 h-3" />
+          </button>
+          <AnimatePresence>
+            {showDiaPicker === activeSem?.id && activeSem && (
+              <SesionDayDropdown
+                existentes={activeSem.sesiones.map(s => s.dia)}
+                semanaId={activeSem.id}
+                onSelect={(sId, dia) => { addSesion(sId, dia); setShowDiaPicker(null) }}
+                onClose={() => setShowDiaPicker(null)}
+              />
+            )}
+          </AnimatePresence>
+        </div>
+      </div>
+
       {/* ── Table ──────────────────────────────────────────────────── */}
-      <div className="overflow-x-auto overflow-y-auto" style={{ maxHeight: 'calc(100vh - 280px)' }}>
+      <div className="overflow-x-auto">
+        <div className="rounded-t-2xl overflow-hidden">
         <table className="w-full border-collapse text-base">
           <thead className="sticky top-0 z-10">
-            <tr className="border-b border-white/40 dark:border-white/[0.08] bg-white/50 dark:bg-black/20 backdrop-blur-sm">
-              {(['Semana', 'Día', 'Bloque', 'Ejercicio', 'Nota', 'Ser.', 'Reps', 'Peso', 'RIR/RPE', ''] as const).map((h, i) => (
-                <th key={`h${i}`} className={`py-2.5 text-xs font-semibold text-gray-400 dark:text-white/35 uppercase tracking-widest whitespace-nowrap ${i < 3 ? 'px-3 text-left' : i <= 4 ? 'px-4 text-left' : 'px-3 text-center'}`}>{h}</th>
+            <tr className="border-b border-gray-200 dark:border-white/[0.06] bg-gray-50 dark:bg-[#111111]">
+              {['Día', 'Bloque'].map(h => (
+                <th key={h} className="py-2 px-3 text-left text-xs font-semibold text-gray-600 dark:text-white/65 uppercase tracking-widest whitespace-nowrap border-r border-gray-200 dark:border-white/[0.06]" rowSpan={2}>{h}</th>
+              ))}
+              <th className="py-2 px-4 text-left text-xs font-semibold text-gray-600 dark:text-white/65 uppercase tracking-widest whitespace-nowrap border-r border-gray-200 dark:border-white/[0.06]" rowSpan={2}>Ejercicio</th>
+              <th colSpan={5} className="py-1.5 px-3 text-center text-xs font-semibold text-gray-600 dark:text-white/60 uppercase tracking-widest border-b border-r border-gray-200 dark:border-white/[0.06]">Plan prescrito</th>
+              <th rowSpan={2} className="w-[56px]" />
+              <th colSpan={5} className="py-1.5 px-3 text-center text-xs font-semibold text-gray-400 dark:text-white/40 uppercase tracking-widest border-b border-gray-200 dark:border-white/[0.06]">Última ejecución</th>
+            </tr>
+            <tr className="border-b border-gray-200 dark:border-white/[0.08] bg-gray-50 dark:bg-[#111111]">
+              {['Nota', 'Ser.', 'Reps', 'Peso', 'RIR/RPE'].map(h => (
+                <th key={`p-${h}`} className={`${thBase} ${h === 'Nota' ? 'px-4 text-left border-r border-gray-200 dark:border-white/[0.06]' : 'text-center'}`}>{h}</th>
+              ))}
+              {['Ser.', 'Reps', 'Peso', 'RIR', 'RPE'].map((h, i) => (
+                <th key={`u-${h}`} className={`${thBase} text-center text-gray-400 dark:text-white/40 ${i === 0 ? 'border-l border-gray-200 dark:border-white/[0.06]' : ''}`}>{h}</th>
               ))}
             </tr>
           </thead>
-          <tbody
-            onDragOver={e => {
-              e.preventDefault()
-              if (!dragSemanaId) return
-              let el: Element | null = e.target as Element
-              while (el && el.tagName !== 'TR') el = el.parentElement
-              const sid = (el as HTMLTableRowElement | null)?.dataset.semId
-              if (sid && sid !== dragSemanaId) setDragOverSemanaId(sid)
-            }}
-            onDrop={e => {
-              e.preventDefault()
-              let el: Element | null = e.target as Element
-              while (el && el.tagName !== 'TR') el = el.parentElement
-              const sid = (el as HTMLTableRowElement | null)?.dataset.semId
-              if (dragSemanaId && sid && sid !== dragSemanaId) reorderSemanas(dragSemanaId, sid)
-              setDragSemanaId(null)
-              setDragOverSemanaId(null)
-            }}
-            onDragEnd={() => { setDragSemanaId(null); setDragOverSemanaId(null) }}
-          >
-            {draft.semanas.flatMap((sem, semIdx): React.ReactNode[] => {
-              const semLabel = sem.nombre?.trim() ? sem.nombre : `S${sem.numero}`
-              const rows: React.ReactNode[] = []
-              let semShown = false
-
-              const semCell = () => {
-                const shown = semShown
-                semShown = true
-                if (shown) return <td key="sc" className={`w-[120px] ${C}`} />
-
-                const isRenaming = renamingSemanaId === sem.id
-                const isDragOver = dragOverSemanaId === sem.id
-
-                return (
-                  <td key="sc" className={`px-2 py-2.5 w-[120px] align-top ${isDragOver ? 'bg-primary/[0.04]' : ''}`}>
-                    <div className="flex items-center gap-0.5 group/sem">
-                      {/* Drag handle */}
-                      <div
-                        draggable
-                        onDragStart={e => { e.stopPropagation(); setDragSemanaId(sem.id); e.dataTransfer.effectAllowed = 'move' }}
-                        className="cursor-grab active:cursor-grabbing p-1 rounded text-gray-300 dark:text-white/30 hover:text-gray-500 dark:hover:text-white/60 transition-colors shrink-0"
-                        title="Arrastrar para reordenar"
-                      >
-                        <GripVertical className="w-3 h-3" />
-                      </div>
-
-                      {isRenaming ? (
-                        <form
-                          onSubmit={e => { e.preventDefault(); renameSemana(sem.id, renameSemanaVal.trim() || `S${sem.numero}`); setRenamingSemanaId(null) }}
-                          className="flex items-center gap-1 flex-1 min-w-0"
-                        >
-                          <input
-                            autoFocus
-                            value={renameSemanaVal}
-                            onChange={e => setRenameSemanaVal(e.target.value)}
-                            onBlur={() => { renameSemana(sem.id, renameSemanaVal.trim() || `S${sem.numero}`); setRenamingSemanaId(null) }}
-                            className="w-14 bg-white dark:bg-white/[0.08] border border-primary/40 rounded-md px-1.5 py-0.5 text-[11px] text-saas-text dark:text-white focus:outline-none"
-                          />
-                          <button type="submit" className="p-0.5 rounded text-primary shrink-0">
-                            <Check className="w-3 h-3" />
-                          </button>
-                        </form>
-                      ) : (
-                        <span
-                          className="px-2 py-0.5 bg-primary/10 border border-primary/20 rounded-lg text-primary/90 text-xs font-bold whitespace-nowrap cursor-pointer hover:bg-primary/20 transition-colors"
-                          title="Click para renombrar"
-                          onClick={() => { setRenamingSemanaId(sem.id); setRenameSemanaVal(sem.nombre ?? '') }}
-                        >
-                          {semLabel}
-                        </span>
-                      )}
-
-                      {!isRenaming && (
-                        <>
-                          <button onClick={() => cloneSemana(sem.id)} title="Duplicar" className="p-1 rounded text-gray-400 dark:text-white/45 hover:text-primary opacity-0 group-hover/sem:opacity-100 transition-all shrink-0">
-                            <Copy className="w-2.5 h-2.5" />
-                          </button>
-                          <button onClick={() => deleteSemana(sem.id)} title="Eliminar" className="p-1 rounded text-gray-400 dark:text-white/45 hover:text-red-400 opacity-0 group-hover/sem:opacity-100 transition-all shrink-0">
-                            <Trash2 className="w-2.5 h-2.5" />
-                          </button>
-                        </>
-                      )}
-                    </div>
-                    {sem.observaciones && !isRenaming && (
-                      <p className="mt-1 text-[10px] text-gray-400 dark:text-white/35 leading-relaxed italic pl-5 line-clamp-2" title={sem.observaciones}>
-                        {sem.observaciones}
-                      </p>
-                    )}
-                  </td>
-                )
-              }
-
-              // Semana sin sesiones
-              if (sem.sesiones.length === 0) {
-                rows.push(
-                  <tr key={`${sem.id}-empty`} data-sem-id={sem.id} className={semIdx > 0 ? 'border-t-2 border-saas-border dark:border-white/[0.1]' : ''}>
-                    {semCell()}
-                    <td colSpan={8} className="px-4 py-2.5">
-                      <div className="relative flex items-center gap-3">
-                        <span className="text-xs text-gray-400 dark:text-white/30">Sin días</span>
-                        <button onClick={() => setShowDiaPicker(sem.id)} className="flex items-center gap-1 text-xs text-primary/70 hover:text-primary transition-colors">
-                          <Plus className="w-3 h-3" /> Agregar día
-                        </button>
-                        <AnimatePresence>
-                          {showDiaPicker === sem.id && (
-                            <SesionDayDropdown existentes={[]} semanaId={sem.id} onSelect={(sId, dia) => { addSesion(sId, dia); setShowDiaPicker(null) }} onClose={() => setShowDiaPicker(null)} />
-                          )}
-                        </AnimatePresence>
-                      </div>
-                    </td>
-                    <td className="w-[60px]" />
-                  </tr>
-                )
-                rows.push(
-                  <tr key={`${sem.id}-adddia`} data-sem-id={sem.id} className="border-t-2 border-saas-border dark:border-white/[0.08]">
-                    <td className={`w-[120px] ${C}`} />
-                    <td colSpan={9} className="px-4 py-2.5" />
-                  </tr>
-                )
-                return rows
-              }
-
-              sem.sesiones.forEach((ses, sesIdx) => {
+          <tbody>
+            {!activeSem || activeSem.sesiones.length === 0 ? (
+              <tr>
+                <td colSpan={14} className="px-5 py-6 text-sm text-gray-400 dark:text-white/30 text-center">
+                  Sin días — usá el botón "Agregar día" arriba
+                </td>
+              </tr>
+            ) : (
+              activeSem.sesiones.flatMap((ses, sesIdx): React.ReactNode[] => {
                 let diaShown = false
+                const rows: React.ReactNode[] = []
 
                 const diaCell = () => {
                   const shown = diaShown
@@ -1556,8 +1582,7 @@ function InlineEditRutinaTable({ rutina, onCancel, onSaved }: {
                       {isRenamingSes ? (
                         <form onSubmit={e => { e.preventDefault(); renameSesion(ses.id, renameSesionVal.trim() || ses.dia); setRenamingSesionId(null) }} className="flex items-center gap-1">
                           <input
-                            autoFocus
-                            value={renameSesionVal}
+                            autoFocus value={renameSesionVal}
                             onChange={e => setRenameSesionVal(e.target.value)}
                             onBlur={() => { renameSesion(ses.id, renameSesionVal.trim() || ses.dia); setRenamingSesionId(null) }}
                             placeholder={ses.dia}
@@ -1574,21 +1599,18 @@ function InlineEditRutinaTable({ rutina, onCancel, onSaved }: {
                           >
                             {diaLabel}
                           </span>
-                          <button onClick={() => deleteSesion(sem.id, ses.id)} className="p-1 rounded text-gray-400 dark:text-white/45 hover:text-red-400 opacity-0 group-hover/dia:opacity-100 transition-all">
+                          <button onClick={() => deleteSesion(activeSem.id, ses.id)} className="p-1 rounded text-gray-400 dark:text-white/45 hover:text-red-400 opacity-0 group-hover/dia:opacity-100 transition-all">
                             <X className="w-2.5 h-2.5" />
                           </button>
                         </div>
                       )}
-                      {/* Nota de sesión */}
                       {editingNotaSesionId === ses.id ? (
                         <textarea
-                          autoFocus
-                          value={notaSesionVal}
+                          autoFocus value={notaSesionVal}
                           onChange={e => setNotaSesionVal(e.target.value)}
                           onBlur={() => { setSesionNota(ses.id, notaSesionVal); setEditingNotaSesionId(null) }}
                           onKeyDown={e => { if (e.key === 'Escape') { setSesionNota(ses.id, notaSesionVal); setEditingNotaSesionId(null) } }}
-                          rows={2}
-                          placeholder="Nota del día…"
+                          rows={2} placeholder="Nota del día…"
                           className="mt-1.5 w-full resize-none bg-white dark:bg-white/[0.06] border border-primary/30 rounded-lg px-2 py-1 text-xs text-saas-text dark:text-white/80 placeholder-gray-300 dark:placeholder-white/20 focus:outline-none focus:border-primary/60"
                         />
                       ) : (
@@ -1596,24 +1618,23 @@ function InlineEditRutinaTable({ rutina, onCancel, onSaved }: {
                           onClick={() => { setEditingNotaSesionId(ses.id); setNotaSesionVal(ses.nota ?? '') }}
                           className="mt-1.5 flex items-start gap-1 text-left w-full"
                         >
-                          {ses.nota?.trim() ? (
-                            <span className="text-[11px] text-gray-500 dark:text-white/40 italic leading-relaxed">{ses.nota}</span>
-                          ) : (
-                            <span className="text-[11px] text-gray-300 dark:text-white/25 hover:text-primary transition-colors">+ nota del día</span>
-                          )}
+                          {ses.nota?.trim()
+                            ? <span className="text-[11px] text-gray-500 dark:text-white/40 italic leading-relaxed">{ses.nota}</span>
+                            : <span className="text-[11px] text-gray-300 dark:text-white/25 hover:text-primary transition-colors">+ nota del día</span>
+                          }
                         </button>
                       )}
                     </td>
                   )
                 }
 
-                const diaBorder = sesIdx > 0 ? 'border-t border-saas-border dark:border-white/[0.07]' : semIdx > 0 && sesIdx === 0 ? 'border-t-2 border-saas-border dark:border-white/[0.1]' : ''
+                const diaBorder = sesIdx > 0 ? 'border-t border-saas-border dark:border-white/[0.07]' : ''
 
                 if (ses.bloques.length === 0) {
                   rows.push(
-                    <tr key={`${ses.id}-empty`} data-sem-id={sem.id} className={diaBorder}>
-                      {semCell()}{diaCell()}
-                      <td colSpan={7} className="px-4 py-2.5">
+                    <tr key={`${ses.id}-empty`} className={diaBorder}>
+                      {diaCell()}
+                      <td colSpan={13} className="px-4 py-2.5">
                         <div className="flex items-center gap-3">
                           <span className="text-xs text-gray-400 dark:text-white/30">Sin bloques</span>
                           <button onClick={() => addBloque(ses.id)} className="flex items-center gap-1 text-xs text-primary/70 hover:text-primary transition-colors">
@@ -1621,11 +1642,9 @@ function InlineEditRutinaTable({ rutina, onCancel, onSaved }: {
                           </button>
                         </div>
                       </td>
-                      <td className="w-[60px]" />
                     </tr>
                   )
-                  semShown = true
-                  return
+                  return rows
                 }
 
                 ses.bloques.forEach((bl, blqIdx) => {
@@ -1658,18 +1677,16 @@ function InlineEditRutinaTable({ rutina, onCancel, onSaved }: {
                   if (bl.ejerciciosPlan.length === 0) {
                     const bt = sesIdx === 0 && blqIdx === 0 ? diaBorder : blBorder
                     rows.push(
-                      <tr key={`${bl.id}-empty`} data-sem-id={sem.id} className={bt}>
-                        {semCell()}{diaCell()}{blCell()}
-                        <td colSpan={6} className="px-4 py-2">
+                      <tr key={`${bl.id}-empty`} className={bt}>
+                        {diaCell()}{blCell()}
+                        <td colSpan={12} className="px-4 py-2">
                           {addingEjBloqueId === bl.id
                             ? <AddEjercicioPanel bloqueId={bl.id} onAdd={addEjercicio} onClose={() => setAddingEjBloqueId(null)} />
                             : <button onClick={() => setAddingEjBloqueId(bl.id)} className="flex items-center gap-1.5 text-xs text-gray-400 dark:text-white/40 hover:text-primary transition-colors py-0.5"><Plus className="w-3 h-3" /> Agregar ejercicio</button>
                           }
                         </td>
-                        <td className="w-[60px]" />
                       </tr>
                     )
-                    semShown = true
                     return
                   }
 
@@ -1682,8 +1699,8 @@ function InlineEditRutinaTable({ rutina, onCancel, onSaved }: {
                     else bt = 'border-t border-saas-border dark:border-white/[0.03]'
 
                     rows.push(
-                      <tr key={ej.id} data-sem-id={sem.id} className={`transition-colors ${isEditing ? 'bg-primary/[0.02] ring-1 ring-inset ring-primary/10' : 'group/ejrow hover:bg-white/[0.03]'} ${bt}`}>
-                        {semCell()}{diaCell()}{blCell()}
+                      <tr key={ej.id} className={`transition-colors ${isEditing ? 'bg-primary/[0.02] ring-1 ring-inset ring-primary/10' : 'group/ejrow hover:bg-white/[0.03]'} ${bt}`}>
+                        {diaCell()}{blCell()}
                         <EjInlineCells
                           ej={ej}
                           isEditing={isEditing}
@@ -1693,16 +1710,16 @@ function InlineEditRutinaTable({ rutina, onCancel, onSaved }: {
                           onDelete={() => deleteEjercicio(ej.id)}
                           catalogo={catalogoTable}
                         />
+                        {renderUlt(ej.id)}
                       </tr>
                     )
-                    semShown = true
                   })
 
                   // Fila para agregar ejercicio al bloque
                   rows.push(
-                    <tr key={`${bl.id}-addej`} data-sem-id={sem.id}>
-                      <td className={`w-[120px] ${C}`} /><td className={`w-[90px] ${C}`} /><td className={`w-[60px] ${C}`} />
-                      <td colSpan={6} className="px-4 py-1.5">
+                    <tr key={`${bl.id}-addej`}>
+                      <td className={`w-[110px] ${C}`} /><td className={`w-[60px] ${C}`} />
+                      <td colSpan={12} className="px-4 py-1.5">
                         <AnimatePresence>
                           {addingEjBloqueId === bl.id
                             ? <AddEjercicioPanel bloqueId={bl.id} onAdd={addEjercicio} onClose={() => setAddingEjBloqueId(null)} />
@@ -1710,57 +1727,28 @@ function InlineEditRutinaTable({ rutina, onCancel, onSaved }: {
                           }
                         </AnimatePresence>
                       </td>
-                      <td className="w-[56px]" />
                     </tr>
                   )
                 })
 
                 // Fila para agregar bloque a la sesión
                 rows.push(
-                  <tr key={`${ses.id}-addbl`} data-sem-id={sem.id} className="border-t border-saas-border dark:border-white/[0.06]">
-                    <td className={`w-[120px] ${C}`} /><td className={`w-[90px] ${C}`} />
-                    <td colSpan={7} className="px-4 py-2">
+                  <tr key={`${ses.id}-addbl`} className="border-t border-saas-border dark:border-white/[0.06]">
+                    <td className={`w-[110px] ${C}`} />
+                    <td colSpan={13} className="px-4 py-2">
                       <button onClick={() => addBloque(ses.id)} className="flex items-center gap-1.5 text-[11px] text-gray-400 dark:text-white/40 hover:text-primary transition-colors">
                         <Plus className="w-3.5 h-3.5" /> bloque en {ses.nombre?.trim() ? ses.nombre : ses.dia}
                       </button>
                     </td>
-                    <td className="w-[56px]" />
                   </tr>
                 )
+
+                return rows
               })
-
-              // Fila para agregar día a la semana
-              rows.push(
-                <tr key={`${sem.id}-adddia`} data-sem-id={sem.id} className="border-t-2 border-saas-border dark:border-white/[0.08]">
-                  <td className={`w-[120px] ${C}`} />
-                  <td colSpan={8} className="px-4 py-2.5 relative">
-                    <button onClick={() => setShowDiaPicker(v => v === sem.id ? null : sem.id)} className="flex items-center gap-1.5 text-xs text-gray-400 dark:text-white/40 hover:text-primary transition-colors">
-                      <Plus className="w-3.5 h-3.5" /> día en {semLabel}
-                      <ChevronDown className="w-3 h-3" />
-                    </button>
-                    <AnimatePresence>
-                      {showDiaPicker === sem.id && (
-                        <SesionDayDropdown existentes={sem.sesiones.map(s => s.dia)} semanaId={sem.id} onSelect={(sId, dia) => { addSesion(sId, dia); setShowDiaPicker(null) }} onClose={() => setShowDiaPicker(null)} />
-                      )}
-                    </AnimatePresence>
-                  </td>
-                  <td className="w-[56px]" />
-                </tr>
-              )
-
-              return rows
-            })}
-
-            {/* Fila para agregar semana */}
-            <tr className="border-t-2 border-saas-border dark:border-white/[0.1]">
-              <td colSpan={10} className="px-4 py-3">
-                <button onClick={addSemana} className="flex items-center gap-1.5 text-xs text-gray-400 dark:text-white/30 hover:text-primary transition-colors">
-                  <Plus className="w-3.5 h-3.5" /> nueva semana
-                </button>
-              </td>
-            </tr>
+            )}
           </tbody>
         </table>
+        </div>
       </div>
 
       {/* ── Footer ──────────────────────────────────────────────────── */}
@@ -1806,7 +1794,9 @@ export default function ClientRutinaPage() {
   const [ficha, setFicha] = useState<FichaEntrenamiento | null>(null)
   const [deleteRutinaTarget, setDeleteRutinaTarget] = useState<string | null>(null)
   const [isDeletingRutina, setIsDeletingRutina] = useState(false)
-  const [histOpenEj, setHistOpenEj] = useState<Record<string, boolean>>({})
+  const [selectedSemanaId, setSelectedSemanaId] = useState<string | null>(null)
+  const [execOffset, setExecOffset] = useState(0)
+  const [showInfo, setShowInfo] = useState(false)
 
   useEffect(() => {
     if (!clienteId) return
@@ -1826,14 +1816,195 @@ export default function ClientRutinaPage() {
 
   const rutina = rutinas.find(r => r.id === selectedRutinaId)
 
+  const TODAS_SEMANAS = '__todas__'
+  const isTodas = selectedSemanaId === TODAS_SEMANAS
+  // Semana activa — fuera del IIFE para que React re-compute correctamente en cada render
+  const selectedSem = (!isTodas && rutina)
+    ? (rutina.semanas.find(s => s.id === selectedSemanaId) ?? rutina.semanas[0])
+    : undefined
+
+  const exportRutinaToExcel = async (r: Rutina) => {
+    const wb = new ExcelJS.Workbook()
+    wb.creator = 'Eficiencia'
+    wb.created = new Date()
+
+    // Paleta
+    const C_YELLOW   = 'FFFBC608'
+    const C_YELLOW_L = 'FFFDE68A'
+    const C_DARK     = 'FF1A1A1A'
+    const C_DARK2    = 'FF2A2A2A'
+    const C_WHITE    = 'FFFFFFFF'
+    const C_TEXT     = 'FF111827'
+    const C_MUTED    = 'FF6B7280'
+    const C_ROW_ALT  = 'FFF9FAFB'
+    const C_BORDER   = 'FFE5E7EB'
+    const C_LINK     = 'FF0563C1'
+
+    const border = (color = C_BORDER): Partial<ExcelJS.Borders> => ({
+      top:    { style: 'thin', color: { argb: color } },
+      bottom: { style: 'thin', color: { argb: color } },
+      left:   { style: 'thin', color: { argb: color } },
+      right:  { style: 'thin', color: { argb: color } },
+    })
+
+    const clienteNombre = r.cliente ? `${r.cliente.nombre} ${r.cliente.apellido}` : 'Cliente'
+
+    for (const sem of r.semanas) {
+      const sheetName = (sem.nombre?.trim() ? sem.nombre : `Semana ${sem.numero}`).slice(0, 31)
+      const ws = wb.addWorksheet(sheetName)
+
+      // A Día | B Bloq | C Ejercicio | D Patrón | E-I Plan×5 | J-N Ult×5 | O Fecha
+      ws.columns = [
+        { width: 14 }, // A Día
+        { width: 6  }, // B Bloq
+        { width: 30 }, // C Ejercicio
+        { width: 18 }, // D Patrón mov.
+        { width: 7  }, // E Plan Ser
+        { width: 9  }, // F Plan Reps
+        { width: 9  }, // G Plan Peso
+        { width: 7  }, // H Plan RIR
+        { width: 7  }, // I Plan RPE
+        { width: 7  }, // J Ult Ser
+        { width: 9  }, // K Ult Reps
+        { width: 9  }, // L Ult Peso
+        { width: 7  }, // M Ult RIR
+        { width: 7  }, // N Ult RPE
+        { width: 12 }, // O Fecha
+      ]
+
+      // ── Fila 1: Título ──────────────────────────────────────────────────────
+      ws.addRow([`${r.nombre}  ·  ${sheetName}  ·  ${clienteNombre}`])
+      ws.mergeCells('A1:O1')
+      const t = ws.getCell('A1')
+      t.value = `${r.nombre}  ·  ${sheetName}  ·  ${clienteNombre}`
+      t.font = { bold: true, size: 13, color: { argb: C_WHITE }, name: 'Calibri' }
+      t.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: C_DARK } }
+      t.alignment = { vertical: 'middle', horizontal: 'left', indent: 1 }
+      ws.getRow(1).height = 28
+
+      // ── Fila 2: Grupos ──────────────────────────────────────────────────────
+      ws.addRow([])
+      ws.mergeCells('A2:D2')
+      ws.mergeCells('E2:I2')
+      ws.mergeCells('J2:O2')
+
+      const applyGroupCell = (addr: string, label: string, bgArgb: string, textArgb: string) => {
+        const c = ws.getCell(addr)
+        c.value = label
+        c.font = { bold: true, size: 9, color: { argb: textArgb }, name: 'Calibri' }
+        c.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: bgArgb } }
+        c.alignment = { vertical: 'middle', horizontal: 'center' }
+      }
+      applyGroupCell('A2', '', C_DARK2, C_WHITE)
+      applyGroupCell('E2', 'PLAN PRESCRITO', C_YELLOW, C_TEXT)
+      applyGroupCell('J2', 'ÚLTIMA EJECUCIÓN', C_DARK2, C_WHITE)
+      ws.getRow(2).height = 18
+
+      // ── Fila 3: Sub-encabezados ─────────────────────────────────────────────
+      const subHeaders = ['Día', 'Bloq', 'Ejercicio', 'Patrón', 'Ser.', 'Reps', 'Peso', 'RIR', 'RPE', 'Ser.', 'Reps', 'Peso', 'RIR', 'RPE', 'Fecha']
+      ws.addRow(subHeaders)
+      ws.getRow(3).height = 16
+      ws.getRow(3).eachCell((cell, col) => {
+        cell.font = { bold: true, size: 9, color: { argb: C_TEXT }, name: 'Calibri' }
+        // A-D info | E-I plan (light yellow) | J-O ult (gray)
+        cell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: col <= 4 ? C_YELLOW : col <= 9 ? C_YELLOW_L : 'FFD1D5DB' } }
+        cell.alignment = { vertical: 'middle', horizontal: col <= 4 ? 'left' : 'center' }
+        cell.border = border(C_YELLOW)
+      })
+
+      // ── Filas de datos ──────────────────────────────────────────────────────
+      let dataRowIdx = 4
+      for (const ses of sem.sesiones) {
+        let firstBloqueOfDia = true
+        for (const bl of ses.bloques) {
+          const patron = bl.patronMovimiento
+            ? (PATRON_LABELS[bl.patronMovimiento as PatronMovimientoEnum] ?? bl.patronMovimiento)
+            : ''
+          for (let ejIdx = 0; ejIdx < bl.ejerciciosPlan.length; ejIdx++) {
+            const ej = bl.ejerciciosPlan[ejIdx]
+            const exec = ej.ejecuciones[0]
+            const isFirst = ejIdx === 0
+            const videoUrl = ej.catalogo?.videoUrl ?? null
+
+            const row = ws.addRow([
+              isFirst && firstBloqueOfDia ? (ses.nombre?.trim() ? ses.nombre : ses.dia) : '',
+              isFirst ? bl.letra : '',
+              ej.nombre,
+              isFirst ? patron : '',
+              ej.series ?? '',
+              ej.repeticiones ?? '',
+              ej.peso ?? '',
+              ej.rir ?? '',
+              ej.rpe ?? '',
+              exec?.series ?? '',
+              exec?.repeticiones ?? '',
+              exec?.peso ?? '',
+              exec?.rir ?? '',
+              exec?.rpe ?? '',
+              exec ? format(parseISO(exec.fecha), 'dd/MM/yyyy') : '',
+            ])
+            if (isFirst) firstBloqueOfDia = false
+
+            const isAlt = dataRowIdx % 2 === 0
+            row.height = 15
+
+            row.eachCell({ includeEmpty: true }, (cell, col) => {
+              if (isAlt) cell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: C_ROW_ALT } }
+              cell.border = border()
+
+              if (col <= 2) {
+                cell.font = { size: 10, bold: true, name: 'Calibri', color: { argb: col === 2 ? C_YELLOW : C_TEXT } }
+              } else if (col === 3) {
+                if (videoUrl) {
+                  cell.value = { text: ej.nombre, hyperlink: videoUrl }
+                  cell.font = { size: 10, name: 'Calibri', color: { argb: C_LINK }, underline: true }
+                } else {
+                  cell.font = { size: 10, name: 'Calibri', color: { argb: C_TEXT } }
+                }
+              } else if (col === 4) {
+                cell.font = { size: 9, italic: true, name: 'Calibri', color: { argb: C_MUTED } }
+              } else if (col >= 5 && col <= 9) {
+                cell.font = { size: 10, name: 'Calibri', color: { argb: C_MUTED } }
+                cell.alignment = { horizontal: 'center' }
+              } else if (col >= 10 && col <= 14) {
+                cell.font = { size: 10, bold: !!cell.value, name: 'Calibri', color: { argb: C_TEXT } }
+                cell.alignment = { horizontal: 'center' }
+              } else if (col === 15) {
+                cell.font = { size: 9, name: 'Calibri', color: { argb: C_MUTED } }
+                cell.alignment = { horizontal: 'center' }
+              }
+            })
+            dataRowIdx++
+          }
+        }
+      }
+    }
+
+    const buffer = await wb.xlsx.writeBuffer()
+    const blob = new Blob([buffer], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' })
+    const url = URL.createObjectURL(blob)
+    const a = document.createElement('a')
+    a.href = url
+    a.download = `Rutina - ${clienteNombre} - ${format(new Date(), 'dd-MM-yyyy')}.xlsx`
+    document.body.appendChild(a)
+    a.click()
+    document.body.removeChild(a)
+    URL.revokeObjectURL(url)
+  }
+
   const selectRutina = (r: Rutina) => {
     setSelectedRutinaId(r.id)
     setEditMode(false)
     setConfirmDeleteSemana(false)
+    setSelectedSemanaId(null)
+    setExecOffset(0)
+    setShowInfo(false)
   }
 
   const handleEnterEdit = () => {
     if (!rutina) return
+    // Si estábamos en vista "Todas", volver a semana individual
+    if (isTodas) setSelectedSemanaId(null)
     setEditMode(true)
     setConfirmDeleteSemana(false)
   }
@@ -1869,7 +2040,7 @@ export default function ClientRutinaPage() {
 
   if (isLoading) {
     return (
-      <div className="p-4 lg:p-6 xl:p-8">
+      <div className="p-4 lg:p-6 xl:p-8 overflow-hidden">
         <button
           onClick={() => navigate(ROUTES.CLIENT_PROFILE.replace(':id', clienteId!))}
           className="flex items-center gap-2 text-gray-500 dark:text-white/50 hover:text-gray-900 dark:hover:text-white transition-colors mb-6"
@@ -2056,6 +2227,8 @@ export default function ClientRutinaPage() {
                 rutina={rutina}
                 onCancel={handleEditCancel}
                 onSaved={handleEditSaved}
+                selectedSemanaId={selectedSemanaId}
+                onSemanaChange={setSelectedSemanaId}
               />
             ) : !rutina ? (
               <motion.div key="empty" className={`${glassCard} flex flex-col items-center justify-center py-24 text-center`}>
@@ -2130,210 +2303,339 @@ export default function ClientRutinaPage() {
                       <p className="text-xs text-gray-400 dark:text-white/30 py-2">{canEdit ? 'Entrá en modo edición para agregar semanas' : 'Sin semanas'}</p>
                     </>
                   ) : (() => {
-                    const sesRS = (ses: typeof rutina.semanas[0]['sesiones'][0]) =>
+                    type Ses = typeof rutina.semanas[0]['sesiones'][0]
+                    type Sem = typeof rutina.semanas[0]
+
+                    const execSubCols = 5
+
+                    const sesRS = (ses: Ses) =>
                       ses.bloques.length === 0 ? 1
                         : ses.bloques.reduce((a, bl) => a + Math.max(1, bl.ejerciciosPlan.length), 0)
-                    const semRS = (sem: typeof rutina.semanas[0]) =>
+
+                    const semRS = (sem: Sem) =>
                       sem.sesiones.length === 0 ? 1
                         : sem.sesiones.reduce((a, ses) => a + sesRS(ses), 0)
+
+                    // ── Helpers de celdas ────────────────────────────────
+                    const thBase = 'py-1.5 px-2 text-center text-xs font-medium text-gray-500 dark:text-white/55 uppercase tracking-wide'
+                    const tdRow = 'border-b border-saas-border dark:border-white/[0.05] hover:bg-gray-50 dark:hover:bg-white/[0.03] transition-colors'
+
+                    const renderEjCell = (ej: EjercicioPlan) => (
+                      <td className="px-3 py-2.5 border-r border-saas-border dark:border-white/[0.06]">
+                        <div className="flex items-center gap-1.5 min-w-0">
+                          <span className="text-sm text-saas-text dark:text-white/90 font-medium truncate">{ej.nombre}</span>
+                          {ej.catalogo?.videoUrl && (
+                            <a href={ej.catalogo.videoUrl} target="_blank" rel="noreferrer"
+                              className="shrink-0 p-0.5 rounded text-gray-300 dark:text-white/25 hover:text-primary transition-colors"
+                              title="Ver video" onClick={e => e.stopPropagation()}>
+                              <ExternalLink className="w-3 h-3" />
+                            </a>
+                          )}
+                        </div>
+                        {ej.catalogo?.patronMovimiento && (
+                          <span className="text-[11px] text-gray-400 dark:text-white/35 block">
+                            {PATRON_LABELS[ej.catalogo.patronMovimiento] ?? ej.catalogo.patronMovimiento}
+                          </span>
+                        )}
+                        {ej.notas?.trim() && (
+                          <p className="mt-1 text-[11px] text-gray-400 dark:text-white/35 italic leading-relaxed">{ej.notas}</p>
+                        )}
+                      </td>
+                    )
+
+                    const renderPlanCells = (ej: EjercicioPlan) => (
+                      <>
+                        <td className="px-2 py-2.5 text-center"><span className="text-sm tabular-nums text-gray-500 dark:text-white/45">{ej.series ?? '—'}</span></td>
+                        <td className="px-2 py-2.5 text-center"><span className="text-sm tabular-nums text-gray-500 dark:text-white/45">{ej.repeticiones ?? '—'}</span></td>
+                        <td className="px-2 py-2.5 text-center"><span className="text-xs px-1.5 py-0.5 bg-gray-100 dark:bg-white/[0.05] text-gray-500 dark:text-white/40 rounded-md tabular-nums">{ej.peso ?? '—'}</span></td>
+                        <td className="px-2 py-2.5 text-center"><span className="text-xs tabular-nums text-gray-400 dark:text-white/35">{ej.rir ?? '—'}</span></td>
+                        <td className="px-2 py-2.5 text-center border-r border-saas-border dark:border-white/[0.06]"><span className="text-xs tabular-nums text-gray-400 dark:text-white/35">{ej.rpe ?? '—'}</span></td>
+                      </>
+                    )
+
+                    const renderExecCells = (exec: EjecucionCliente, delta?: number | null) => (
+                      <>
+                        <td className="px-2 py-2.5 text-center"><span className="text-sm tabular-nums text-gray-700 dark:text-white/65 font-medium">{exec.series ?? '—'}</span></td>
+                        <td className="px-2 py-2.5 text-center"><span className="text-sm tabular-nums text-gray-600 dark:text-white/60">{exec.repeticiones ?? '—'}</span></td>
+                        <td className="px-2 py-2.5 text-center">
+                          <div className="flex items-center justify-center gap-1">
+                            <span className="text-xs px-1.5 py-0.5 bg-primary/10 text-primary/80 rounded-md font-medium tabular-nums">{exec.peso ?? '—'}</span>
+                            {delta != null && delta !== 0 && (
+                              <span className={`text-[10px] font-bold px-1 py-0.5 rounded ${delta > 0 ? 'text-emerald-600 dark:text-emerald-400 bg-emerald-50 dark:bg-emerald-500/10' : 'text-red-500 dark:text-red-400 bg-red-50 dark:bg-red-500/10'}`}>
+                                {delta > 0 ? '↑' : '↓'}{Math.abs(delta)}
+                              </span>
+                            )}
+                          </div>
+                        </td>
+                        <td className="px-2 py-2.5 text-center"><span className="text-xs tabular-nums text-gray-500 dark:text-white/45">{exec.rir ?? '—'}</span></td>
+                        <td className="px-2 py-2.5 text-center"><span className="text-xs tabular-nums text-gray-500 dark:text-white/45">{exec.rpe ?? '—'}</span></td>
+                      </>
+                    )
+
+                    const renderEmptyCols = (n: number) => (
+                      <td colSpan={n} className="px-2 py-2.5 text-center">
+                        <span className="text-[11px] text-gray-300 dark:text-white/20">—</span>
+                      </td>
+                    )
+
+                    const bloqueChip = (bl: Sem['sesiones'][0]['bloques'][0]) => (
+                      <td rowSpan={Math.max(1, bl.ejerciciosPlan.length)} className="px-1.5 py-3 text-center align-top border-r border-saas-border dark:border-white/[0.06]">
+                        <div className="flex flex-col items-center gap-0.5">
+                          <span className="w-7 h-7 rounded-lg bg-primary/15 border border-primary/25 text-primary text-xs font-bold flex items-center justify-center">{bl.letra}</span>
+                          {bl.patronMovimiento && (
+                            <span className="text-[10px] leading-tight text-gray-400 dark:text-white/35 text-center whitespace-nowrap">
+                              {PATRON_LABELS[bl.patronMovimiento] ?? bl.patronMovimiento}
+                            </span>
+                          )}
+                        </div>
+                      </td>
+                    )
+
+                    // ── Mini navbar pills ─────────────────────────────────
+                    const pillNav = (
+                      <div className="flex items-center gap-1 mb-4 flex-wrap">
+                        <button
+                          type="button"
+                          onClick={() => setSelectedSemanaId(TODAS_SEMANAS)}
+                          className={`px-3 py-1.5 rounded-lg text-xs font-semibold transition-all whitespace-nowrap ${isTodas ? 'bg-primary/15 border border-primary/25 text-primary' : 'text-gray-500 dark:text-white/40 border border-transparent hover:text-gray-800 dark:hover:text-white/70 hover:border-gray-200 dark:hover:border-white/[0.08]'}`}
+                        >
+                          Todas
+                        </button>
+                        {rutina.semanas.map(sem => {
+                          const label = sem.nombre?.trim() ? sem.nombre : `S${sem.numero}`
+                          const isActive = !isTodas && selectedSem?.id === sem.id
+                          return (
+                            <button
+                              key={sem.id}
+                              type="button"
+                              onClick={() => setSelectedSemanaId(sem.id)}
+                              className={`px-3 py-1.5 rounded-lg text-xs font-semibold transition-all whitespace-nowrap ${isActive ? 'bg-primary/15 border border-primary/25 text-primary' : 'text-gray-500 dark:text-white/40 border border-transparent hover:text-gray-800 dark:hover:text-white/70 hover:border-gray-200 dark:hover:border-white/[0.08]'}`}
+                            >
+                              {label}
+                            </button>
+                          )
+                        })}
+                      </div>
+                    )
+
+                    // ── Footer: Info + Excel ──────────────────────────────
+                    const footer = (
+                      <div className="flex items-start justify-between mt-3 gap-4">
+                        {/* Info desplegable */}
+                        <div>
+                          <button
+                            type="button"
+                            onClick={() => setShowInfo(p => !p)}
+                            className="flex items-center gap-1.5 text-xs text-gray-400 dark:text-white/30 hover:text-gray-600 dark:hover:text-white/50 transition-colors"
+                          >
+                            <Info className="w-3.5 h-3.5" />
+                            <span>Cómo leer esta tabla</span>
+                            <ChevronDown className={`w-3 h-3 transition-transform duration-200 ${showInfo ? 'rotate-180' : ''}`} />
+                          </button>
+                          {showInfo && (
+                            <div className="mt-2 space-y-1.5 text-[11px] text-gray-500 dark:text-white/40 leading-relaxed max-w-sm">
+                              {isTodas ? (
+                                <>
+                                  <p><span className="font-semibold text-gray-600 dark:text-white/55">Anteúltima</span> — segunda ejecución más reciente del ejercicio</p>
+                                  <p><span className="font-semibold text-gray-600 dark:text-white/55">Última</span> — ejecución más reciente registrada. La flecha <span className="text-emerald-600 dark:text-emerald-400 font-bold">↑</span><span className="text-red-500 dark:text-red-400 font-bold">↓</span> indica cambio de peso respecto a la anterior.</p>
+                                </>
+                              ) : (
+                                <>
+                                  <p><span className="font-semibold text-gray-600 dark:text-white/55">Plan</span> — valores prescritos por el profesor para esta semana</p>
+                                  <p><span className="font-semibold text-gray-600 dark:text-white/55">Última</span> — última ejecución registrada de cada ejercicio</p>
+                                  <p className="text-gray-400 dark:text-white/25">Para ver la progresión histórica entre semanas, usá la vista <span className="font-medium text-gray-500 dark:text-white/40">Todas</span>.</p>
+                                </>
+                              )}
+                            </div>
+                          )}
+                        </div>
+                        {/* Excel */}
+                        <button
+                          type="button"
+                          onClick={() => exportRutinaToExcel(rutina)}
+                          className="shrink-0 flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium text-gray-500 dark:text-white/40 border border-gray-200 dark:border-white/[0.08] hover:text-gray-700 dark:hover:text-white/60 hover:border-gray-300 dark:hover:border-white/[0.14] transition-all"
+                        >
+                          <Download className="w-3.5 h-3.5" />
+                          Excel
+                        </button>
+                      </div>
+                    )
+
+                    // ════════════════════════════════════════════════════
+                    // VISTA: Todas las semanas (Plan | Última navegable)
+                    // ════════════════════════════════════════════════════
+                    if (isTodas) {
+                      const totalCols = 4 + execSubCols + execSubCols
+                      const allEjsTodas = rutina.semanas.flatMap(s => s.sesiones.flatMap(ses => ses.bloques.flatMap(b => b.ejerciciosPlan)))
+                      const maxOffsetTodas = allEjsTodas.reduce((mx, ej) => Math.max(mx, (ej.ejecuciones?.length ?? 0) - 1), 0)
+                      const dateAtOffsetTodas = allEjsTodas.reduce<string | null>((f, ej) => f ?? (ej.ejecuciones[execOffset]?.fecha ?? null), null)
+                      return (
+                        <>
+                          <div className="border-t border-saas-border dark:border-white/[0.06] -mx-5 mb-4" />
+                          {pillNav}
+                          <div className="overflow-x-auto">
+                            <div className="rounded-t-2xl overflow-hidden">
+                            <table className="w-full border-collapse text-base">
+                              <thead>
+                                <tr className="border-b border-gray-200 dark:border-white/[0.06] bg-gray-50 dark:bg-[#111111]">
+                                  <th rowSpan={2} className="py-2 px-2 text-left text-xs font-semibold text-gray-600 dark:text-white/65 uppercase tracking-widest whitespace-nowrap border-r border-gray-200 dark:border-white/[0.06]">Sem</th>
+                                  <th rowSpan={2} className="py-2 px-2 text-left text-xs font-semibold text-gray-600 dark:text-white/65 uppercase tracking-widest whitespace-nowrap border-r border-gray-200 dark:border-white/[0.06]">Día</th>
+                                  <th rowSpan={2} className="py-2 px-2 text-center text-xs font-semibold text-gray-600 dark:text-white/65 uppercase tracking-widest whitespace-nowrap border-r border-gray-200 dark:border-white/[0.06]">Bloq</th>
+                                  <th rowSpan={2} className="py-2 px-3 text-left text-xs font-semibold text-gray-600 dark:text-white/65 uppercase tracking-widest whitespace-nowrap border-r border-gray-200 dark:border-white/[0.06]">Ejercicio</th>
+                                  <th colSpan={execSubCols} className="py-1.5 px-2 text-center text-xs font-semibold text-gray-600 dark:text-white/60 uppercase tracking-widest border-b border-gray-200 dark:border-white/[0.06] border-r border-gray-200 dark:border-white/[0.06]">Plan prescrito</th>
+                                  <th colSpan={execSubCols} className="py-1 px-2 text-center text-xs font-semibold text-gray-400 dark:text-white/40 uppercase tracking-widest border-b border-gray-200 dark:border-white/[0.06]">
+                                    <div className="flex items-center justify-center gap-1">
+                                      <button onClick={() => setExecOffset(o => o + 1)} disabled={execOffset >= maxOffsetTodas} className="p-0.5 rounded hover:bg-black/5 dark:hover:bg-white/10 disabled:opacity-25 disabled:cursor-not-allowed transition-opacity"><ChevronLeft className="w-3.5 h-3.5" /></button>
+                                      <span className="whitespace-nowrap normal-case tracking-normal font-semibold text-xs">
+                                        {execOffset === 0 ? 'Última' : `Previa ×${execOffset}`}
+                                        {dateAtOffsetTodas && <span className="font-normal opacity-70 ml-1">({format(parseISO(dateAtOffsetTodas), 'dd/MM')})</span>}
+                                      </span>
+                                      <button onClick={() => setExecOffset(o => o - 1)} disabled={execOffset === 0} className="p-0.5 rounded hover:bg-black/5 dark:hover:bg-white/10 disabled:opacity-25 disabled:cursor-not-allowed transition-opacity"><ChevronRight className="w-3.5 h-3.5" /></button>
+                                    </div>
+                                  </th>
+                                </tr>
+                                <tr className="border-b border-gray-200 dark:border-white/[0.08] bg-gray-50 dark:bg-[#111111]">
+                                  {['Ser', 'Reps', 'Peso', 'RIR', 'RPE'].map(h => <th key={`p-${h}`} className={`${thBase} ${h === 'RPE' ? 'border-r border-saas-border dark:border-white/[0.06]' : ''}`}>{h}</th>)}
+                                  {['Ser', 'Reps', 'Peso', 'RIR', 'RPE'].map(h => <th key={`u-${h}`} className={thBase}>{h}</th>)}
+                                </tr>
+                              </thead>
+                              <tbody>
+                                {rutina.semanas.flatMap((sem) => {
+                                  const semRowspan = semRS(sem)
+                                  const semLabel = sem.nombre?.trim() ? sem.nombre : `S${sem.numero}`
+                                  const semCell = (
+                                    <td rowSpan={semRowspan} className="px-2 py-3 align-top border-r border-saas-border dark:border-white/[0.06]">
+                                      <span className="text-xs font-bold text-primary/80 whitespace-nowrap">{semLabel}</span>
+                                    </td>
+                                  )
+                                  if (sem.sesiones.length === 0) {
+                                    return [(<tr key={`${sem.id}-esem`} className={tdRow}>{semCell}{renderEmptyCols(totalCols - 1)}</tr>)]
+                                  }
+                                  return sem.sesiones.flatMap((ses, sesIdx) => {
+                                    const diaRS = sesRS(ses)
+                                    const diaCell = (
+                                      <td rowSpan={diaRS} className="px-2 py-3 align-top border-r border-saas-border dark:border-white/[0.06] max-w-[90px]">
+                                        <span className="text-sm text-gray-700 dark:text-white/70 font-semibold whitespace-nowrap">{ses.nombre?.trim() ? ses.nombre : ses.dia}</span>
+                                        {ses.nota?.trim() && <p className="mt-1 text-[11px] text-gray-400 dark:text-white/35 italic break-words">{ses.nota}</p>}
+                                      </td>
+                                    )
+                                    if (ses.bloques.length === 0) {
+                                      return [(<tr key={`${ses.id}-eses`} className={tdRow}>{sesIdx === 0 && semCell}{diaCell}{renderEmptyCols(totalCols - 2)}</tr>)]
+                                    }
+                                    return ses.bloques.flatMap((bl, blqIdx) => {
+                                      const bc = bloqueChip(bl)
+                                      if (bl.ejerciciosPlan.length === 0) {
+                                        return [(<tr key={`${bl.id}-ebl`} className={tdRow}>{sesIdx === 0 && blqIdx === 0 && semCell}{blqIdx === 0 && diaCell}{bc}{renderEmptyCols(totalCols - 3)}</tr>)]
+                                      }
+                                      return bl.ejerciciosPlan.map((ej, ejIdx) => {
+                                        const exec = ej.ejecuciones[execOffset] as EjecucionCliente | undefined
+                                        const prev = ej.ejecuciones[execOffset + 1] as EjecucionCliente | undefined
+                                        const delta = exec?.peso != null && prev?.peso != null ? Number(exec.peso) - Number(prev.peso) : null
+                                        return (
+                                          <tr key={ej.id} className={tdRow}>
+                                            {sesIdx === 0 && blqIdx === 0 && ejIdx === 0 && semCell}
+                                            {blqIdx === 0 && ejIdx === 0 && diaCell}
+                                            {ejIdx === 0 && bc}
+                                            {renderEjCell(ej)}
+                                            {renderPlanCells(ej)}
+                                            {exec ? renderExecCells(exec, delta) : renderEmptyCols(execSubCols)}
+                                          </tr>
+                                        )
+                                      })
+                                    })
+                                  })
+                                })}
+                              </tbody>
+                            </table>
+                            </div>
+                          </div>
+                          {footer}
+                        </>
+                      )
+                    }
+
+                    // ════════════════════════════════════════════════════
+                    // VISTA: Semana individual (Plan prescrito | Última)
+                    // ════════════════════════════════════════════════════
+                    if (!selectedSem) return null
+
+                    const allEjs = selectedSem.sesiones.flatMap(ss => ss.bloques.flatMap(b => b.ejerciciosPlan))
+                    const maxOffset = allEjs.reduce((mx, ej) => Math.max(mx, (ej.ejecuciones?.length ?? 0) - 1), 0)
+                    const dateAtOffset = allEjs.reduce<string | null>((f, ej) => f ?? (ej.ejecuciones[execOffset]?.fecha ?? null), null)
+                    const totalColsInd = 3 + execSubCols + execSubCols
+
                     return (
                       <>
                         <div className="border-t border-saas-border dark:border-white/[0.06] -mx-5 mb-4" />
-                        <div className="overflow-x-auto">
+                        {pillNav}
+                        {selectedSem.observaciones?.trim() && (
+                          <p className="text-[11px] text-gray-400 dark:text-white/35 italic mb-3 px-1">{selectedSem.observaciones}</p>
+                        )}
+                        <div key={selectedSem.id} className="overflow-x-auto">
+                          <div className="rounded-t-2xl overflow-hidden">
                           <table className="w-full border-collapse text-base">
                             <thead>
-                              <tr className="border-b border-saas-border dark:border-white/[0.08] bg-gray-50/50 dark:bg-white/[0.02]">
-                                {(['Semana', 'Día', 'Bloque', 'Ejercicio', 'Nota', 'Ser.', 'Reps', 'Peso', 'RIR / RPE'] as const).map((h, i) => (
-                                  <th
-                                    key={h}
-                                    className={`py-3 text-xs font-semibold text-gray-400 dark:text-white/35 uppercase tracking-widest whitespace-nowrap ${
-                                      i < 3 ? 'px-4 text-left border-r border-saas-border dark:border-white/[0.06]'
-                                      : i <= 4 ? 'px-4 text-left'
-                                      : 'px-3 text-center'
-                                    }`}
-                                  >
-                                    {h}
-                                  </th>
-                                ))}
+                              <tr className="border-b border-gray-200 dark:border-white/[0.06] bg-gray-50 dark:bg-[#111111]">
+                                <th rowSpan={2} className="py-2 px-2 text-left text-xs font-semibold text-gray-600 dark:text-white/65 uppercase tracking-widest whitespace-nowrap border-r border-gray-200 dark:border-white/[0.06]">Día</th>
+                                <th rowSpan={2} className="py-2 px-2 text-center text-xs font-semibold text-gray-600 dark:text-white/65 uppercase tracking-widest whitespace-nowrap border-r border-gray-200 dark:border-white/[0.06]">Bloq</th>
+                                <th rowSpan={2} className="py-2 px-3 text-left text-xs font-semibold text-gray-600 dark:text-white/65 uppercase tracking-widest whitespace-nowrap border-r border-gray-200 dark:border-white/[0.06]">Ejercicio</th>
+                                <th colSpan={execSubCols} className="py-1.5 px-2 text-center text-xs font-semibold text-gray-600 dark:text-white/60 uppercase tracking-widest border-b border-gray-200 dark:border-white/[0.06] border-r border-gray-200 dark:border-white/[0.06]">Plan prescrito</th>
+                                <th colSpan={execSubCols} className="py-1 px-2 text-center text-xs font-semibold text-gray-400 dark:text-white/40 uppercase tracking-widest border-b border-gray-200 dark:border-white/[0.06]">
+                                  <div className="flex items-center justify-center gap-1">
+                                    <button onClick={() => setExecOffset(o => o + 1)} disabled={execOffset >= maxOffset} className="p-0.5 rounded hover:bg-black/5 dark:hover:bg-white/10 disabled:opacity-25 disabled:cursor-not-allowed transition-opacity"><ChevronLeft className="w-3.5 h-3.5" /></button>
+                                    <span className="whitespace-nowrap normal-case tracking-normal font-semibold text-xs">
+                                      {execOffset === 0 ? 'Última' : `Previa ×${execOffset}`}
+                                      {dateAtOffset && <span className="font-normal opacity-70 ml-1">({format(parseISO(dateAtOffset), 'dd/MM')})</span>}
+                                    </span>
+                                    <button onClick={() => setExecOffset(o => o - 1)} disabled={execOffset === 0} className="p-0.5 rounded hover:bg-black/5 dark:hover:bg-white/10 disabled:opacity-25 disabled:cursor-not-allowed transition-opacity"><ChevronRight className="w-3.5 h-3.5" /></button>
+                                  </div>
+                                </th>
+                              </tr>
+                              <tr className="border-b border-gray-200 dark:border-white/[0.08] bg-gray-50 dark:bg-[#111111]">
+                                {['Ser', 'Reps', 'Peso', 'RIR', 'RPE'].map(h => <th key={`p-${h}`} className={`${thBase} ${h === 'RPE' ? 'border-r border-saas-border dark:border-white/[0.06]' : ''}`}>{h}</th>)}
+                                {['Ser', 'Reps', 'Peso', 'RIR', 'RPE'].map(h => <th key={`u-${h}`} className={thBase}>{h}</th>)}
                               </tr>
                             </thead>
                             <tbody>
-                              {rutina.semanas.flatMap(sem => {
-                                const sLabel = sem.nombre?.trim() ? sem.nombre : `S${sem.numero}`
-                                const sRS = semRS(sem)
-                                const semanaCell = (
-                                  <td rowSpan={sRS} className="px-4 py-3 align-top border-r border-saas-border dark:border-white/[0.06] max-w-[160px]">
-                                    <span className="px-2 py-1 bg-primary/10 border border-primary/20 rounded-lg text-primary/90 text-sm font-bold whitespace-nowrap">
-                                      {sLabel}
-                                    </span>
-                                    {sem.observaciones && (
-                                      <p className="mt-2 text-[11px] text-gray-500 dark:text-white/45 leading-relaxed italic break-words">
-                                        {sem.observaciones}
-                                      </p>
-                                    )}
+                              {selectedSem.sesiones.length === 0 ? (
+                                <tr className={tdRow}><td colSpan={totalColsInd} className="px-4 py-3 text-xs text-gray-400 dark:text-white/25">Sin días asignados</td></tr>
+                              ) : selectedSem.sesiones.flatMap((ses, _sesIdx) => {
+                                const diaRS = sesRS(ses)
+                                const diaCell = (
+                                  <td rowSpan={diaRS} className="px-2 py-3 align-top border-r border-saas-border dark:border-white/[0.06] max-w-[100px]">
+                                    <span className="text-sm text-gray-700 dark:text-white/70 font-semibold whitespace-nowrap">{ses.nombre?.trim() ? ses.nombre : ses.dia}</span>
+                                    {ses.nota?.trim() && <p className="mt-1.5 text-[11px] text-gray-400 dark:text-white/35 italic break-words">{ses.nota}</p>}
                                   </td>
                                 )
-                                if (sem.sesiones.length === 0) {
-                                  return [(
-                                    <tr key={`${sem.id}-empty`} className="border-b border-saas-border dark:border-white/[0.05]">
-                                      {semanaCell}
-                                      <td colSpan={8} className="px-4 py-3 text-xs text-gray-400 dark:text-white/25">Sin días asignados</td>
-                                    </tr>
-                                  )]
+                                if (ses.bloques.length === 0) {
+                                  return [(<tr key={`${ses.id}-eses`} className={tdRow}>{diaCell}{renderEmptyCols(totalColsInd - 1)}</tr>)]
                                 }
-                                return sem.sesiones.flatMap((ses, sesIdx) => {
-                                  const sRS_ = sesRS(ses)
-                                  const diaCell = (
-                                    <td rowSpan={sRS_} className="px-4 py-3 align-top border-r border-saas-border dark:border-white/[0.06] min-w-[110px] max-w-[160px]">
-                                      <span className="text-base text-gray-700 dark:text-white/70 font-semibold whitespace-nowrap">{ses.nombre?.trim() ? ses.nombre : ses.dia}</span>
-                                      {ses.nota?.trim() && (
-                                        <div className="mt-2 px-2 py-1.5 rounded-lg bg-gray-50 dark:bg-white/[0.04] border border-gray-200 dark:border-white/[0.06]">
-                                          <p className="text-[11px] text-gray-500 dark:text-white/45 italic leading-relaxed whitespace-normal break-words">{ses.nota}</p>
-                                        </div>
-                                      )}
-                                    </td>
-                                  )
-                                  if (ses.bloques.length === 0) {
-                                    return [(
-                                      <tr key={`${ses.id}-empty`} className="border-b border-saas-border dark:border-white/[0.05]">
-                                        {sesIdx === 0 && semanaCell}
-                                        {diaCell}
-                                        <td colSpan={7} className="px-4 py-3 text-xs text-gray-400 dark:text-white/25">Sin bloques</td>
-                                      </tr>
-                                    )]
+                                return ses.bloques.flatMap((bl, blqIdx) => {
+                                  const bc = bloqueChip(bl)
+                                  if (bl.ejerciciosPlan.length === 0) {
+                                    return [(<tr key={`${bl.id}-ebl`} className={tdRow}>{blqIdx === 0 && diaCell}{bc}{renderEmptyCols(totalColsInd - 2)}</tr>)]
                                   }
-                                  return ses.bloques.flatMap((bl, blqIdx) => {
-                                    const blRS = Math.max(1, bl.ejerciciosPlan.length)
-                                    const bloqueCell = (
-                                      <td rowSpan={blRS} className="px-3 py-3 text-center align-top border-r border-saas-border dark:border-white/[0.06]">
-                                        <div className="flex flex-col items-center gap-0.5">
-                                          <span className="w-8 h-8 rounded-xl bg-primary/15 border border-primary/25 text-primary text-sm font-bold flex items-center justify-center mx-auto">
-                                            {bl.letra}
-                                          </span>
-                                          {bl.patronMovimiento && (
-                                            <span className="text-xs leading-tight text-gray-400 dark:text-white/35 text-center whitespace-nowrap">
-                                              {PATRON_LABELS[bl.patronMovimiento] ?? bl.patronMovimiento}
-                                            </span>
-                                          )}
-                                        </div>
-                                      </td>
-                                    )
-                                    if (bl.ejerciciosPlan.length === 0) {
-                                      return [(
-                                        <tr key={`${bl.id}-empty`} className="border-b border-saas-border dark:border-white/[0.05]">
-                                          {sesIdx === 0 && blqIdx === 0 && semanaCell}
-                                          {blqIdx === 0 && diaCell}
-                                          {bloqueCell}
-                                          <td colSpan={6} className="px-4 py-3 text-xs text-gray-400 dark:text-white/25">Sin ejercicios</td>
-                                        </tr>
-                                      )]
-                                    }
-                                    return bl.ejerciciosPlan.map((ej, ejIdx) => (
-                                      <tr key={ej.id} className="border-b border-saas-border dark:border-white/[0.05] hover:bg-gray-50 dark:hover:bg-white/[0.03] transition-colors">
-                                        {sesIdx === 0 && blqIdx === 0 && ejIdx === 0 && semanaCell}
+                                  return bl.ejerciciosPlan.map((ej, ejIdx) => {
+                                    const exec = ej.ejecuciones[execOffset] as EjecucionCliente | undefined
+                                    const prev = ej.ejecuciones[execOffset + 1] as EjecucionCliente | undefined
+                                    const delta = exec?.peso != null && prev?.peso != null ? Number(exec.peso) - Number(prev.peso) : null
+                                    return (
+                                      <tr key={ej.id} className={tdRow}>
                                         {blqIdx === 0 && ejIdx === 0 && diaCell}
-                                        {ejIdx === 0 && bloqueCell}
-                                        <td className="px-4 py-2.5">
-                                          <div className="flex items-center gap-1.5 min-w-0">
-                                            <span className="text-base text-saas-text dark:text-white/90 font-medium truncate">{ej.nombre}</span>
-                                            {ej.catalogo?.videoUrl && (
-                                              <a href={ej.catalogo.videoUrl} target="_blank" rel="noreferrer"
-                                                className="shrink-0 p-0.5 rounded text-gray-300 dark:text-white/25 hover:text-primary transition-colors"
-                                                title="Ver video del ejercicio"
-                                                onClick={e => e.stopPropagation()}>
-                                                <ExternalLink className="w-3 h-3" />
-                                              </a>
-                                            )}
-                                          </div>
-                                          {ej.catalogo?.patronMovimiento && (
-                                            <span className="text-xs text-gray-400 dark:text-white/35 block">
-                                              {PATRON_LABELS[ej.catalogo.patronMovimiento] ?? ej.catalogo.patronMovimiento}
-                                            </span>
-                                          )}
-                                          {/* Historial de ejecuciones */}
-                                          {ej.ejecuciones.length > 0 && (
-                                            <>
-                                              <button
-                                                type="button"
-                                                onClick={() => setHistOpenEj(h => ({ ...h, [ej.id]: !h[ej.id] }))}
-                                                className="flex items-center gap-1 mt-1.5 text-xs text-gray-400 dark:text-white/30 hover:text-primary transition-colors"
-                                              >
-                                                <History className="w-3 h-3" />
-                                                <span>{ej.ejecuciones.length} registro{ej.ejecuciones.length !== 1 ? 's' : ''}</span>
-                                                <ChevronDown className={`w-2.5 h-2.5 transition-transform duration-200 ${histOpenEj[ej.id] ? 'rotate-180' : ''}`} />
-                                              </button>
-                                              <AnimatePresence>
-                                                {histOpenEj[ej.id] && (
-                                                  <motion.div
-                                                    initial={{ height: 0, opacity: 0 }}
-                                                    animate={{ height: 'auto', opacity: 1 }}
-                                                    exit={{ height: 0, opacity: 0 }}
-                                                    transition={{ duration: 0.2, ease: 'easeInOut' }}
-                                                    className="overflow-hidden mt-1.5"
-                                                  >
-                                                    <table className="w-full text-xs border-collapse">
-                                                      <thead>
-                                                        <tr className="border-b border-gray-200 dark:border-white/10">
-                                                          {['Fecha', 'Ser', 'Reps', 'Kg', 'RIR', 'RPE'].map(h => (
-                                                            <th key={h} className="py-1 px-0.5 text-center text-gray-400 dark:text-white/25 font-semibold uppercase tracking-wide">{h}</th>
-                                                          ))}
-                                                        </tr>
-                                                      </thead>
-                                                      <tbody>
-                                                        {ej.ejecuciones.map((e: EjecucionCliente) => (
-                                                          <tr key={e.id} className="border-b border-gray-100 dark:border-white/[0.05]">
-                                                            <td className="py-1 px-0.5 text-center text-gray-500 dark:text-white/35 whitespace-nowrap">{format(parseISO(e.fecha), 'dd/MM/yy')}</td>
-                                                            <td className="py-1 px-0.5 text-center text-gray-600 dark:text-white/55">{e.series ?? '—'}</td>
-                                                            <td className="py-1 px-0.5 text-center text-gray-600 dark:text-white/55">{e.repeticiones ?? '—'}</td>
-                                                            <td className="py-1 px-0.5 text-center text-primary/80 font-semibold">{e.peso ?? '—'}</td>
-                                                            <td className="py-1 px-0.5 text-center text-gray-400 dark:text-white/30">{e.rir ?? '—'}</td>
-                                                            <td className="py-1 px-0.5 text-center text-gray-400 dark:text-white/30">{e.rpe ?? '—'}</td>
-                                                          </tr>
-                                                        ))}
-                                                      </tbody>
-                                                    </table>
-                                                  </motion.div>
-                                                )}
-                                              </AnimatePresence>
-                                            </>
-                                          )}
-                                        </td>
-                                        <td className="px-4 py-2.5 max-w-[180px]">
-                                          {ej.notas?.trim()
-                                            ? <p className="text-xs text-gray-500 dark:text-white/55 italic leading-relaxed">{ej.notas}</p>
-                                            : <span className="text-gray-300 dark:text-white/20 text-xs">—</span>
-                                          }
-                                        </td>
-                                        <td className="px-3 py-2.5 text-center">
-                                          {ej.series != null
-                                            ? <span className="text-sm tabular-nums bg-gray-100 dark:bg-white/[0.06] px-1.5 py-0.5 rounded-md text-gray-600 dark:text-white/60 font-medium">{ej.series}×</span>
-                                            : <span className="text-gray-300 dark:text-white/15 text-xs">—</span>}
-                                        </td>
-                                        <td className="px-3 py-2.5 text-center">
-                                          {ej.repeticiones
-                                            ? <span className="text-xs text-gray-500 dark:text-white/55">{ej.repeticiones}</span>
-                                            : <span className="text-gray-300 dark:text-white/15 text-xs">—</span>}
-                                        </td>
-                                        <td className="px-3 py-2.5 text-center">
-                                          {ej.peso
-                                            ? <span className="text-xs px-1.5 py-0.5 bg-primary/10 text-primary/80 rounded-md font-medium">{ej.peso}</span>
-                                            : <span className="text-gray-300 dark:text-white/15 text-xs">—</span>}
-                                        </td>
-                                        <td className="px-3 py-2.5 text-center">
-                                          <div className="flex items-center justify-center gap-2">
-                                            {ej.rir != null && <span className="text-[11px] text-gray-400 dark:text-white/40">RIR <span className="text-gray-600 dark:text-white/65 font-semibold">{ej.rir}</span></span>}
-                                            {ej.rpe != null && <span className="text-[11px] text-gray-400 dark:text-white/40">RPE <span className="text-gray-600 dark:text-white/65 font-semibold">{ej.rpe}</span></span>}
-                                            {ej.rir == null && ej.rpe == null && <span className="text-gray-300 dark:text-white/15 text-xs">—</span>}
-                                          </div>
-                                        </td>
+                                        {ejIdx === 0 && bc}
+                                        {renderEjCell(ej)}
+                                        {renderPlanCells(ej)}
+                                        {exec ? renderExecCells(exec, delta) : renderEmptyCols(execSubCols)}
                                       </tr>
-                                    ))
+                                    )
                                   })
                                 })
                               })}
                             </tbody>
                           </table>
+                          </div>
                         </div>
+                        {footer}
                       </>
                     )
                   })()}
