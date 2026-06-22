@@ -467,6 +467,7 @@ export default function ShiftsPage() {
     try {
       await shiftsApi.remove(id)
       queryClient.setQueryData<Shift[]>(QK.shifts.all(), old => (old ?? []).filter(s => String(s.id) !== String(id)))
+      await queryClient.invalidateQueries({ queryKey: QK.shifts.all() })
       addToast('Turno eliminado', 'success')
     } catch {
       addToast('Error al eliminar', 'error')
