@@ -81,7 +81,7 @@ export const useSettingsStore = create<SettingsState>()(
     }),
     {
       name: 'eficiencia-settings',
-      version: 3,
+      version: 4,
       migrate: (state: unknown, version: number) => {
         const s = state as Record<string, unknown>
         if (version < 2) {
@@ -92,6 +92,14 @@ export const useSettingsStore = create<SettingsState>()(
           return {
             ...s,
             notifications: { ...notif, emailAlAprobarSolicitudes: false },
+          }
+        }
+        if (version < 4) {
+          // Resetear tema a 'light' — por decisión del cliente todos arrancan en claro
+          const appearance = (s.appearance as Record<string, unknown>) ?? {}
+          return {
+            ...s,
+            appearance: { ...appearance, theme: 'light' },
           }
         }
         return s

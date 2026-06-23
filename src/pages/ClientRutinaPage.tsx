@@ -707,23 +707,23 @@ function EjInlineCells({ ej, isEditing, onEditStart, onUpdate, onCancelEdit, onD
         <input
           {...register('notas')}
           placeholder="Nota…"
-          onKeyDown={e => { if (e.key === 'Escape') onCancelEdit() }}
+          onKeyDown={e => { if (e.key === 'Escape') onCancelEdit(); else if (e.key === 'Enter') { e.preventDefault(); submit() } }}
           className={`${inp} text-xs italic placeholder-gray-300 dark:placeholder-white/20`}
         />
       </td>
       <td className="px-1.5 py-1.5">
-        <input {...register('series')} placeholder="—" onKeyDown={e => { if (e.key === 'Escape') onCancelEdit() }} className={`${inp} text-center`} />
+        <input {...register('series')} placeholder="—" onKeyDown={e => { if (e.key === 'Escape') onCancelEdit(); else if (e.key === 'Enter') { e.preventDefault(); submit() } }} className={`${inp} text-center`} />
       </td>
       <td className="px-1.5 py-1.5">
-        <input {...register('repeticiones')} placeholder="—" onKeyDown={e => { if (e.key === 'Escape') onCancelEdit() }} className={`${inp} text-center`} />
+        <input {...register('repeticiones')} placeholder="—" onKeyDown={e => { if (e.key === 'Escape') onCancelEdit(); else if (e.key === 'Enter') { e.preventDefault(); submit() } }} className={`${inp} text-center`} />
       </td>
       <td className="px-1.5 py-1.5">
-        <input {...register('peso')} placeholder="—" onKeyDown={e => { if (e.key === 'Escape') onCancelEdit() }} className={`${inp} text-center`} />
+        <input {...register('peso')} placeholder="—" onKeyDown={e => { if (e.key === 'Escape') onCancelEdit(); else if (e.key === 'Enter') { e.preventDefault(); submit() } }} className={`${inp} text-center`} />
       </td>
       <td className="px-1.5 py-1.5">
         <div className="flex gap-1">
-          <input {...register('rir')} placeholder="RIR" onKeyDown={e => { if (e.key === 'Escape') onCancelEdit() }} className={`${inp} text-center`} />
-          <input {...register('rpe')} placeholder="RPE" onKeyDown={e => { if (e.key === 'Escape') onCancelEdit() }} className={`${inp} text-center`} />
+          <input {...register('rir')} placeholder="RIR" onKeyDown={e => { if (e.key === 'Escape') onCancelEdit(); else if (e.key === 'Enter') { e.preventDefault(); submit() } }} className={`${inp} text-center`} />
+          <input {...register('rpe')} placeholder="RPE" onKeyDown={e => { if (e.key === 'Escape') onCancelEdit(); else if (e.key === 'Enter') { e.preventDefault(); submit() } }} className={`${inp} text-center`} />
         </div>
       </td>
       <td className="px-1.5 py-1.5 w-[56px]">
@@ -1762,7 +1762,7 @@ function InlineEditRutinaTable({ rutina, onCancel, onSaved, selectedSemanaId, on
           )}
         </span>
         <button
-          onClick={() => saveDraft(onSaved)}
+          onClick={() => { setEditingEjId(null); saveDraft(onSaved) }}
           disabled={!hasChanges || saving}
           className="flex items-center gap-2 px-5 py-2.5 rounded-xl bg-primary text-black text-sm font-semibold disabled:opacity-40 transition-opacity"
         >

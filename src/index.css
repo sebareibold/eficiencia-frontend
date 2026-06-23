@@ -15,6 +15,8 @@
   --sp-card: 1.5rem;
   --sp-gap: 1.5rem;
   --sp-item: 1rem;
+
+  font-size: 15px;
 }
 
 [data-density='compact'] {
@@ -83,8 +85,8 @@ html:not(.dark) .bg-white {
 .dark .text-gray-800  { color: #e5e7eb !important; }
 .dark .text-gray-700  { color: #d1d5db !important; }
 .dark .text-gray-600  { color: #9ca3af !important; }
-.dark .text-gray-500  { color: #6b7280 !important; }
-.dark .text-gray-400  { color: #525252 !important; }
+.dark .text-gray-500  { color: #8e8e9e !important; }
+.dark .text-gray-400  { color: #8a8a9a !important; }
 
 /* Status text: keep semantic colors readable on dark */
 .dark .text-green-600 { color: #4ade80 !important; }

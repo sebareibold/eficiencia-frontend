@@ -292,30 +292,28 @@ export default function Navbar() {
 
         {/* ── Desktop right actions (hidden on mobile) ───────────────────── */}
         <div className="hidden md:flex items-center gap-2 shrink-0">
-          {isAdmin && (
-            <NavLink
-              to={ROUTES.SETTINGS}
-              className={({ isActive }) =>
-                `relative flex items-center justify-center h-10 w-10 rounded-full transition-colors ${isActive ? 'text-gray-900 dark:text-white' : 'text-gray-500 hover:text-gray-900 hover:bg-black/[0.05] dark:hover:bg-white/[0.06]'}`
-              }
-              title="Configuración"
-            >
-              {({ isActive }) => (
-                <>
-                  {isActive && (
-                    <motion.div
-                      initial={{ opacity: 0 }}
-                      animate={{ opacity: 1 }}
-                      transition={{ duration: 0.15, ease: 'easeOut' }}
-                      className="absolute inset-0 rounded-full bg-white/30 dark:bg-black/30 backdrop-blur-3xl border border-white/50 dark:border-white/10 shadow-[0_8px_32px_rgba(0,0,0,0.04),0_0_16px_rgba(251,198,8,0.18)] dark:shadow-[0_8px_32px_rgba(0,0,0,0.3),0_0_20px_rgba(251,198,8,0.22)]"
-                      style={{ zIndex: 0 }}
-                    />
-                  )}
-                  <Settings size={18} strokeWidth={2.5} className="relative z-10" />
-                </>
-              )}
-            </NavLink>
-          )}
+          <NavLink
+            to={ROUTES.SETTINGS}
+            className={({ isActive }) =>
+              `relative flex items-center justify-center h-10 w-10 rounded-full transition-colors ${isActive ? 'text-gray-900 dark:text-white' : 'text-gray-500 hover:text-gray-900 hover:bg-black/[0.05] dark:hover:bg-white/[0.06]'}`
+            }
+            title="Configuración"
+          >
+            {({ isActive }) => (
+              <>
+                {isActive && (
+                  <motion.div
+                    initial={{ opacity: 0 }}
+                    animate={{ opacity: 1 }}
+                    transition={{ duration: 0.15, ease: 'easeOut' }}
+                    className="absolute inset-0 rounded-full bg-white/30 dark:bg-black/30 backdrop-blur-3xl border border-white/50 dark:border-white/10 shadow-[0_8px_32px_rgba(0,0,0,0.04),0_0_16px_rgba(251,198,8,0.18)] dark:shadow-[0_8px_32px_rgba(0,0,0,0.3),0_0_20px_rgba(251,198,8,0.22)]"
+                    style={{ zIndex: 0 }}
+                  />
+                )}
+                <Settings size={18} strokeWidth={2.5} className="relative z-10" />
+              </>
+            )}
+          </NavLink>
           <div className="flex items-center gap-1">
             <button
               onClick={handleLogout}
@@ -454,35 +452,33 @@ export default function Navbar() {
                       {user?.name} {user?.lastName}
                     </p>
                     <p className="text-xs text-gray-500 dark:text-[#8A8A9A] leading-tight mt-0.5">
-                      {user?.email === 'sebastianreibold2003@gmail.com' ? 'Desarrollador' : isAdmin ? 'Administrador' : 'Staff'}
+                      {user?.email === 'sebastianreibold2003@gmail.com' ? 'Desarrollador' : isAdmin ? 'Administrador' : user?.role === 'profesor' ? 'Profesor' : 'Staff'}
                     </p>
                   </div>
                 </div>
 
-                {/* Settings (admin only) */}
-                {isAdmin && (
-                  <NavLink
-                    to={ROUTES.SETTINGS}
-                    onClick={() => setMobileOpen(false)}
-                    className={({ isActive }) =>
-                      `relative flex items-center gap-4 rounded-2xl px-5 py-[14px] text-[0.9rem] font-semibold transition-all duration-150 overflow-hidden ${
-                        isActive
-                          ? 'bg-white/30 dark:bg-black/30 backdrop-blur-3xl border border-white/50 dark:border-white/10 shadow-[0_8px_32px_rgba(0,0,0,0.04),0_0_16px_rgba(251,198,8,0.18)] dark:shadow-[0_8px_32px_rgba(0,0,0,0.3),0_0_20px_rgba(251,198,8,0.22)] text-gray-900 dark:text-white'
-                          : 'text-gray-600 dark:text-[#8A8A9A] hover:bg-black/[0.05] dark:hover:bg-white/[0.05] hover:text-gray-900 dark:hover:text-white'
-                      }`
-                    }
-                  >
-                    {({ isActive }) => (
-                      <>
-                        {isActive && (
-                          <span className="absolute left-0 top-1/2 -translate-y-1/2 w-[3px] h-7 bg-primary rounded-r-full" />
-                        )}
-                        <Settings size={19} strokeWidth={2} className={`shrink-0 ${isActive ? 'text-primary' : ''}`} />
-                        <span>Configuración</span>
-                      </>
-                    )}
-                  </NavLink>
-                )}
+                {/* Settings */}
+                <NavLink
+                  to={ROUTES.SETTINGS}
+                  onClick={() => setMobileOpen(false)}
+                  className={({ isActive }) =>
+                    `relative flex items-center gap-4 rounded-2xl px-5 py-[14px] text-[0.9rem] font-semibold transition-all duration-150 overflow-hidden ${
+                      isActive
+                        ? 'bg-white/30 dark:bg-black/30 backdrop-blur-3xl border border-white/50 dark:border-white/10 shadow-[0_8px_32px_rgba(0,0,0,0.04),0_0_16px_rgba(251,198,8,0.18)] dark:shadow-[0_8px_32px_rgba(0,0,0,0.3),0_0_20px_rgba(251,198,8,0.22)] text-gray-900 dark:text-white'
+                        : 'text-gray-600 dark:text-[#8A8A9A] hover:bg-black/[0.05] dark:hover:bg-white/[0.05] hover:text-gray-900 dark:hover:text-white'
+                    }`
+                  }
+                >
+                  {({ isActive }) => (
+                    <>
+                      {isActive && (
+                        <span className="absolute left-0 top-1/2 -translate-y-1/2 w-[3px] h-7 bg-primary rounded-r-full" />
+                      )}
+                      <Settings size={19} strokeWidth={2} className={`shrink-0 ${isActive ? 'text-primary' : ''}`} />
+                      <span>Configuración</span>
+                    </>
+                  )}
+                </NavLink>
 
                 {/* Logout */}
                 <button

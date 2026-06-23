@@ -185,6 +185,34 @@ function rutinaToSesionesDraft(rutina: Rutina): SesionDraft[] {
   }))
 }
 
+// Copia estructura sin valores del plan (series/reps/peso/rir/rpe/notas)
+// Usado al crear a partir de la rutina de otro cliente
+function rutinaToSesionesDraftSinPlan(rutina: Rutina): SesionDraft[] {
+  const primera = rutina.semanas[0]
+  if (!primera) return []
+  return primera.sesiones.map((s, si) => ({
+    _id: uid(),
+    numero: si + 1,
+    bloques: s.bloques.map((b, bi) => ({
+      _id: uid(),
+      letra: LETRAS[bi] ?? String.fromCharCode(65 + bi),
+      orden: bi,
+      patronMovimiento: null,
+      cantidadEjercicios: b.ejerciciosPlan.length,
+      ejercicios: b.ejerciciosPlan.map(e => ({
+        _id: uid(),
+        catalogoId: e.catalogoId,
+        nombre: e.nombre,
+        series: undefined,
+        repeticiones: undefined,
+        peso: undefined,
+        rir: undefined,
+        rpe: undefined,
+      })),
+    })),
+  }))
+}
+
 // ─── Estado inicial y reducer ─────────────────────────────────────────────────
 
 const initialState: WizardState = {
@@ -221,6 +249,7 @@ type WizardAction =
   | { type: 'SET_CONFIG'; nombre: string; cantidadSemanas: number; fechaInicio: string; periodo: PeriodoEntrenamiento | null; descripcion: string; profesorId: string | null }
   | { type: 'INIT_MESOCICLO'; sesiones: SesionDraft[]; rutinaBaseId: string }
   | { type: 'SET_BASE_RUTINA'; sesiones: SesionDraft[]; rutinaBaseId: string; sesionesSemanales: number }
+  | { type: 'SET_DESCRIPCION'; descripcion: string }
   | { type: 'RESET_PASO1' }
   // ── Acciones semanas wizard (Paso 5) ─────────────────────────────────────────
   | { type: 'INIT_WIZARD_SEMANAS' }
@@ -383,6 +412,9 @@ function wizardReducer(state: WizardState, action: WizardAction): WizardState {
         plantillaId: null,
       }
 
+    case 'SET_DESCRIPCION':
+      return { ...state, descripcion: action.descripcion }
+
     case 'RESET_PASO1':
       return {
         ...state,
@@ -392,6 +424,7 @@ function wizardReducer(state: WizardState, action: WizardAction): WizardState {
         sesionesSemanales: null,
         sinPlantilla: false,
         plantillaId: null,
+        descripcion: '',
       }
 
     // ── Semanas wizard (Paso 5 tabla inline) ──────────────────────────────────
@@ -1393,6 +1426,64 @@ export default function CreateRutinaPage() {
       dispatch({ type: 'SET_PASO', paso: 2 })
     }
 
+    // ── Sub-estado para "desde otro cliente" ──────────────────────────────────
+    const [showOtroCliente, setShowOtroCliente] = useState(false)
+    const [otroSearch, setOtroSearch] = useState('')
+    const [otroLoadingSearch, setOtroLoadingSearch] = useState(false)
+    const [otroResults, setOtroResults] = useState<{ id: number; nombre: string; apellido: string }[]>([])
+    const [otroRutinas, setOtroRutinas] = useState<Rutina[]>([])
+    const [otroNombreCliente, setOtroNombreCliente] = useState('')
+    const [otroLoadingRutinas, setOtroLoadingRutinas] = useState(false)
+    const otroTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
+
+    useEffect(() => {
+      if (otroSearch.length < 2) { setOtroResults([]); return }
+      if (otroTimerRef.current) clearTimeout(otroTimerRef.current)
+      otroTimerRef.current = setTimeout(async () => {
+        setOtroLoadingSearch(true)
+        try {
+          const res = await clientsApi.getAll({ search: otroSearch, limit: 20, page: 1 })
+          // Excluir al cliente destino
+          const destinoId = state.cliente?.id
+          setOtroResults(
+            res.data
+              .filter(c => String(c.id) !== destinoId)
+              .map(c => ({ id: Number(c.id), nombre: c.name, apellido: c.lastName }))
+          )
+        } catch {
+          setOtroResults([])
+        } finally {
+          setOtroLoadingSearch(false)
+        }
+      }, 300)
+      return () => { if (otroTimerRef.current) clearTimeout(otroTimerRef.current) }
+    }, [otroSearch])
+
+    async function seleccionarOtroCliente(id: number, nombre: string, apellido: string) {
+      setOtroLoadingRutinas(true)
+      setOtroNombreCliente(`${nombre} ${apellido}`)
+      setOtroResults([])
+      setOtroSearch(`${nombre} ${apellido}`)
+      try {
+        const rutinas = await rutinasApi.getByCliente(String(id))
+        setOtroRutinas(rutinas)
+      } catch {
+        setOtroRutinas([])
+        addToast('Error al cargar las rutinas', 'error')
+      } finally {
+        setOtroLoadingRutinas(false)
+      }
+    }
+
+    function elegirRutinaOtroCliente(rutina: Rutina) {
+      const sesionesDraft = rutinaToSesionesDraftSinPlan(rutina)
+      const sesionesSemanales = rutina.semanas[0]?.sesiones.length ?? 3
+      dispatch({ type: 'SET_BASE_RUTINA', sesiones: sesionesDraft, rutinaBaseId: rutina.id, sesionesSemanales })
+      dispatch({ type: 'SET_DESCRIPCION', descripcion: `Basada en la rutina de ${otroNombreCliente}` })
+      setBaseDecidida(true)
+      setShowOtroCliente(false)
+    }
+
     // ── Phase B: base rutina selection ────────────────────────────────────────
     if (showBasePhase && state.cliente) {
       return (
@@ -1447,7 +1538,7 @@ export default function CreateRutinaPage() {
               </div>
             </OptionCard>
 
-            {/* Existing rutinas */}
+            {/* Existing rutinas del cliente destino */}
             {clienteRutinas.map(rutina => {
               const ejCount = rutina.semanas[0]?.sesiones.reduce(
                 (sum, s) => sum + s.bloques.reduce((bs, b) => bs + b.ejerciciosPlan.length, 0), 0
@@ -1455,12 +1546,14 @@ export default function CreateRutinaPage() {
               return (
                 <OptionCard
                   key={rutina.id}
-                  selected={baseDecidida && state.rutinaBaseId === rutina.id}
+                  selected={baseDecidida && state.rutinaBaseId === rutina.id && !showOtroCliente}
                   onClick={() => {
                     const sesionesDraft = rutinaToSesionesDraft(rutina)
                     const sesionesSemanales = rutina.semanas[0]?.sesiones.length ?? 3
                     dispatch({ type: 'SET_BASE_RUTINA', sesiones: sesionesDraft, rutinaBaseId: rutina.id, sesionesSemanales })
+                    dispatch({ type: 'SET_DESCRIPCION', descripcion: '' })
                     setBaseDecidida(true)
+                    setShowOtroCliente(false)
                   }}
                 >
                   <div>
@@ -1488,6 +1581,135 @@ export default function CreateRutinaPage() {
                 </OptionCard>
               )
             })}
+
+            {/* Desde la rutina de otro cliente */}
+            <OptionCard
+              selected={showOtroCliente}
+              onClick={() => {
+                setShowOtroCliente(true)
+                setBaseDecidida(false)
+                if (state.rutinaBaseId) {
+                  dispatch({ type: 'RESET_PASO1' })
+                  dispatch({ type: 'SET_CLIENTE', cliente: state.cliente! })
+                }
+              }}
+            >
+              <div className="flex items-center gap-3">
+                <div className="h-9 w-9 rounded-xl bg-white/[0.06] border border-white/[0.08] flex items-center justify-center shrink-0">
+                  <Copy size={15} className="text-gray-400" />
+                </div>
+                <div className="min-w-0">
+                  <p className="text-sm font-black text-gray-900 dark:text-white">Desde la rutina de otro cliente</p>
+                  <p className="text-xs text-gray-500 mt-0.5">Copiar la estructura de la rutina de otro socio como base</p>
+                </div>
+              </div>
+            </OptionCard>
+
+            {/* Sub-búsqueda de otro cliente */}
+            <AnimatePresence>
+              {showOtroCliente && (
+                <motion.div
+                  initial={{ opacity: 0, height: 0 }}
+                  animate={{ opacity: 1, height: 'auto' }}
+                  exit={{ opacity: 0, height: 0 }}
+                  transition={{ duration: 0.2, ease: 'easeOut' }}
+                  className="overflow-hidden"
+                >
+                  <div className="mt-1 ml-4 pl-4 border-l-2 border-primary/20 space-y-3">
+                    {/* Buscador de otro cliente */}
+                    <div className="relative">
+                      <Search size={13} className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400 pointer-events-none" />
+                      <input
+                        value={otroSearch}
+                        onChange={e => { setOtroSearch(e.target.value); setOtroRutinas([]) }}
+                        placeholder="Buscar cliente (mín. 2 caracteres)"
+                        className={inputCls + ' pl-9 text-xs py-2'}
+                        autoFocus
+                      />
+                      {otroSearch && (
+                        <button
+                          type="button"
+                          onClick={() => { setOtroSearch(''); setOtroResults([]); setOtroRutinas([]) }}
+                          className="absolute right-2.5 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600"
+                        >
+                          <X size={12} />
+                        </button>
+                      )}
+                    </div>
+
+                    {/* Resultados de búsqueda */}
+                    {otroLoadingSearch && (
+                      <p className="text-xs text-gray-500 px-1">Buscando...</p>
+                    )}
+                    {!otroLoadingSearch && otroResults.length > 0 && (
+                      <div className="rounded-xl border border-white/[0.08] bg-white/[0.03] divide-y divide-white/[0.04] overflow-hidden">
+                        {otroResults.map(c => (
+                          <button
+                            key={c.id}
+                            type="button"
+                            onClick={() => seleccionarOtroCliente(c.id, c.nombre, c.apellido)}
+                            className="w-full flex items-center gap-2 px-3 py-2.5 text-left hover:bg-white/[0.04] transition-colors"
+                          >
+                            <div className="h-6 w-6 rounded-lg bg-gray-100 dark:bg-white/[0.06] flex items-center justify-center shrink-0">
+                              <span className="text-[10px] font-bold text-gray-500 dark:text-white/40">{c.nombre[0]}</span>
+                            </div>
+                            <span className="text-sm text-gray-900 dark:text-white">{c.nombre} {c.apellido}</span>
+                          </button>
+                        ))}
+                      </div>
+                    )}
+
+                    {/* Rutinas del otro cliente */}
+                    {otroLoadingRutinas && (
+                      <p className="text-xs text-gray-500 px-1">Cargando rutinas...</p>
+                    )}
+                    {!otroLoadingRutinas && otroRutinas.length === 0 && otroNombreCliente && (
+                      <p className="text-xs text-gray-500 px-1">{otroNombreCliente} no tiene rutinas.</p>
+                    )}
+                    {!otroLoadingRutinas && otroRutinas.length > 0 && (
+                      <div className="space-y-1.5">
+                        <p className="text-[10px] text-gray-500 px-1 uppercase tracking-wider font-semibold">Rutinas de {otroNombreCliente}</p>
+                        {otroRutinas.map(rutina => {
+                          const ejCount = rutina.semanas[0]?.sesiones.reduce(
+                            (sum, s) => sum + s.bloques.reduce((bs, b) => bs + b.ejerciciosPlan.length, 0), 0
+                          ) ?? 0
+                          const isSelected = baseDecidida && state.rutinaBaseId === rutina.id
+                          return (
+                            <button
+                              key={rutina.id}
+                              type="button"
+                              onClick={() => elegirRutinaOtroCliente(rutina)}
+                              className={`w-full text-left rounded-xl border px-3 py-2.5 transition-all ${
+                                isSelected
+                                  ? 'border-primary/40 bg-primary/[0.06]'
+                                  : 'border-white/[0.08] bg-white/[0.02] hover:bg-white/[0.04] hover:border-white/[0.12]'
+                              }`}
+                            >
+                              <div className="flex items-start justify-between gap-2">
+                                <p className="text-sm font-semibold text-gray-900 dark:text-white leading-tight">{rutina.nombre}</p>
+                                <div className="flex items-center gap-1.5 shrink-0">
+                                  {rutina.activa && (
+                                    <span className="text-[9px] font-bold uppercase tracking-wider px-1.5 py-0.5 rounded-md bg-emerald-500/10 text-emerald-400 border border-emerald-500/15">
+                                      Activa
+                                    </span>
+                                  )}
+                                  {isSelected && <Check size={12} className="text-primary" />}
+                                </div>
+                              </div>
+                              <div className="flex flex-wrap gap-x-3 mt-1 text-[10px] text-gray-500">
+                                <span>{rutina.semanas.length} sem.</span>
+                                {rutina.semanas[0] && <span>{rutina.semanas[0].sesiones.length} días/sem</span>}
+                                {ejCount > 0 && <span>{ejCount} ejercicios</span>}
+                              </div>
+                            </button>
+                          )
+                        })}
+                      </div>
+                    )}
+                  </div>
+                </motion.div>
+              )}
+            </AnimatePresence>
           </div>
         </div>
       )
