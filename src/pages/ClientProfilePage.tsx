@@ -32,6 +32,7 @@ import type { ListaEsperaClienteEntry } from '../api/listaEspera.api'
 import { shiftsApi } from '../api/shifts.api'
 import type { Shift } from '../types/shift.types'
 import { useRutinas } from '../hooks/useRutinas'
+import { usePermissions } from '../hooks/usePermissions'
 import type { Rutina } from '../types/rutina.types'
 import { rutinasApi } from '../api/rutinas.api'
 import { useUiStore } from '../store/uiStore'
@@ -479,6 +480,7 @@ export default function ClientProfilePage() {
   const addToast = useUiStore(s => s.addToast)
   const user = useAuthStore(s => s.user)
   const isAdmin = user?.role === 'admin'
+  const { can } = usePermissions()
 
   // Visita de regreso → no animar desde opacity:0 para evitar flash "solo navbar"
   const isReturnVisit = Boolean(id && loadedClientIds.has(id))
@@ -1377,13 +1379,13 @@ export default function ClientProfilePage() {
               </p>
               <div className="space-y-1">
                 {[
-                  { id: 'perfil',      label: 'Perfil',      icon: User       },
-                  { id: 'rutinas',     label: 'Rutinas',     icon: BookOpen   },
-                  { id: 'clases',      label: 'Clases',      icon: Dumbbell   },
-                  { id: 'asistencia',  label: 'Asistencia',  icon: Activity   },
-                  { id: 'membresias',  label: 'Membresías',  icon: Tag        },
-                  { id: 'pagos',       label: 'Pagos',       icon: CreditCard },
-                ].map(item => {
+                  { id: 'perfil',      label: 'Perfil',      icon: User,       show: true },
+                  { id: 'rutinas',     label: 'Rutinas',     icon: BookOpen,   show: can('clients', 'view_rutinas') },
+                  { id: 'clases',      label: 'Clases',      icon: Dumbbell,   show: true },
+                  { id: 'asistencia',  label: 'Asistencia',  icon: Activity,   show: true },
+                  { id: 'membresias',  label: 'Membresías',  icon: Tag,        show: can('clients', 'view_membresias') },
+                  { id: 'pagos',       label: 'Pagos',       icon: CreditCard, show: can('clients', 'view_pagos') },
+                ].filter(item => item.show).map(item => {
                   const Icon = item.icon
                   return (
                     <button
@@ -1404,7 +1406,7 @@ export default function ClientProfilePage() {
         {/* Bloque de Secciones de Contenido (Offset to clear the fixed sidebar) */}
         <motion.div className="w-full space-y-6" variants={staggerContainerFast} initial="initial" animate="animate">
           {/* ─── SECCIÓN 1: RUTINAS ────────────────────────────────────────── */}
-          <motion.div variants={fadeUpItem} id="rutinas" className={`${glassCard} p-6 space-y-5 scroll-mt-24`}>
+          {can('clients', 'view_rutinas') && <motion.div variants={fadeUpItem} id="rutinas" className={`${glassCard} p-6 space-y-5 scroll-mt-24`}>
             <div className="flex items-center justify-between border-b border-gray-200 dark:border-white/[0.06] pb-3">
               <div className="flex items-center gap-3">
                 <div className="h-10 w-10 rounded-xl bg-primary/10 flex items-center justify-center shrink-0">
@@ -1750,10 +1752,10 @@ export default function ClientProfilePage() {
             ) : (
               <AttendanceTabContent attendance={attendance} />
             )}
-          </motion.div>
+          </motion.div>}
 
           {/* ─── SECCIÓN 4: MEMBRESÍAS ──────────────────────────────────────────── */}
-          <motion.div variants={fadeUpItem} id="membresias" className={`${glassCard} p-6 space-y-5 scroll-mt-24`}>
+          {can('clients', 'view_membresias') && <motion.div variants={fadeUpItem} id="membresias" className={`${glassCard} p-6 space-y-5 scroll-mt-24`}>
             <div className="flex items-center justify-between border-b border-gray-200 dark:border-white/[0.06] pb-3">
               <div className="flex items-center gap-3">
                 <div className="h-10 w-10 rounded-xl bg-primary/10 flex items-center justify-center shrink-0">
@@ -1892,10 +1894,10 @@ export default function ClientProfilePage() {
                 )
               })()
             )}
-          </motion.div>
+          </motion.div>}
 
           {/* ─── SECCIÓN 5: PAGOS Y FACTURACIÓN ───────────────────────────────────── */}
-          <motion.div variants={fadeUpItem} id="pagos" className={`${glassCard} p-6 space-y-6 scroll-mt-24`}>
+          {can('clients', 'view_pagos') && <motion.div variants={fadeUpItem} id="pagos" className={`${glassCard} p-6 space-y-6 scroll-mt-24`}>
             <div className="flex items-center justify-between border-b border-gray-200 dark:border-white/[0.06] pb-3">
               <div className="flex items-center gap-3">
                 <div className="h-10 w-10 rounded-xl bg-primary/10 flex items-center justify-center shrink-0">
@@ -2089,7 +2091,7 @@ export default function ClientProfilePage() {
                 </div>
               </div>
             )}
-          </motion.div>
+          </motion.div>}
           <div className="h-[35vh]" />
         </motion.div>
       </div>

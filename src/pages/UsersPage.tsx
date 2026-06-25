@@ -5,7 +5,7 @@ import { pageVariants } from '../lib/motion'
 import {
   Plus, Search, RefreshCw, Edit2, Trash2, UserCheck, UserX,
   ShieldCheck, Users, GraduationCap, Check, X as XIcon,
-  ClipboardList, CheckCircle2, Ban, Save,
+  ClipboardList, CheckCircle2, Ban, Save, Lock,
 } from 'lucide-react'
 import { useForm } from 'react-hook-form'
 import { zodResolver } from '@hookform/resolvers/zod'
@@ -595,10 +595,13 @@ const MODULES_MATRIX = [
   {
     id: 'clients', name: 'Gestión de Clientes',
     actions: [
-      { id: 'read',   name: 'Ver listado y perfiles' },
-      { id: 'create', name: 'Crear nuevos clientes' },
-      { id: 'update', name: 'Editar datos personales' },
-      { id: 'delete', name: 'Eliminar clientes' },
+      { id: 'read',             name: 'Ver listado y perfiles' },
+      { id: 'create',           name: 'Crear nuevos clientes' },
+      { id: 'update',           name: 'Editar datos personales' },
+      { id: 'delete',           name: 'Eliminar clientes' },
+      { id: 'view_pagos',       name: 'Ver pagos en perfil del cliente' },
+      { id: 'view_membresias',  name: 'Ver membresías en perfil del cliente' },
+      { id: 'view_rutinas',     name: 'Gestionar rutinas del cliente' },
     ],
   },
   {
@@ -660,6 +663,7 @@ const MODULES_MATRIX = [
   },
   {
     id: 'rutinas', name: 'Rutinas',
+    dependsOn: { modulo: 'clients', accion: 'view_rutinas' },
     actions: [
       { id: 'read',   name: 'Ver rutinas' },
       { id: 'create', name: 'Crear rutinas' },
@@ -787,9 +791,28 @@ function PermisosTab() {
                 {MODULES_MATRIX.map(mod => (
                   <Fragment key={mod.id}>
                     <tr>
-                      <td colSpan={ROLES_MATRIX.length + 1} className="px-6 py-2.5 text-xs font-extrabold text-gray-900 dark:text-white bg-primary/[0.04] dark:bg-primary/[0.06] border-y border-primary/10">
+                      <td className="px-6 py-2.5 text-xs font-extrabold text-gray-900 dark:text-white bg-primary/[0.04] dark:bg-primary/[0.06] border-y border-primary/10">
                         {mod.name}
                       </td>
+                      {ROLES_MATRIX.map(role => {
+                        const isAdmin = role.id === 'ADMINISTRADOR'
+                        const isLocked = !isAdmin && mod.dependsOn
+                          ? !localMap[`${role.id}__${mod.dependsOn.modulo}__${mod.dependsOn.accion}`]?.permitido
+                          : false
+                        return (
+                          <td key={role.id} className="px-6 py-2.5 text-center bg-primary/[0.04] dark:bg-primary/[0.06] border-y border-primary/10">
+                            {isLocked && (
+                              <div
+                                className="inline-flex items-center gap-1 text-[9px] text-gray-400 dark:text-gray-500 font-semibold"
+                                title="Activá 'Gestionar rutinas del cliente' en Gestión de Clientes"
+                              >
+                                <Lock size={9} />
+                                <span>Sin acceso previo</span>
+                              </div>
+                            )}
+                          </td>
+                        )
+                      })}
                     </tr>
                     {mod.actions.map(action => (
                       <tr key={`${mod.id}-${action.id}`} className="hover:bg-gray-50/50 dark:hover:bg-white/[0.02] transition-colors">
@@ -801,18 +824,25 @@ function PermisosTab() {
                           const permiso = localMap[key]
                           const checked = permiso?.permitido ?? false
                           const isAdmin = role.id === 'ADMINISTRADOR'
+                          const isLocked = !isAdmin && mod.dependsOn
+                            ? !localMap[`${role.id}__${mod.dependsOn.modulo}__${mod.dependsOn.accion}`]?.permitido
+                            : false
                           const savedPermiso = savedPermisos.find(sp => sp.id === permiso?.id)
                           const isChanged = savedPermiso && savedPermiso.permitido !== checked
                           return (
-                            <td key={role.id} className="px-6 py-3.5 text-center">
-                              <div className="inline-flex flex-col items-center gap-1">
+                            <td
+                              key={role.id}
+                              className={`px-6 py-3.5 text-center transition-opacity ${isLocked ? 'opacity-30' : ''}`}
+                              title={isLocked ? 'Activá "Gestionar rutinas del cliente" en Gestión de Clientes para editar este permiso' : undefined}
+                            >
+                              <div className={`inline-flex flex-col items-center gap-1 ${isLocked ? 'pointer-events-none' : ''}`}>
                                 <button
                                   type="button"
-                                  disabled={isAdmin}
+                                  disabled={isAdmin || isLocked}
                                   onClick={() => toggle(role.id, mod.id, action.id)}
                                   className={`relative inline-flex h-5 w-9 shrink-0 items-center rounded-full transition-all duration-200 ${
                                     checked ? 'bg-primary shadow-[0_0_8px_rgb(var(--color-primary)/0.4)]' : 'bg-gray-200 dark:bg-gray-700/50'
-                                  } ${isAdmin ? 'cursor-not-allowed opacity-70' : 'cursor-pointer hover:scale-105'}`}
+                                  } ${isAdmin || isLocked ? 'cursor-not-allowed opacity-70' : 'cursor-pointer hover:scale-105'}`}
                                 >
                                   <span className={`inline-block h-3.5 w-3.5 transform rounded-full bg-white shadow transition-transform duration-200 ${checked ? 'translate-x-[18px]' : 'translate-x-[3px]'}`} />
                                 </button>

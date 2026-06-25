@@ -16,7 +16,7 @@ export type PermModule =
   | 'exercises'
   | 'plantillas'
 
-export type PermAction = 'read' | 'create' | 'update' | 'delete' | 'mark'
+export type PermAction = 'read' | 'create' | 'update' | 'delete' | 'mark' | 'view_pagos' | 'view_membresias' | 'view_rutinas'
 
 type RolePerms = Partial<Record<PermModule, Partial<Record<PermAction, boolean>>>>
 
@@ -24,7 +24,7 @@ type RolePerms = Partial<Record<PermModule, Partial<Record<PermAction, boolean>>
 // La fuente de verdad real es la tabla Permiso en la BD (permisos.service.ts).
 export const MATRIX: Record<UserRole, RolePerms> = {
   admin: {
-    clients:     { read: true, create: true, update: true, delete: true  },
+    clients:     { read: true, create: true, update: true, delete: true, view_pagos: true, view_membresias: true, view_rutinas: true },
     payments:    { read: true, create: true, update: true, delete: true  },
     shifts:      { read: true, create: true, update: true, delete: true  },
     attendance:  { read: true, mark: true                                 },
@@ -37,7 +37,7 @@ export const MATRIX: Record<UserRole, RolePerms> = {
     plantillas:  { read: true, create: true, update: true, delete: true  },
   },
   staff: {
-    clients:     { read: true, create: true, update: true, delete: false },
+    clients:     { read: true, create: true, update: true, delete: false, view_pagos: true, view_membresias: true, view_rutinas: false },
     payments:    { read: true, create: true, update: false, delete: false },
     shifts:      { read: true, create: true, update: true, delete: true  },
     attendance:  { read: true, mark: true                                 },
@@ -50,7 +50,7 @@ export const MATRIX: Record<UserRole, RolePerms> = {
     plantillas:  {},
   },
   profesor: {
-    clients:     {},                                                        // sin acceso a lista/perfil de clientes
+    clients:     { view_rutinas: true },                                    // sin acceso a lista/perfil — solo gestión de rutinas
     payments:    {},
     shifts:      { read: true                                             },
     attendance:  { read: true, mark: true                                 },
@@ -98,6 +98,8 @@ export function usePermissions() {
     // Deny-by-default: si los permisos del servidor no cargaron aún, denegar todo.
     // Esto previene escalada de privilegios cuando la carga de permisos falla o tarda.
     if (!permsLoaded) return false
+    // ADMINISTRADOR siempre tiene acceso — igual que el bypass del backend
+    if (role === 'admin') return true
     return serverPerms[module]?.[action] ?? false
   }
 
