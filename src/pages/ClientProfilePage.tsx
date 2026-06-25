@@ -1568,7 +1568,7 @@ export default function ClientProfilePage() {
                 </div>
               )
             })()}
-          </motion.div>
+          </motion.div>}
 
           {/* ─── SECCIÓN 2: CLASES ─────────────────────────────────────────── */}
           <motion.div variants={fadeUpItem} id="clases" className={`${glassCard} p-6 space-y-5 scroll-mt-24`}>
@@ -1752,7 +1752,7 @@ export default function ClientProfilePage() {
             ) : (
               <AttendanceTabContent attendance={attendance} />
             )}
-          </motion.div>}
+          </motion.div>
 
           {/* ─── SECCIÓN 4: MEMBRESÍAS ──────────────────────────────────────────── */}
           {can('clients', 'view_membresias') && <motion.div variants={fadeUpItem} id="membresias" className={`${glassCard} p-6 space-y-5 scroll-mt-24`}>
