@@ -1,7 +1,7 @@
 import { useState, useEffect, useRef } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { AnimatePresence, motion } from 'framer-motion'
-import { Search, Users } from 'lucide-react'
+import { Search, Users, ChevronRight } from 'lucide-react'
 import api from '../api/axiosInstance'
 import { shiftsApi } from '../api/shifts.api'
 import { inscripcionesApi } from '../api/inscripciones.api'
@@ -43,6 +43,10 @@ export default function EjecucionPage() {
   const [activeIdx, setActiveIdx]   = useState(-1)
   const [recomendados, setRecom]    = useState<RecomendadoCliente[]>([])
   const [loadingRecom, setLoadingR] = useState(true)
+  const [recomExpanded, setRecomExpanded] = useState(false)
+
+  const RECOM_INITIAL = 5
+  const RECOM_MAX     = 8
 
   // ── Clientes recomendados (turnos activos/próximos) ───────────────────────
   useEffect(() => {
@@ -107,8 +111,12 @@ export default function EjecucionPage() {
     return () => { cancelled = true }
   }, [])
 
-  // ── Scroll al top al montar ───────────────────────────────────────────────
-  useEffect(() => { window.scrollTo({ top: 0, behavior: 'instant' as ScrollBehavior }) }, [])
+  // ── Bloquea scroll de página (overscroll-behavior, no toca overflow) ──────
+  useEffect(() => {
+    const html = document.documentElement
+    html.style.overscrollBehavior = 'none'
+    return () => { html.style.overscrollBehavior = '' }
+  }, [])
 
   // ── Buscador con debounce ─────────────────────────────────────────────────
   useEffect(() => {
@@ -116,7 +124,7 @@ export default function EjecucionPage() {
     const t = setTimeout(async () => {
       setSearching(true)
       try {
-        const r = await api.get('/clientes/buscar', { params: { q: search, limit: 8 } })
+        const r = await api.get('/clientes/buscar', { params: { q: search, limit: 8, startsWith: 'true' } })
         const items: Array<{ id: string; nombre: string; apellido: string }> = r.data ?? []
         setResults(items.map(c => ({ id: c.id, name: c.nombre, lastName: c.apellido } as unknown as Client)))
       } catch { setResults([]) }
@@ -164,7 +172,7 @@ export default function EjecucionPage() {
           initial={{ opacity: 0, y: 10 }}
           animate={{ opacity: 1, y: 0 }}
           transition={{ duration: 0.26, delay: 0.06, ease: EASE_OUT }}
-          className="relative rounded-2xl bg-white/30 dark:bg-white/[0.05] backdrop-blur-3xl border border-white/50 dark:border-white/[0.12] shadow-[0_8px_32px_rgba(0,0,0,0.04)] dark:shadow-[0_8px_32px_rgba(0,0,0,0.3)] transition-colors focus-within:border-primary/50 focus-within:bg-white/50 dark:focus-within:bg-white/[0.07]"
+          className={`relative backdrop-blur-3xl border border-white/50 dark:border-white/[0.12] shadow-[0_8px_32px_rgba(0,0,0,0.04)] dark:shadow-[0_8px_32px_rgba(0,0,0,0.3)] transition-colors focus-within:border-primary/50 bg-white/30 dark:bg-white/[0.05] focus-within:bg-white/50 dark:focus-within:bg-white/[0.07] ${results.length > 0 ? 'rounded-t-2xl rounded-b-none' : 'rounded-2xl'}`}
         >
           <Search className="absolute left-4 top-1/2 -translate-y-1/2 w-5 h-5 text-gray-400 dark:text-white/30 pointer-events-none" />
           <input
@@ -187,21 +195,27 @@ export default function EjecucionPage() {
                 animate={{ opacity: 1, y: 0, scale: 1 }}
                 exit={{ opacity: 0, y: -4, scale: 0.98 }}
                 transition={{ duration: 0.18, ease: EASE_OUT }}
-                className="absolute top-full left-0 right-0 mt-2 bg-white/50 dark:bg-black/30 backdrop-blur-3xl border border-white/60 dark:border-white/[0.10] rounded-2xl overflow-hidden z-20 shadow-2xl"
+                className="absolute top-full left-[-1px] right-[-1px] bg-white/50 dark:bg-black/30 backdrop-blur-3xl border border-t-0 border-white/50 dark:border-white/[0.12] rounded-b-2xl z-20 shadow-[0_12px_32px_rgba(0,0,0,0.08)] dark:shadow-[0_12px_32px_rgba(0,0,0,0.4)]"
+                style={{
+                  maskImage: 'linear-gradient(to bottom, transparent 0%, black 12%, black 88%, transparent 100%)',
+                  WebkitMaskImage: 'linear-gradient(to bottom, transparent 0%, black 12%, black 88%, transparent 100%)',
+                }}
               >
-                {results.map((c, i) => (
-                  <button
-                    key={c.id}
-                    onClick={() => goToRutina(c.id, c.name, c.lastName ?? '')}
-                    onMouseEnter={() => setActiveIdx(i)}
-                    className={`w-full text-left px-5 py-4 transition-colors border-b border-white/30 dark:border-white/[0.05] last:border-0 flex items-center gap-4 active:scale-[0.99] ${i === activeIdx ? 'bg-white/40 dark:bg-white/[0.10]' : 'hover:bg-white/30 dark:hover:bg-white/[0.06]'}`}
-                  >
-                    <span className={`w-10 h-10 rounded-xl text-base font-bold flex items-center justify-center shrink-0 ${i === activeIdx ? 'bg-primary/25 text-primary' : 'bg-primary/15 text-primary'}`}>
-                      {c.name.charAt(0).toUpperCase()}
-                    </span>
-                    <p className="text-base font-semibold text-gray-900 dark:text-white">{c.name} {c.lastName}</p>
-                  </button>
-                ))}
+                <div className="overflow-y-auto max-h-[336px] overscroll-contain">
+                  {results.map((c, i) => (
+                    <button
+                      key={c.id}
+                      onClick={() => goToRutina(c.id, c.name, c.lastName ?? '')}
+                      onMouseEnter={() => setActiveIdx(i)}
+                      className={`w-full text-left px-5 py-4 transition-colors border-b border-white/30 dark:border-white/[0.05] last:border-0 flex items-center gap-4 active:scale-[0.97] ${i === activeIdx ? 'bg-white/40 dark:bg-white/[0.10]' : 'hover:bg-white/30 dark:hover:bg-white/[0.06]'}`}
+                    >
+                      <span className={`w-10 h-10 rounded-xl text-base font-bold flex items-center justify-center shrink-0 ${i === activeIdx ? 'bg-primary/25 text-primary' : 'bg-primary/15 text-primary'}`}>
+                        {c.name.charAt(0).toUpperCase()}
+                      </span>
+                      <p className="text-base font-semibold text-gray-900 dark:text-white">{c.name} {c.lastName}</p>
+                    </button>
+                  ))}
+                </div>
               </motion.div>
             )}
           </AnimatePresence>
@@ -223,12 +237,11 @@ export default function EjecucionPage() {
             </div>
 
             {loadingRecom ? (
-              <div className="flex flex-wrap gap-2">
-                {[80, 110, 95, 120, 90].map((w, i) => (
+              <div className="flex flex-col gap-2">
+                {[1, 2, 3].map((i) => (
                   <div
                     key={i}
-                    className="h-10 rounded-xl bg-white/20 dark:bg-white/[0.04] animate-pulse"
-                    style={{ width: w }}
+                    className="h-[60px] rounded-2xl bg-white/20 dark:bg-white/[0.04] animate-pulse"
                   />
                 ))}
               </div>
@@ -237,24 +250,54 @@ export default function EjecucionPage() {
                 No hay turnos activos en este momento
               </p>
             ) : (
-              <div className="flex flex-wrap gap-2">
-                {recomendados.map((c, i) => (
-                  <motion.button
-                    key={c.clienteId}
-                    initial={{ opacity: 0, scale: 0.95 }}
-                    animate={{ opacity: 1, scale: 1 }}
-                    transition={{ duration: 0.18, delay: i * 0.04, ease: EASE_OUT }}
-                    onClick={() => goToRutina(c.clienteId, c.name, c.lastName)}
-                    className="flex items-center gap-2.5 px-4 py-2.5 rounded-xl bg-white/20 dark:bg-white/[0.05] backdrop-blur-sm border border-white/50 dark:border-white/[0.08] hover:bg-white/40 dark:hover:bg-white/[0.09] hover:border-white/70 dark:hover:border-white/[0.16] transition-all active:scale-[0.97] group"
+              <div className="flex flex-col gap-0">
+                {/* Lista con fade en bordes + scroll interno */}
+                <div className="relative">
+                  <div
+                    className="flex flex-col gap-2 overflow-y-auto overscroll-contain"
+                    style={{
+                      maxHeight: recomExpanded ? '360px' : '292px',
+                      maskImage: 'linear-gradient(to bottom, transparent 0%, black 12%, black 88%, transparent 100%)',
+                      WebkitMaskImage: 'linear-gradient(to bottom, transparent 0%, black 12%, black 88%, transparent 100%)',
+                    }}
                   >
-                    <span className="w-6 h-6 rounded-lg bg-primary/15 text-primary text-xs font-bold flex items-center justify-center shrink-0 group-hover:bg-primary/25 transition-colors">
-                      {c.name.charAt(0).toUpperCase()}
-                    </span>
-                    <span className="text-sm font-medium text-gray-600 dark:text-white/70 group-hover:text-gray-900 dark:group-hover:text-white transition-colors">
-                      {c.name} {c.lastName}
-                    </span>
-                  </motion.button>
-                ))}
+                    {recomendados.slice(0, RECOM_MAX).map((c, i) => (
+                      <motion.button
+                        key={c.clienteId}
+                        initial={{ opacity: 0, y: 8 }}
+                        animate={{ opacity: 1, y: 0 }}
+                        transition={{ duration: 0.22, delay: i * 0.04, ease: EASE_OUT }}
+                        onClick={() => goToRutina(c.clienteId, c.name, c.lastName)}
+                        className="flex items-center gap-3.5 px-4 py-3.5 rounded-2xl bg-white/50 dark:bg-white/[0.06] backdrop-blur-xl shadow-[0_2px_8px_rgba(0,0,0,0.08),inset_0_1px_0_rgba(255,255,255,0.6)] dark:shadow-[0_2px_8px_rgba(0,0,0,0.3),inset_0_1px_0_rgba(255,255,255,0.06)] border border-white/70 dark:border-white/[0.10] hover:bg-white/70 dark:hover:bg-white/[0.09] hover:border-white/90 dark:hover:border-white/[0.16] hover:shadow-[0_4px_16px_rgba(0,0,0,0.10),inset_0_1px_0_rgba(255,255,255,0.7)] dark:hover:shadow-[0_4px_16px_rgba(0,0,0,0.4),inset_0_1px_0_rgba(255,255,255,0.08)] transition-[background-color,border-color,box-shadow,transform] duration-150 active:scale-[0.97] text-left w-full group shrink-0"
+                      >
+                        <span className="w-10 h-10 rounded-xl bg-primary/15 text-primary text-sm font-bold flex items-center justify-center shrink-0 group-hover:bg-primary/25 transition-colors duration-150">
+                          {c.name.charAt(0).toUpperCase()}
+                        </span>
+                        <div className="flex-1 min-w-0">
+                          <p className="text-sm font-semibold text-gray-800 dark:text-white/85 group-hover:text-gray-900 dark:group-hover:text-white transition-colors duration-150 truncate">
+                            {c.name} {c.lastName}
+                          </p>
+                          <p className="text-xs text-gray-400 dark:text-white/30 mt-0.5">
+                            Rutina · {c.turnoLabel}
+                          </p>
+                        </div>
+                        <ChevronRight className="w-4 h-4 text-gray-300 dark:text-white/20 group-hover:text-primary transition-colors duration-150 shrink-0" />
+                      </motion.button>
+                    ))}
+                  </div>
+
+
+                </div>
+
+                {/* Botón Ver más */}
+                {!recomExpanded && recomendados.length > RECOM_INITIAL && (
+                  <button
+                    onClick={() => setRecomExpanded(true)}
+                    className="relative z-10 mt-1 text-xs font-semibold text-primary hover:text-primary-dark transition-colors duration-150 text-center py-2 active:scale-[0.97]"
+                  >
+                    Ver más · {Math.min(recomendados.length, RECOM_MAX) - RECOM_INITIAL} más
+                  </button>
+                )}
               </div>
             )}
           </motion.div>
