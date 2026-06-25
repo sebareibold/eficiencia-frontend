@@ -167,7 +167,7 @@ function rutinaToSesionesDraft(rutina: Rutina): SesionDraft[] {
     numero: si + 1,
     bloques: s.bloques.map((b, bi) => ({
       _id: uid(),
-      letra: LETRAS[bi] ?? String.fromCharCode(65 + bi),
+      letra: b.letra,
       orden: bi,
       patronMovimiento: null,
       cantidadEjercicios: b.ejerciciosPlan.length,
@@ -195,7 +195,7 @@ function rutinaToSesionesDraftSinPlan(rutina: Rutina): SesionDraft[] {
     numero: si + 1,
     bloques: s.bloques.map((b, bi) => ({
       _id: uid(),
-      letra: LETRAS[bi] ?? String.fromCharCode(65 + bi),
+      letra: b.letra,
       orden: bi,
       patronMovimiento: null,
       cantidadEjercicios: b.ejerciciosPlan.length,
