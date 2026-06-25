@@ -197,7 +197,7 @@ export default function Layout() {
         {isInitializing ? <DotsLoader className="flex items-center justify-center h-[calc(100vh-9rem)]" /> : (
           <AnimatePresence initial={false}>
             <motion.div
-              key={location.pathname}
+              key={'/' + location.pathname.split('/').filter(Boolean)[0]}
               initial={{ opacity: 0 }}
               animate={{ opacity: 1 }}
               exit={{ opacity: 0, position: 'absolute', inset: 0, pointerEvents: 'none' }}

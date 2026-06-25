@@ -5,7 +5,7 @@ import { pageVariants, tabContentVariants, staggerContainerFast, fadeUpItem } fr
 import {
   ArrowLeft, Users, Clock, Dumbbell, UserPlus, ListPlus,
   X, Bell, Check, Trash2, Search, AlertTriangle, CheckCircle2, Pencil, Save,
-  Hash, Tag, CalendarDays, GripVertical, Ban, Plus,
+  Hash, Tag, CalendarDays, GripVertical, Ban, Plus, ChevronLeft, ChevronRight,
 } from 'lucide-react'
 import { useForm } from 'react-hook-form'
 import { zodResolver } from '@hookform/resolvers/zod'
@@ -21,6 +21,7 @@ import { listaEsperaApi } from '../api/listaEspera.api'
 import { useListaEspera } from '../hooks/useListaEspera'
 import { useAttendance } from '../hooks/useAttendance'
 import { useClients } from '../hooks/useClients'
+import { useShifts } from '../hooks/useShifts'
 import { useUiStore } from '../store/uiStore'
 import { useAuthStore } from '../store/authStore'
 import Button from '../components/ui/Button'
@@ -89,8 +90,11 @@ export default function ShiftDetailPage() {
   const user = useAuthStore(s => s.user)
   const isAdmin = user?.role === 'admin'
 
-  const [shift, setShift] = useState<Shift | null>(null)
-  const [loading, setLoading] = useState(true)
+  // Traer lista primero para poder inicializar el estado desde cache
+  const { shifts } = useShifts()
+
+  const [shift, setShift] = useState<Shift | null>(() => shifts.find(s => s.id === id) ?? null)
+  const [loading, setLoading] = useState(() => !shifts.find(s => s.id === id))
   const [tab, setTab] = useState<DetailTab>('resumen')
   const [isEditingShift, setIsEditingShift] = useState(false)
   const [isConfirmDeleteShift, setIsConfirmDeleteShift] = useState(false)
@@ -157,24 +161,53 @@ export default function ShiftDetailPage() {
   const editDays = (editWatch('days') || []) as WeekDay[]
   const editRecurrente = editWatch('recurrente') ?? true
 
-  // Cargar turno
+  // Navegación entre turnos — usa `id` de la URL, no `shift.id`, para estar siempre sincronizado
+  const { prevShift, nextShift } = useMemo(() => {
+    if (!id || !shifts.length) return { prevShift: null, nextShift: null }
+    const sorted = [...shifts].sort((a, b) => a.startTime.localeCompare(b.startTime))
+    const currentIndex = sorted.findIndex(s => s.id === id)
+    return {
+      prevShift: currentIndex > 0 ? sorted[currentIndex - 1] : null,
+      nextShift: currentIndex >= 0 && currentIndex < sorted.length - 1 ? sorted[currentIndex + 1] : null,
+    }
+  }, [id, shifts])
+
+  // Cargar turno — inicialización lazy desde cache, API solo como fallback
   useEffect(() => {
     if (!id) return
-    setLoading(true)
-    shiftsApi.getById(id)
-      .then(s => {
-        setShift(s)
-        editReset({
-          days: s.days, recurrente: s.recurrente,
-          startTime: s.startTime, endTime: s.endTime,
-          cupoMaximoSalaA: String(s.cupoMaximoSalaA),
-          cupoMaximoSalaB: String(s.cupoMaximoSalaB),
-          profesorId: s.profesorId,
-        })
+
+    const fromCache = shifts.find(s => s.id === id)
+    if (fromCache) {
+      setShift(fromCache)
+      editReset({
+        days: fromCache.days, recurrente: fromCache.recurrente,
+        startTime: fromCache.startTime, endTime: fromCache.endTime,
+        cupoMaximoSalaA: String(fromCache.cupoMaximoSalaA),
+        cupoMaximoSalaB: String(fromCache.cupoMaximoSalaB),
+        profesorId: fromCache.profesorId,
       })
-      .catch(() => addToast('Error al cargar el turno', 'error'))
-      .finally(() => setLoading(false))
-  }, [id])
+      setLoading(false)
+      return
+    }
+
+    // Solo llega acá si la lista no estaba cargada (acceso directo por URL)
+    if (!shift) {
+      setLoading(true)
+      shiftsApi.getById(id)
+        .then(s => {
+          setShift(s)
+          editReset({
+            days: s.days, recurrente: s.recurrente,
+            startTime: s.startTime, endTime: s.endTime,
+            cupoMaximoSalaA: String(s.cupoMaximoSalaA),
+            cupoMaximoSalaB: String(s.cupoMaximoSalaB),
+            profesorId: s.profesorId,
+          })
+        })
+        .catch(() => addToast('Error al cargar el turno', 'error'))
+        .finally(() => setLoading(false))
+    }
+  }, [id, shifts])
 
   // Cargar profesores
   useEffect(() => {
@@ -457,12 +490,7 @@ export default function ShiftDetailPage() {
 
   if (loading) {
     return (
-      <motion.div
-        initial={{ opacity: 0, y: 10 }}
-        animate={{ opacity: 1, y: 0 }}
-        transition={{ duration: 0.2 }}
-        className="space-y-4 md:space-y-5"
-      >
+      <div className="space-y-4 md:space-y-5">
         <button
           onClick={() => navigate('/shifts')}
           className="group flex items-center gap-2 text-sm text-[#8A8A9A] hover:text-gray-900 dark:hover:text-white transition-colors"
@@ -472,19 +500,38 @@ export default function ShiftDetailPage() {
         </button>
 
         <div className={`${glassCard} overflow-hidden`}>
-          <div className="h-1 w-full bg-black/[0.06] dark:bg-white/[0.06] animate-pulse" />
-          <div className="p-5 md:p-7">
-            <div className="flex flex-col sm:flex-row gap-5 sm:items-start">
-              <div className="h-16 w-16 md:h-20 md:w-20 rounded-2xl md:rounded-3xl bg-black/[0.06] dark:bg-white/[0.08] animate-pulse shrink-0" />
-              <div className="flex-1 space-y-3 pt-1">
-                <div className="h-8 w-64 rounded-xl bg-black/[0.06] dark:bg-white/[0.08] animate-pulse" />
-                <div className="h-4 w-40 rounded-lg bg-black/[0.04] dark:bg-white/[0.06] animate-pulse" />
-                <div className="mt-4 pt-4 border-t border-gray-200/40 dark:border-white/[0.06] space-y-3">
-                  <div className="h-3 w-20 rounded bg-black/[0.04] dark:bg-white/[0.06] animate-pulse" />
-                  <div className="h-2 rounded-full bg-black/[0.06] dark:bg-white/[0.08] animate-pulse" />
-                  <div className="h-2 rounded-full bg-black/[0.06] dark:bg-white/[0.08] animate-pulse" />
+          <div className="h-[3px] w-full bg-black/[0.06] dark:bg-white/[0.06] animate-pulse" />
+          <div className="flex items-stretch">
+            {/* Flecha izq skeleton */}
+            <div className="w-8 shrink-0 border-r border-gray-200/40 dark:border-white/[0.06] flex items-center justify-center">
+              <div className="h-5 w-3 rounded bg-black/[0.06] dark:bg-white/[0.08] animate-pulse" />
+            </div>
+            {/* Contenido skeleton */}
+            <div className="flex-1 p-5 md:p-7">
+              <div className="flex flex-col sm:flex-row gap-5 sm:items-start">
+                <div className="h-16 w-16 md:h-20 md:w-20 rounded-2xl md:rounded-3xl bg-black/[0.06] dark:bg-white/[0.08] animate-pulse shrink-0" />
+                <div className="flex-1 space-y-3 pt-1">
+                  <div className="h-8 w-48 rounded-xl bg-black/[0.06] dark:bg-white/[0.08] animate-pulse" />
+                  <div className="h-4 w-36 rounded-lg bg-black/[0.04] dark:bg-white/[0.06] animate-pulse" />
+                  <div className="h-3 w-28 rounded bg-black/[0.04] dark:bg-white/[0.05] animate-pulse" />
+                  <div className="pt-4 border-t border-gray-200/40 dark:border-white/[0.06] space-y-3">
+                    <div className="flex items-center gap-3">
+                      <div className="h-3 w-16 rounded bg-black/[0.04] dark:bg-white/[0.06] animate-pulse" />
+                      <div className="flex-1 h-1.5 rounded-full bg-black/[0.06] dark:bg-white/[0.08] animate-pulse" />
+                      <div className="h-3 w-10 rounded bg-black/[0.04] dark:bg-white/[0.06] animate-pulse" />
+                    </div>
+                    <div className="flex items-center gap-3">
+                      <div className="h-3 w-16 rounded bg-black/[0.04] dark:bg-white/[0.06] animate-pulse" />
+                      <div className="flex-1 h-1.5 rounded-full bg-black/[0.06] dark:bg-white/[0.08] animate-pulse" />
+                      <div className="h-3 w-10 rounded bg-black/[0.04] dark:bg-white/[0.06] animate-pulse" />
+                    </div>
+                  </div>
                 </div>
               </div>
+            </div>
+            {/* Flecha der skeleton */}
+            <div className="w-8 shrink-0 border-l border-gray-200/40 dark:border-white/[0.06] flex items-center justify-center">
+              <div className="h-5 w-3 rounded bg-black/[0.06] dark:bg-white/[0.08] animate-pulse" />
             </div>
           </div>
         </div>
@@ -500,7 +547,7 @@ export default function ShiftDetailPage() {
             <div key={i} className="h-12 w-full rounded-xl bg-black/[0.05] dark:bg-white/[0.06] animate-pulse" style={{ opacity: 1 - i * 0.15 }} />
           ))}
         </div>
-      </motion.div>
+      </div>
     )
   }
 
@@ -532,10 +579,7 @@ export default function ShiftDetailPage() {
   ]
 
   return (
-    <motion.div
-      {...pageVariants}
-      className="space-y-4 md:space-y-5"
-    >
+    <div className="space-y-4 md:space-y-5">
       {/* Breadcrumb */}
       <button
         onClick={() => navigate('/shifts')}
@@ -545,12 +589,37 @@ export default function ShiftDetailPage() {
         <span>Turnos</span>
       </button>
 
-      {/* Hero card */}
-      <div className={`${glassCard} overflow-hidden`}>
-        {/* Top bar: dual color for A/B */}
-        <div className="flex h-1 w-full overflow-hidden">
-          <div className={`flex-1 ${getOccupancyColor(shift.inscritosA, shift.cupoMaximoSalaA)}`} />
-          <div className={`flex-1 ${getOccupancyColor(shift.inscritosB, shift.cupoMaximoSalaB)}`} />
+      {/* Hero card con navegación */}
+      <motion.div
+        key={id}
+        initial={{ opacity: 0 }}
+        animate={{ opacity: 1 }}
+        transition={{ duration: 0.12, ease: 'easeOut' }}
+        className={`${glassCard} overflow-hidden hover:bg-white/50 dark:hover:bg-white/[0.08] transition-colors`}
+      >
+        <div className="flex gap-0 items-stretch">
+          {/* Flecha izquierda */}
+          <button
+            onClick={() => prevShift && navigate(`/shifts/${prevShift.id}`)}
+            disabled={!prevShift}
+            className="w-8 flex items-center justify-center hover:bg-gray-100 dark:hover:bg-white/[0.08] disabled:opacity-40 disabled:cursor-not-allowed transition-colors border-r border-gray-200/40 dark:border-white/[0.06] group"
+            title={prevShift ? `Turno anterior: ${prevShift.startTime}` : 'No hay turno anterior'}
+          >
+            <ChevronLeft size={22} strokeWidth={2} className="text-gray-400 dark:text-[#8A8A9A] group-hover:text-primary transition-colors" />
+          </button>
+
+          {/* Card principal */}
+          <div className="overflow-hidden flex-1">
+        {/* Top bar: dual color for A/B con difuminado en extremos */}
+        <div className="relative h-[3px] w-full">
+          <div
+            className={`absolute left-0 right-1/2 h-full rounded-full ${getOccupancyColor(shift.inscritosA, shift.cupoMaximoSalaA)}`}
+            style={{ maskImage: 'linear-gradient(to right, transparent 0%, black 25%, black 100%)' }}
+          />
+          <div
+            className={`absolute left-1/2 right-0 h-full rounded-full ${getOccupancyColor(shift.inscritosB, shift.cupoMaximoSalaB)}`}
+            style={{ maskImage: 'linear-gradient(to left, transparent 0%, black 25%, black 100%)' }}
+          />
         </div>
 
         <AnimatePresence mode="wait">
@@ -778,8 +847,20 @@ export default function ShiftDetailPage() {
               </form>
             </motion.div>
           )}
-        </AnimatePresence>
-      </div>
+          </AnimatePresence>
+          </div>
+
+          {/* Flecha derecha */}
+          <button
+            onClick={() => nextShift && navigate(`/shifts/${nextShift.id}`)}
+            disabled={!nextShift}
+            className="w-8 flex items-center justify-center hover:bg-gray-100 dark:hover:bg-white/[0.08] disabled:opacity-40 disabled:cursor-not-allowed transition-colors border-l border-gray-200/40 dark:border-white/[0.06] group"
+            title={nextShift ? `Siguiente turno: ${nextShift.startTime}` : 'No hay siguiente turno'}
+          >
+            <ChevronRight size={22} strokeWidth={2} className="text-gray-400 dark:text-[#8A8A9A] group-hover:text-primary transition-colors" />
+          </button>
+        </div>
+      </motion.div>
 
       {/* Sub-navegación */}
       <div className="space-y-3">
@@ -1497,7 +1578,7 @@ export default function ShiftDetailPage() {
         onConfirm={deleteShift}
         onClose={() => setIsConfirmDeleteShift(false)}
       />
-    </motion.div>
+    </div>
   )
 }
 
