@@ -13,6 +13,8 @@ import { z } from 'zod'
 import { format, parseISO } from 'date-fns'
 import { es } from 'date-fns/locale'
 import { shiftsApi, professorsApi } from '../api/shifts.api'
+import { clientsApi } from '../api/clients.api'
+import type { Client } from '../types/client.types'
 import { cancelacionesApi } from '../api/cancelaciones.api'
 import type { CancelacionTurno } from '../types/cancelaciones.types'
 import { inscripcionesApi } from '../api/inscripciones.api'
@@ -117,6 +119,8 @@ export default function ShiftDetailPage() {
   const [addClientId, setAddClientId] = useState('')
   const [addClientSala, setAddClientSala] = useState<'A' | 'B'>('A')
   const [addClientSubmitting, setAddClientSubmitting] = useState(false)
+  const [clientSearchResults, setClientSearchResults] = useState<Client[]>([])
+  const [clientSearchLoading, setClientSearchLoading] = useState(false)
 
   // Lista de espera
   const [addEsperaMode, setAddEsperaMode] = useState(false)
@@ -146,6 +150,20 @@ export default function ShiftDetailPage() {
   const [editSubmitting, setEditSubmitting] = useState(false)
 
   const { clients } = useClients()
+
+  // Buscador server-side para el panel "Agregar cliente" — carga todos con diasUsados real
+  useEffect(() => {
+    if (!addClientMode) return
+    setClientSearchLoading(true)
+    const timer = setTimeout(() => {
+      clientsApi.getAll({ search: addClientSearch, limit: 50 })
+        .then(r => setClientSearchResults(r.data))
+        .catch(() => {})
+        .finally(() => setClientSearchLoading(false))
+    }, addClientSearch ? 300 : 0)
+    return () => clearTimeout(timer)
+  }, [addClientSearch, addClientMode])
+
   const { entries: esperaEntries, isLoading: esperaLoading, error: esperaError, refetch: refetchEspera } =
     useListaEspera(id ?? null)
   const { records: attendanceRecords, isLoading: loadingAttendance, fetchByShiftAndDate } = useAttendance()
@@ -296,7 +314,7 @@ export default function ShiftDetailPage() {
     try {
       const res = await inscripcionesApi.enroll(addClientId, id, addClientSala)
       addToast(res.enListaEspera ? `Sala ${addClientSala} llena — cliente en lista de espera` : `Cliente inscripto en Sala ${addClientSala}`, 'success')
-      setAddClientId(''); setAddClientSearch(''); setAddClientMode(false)
+      setAddClientId(''); setAddClientSearch(''); setAddClientMode(false); setClientSearchResults([])
       inscripcionesApi.getByTurno(id).then(setInscripciones).catch(() => {})
       setShift(s => {
         if (!s) return s
@@ -970,11 +988,14 @@ export default function ShiftDetailPage() {
           {tab === 'inscripciones' && (() => {
             const enrolledIds = new Set(inscripciones.map(i => i.clienteId))
             const shiftDias = shift?.days.length ?? 0
-            const notEnrolled = clients.filter(c => !enrolledIds.has(String(c.id)))
-            const filteredForAdd = notEnrolled
+            const notEnrolled = clientSearchResults.filter(c => !enrolledIds.has(String(c.id)))
+            const availableForAdd = notEnrolled
               .filter(c => !c.planFrequency || (c.diasUsados + shiftDias) <= Number(c.planFrequency))
-              .filter(c => !addClientSearch || `${c.name} ${c.lastName}`.toLowerCase().includes(addClientSearch.toLowerCase()))
               .slice(0, 8)
+            const atLimitForAdd = notEnrolled
+              .filter(c => c.planFrequency != null && (c.diasUsados + shiftDias) > Number(c.planFrequency))
+              .slice(0, 4)
+            const filteredForAdd = availableForAdd
             return (
             <motion.div key="inscripciones" {...tabContentVariants}>
               <div className="p-5 space-y-4">
@@ -984,7 +1005,7 @@ export default function ShiftDetailPage() {
                     {localInscripciones.length === 0 ? 'Sin inscriptos activos' : `${localInscripciones.length} inscripto${localInscripciones.length !== 1 ? 's' : ''}`}
                   </p>
                   <button
-                    onClick={() => { setAddClientMode(m => !m); setAddClientSearch(''); setAddClientId('') }}
+                    onClick={() => { setAddClientMode(m => !m); setAddClientSearch(''); setAddClientId(''); setClientSearchResults([]) }}
                     className="flex items-center gap-1.5 rounded-xl bg-primary/10 px-3 py-1.5 text-xs font-semibold text-primary hover:bg-primary/20 transition-all"
                   >
                     <UserPlus size={13} /> Agregar cliente
@@ -1025,22 +1046,49 @@ export default function ShiftDetailPage() {
                           className="w-full rounded-lg border border-white/[0.08] bg-white/[0.04] pl-8 pr-3 py-2 text-sm text-gray-900 dark:text-white placeholder:text-[#8A8A9A] outline-none focus:border-primary/40"
                         />
                       </div>
-                      <div className="space-y-1 max-h-40 overflow-y-auto">
-                        {filteredForAdd.length === 0 ? (
+                      <div className="space-y-1 max-h-48 overflow-y-auto">
+                        {clientSearchLoading ? (
+                          <div className="space-y-1 py-1">
+                            {[1, 2, 3].map(i => <div key={i} className="h-8 rounded-lg bg-black/[0.05] dark:bg-white/[0.06] animate-pulse" />)}
+                          </div>
+                        ) : filteredForAdd.length === 0 && atLimitForAdd.length === 0 ? (
                           <p className="text-xs text-[#8A8A9A] text-center py-3">
-                            {addClientSearch ? 'Sin resultados' : notEnrolled.length === 0 ? 'Todos los clientes ya están inscriptos' : 'Todos los clientes disponibles alcanzarían el límite de su plan con este turno'}
+                            {clientSearchResults.length === 0
+                              ? 'Buscá un cliente por nombre'
+                              : notEnrolled.length === 0
+                              ? 'Todos los clientes ya están inscriptos'
+                              : 'Todos los resultados alcanzaron el límite de su plan'}
                           </p>
-                        ) : filteredForAdd.map(c => (
-                          <button key={c.id} type="button" onClick={() => setAddClientId(String(c.id))}
-                            className={`w-full flex items-center gap-2 px-3 py-2 rounded-lg text-left text-sm transition-all ${
-                              addClientId === String(c.id)
-                                ? 'bg-primary/10 border border-primary/30 text-primary'
-                                : 'hover:bg-black/5 dark:hover:bg-white/5 text-gray-900 dark:text-white'
-                            }`}
-                          >
-                            <span className="font-medium">{c.name} {c.lastName}</span>
-                          </button>
-                        ))}
+                        ) : (
+                          <>
+                            {filteredForAdd.map(c => (
+                              <button key={c.id} type="button" onClick={() => setAddClientId(String(c.id))}
+                                className={`w-full flex items-center gap-2 px-3 py-2 rounded-lg text-left text-sm transition-all ${
+                                  addClientId === String(c.id)
+                                    ? 'bg-primary/10 border border-primary/30 text-primary'
+                                    : 'hover:bg-black/5 dark:hover:bg-white/5 text-gray-900 dark:text-white'
+                                }`}
+                              >
+                                <span className="font-medium flex-1">{c.name} {c.lastName}</span>
+                                {c.planFrequency != null && (
+                                  <span className="text-[10px] text-[#8A8A9A] tabular-nums shrink-0">
+                                    {c.diasUsados}/{c.planFrequency}d
+                                  </span>
+                                )}
+                              </button>
+                            ))}
+                            {atLimitForAdd.map(c => (
+                              <div key={c.id}
+                                className="w-full flex items-center gap-2 px-3 py-2 rounded-lg text-sm opacity-50 cursor-not-allowed select-none"
+                              >
+                                <span className="font-medium flex-1 text-gray-900 dark:text-white">{c.name} {c.lastName}</span>
+                                <span className="text-[10px] text-amber-500 bg-amber-500/10 border border-amber-500/20 px-1.5 py-0.5 rounded-md font-semibold shrink-0 whitespace-nowrap">
+                                  Límite de plan
+                                </span>
+                              </div>
+                            ))}
+                          </>
+                        )}
                       </div>
                       {addClientId && (
                         <Button size="sm" onClick={handleAddToShift} isLoading={addClientSubmitting} className="w-full">
