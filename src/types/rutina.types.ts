@@ -198,7 +198,9 @@ export interface EjercicioCatalogoItem {
   id: string
   nombre: string
   patronMovimiento?: PatronMovimientoEnum
-  dificultad: 'FACIL' | 'DIFICIL' | 'AVANZADO'
+  dificultad?: string          // legacy
+  categoriaId?: string
+  categoria?: { id: string; nombre: string }
   puntaje?: number
   videoUrl?: string
   activo: boolean

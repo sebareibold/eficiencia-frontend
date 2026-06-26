@@ -1,9 +1,14 @@
 export type Dificultad = 'FACIL' | 'DIFICIL' | 'AVANZADO'
 
-export const DIFICULTAD_LABELS: Record<Dificultad, string> = {
+export const DIFICULTAD_LABELS: Record<string, string> = {
   FACIL: 'Fácil',
   DIFICIL: 'Difícil',
   AVANZADO: 'Avanzado',
+}
+
+export interface CategoriaEjercicioBasic {
+  id: string
+  nombre: string
 }
 
 export interface EjercicioCatalogo {
@@ -12,7 +17,9 @@ export interface EjercicioCatalogo {
   descripcion?: string
   videoUrl?: string
   patronMovimiento?: string
-  dificultad: Dificultad
+  dificultad?: Dificultad    // legacy
+  categoriaId?: string
+  categoria?: CategoriaEjercicioBasic
   activo: boolean
   createdAt: string
   updatedAt: string
@@ -24,6 +31,7 @@ export interface CreateEjercicioCatalogoPayload {
   videoUrl?: string
   patronMovimiento?: string
   dificultad?: Dificultad
+  categoriaId?: string
 }
 
 export interface UpdateEjercicioCatalogoPayload {
@@ -32,11 +40,12 @@ export interface UpdateEjercicioCatalogoPayload {
   videoUrl?: string
   patronMovimiento?: string
   dificultad?: Dificultad
+  categoriaId?: string
 }
 
 export interface EjerciciosCatalogoFilters {
   nombre?: string
-  dificultad?: Dificultad
+  categoriaId?: string
   patronMovimiento?: string
   startsWith?: boolean
 }

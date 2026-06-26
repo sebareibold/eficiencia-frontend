@@ -5,9 +5,10 @@ import { useNavigate } from 'react-router-dom'
 import { Dumbbell, Plus, Edit2, Trash2, ExternalLink, Search, ChevronLeft, ChevronRight, Check, X, ArrowUp, ArrowDown, ArrowUpDown, LayoutGrid, List } from 'lucide-react'
 import { ejerciciosApi } from '../api/ejercicios.api'
 import { patronesApi, type PatronMovimientoConfig } from '../api/patrones.api'
+import { categoriasEjercicioApi, type CategoriaEjercicio } from '../api/categorias-ejercicio.api'
 import { useAuthStore } from '../store/authStore'
 import { useUiStore } from '../store/uiStore'
-import type { EjercicioCatalogo, Dificultad } from '../types/ejercicio-catalogo.types'
+import type { EjercicioCatalogo } from '../types/ejercicio-catalogo.types'
 import PlantillasPage from './PlantillasPage'
 import { ROUTES } from '../constants/routes'
 import ConfirmDialog from '../components/ui/ConfirmDialog'
@@ -17,15 +18,9 @@ import DotsLoader from '../components/ui/DotsLoader'
 const glass = 'rounded-[2rem] border border-white/50 dark:border-white/10 bg-white/30 dark:bg-black/30 backdrop-blur-3xl shadow-[0_8px_32px_rgba(0,0,0,0.04)] dark:shadow-[0_8px_32px_rgba(0,0,0,0.3)]'
 const thCls = 'py-3 px-4 text-left text-[10px] font-bold uppercase tracking-wider text-gray-500 dark:text-[#6B7280]'
 
-const DIFICULTAD_CONFIG: Record<string, { label: string; cls: string }> = {
-  FACIL:    { label: 'Fácil',    cls: 'bg-emerald-500/10 text-emerald-400 border border-emerald-500/20' },
-  DIFICIL:  { label: 'Difícil',  cls: 'bg-amber-500/10 text-amber-400 border border-amber-500/20' },
-  AVANZADO: { label: 'Avanzado', cls: 'bg-red-500/10 text-red-400 border border-red-500/20' },
-}
-const DIFICULTAD_FALLBACK = { label: 'Sin definir', cls: 'bg-gray-500/10 text-gray-400 border border-gray-500/20' }
-const DIFICULTAD_ORDER: Record<string, number> = { FACIL: 1, DIFICIL: 2, AVANZADO: 3 }
+const CATEGORIA_FALLBACK_CLS = 'bg-gray-500/10 text-gray-400 border border-gray-500/20'
 
-type ExSortKey = 'nombre' | 'patronMovimiento' | 'dificultad'
+type ExSortKey = 'nombre' | 'patronMovimiento' | 'categoria'
 type ExSortDir = 'asc' | 'desc'
 
 function ExSortIcon({ active, dir }: { active: boolean; dir: ExSortDir }) {
@@ -48,11 +43,21 @@ export default function ExercisesPage() {
 
   const [items, setItems]         = useState<EjercicioCatalogo[]>([])
   const [loading, setLoading]     = useState(true)
-  const [search, setSearch]           = useState('')
-  const [filterDif, setFilterDif]     = useState<string>('todos')
-  const [filterPatron, setFilterPatron] = useState<string>('')
-  const [page, setPage]               = useState(1)
+  const [search, setSearch]             = useState('')
+  const [filterCategoria, setFilterCategoria] = useState<string>('')
+  const [filterPatron, setFilterPatron]   = useState<string>('')
+  const [page, setPage]                 = useState(1)
   const [deleteTarget, setDeleteTarget] = useState<string | null>(null)
+
+  // ── Categorías ──
+  const [categorias, setCategorias]               = useState<CategoriaEjercicio[]>([])
+  const [categoriasLoading, setCategoriasLoading] = useState(true)
+  const [editingCategoria, setEditingCategoria]   = useState<string | null>(null)
+  const [editCatNombre, setEditCatNombre]         = useState('')
+  const [newCatNombre, setNewCatNombre]           = useState('')
+  const [showNewCatForm, setShowNewCatForm]       = useState(false)
+  const [savingCategoria, setSavingCategoria]     = useState(false)
+  const [deleteCatTarget, setDeleteCatTarget]     = useState<string | null>(null)
 
   // ── Patrones ──
   const [patrones, setPatrones]               = useState<PatronMovimientoConfig[]>([])
@@ -100,8 +105,10 @@ export default function ExercisesPage() {
         const la = patrones.find(p => p.clave === a.patronMovimiento)?.label ?? a.patronMovimiento ?? ''
         const lb = patrones.find(p => p.clave === b.patronMovimiento)?.label ?? b.patronMovimiento ?? ''
         cmp = la.localeCompare(lb)
-      } else if (sortKey === 'dificultad') {
-        cmp = (DIFICULTAD_ORDER[a.dificultad] ?? 0) - (DIFICULTAD_ORDER[b.dificultad] ?? 0)
+      } else if (sortKey === 'categoria') {
+        const ca = a.categoria?.nombre ?? a.dificultad ?? ''
+        const cb = b.categoria?.nombre ?? b.dificultad ?? ''
+        cmp = ca.localeCompare(cb)
       }
       return sortDir === 'asc' ? cmp : -cmp
     })
@@ -116,7 +123,7 @@ export default function ExercisesPage() {
     try {
       const data = await ejerciciosApi.getAll({
         nombre: search || undefined,
-        dificultad: filterDif !== 'todos' ? filterDif as Dificultad : undefined,
+        categoriaId: filterCategoria || undefined,
         patronMovimiento: filterPatron || undefined,
         startsWith: search ? true : undefined,
       })
@@ -127,12 +134,70 @@ export default function ExercisesPage() {
     } finally {
       setLoading(false)
     }
-  }, [search, filterDif, filterPatron, addToast])
+  }, [search, filterCategoria, filterPatron, addToast])
 
   useEffect(() => {
     const t = setTimeout(fetchItems, 300)
     return () => clearTimeout(t)
   }, [fetchItems])
+
+  // ── Fetch categorías ──
+  const fetchCategorias = useCallback(async () => {
+    setCategoriasLoading(true)
+    try { setCategorias(await categoriasEjercicioApi.getAll()) }
+    catch { addToast('Error al cargar categorías', 'error') }
+    finally { setCategoriasLoading(false) }
+  }, [addToast])
+
+  useEffect(() => { fetchCategorias() }, [fetchCategorias])
+
+  async function handleSaveCategoria(id: string) {
+    if (!editCatNombre.trim()) return
+    setSavingCategoria(true)
+    try {
+      const updated = await categoriasEjercicioApi.update(id, { nombre: editCatNombre.trim() })
+      setCategorias(prev => prev.map(c => c.id === id ? updated : c))
+      setEditingCategoria(null)
+      addToast('Categoría actualizada', 'success')
+    } catch { addToast('Error al actualizar la categoría', 'error') }
+    finally { setSavingCategoria(false) }
+  }
+
+  async function handleCreateCategoria() {
+    if (!newCatNombre.trim()) return
+    setSavingCategoria(true)
+    try {
+      const created = await categoriasEjercicioApi.create({ nombre: newCatNombre.trim(), orden: categorias.length })
+      setCategorias(prev => [...prev, created])
+      setNewCatNombre('')
+      setShowNewCatForm(false)
+      addToast('Categoría creada', 'success')
+    } catch (err: unknown) {
+      const msg = (err as { response?: { data?: { message?: string } } })?.response?.data?.message ?? 'Error al crear la categoría'
+      addToast(msg, 'error')
+    } finally { setSavingCategoria(false) }
+  }
+
+  async function handleDeleteCategoria(id: string) {
+    setDeleteCatTarget(null)
+    const backup = categorias.find(c => c.id === id)
+    setCategorias(prev => prev.filter(c => c.id !== id))
+    if (filterCategoria === id) setFilterCategoria('')
+    try {
+      await categoriasEjercicioApi.remove(id)
+      addToast('Categoría eliminada', 'success')
+    } catch {
+      if (backup) setCategorias(prev => [...prev, backup])
+      addToast('Error al eliminar la categoría', 'error')
+    }
+  }
+
+  async function handleToggleCategoria(id: string, activo: boolean) {
+    try {
+      const updated = await categoriasEjercicioApi.update(id, { activo: !activo })
+      setCategorias(prev => prev.map(c => c.id === id ? updated : c))
+    } catch { addToast('Error al cambiar estado de la categoría', 'error') }
+  }
 
   // ── Fetch patrones ──
   const fetchPatrones = useCallback(async () => {
@@ -254,20 +319,18 @@ export default function ExercisesPage() {
 
           {/* Filtros */}
           <div className="flex flex-col sm:flex-row gap-3 flex-wrap items-end">
-            {/* Dificultad */}
+            {/* Categoría */}
             <div className="flex flex-col gap-1.5">
-              <span className="text-[10px] font-bold uppercase tracking-wider text-gray-400 dark:text-gray-500 px-1">Dificultad</span>
+              <span className="text-[10px] font-bold uppercase tracking-wider text-gray-400 dark:text-gray-500 px-1">Categoría</span>
               <div className="flex items-center rounded-full border border-white/50 dark:border-white/10 bg-white/30 dark:bg-black/30 backdrop-blur-xl p-1 shadow-sm gap-1">
-                {(['todos', 'FACIL', 'DIFICIL', 'AVANZADO'] as const).map(d => {
-                  const isActive = filterDif === d
+                {[{ id: '', nombre: 'Todos' }, ...categorias.filter(c => c.activo)].map(c => {
+                  const isActive = filterCategoria === c.id
                   return (
-                    <motion.button key={d} onClick={() => setFilterDif(d)} whileTap={{ scale: 0.94 }}
+                    <motion.button key={c.id} onClick={() => setFilterCategoria(c.id)} whileTap={{ scale: 0.94 }}
                       className={`relative inline-flex items-center justify-center rounded-full px-4 py-1.5 text-xs font-bold transition-colors duration-150 cursor-pointer ${isActive ? 'text-white dark:text-gray-900' : 'text-gray-500 dark:text-[#8A8A9A] hover:text-gray-900 dark:hover:text-white'}`}
                     >
-                      {isActive && <motion.div layoutId="exercises-dif-pill" className="absolute inset-0 rounded-full bg-gray-900 dark:bg-white shadow-[0_2px_8px_rgba(0,0,0,0.15)]" style={{ zIndex: 0 }} transition={{ type: 'spring', stiffness: 400, damping: 35 }} />}
-                      <span className="relative" style={{ zIndex: 1 }}>
-                        {d === 'todos' ? 'Todos' : DIFICULTAD_CONFIG[d as keyof typeof DIFICULTAD_CONFIG].label}
-                      </span>
+                      {isActive && <motion.div layoutId="exercises-cat-pill" className="absolute inset-0 rounded-full bg-gray-900 dark:bg-white shadow-[0_2px_8px_rgba(0,0,0,0.15)]" style={{ zIndex: 0 }} transition={{ type: 'spring', stiffness: 400, damping: 35 }} />}
+                      <span className="relative" style={{ zIndex: 1 }}>{c.nombre}</span>
                     </motion.button>
                   )
                 })}
@@ -309,15 +372,15 @@ export default function ExercisesPage() {
             </div>
             <div className="text-center">
               <p className="text-base font-bold text-gray-900 dark:text-white">
-                {search || filterDif !== 'todos' ? 'Sin resultados' : 'Catálogo vacío'}
+                {search || filterCategoria ? 'Sin resultados' : 'Catálogo vacío'}
               </p>
               <p className="text-sm text-gray-500 dark:text-[#8A8A9A] mt-1">
-                {search || filterDif !== 'todos'
+                {search || filterCategoria
                   ? 'Probá con otros filtros'
                   : 'Agregá el primer ejercicio al catálogo'}
               </p>
             </div>
-            {isAdmin && !search && filterDif === 'todos' && (
+            {isAdmin && !search && !filterCategoria && (
               <button
                 onClick={() => navigate(ROUTES.EXERCISE_NEW)}
                 className="flex items-center gap-2 px-5 py-2.5 rounded-xl btn-action text-sm mt-2"
@@ -371,8 +434,8 @@ export default function ExercisesPage() {
                       {patrones.find(p => p.clave === ej.patronMovimiento)?.label ?? ej.patronMovimiento}
                     </span>
                   )}
-                  <span className={`inline-flex items-center rounded-full px-2.5 py-0.5 text-[11px] font-semibold ${(DIFICULTAD_CONFIG[ej.dificultad] ?? DIFICULTAD_FALLBACK).cls}`}>
-                    {(DIFICULTAD_CONFIG[ej.dificultad] ?? DIFICULTAD_FALLBACK).label}
+                  <span className={`inline-flex items-center rounded-full px-2.5 py-0.5 text-[11px] font-semibold ${CATEGORIA_FALLBACK_CLS}`}>
+                    {ej.categoria?.nombre ?? ej.dificultad ?? 'Sin categoría'}
                   </span>
                   {ej.videoUrl && (
                     <a href={ej.videoUrl} target="_blank" rel="noopener noreferrer" onClick={e => e.stopPropagation()}
@@ -397,8 +460,8 @@ export default function ExercisesPage() {
                   <th className={`${thCls} cursor-pointer select-none hover:text-gray-700 dark:hover:text-gray-200 transition-colors`} onClick={() => handleSort('patronMovimiento')}>
                     <div className="flex items-center gap-1.5">Patrón de movimiento <ExSortIcon active={sortKey === 'patronMovimiento'} dir={sortDir} /></div>
                   </th>
-                  <th className={`${thCls} text-center cursor-pointer select-none hover:text-gray-700 dark:hover:text-gray-200 transition-colors`} onClick={() => handleSort('dificultad')}>
-                    <div className="flex items-center justify-center gap-1.5">Dificultad <ExSortIcon active={sortKey === 'dificultad'} dir={sortDir} /></div>
+                  <th className={`${thCls} text-center cursor-pointer select-none hover:text-gray-700 dark:hover:text-gray-200 transition-colors`} onClick={() => handleSort('categoria')}>
+                    <div className="flex items-center justify-center gap-1.5">Categoría <ExSortIcon active={sortKey === 'categoria'} dir={sortDir} /></div>
                   </th>
                   <th className={`${thCls} text-center w-16`}>Video</th>
                   {isAdmin && <th className="w-24" />}
@@ -434,8 +497,8 @@ export default function ExercisesPage() {
                       )}
                     </td>
                     <td className="py-3.5 px-4 text-center">
-                      <span className={`inline-flex items-center rounded-full px-2.5 py-0.5 text-[11px] font-semibold ${(DIFICULTAD_CONFIG[ej.dificultad] ?? DIFICULTAD_FALLBACK).cls}`}>
-                        {(DIFICULTAD_CONFIG[ej.dificultad] ?? DIFICULTAD_FALLBACK).label}
+                      <span className={`inline-flex items-center rounded-full px-2.5 py-0.5 text-[11px] font-semibold ${CATEGORIA_FALLBACK_CLS}`}>
+                        {ej.categoria?.nombre ?? ej.dificultad ?? 'Sin categoría'}
                       </span>
                     </td>
                     <td className="py-3.5 px-4 text-center">
@@ -790,6 +853,173 @@ export default function ExercisesPage() {
           </div>
         </div>
       </Modal>
+
+      {/* ══ Sección Categorías ══ */}
+      <section className="flex flex-col gap-5">
+        <div className="flex items-center justify-between gap-3">
+          <h2 className="text-2xl lg:text-3xl xl:text-4xl font-black tracking-tighter text-gray-900 dark:text-white drop-shadow-sm">
+            Categorías
+          </h2>
+          {isAdmin && (
+            <button
+              onClick={() => { setShowNewCatForm(v => !v); setNewCatNombre('') }}
+              className="flex items-center gap-2 rounded-xl btn-action px-4 py-2.5 text-sm"
+            >
+              <Plus size={14} /> Nueva categoría
+            </button>
+          )}
+        </div>
+
+        {/* Formulario nueva categoría */}
+        <AnimatePresence>
+          {showNewCatForm && isAdmin && (
+            <motion.div
+              initial={{ opacity: 0, y: -8 }}
+              animate={{ opacity: 1, y: 0 }}
+              exit={{ opacity: 0, y: -8 }}
+              className={`${glass} p-5 flex flex-col gap-4`}
+            >
+              <p className="text-xs font-bold uppercase tracking-wider text-gray-500 dark:text-[#6B7280]">Nueva categoría de ejercicio</p>
+              <div className="flex gap-3 items-end">
+                <div className="flex-1 flex flex-col gap-1.5">
+                  <label className="text-[11px] font-semibold text-gray-500 dark:text-[#8A8A9A]">Nombre *</label>
+                  <input
+                    value={newCatNombre}
+                    onChange={e => setNewCatNombre(e.target.value)}
+                    placeholder="Ej: Intermedio"
+                    className="rounded-xl border border-white/50 dark:border-white/10 bg-white/60 dark:bg-black/20 px-3 py-2 text-sm text-gray-900 dark:text-white placeholder-gray-400 focus:outline-none focus:border-primary"
+                  />
+                </div>
+                <div className="flex items-center gap-2">
+                  <button onClick={() => setShowNewCatForm(false)} className="px-4 py-2 rounded-xl text-xs font-semibold text-gray-500 dark:text-[#8A8A9A] hover:text-gray-900 dark:hover:text-white transition-colors">
+                    Cancelar
+                  </button>
+                  <button
+                    onClick={handleCreateCategoria}
+                    disabled={savingCategoria || !newCatNombre.trim()}
+                    className="flex items-center gap-2 rounded-xl btn-action px-4 py-2 text-sm disabled:opacity-40"
+                  >
+                    {savingCategoria ? <DotsLoader size="sm" className="flex items-center" /> : <Check size={13} />}
+                    Guardar
+                  </button>
+                </div>
+              </div>
+            </motion.div>
+          )}
+        </AnimatePresence>
+
+        {/* Lista de categorías */}
+        {categoriasLoading ? (
+          <div className="flex gap-3 flex-wrap">
+            {Array.from({ length: 4 }).map((_, i) => (
+              <div key={i} className="h-12 w-28 rounded-2xl bg-black/[0.05] dark:bg-white/[0.04] animate-pulse" style={{ opacity: 1 - i * 0.15 }} />
+            ))}
+          </div>
+        ) : categorias.length === 0 ? (
+          <div className={`${glass} flex items-center justify-center py-12`}>
+            <p className="text-sm text-gray-400 dark:text-[#6B7280]">Sin categorías configuradas</p>
+          </div>
+        ) : (
+          <div className={`${glass} overflow-hidden`}>
+            <table className="w-full text-sm">
+              <thead>
+                <tr className="border-b border-white/20 dark:border-white/10 bg-gray-50/30 dark:bg-black/10">
+                  <th className={thCls}>Categoría</th>
+                  <th className={`${thCls} text-center`}>Estado</th>
+                  {isAdmin && <th className="w-20" />}
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-white/20 dark:divide-white/10">
+                {categorias.map((c, i) => (
+                  <motion.tr
+                    key={c.id}
+                    layout
+                    initial={{ opacity: 0 }}
+                    animate={{ opacity: 1 }}
+                    transition={{ delay: i * 0.02 }}
+                    className={`group hover:bg-gray-50/80 dark:hover:bg-white/[0.04] transition-colors ${!c.activo ? 'opacity-50' : ''}`}
+                  >
+                    <td className="py-3 px-4">
+                      <p className="font-semibold text-gray-900 dark:text-white">{c.nombre}</p>
+                    </td>
+                    <td className="py-3 px-4 text-center">
+                      {isAdmin ? (
+                        <button
+                          onClick={() => handleToggleCategoria(c.id, c.activo)}
+                          className={`inline-flex items-center rounded-full px-2.5 py-0.5 text-[10px] font-semibold border transition-colors ${
+                            c.activo
+                              ? 'bg-emerald-500/10 text-emerald-400 border-emerald-500/20 hover:bg-red-500/10 hover:text-red-400 hover:border-red-500/20'
+                              : 'bg-gray-100 dark:bg-white/[0.05] text-gray-400 border-gray-200 dark:border-white/[0.1] hover:bg-emerald-500/10 hover:text-emerald-400 hover:border-emerald-500/20'
+                          }`}
+                        >
+                          {c.activo ? 'Activa' : 'Inactiva'}
+                        </button>
+                      ) : (
+                        <span className={`inline-flex items-center rounded-full px-2.5 py-0.5 text-[10px] font-semibold border ${c.activo ? 'bg-emerald-500/10 text-emerald-400 border-emerald-500/20' : 'bg-gray-100 dark:bg-white/[0.05] text-gray-400 border-gray-200 dark:border-white/[0.1]'}`}>
+                          {c.activo ? 'Activa' : 'Inactiva'}
+                        </span>
+                      )}
+                    </td>
+                    {isAdmin && (
+                      <td className="py-3 px-4">
+                        <div className="flex items-center justify-end gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
+                          <button onClick={() => { setEditingCategoria(c.id); setEditCatNombre(c.nombre) }} className="p-1.5 rounded-lg text-gray-400 dark:text-[#6B7280] hover:text-gray-900 dark:hover:text-white hover:bg-gray-100 dark:hover:bg-white/[0.06] transition-colors">
+                            <Edit2 size={12} />
+                          </button>
+                          <button onClick={() => setDeleteCatTarget(c.id)} className="p-1.5 rounded-lg text-gray-400 dark:text-[#6B7280] hover:text-red-400 hover:bg-red-500/10 transition-colors">
+                            <Trash2 size={12} />
+                          </button>
+                        </div>
+                      </td>
+                    )}
+                  </motion.tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        )}
+      </section>
+
+      {/* Modal editar categoría */}
+      <Modal isOpen={editingCategoria !== null} onClose={() => setEditingCategoria(null)} size="sm">
+        <div className="space-y-5">
+          <p className="text-base font-bold text-gray-900 dark:text-white">Editar categoría</p>
+          <div className="flex flex-col gap-1.5">
+            <label className="text-[11px] font-bold uppercase tracking-wider text-gray-500 dark:text-[#8A8A9A]">Nombre *</label>
+            <input
+              value={editCatNombre}
+              onChange={e => setEditCatNombre(e.target.value)}
+              autoFocus
+              className="rounded-xl border border-white/50 dark:border-white/10 bg-white/60 dark:bg-black/20 px-3 py-2.5 text-sm text-gray-900 dark:text-white placeholder-gray-400 focus:outline-none focus:border-primary transition-colors"
+            />
+          </div>
+          <div className="flex items-center gap-2 pt-1">
+            <button
+              onClick={() => setEditingCategoria(null)}
+              className="flex-1 rounded-xl border border-white/30 dark:border-white/10 bg-white/40 dark:bg-white/[0.05] py-2.5 text-sm font-bold text-gray-600 dark:text-gray-300 hover:bg-white/60 dark:hover:bg-white/10 transition-all"
+            >
+              Cancelar
+            </button>
+            <button
+              onClick={() => editingCategoria && handleSaveCategoria(editingCategoria)}
+              disabled={savingCategoria || !editCatNombre.trim()}
+              className="flex flex-1 items-center justify-center gap-2 rounded-xl btn-action py-2.5 text-sm font-bold disabled:opacity-60"
+            >
+              {savingCategoria ? <DotsLoader size="sm" className="flex items-center" /> : <Check size={13} />}
+              Guardar
+            </button>
+          </div>
+        </div>
+      </Modal>
+
+      <ConfirmDialog
+        isOpen={deleteCatTarget !== null}
+        title="Eliminar categoría"
+        message="Se eliminará esta categoría. Los ejercicios que la tengan asignada quedarán sin categoría. Esta acción no se puede deshacer."
+        confirmLabel="Eliminar"
+        onConfirm={() => deleteCatTarget !== null && handleDeleteCategoria(deleteCatTarget)}
+        onClose={() => setDeleteCatTarget(null)}
+      />
 
       <ConfirmDialog
         isOpen={deleteTarget !== null}

@@ -504,8 +504,8 @@ function AddEjercicioPanel({ bloqueId, onAdd, onClose }: AddEjercicioPanelProps)
                     <p className="text-sm text-saas-text dark:text-white/90 font-medium truncate">{ej.nombre}</p>
                     {ej.patronMovimiento && <p className="text-[11px] text-gray-400 dark:text-white/35 truncate">{ej.patronMovimiento}</p>}
                   </div>
-                  <span className={`px-1.5 py-0.5 rounded-md text-[10px] font-semibold shrink-0 ${DIFICULTAD_COLORS[ej.dificultad] ?? 'bg-gray-100 dark:bg-white/[0.06] text-gray-400 dark:text-white/35'}`}>
-                    {DIFICULTAD_LABELS[ej.dificultad] ?? ej.dificultad}
+                  <span className={`px-1.5 py-0.5 rounded-md text-[10px] font-semibold shrink-0 ${ej.dificultad ? (DIFICULTAD_COLORS[ej.dificultad] ?? 'bg-gray-100 dark:bg-white/[0.06] text-gray-400 dark:text-white/35') : 'bg-gray-100 dark:bg-white/[0.06] text-gray-400 dark:text-white/35'}`}>
+                    {ej.categoria?.nombre ?? (ej.dificultad ? DIFICULTAD_LABELS[ej.dificultad] : null) ?? ''}
                   </span>
                 </button>
               ))}

@@ -7,6 +7,7 @@ import { z } from 'zod'
 import { ArrowLeft, Check, Dumbbell } from 'lucide-react'
 import { ejerciciosApi } from '../api/ejercicios.api'
 import { patronesApi, type PatronMovimientoConfig } from '../api/patrones.api'
+import { categoriasEjercicioApi, type CategoriaEjercicio } from '../api/categorias-ejercicio.api'
 import { useUiStore } from '../store/uiStore'
 import { ROUTES } from '../constants/routes'
 import DotsLoader from '../components/ui/DotsLoader'
@@ -20,7 +21,7 @@ const schema = z.object({
   descripcion:      z.string().optional(),
   videoUrl:         z.string().optional(),
   patronMovimiento: z.string().optional(),
-  dificultad:       z.enum(['FACIL', 'DIFICIL', 'AVANZADO']),
+  categoriaId:      z.string().optional(),
 })
 type FormValues = z.infer<typeof schema>
 
@@ -33,14 +34,16 @@ export default function EjercicioDetailPage() {
   const [loadingData, setLoadingData] = useState(!isNew)
   const [saving, setSaving]           = useState(false)
   const [patrones, setPatrones]       = useState<PatronMovimientoConfig[]>([])
+  const [categorias, setCategorias]   = useState<CategoriaEjercicio[]>([])
 
   useEffect(() => {
     patronesApi.getAll(true).then(setPatrones).catch(() => {})
+    categoriasEjercicioApi.getAll(true).then(setCategorias).catch(() => {})
   }, [])
 
   const { register, handleSubmit, reset, formState: { errors } } = useForm<FormValues>({
     resolver: zodResolver(schema),
-    defaultValues: { dificultad: 'DIFICIL' },
+    defaultValues: { categoriaId: '' },
   })
 
   useEffect(() => {
@@ -52,7 +55,7 @@ export default function EjercicioDetailPage() {
           descripcion:      ej.descripcion      ?? '',
           videoUrl:         ej.videoUrl         ?? '',
           patronMovimiento: ej.patronMovimiento  ?? '',
-          dificultad:       ej.dificultad,
+          categoriaId:      ej.categoriaId       ?? '',
         }))
         .catch(() => { addToast('Error al cargar el ejercicio', 'error'); navigate(ROUTES.EXERCISES) })
         .finally(() => setLoadingData(false))
@@ -67,6 +70,7 @@ export default function EjercicioDetailPage() {
         descripcion:      data.descripcion      || undefined,
         videoUrl:         data.videoUrl         || undefined,
         patronMovimiento: data.patronMovimiento  || undefined,
+        categoriaId:      data.categoriaId       || undefined,
       }
       if (isNew) {
         await ejerciciosApi.create(payload)
@@ -122,11 +126,12 @@ export default function EjercicioDetailPage() {
                   {errors.nombre && <p className="mt-0.5 text-[11px] text-red-400">{errors.nombre.message}</p>}
                 </div>
                 <div className="col-span-2 sm:col-span-1">
-                  <label className={labelCls}>Dificultad</label>
-                  <select {...register('dificultad')} className={inputCls + ' cursor-pointer'}>
-                    <option value="FACIL">Fácil</option>
-                    <option value="DIFICIL">Difícil</option>
-                    <option value="AVANZADO">Avanzado</option>
+                  <label className={labelCls}>Categoría</label>
+                  <select {...register('categoriaId')} className={inputCls + ' cursor-pointer'}>
+                    <option value="">— Sin categoría —</option>
+                    {categorias.map(c => (
+                      <option key={c.id} value={c.id}>{c.nombre}</option>
+                    ))}
                   </select>
                 </div>
               </div>

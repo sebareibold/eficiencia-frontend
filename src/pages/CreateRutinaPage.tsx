@@ -878,8 +878,8 @@ function SearchableExerciseSelector({
                 )}
               </div>
               <div className="flex items-center gap-2 shrink-0">
-                <span className={`text-[10px] px-1.5 py-0.5 rounded-md font-semibold ${DIFICULTAD_CLS[ej.dificultad] ?? ''}`}>
-                  {DIFICULTAD_LABELS[ej.dificultad] ?? ej.dificultad}
+                <span className={`text-[10px] px-1.5 py-0.5 rounded-md font-semibold ${ej.dificultad ? (DIFICULTAD_CLS[ej.dificultad] ?? 'bg-gray-100 dark:bg-white/[0.06] text-gray-400 dark:text-white/35') : 'bg-gray-100 dark:bg-white/[0.06] text-gray-400 dark:text-white/35'}`}>
+                  {ej.categoria?.nombre ?? (ej.dificultad ? DIFICULTAD_LABELS[ej.dificultad] : null) ?? ''}
                 </span>
                 {ej.videoUrl && (
                   <button
