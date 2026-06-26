@@ -13,11 +13,16 @@ export interface CreatePlantillaEjercicioPayload {
   orden?: number
 }
 
+export interface CreateBloquePatronPayload {
+  patronMovimiento: PatronMovimientoEnum
+  cantidad: number
+  orden?: number
+}
+
 export interface CreateBloquePayload {
   letra: string
   orden: number
-  patronMovimiento: PatronMovimientoEnum
-  cantidadEjercicios: number
+  patrones: CreateBloquePatronPayload[]
   ejercicios?: CreatePlantillaEjercicioPayload[]
 }
 

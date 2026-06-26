@@ -156,12 +156,22 @@ export interface PlantillaEjercicioData {
   catalogo?: { id: string; nombre: string; patronMovimiento?: string; videoUrl?: string }
 }
 
+export interface PlantillaBloquePatronData {
+  id: string
+  patronMovimiento: PatronMovimientoEnum
+  cantidad: number
+  orden: number
+}
+
 export interface PlantillaBloqueData {
   id: string
   letra: string
   orden: number
-  patronMovimiento: PatronMovimientoEnum
-  cantidadEjercicios: number
+  // legacy (puede ser null en bloques nuevos con múltiples patrones)
+  patronMovimiento?: PatronMovimientoEnum | null
+  cantidadEjercicios?: number | null
+  // nuevo — array ordenado de patrones
+  patrones: PlantillaBloquePatronData[]
   ejercicios: PlantillaEjercicioData[]
 }
 
@@ -215,12 +225,18 @@ export interface EjercicioDraft {
   }
 }
 
+export interface PatronEntry {
+  _id: string
+  patronMovimiento: PatronMovimientoEnum | null
+  cantidad: number
+}
+
 export interface BloqueDraft {
   _id: string
   letra: string
   orden: number
-  patronMovimiento: PatronMovimientoEnum | null
-  cantidadEjercicios: number
+  // nuevo — lista de (patron, cantidad)
+  patrones: PatronEntry[]
   ejercicios: EjercicioDraft[]
 }
 
@@ -263,7 +279,7 @@ export interface WSesionDraft {
 export interface WBloqueDraft {
   _id: string
   letra: string
-  patronMovimiento: PatronMovimientoEnum | null
+  patrones: PatronEntry[]
   ejercicios: EjercicioDraft[]
 }
 

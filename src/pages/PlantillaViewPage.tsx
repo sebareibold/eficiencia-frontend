@@ -76,25 +76,32 @@ function buildPayload(p: PlantillaRutinaData): CreatePlantillaPayload {
     sesiones: p.sesiones.map(ses => ({
       numero: ses.numero,
       nombre: ses.nombre,
-      bloques: ses.bloques.map((bl, j) => ({
-        letra: bl.letra,
-        orden: j,
-        patronMovimiento: bl.patronMovimiento,
-        cantidadEjercicios: bl.cantidadEjercicios,
-        ejercicios: p.especializada
-          ? bl.ejercicios.map((ej, k) => ({
-              catalogoId: ej.catalogoId,
-              nombre: ej.nombre,
-              series: ej.series,
-              repeticiones: ej.repeticiones,
-              peso: ej.peso,
-              rir: ej.rir,
-              rpe: ej.rpe,
-              notas: ej.notas,
-              orden: k,
-            }))
-          : undefined,
-      })),
+      bloques: ses.bloques.map((bl, j) => {
+        // Normalizar patrones: usar array si existe, si no convertir legacy
+        const patronesPayload = bl.patrones && bl.patrones.length > 0
+          ? bl.patrones.map((pt, pi) => ({ patronMovimiento: pt.patronMovimiento, cantidad: pt.cantidad, orden: pi }))
+          : bl.patronMovimiento
+            ? [{ patronMovimiento: bl.patronMovimiento, cantidad: bl.cantidadEjercicios ?? 2, orden: 0 }]
+            : []
+        return {
+          letra: bl.letra,
+          orden: j,
+          patrones: patronesPayload,
+          ejercicios: p.especializada
+            ? bl.ejercicios.map((ej, k) => ({
+                catalogoId: ej.catalogoId,
+                nombre: ej.nombre,
+                series: ej.series,
+                repeticiones: ej.repeticiones,
+                peso: ej.peso,
+                rir: ej.rir,
+                rpe: ej.rpe,
+                notas: ej.notas,
+                orden: k,
+              }))
+            : undefined,
+        }
+      }),
     })),
   }
 }
@@ -165,7 +172,7 @@ export default function PlantillaViewPage() {
       if (!draft?.nombre.trim()) { addToast('El nombre es requerido', 'error'); return }
       const sesiones = Array.from({ length: wizardSesCount }, (_, i) => ({
         id: uid(), numero: i + 1, nombre: undefined,
-        bloques: [{ id: uid(), letra: 'A', orden: 0, patronMovimiento: PATRON_OPTIONS[0].value, cantidadEjercicios: 3, ejercicios: [] }],
+        bloques: [{ id: uid(), letra: 'A', orden: 0, patronMovimiento: null, cantidadEjercicios: null, patrones: [{ id: uid(), patronMovimiento: PATRON_OPTIONS[0].value, cantidad: 3, orden: 0 }], ejercicios: [] }],
       }))
       setDraft(prev => prev ? { ...prev, sesiones, cantidadSesiones: wizardSesCount } : prev)
       setStep(2)
@@ -260,7 +267,7 @@ export default function PlantillaViewPage() {
   function addSesion() {
     mut(prev => {
       const nextNum = prev.sesiones.length > 0 ? Math.max(...prev.sesiones.map(s => s.numero)) + 1 : 1
-      const bloqueInicial = { id: uid(), letra: 'A', orden: 0, patronMovimiento: PATRON_OPTIONS[0].value, cantidadEjercicios: 3, ejercicios: [] }
+      const bloqueInicial = { id: uid(), letra: 'A', orden: 0, patronMovimiento: null, cantidadEjercicios: null, patrones: [{ id: uid(), patronMovimiento: PATRON_OPTIONS[0].value, cantidad: 3, orden: 0 }], ejercicios: [] }
       return { ...prev, cantidadSesiones: prev.sesiones.length + 1, sesiones: [...prev.sesiones, { id: uid(), numero: nextNum, nombre: undefined, bloques: [bloqueInicial] }] }
     })
   }
@@ -285,7 +292,7 @@ export default function PlantillaViewPage() {
       sesiones: prev.sesiones.map(ses => {
         if (ses.id !== sesionId) return ses
         const letra = String.fromCharCode(65 + ses.bloques.length)
-        return { ...ses, bloques: [...ses.bloques, { id: uid(), letra, orden: ses.bloques.length, patronMovimiento: pendingPatron, cantidadEjercicios: 3, ejercicios: [] }] }
+        return { ...ses, bloques: [...ses.bloques, { id: uid(), letra, orden: ses.bloques.length, patronMovimiento: null, cantidadEjercicios: null, patrones: [{ id: uid(), patronMovimiento: pendingPatron, cantidad: 3, orden: 0 }], ejercicios: [] }] }
       }),
     }))
     setAddingBloqueToSesId(null)
@@ -310,12 +317,56 @@ export default function PlantillaViewPage() {
     setRenamingBloqueKey(null)
   }
 
-  function updateBloquePatron(sesionId: string, bloqueId: string, patron: string) {
-    mut(prev => ({ ...prev, sesiones: prev.sesiones.map(ses => ses.id !== sesionId ? ses : { ...ses, bloques: ses.bloques.map(bl => bl.id !== bloqueId ? bl : { ...bl, patronMovimiento: patron }) }) }))
+  function updatePatronEntry(sesionId: string, bloqueId: string, pi: number, patron: string) {
+    mut(prev => ({
+      ...prev,
+      sesiones: prev.sesiones.map(ses => ses.id !== sesionId ? ses : {
+        ...ses,
+        bloques: ses.bloques.map(bl => bl.id !== bloqueId ? bl : {
+          ...bl,
+          patrones: bl.patrones.map((p, i) => i === pi ? { ...p, patronMovimiento: patron } : p),
+        }),
+      }),
+    }))
   }
 
-  function updateCantidad(sesionId: string, bloqueId: string, delta: number) {
-    mut(prev => ({ ...prev, sesiones: prev.sesiones.map(ses => ses.id !== sesionId ? ses : { ...ses, bloques: ses.bloques.map(bl => bl.id !== bloqueId ? bl : { ...bl, cantidadEjercicios: Math.max(1, Math.min(10, bl.cantidadEjercicios + delta)) }) }) }))
+  function updatePatronCantidad(sesionId: string, bloqueId: string, pi: number, delta: number) {
+    mut(prev => ({
+      ...prev,
+      sesiones: prev.sesiones.map(ses => ses.id !== sesionId ? ses : {
+        ...ses,
+        bloques: ses.bloques.map(bl => bl.id !== bloqueId ? bl : {
+          ...bl,
+          patrones: bl.patrones.map((p, i) => i === pi ? { ...p, cantidad: Math.max(1, Math.min(10, p.cantidad + delta)) } : p),
+        }),
+      }),
+    }))
+  }
+
+  function addPatronToBloque(sesionId: string, bloqueId: string) {
+    mut(prev => ({
+      ...prev,
+      sesiones: prev.sesiones.map(ses => ses.id !== sesionId ? ses : {
+        ...ses,
+        bloques: ses.bloques.map(bl => bl.id !== bloqueId ? bl : {
+          ...bl,
+          patrones: [...bl.patrones, { id: uid(), patronMovimiento: PATRON_OPTIONS[0].value, cantidad: 2, orden: bl.patrones.length }],
+        }),
+      }),
+    }))
+  }
+
+  function removePatronFromBloque(sesionId: string, bloqueId: string, pi: number) {
+    mut(prev => ({
+      ...prev,
+      sesiones: prev.sesiones.map(ses => ses.id !== sesionId ? ses : {
+        ...ses,
+        bloques: ses.bloques.map(bl => bl.id !== bloqueId ? bl : {
+          ...bl,
+          patrones: bl.patrones.filter((_, i) => i !== pi),
+        }),
+      }),
+    }))
   }
 
   // ── Update campo ejercicio (wizard paso 3) ────────────────────────────────
@@ -622,35 +673,55 @@ export default function PlantillaViewPage() {
                     {ses.bloques.map((bl) => {
                       const col = getBloqueColor(bl.letra)
                       return (
-                        <div key={bl.id} className="flex items-center gap-3 rounded-2xl border border-white/50 dark:border-white/[0.08] bg-white/40 dark:bg-white/[0.04] backdrop-blur-xl px-4 py-3 shadow-[0_2px_12px_rgba(0,0,0,0.04)]">
-                          <div className={`w-9 h-9 rounded-xl ${col.bg} border ${col.border} ${col.text} text-sm font-black flex items-center justify-center shrink-0`}>{bl.letra}</div>
-                          <select value={bl.patronMovimiento} onChange={e => updateBloquePatron(ses.id, bl.id, e.target.value)}
-                            className="flex-1 rounded-xl py-2 px-3 text-sm bg-gray-50 dark:bg-white/[0.05] border border-gray-200 dark:border-white/[0.08] text-gray-700 dark:text-white/70 font-medium cursor-pointer focus:outline-none focus:border-primary/50 focus:ring-2 focus:ring-primary/10 transition-all">
-                            {PATRON_OPTIONS.map(o => <option key={o.value} value={o.value}>{o.label}</option>)}
-                          </select>
-                          <div className="flex items-center gap-2 shrink-0">
-                            <span className="text-[10px] text-gray-400 dark:text-white/25 font-semibold uppercase tracking-wider hidden sm:block">Ejercicios</span>
-                            <button onClick={() => updateCantidad(ses.id, bl.id, -1)} disabled={bl.cantidadEjercicios <= 1}
-                              className="w-7 h-7 rounded-lg border border-gray-200 dark:border-white/[0.08] flex items-center justify-center text-gray-400 dark:text-white/30 hover:text-gray-900 dark:hover:text-white bg-white/60 dark:bg-white/[0.04] disabled:opacity-30 transition-all">
-                              <Minus size={11} />
-                            </button>
-                            <span className="tabular-nums text-base font-black text-gray-700 dark:text-white/80 w-6 text-center">{bl.cantidadEjercicios}</span>
-                            <button onClick={() => updateCantidad(ses.id, bl.id, 1)} disabled={bl.cantidadEjercicios >= 10}
-                              className="w-7 h-7 rounded-lg border border-gray-200 dark:border-white/[0.08] flex items-center justify-center text-gray-400 dark:text-white/30 hover:text-gray-900 dark:hover:text-white bg-white/60 dark:bg-white/[0.04] disabled:opacity-30 transition-all">
-                              <Plus size={11} />
-                            </button>
+                        <div key={bl.id} className="rounded-2xl border border-white/50 dark:border-white/[0.08] bg-white/40 dark:bg-white/[0.04] backdrop-blur-xl px-4 py-3 shadow-[0_2px_12px_rgba(0,0,0,0.04)] space-y-2">
+                          {/* Fila header bloque */}
+                          <div className="flex items-center gap-3">
+                            <div className={`w-9 h-9 rounded-xl ${col.bg} border ${col.border} ${col.text} text-sm font-black flex items-center justify-center shrink-0`}>{bl.letra}</div>
+                            <span className="text-xs font-semibold text-gray-500 dark:text-white/40 flex-1">{bl.patrones.length} patrón{bl.patrones.length !== 1 ? 'es' : ''}</span>
+                            {ses.bloques.length > 1 && (
+                              <button onClick={() => deleteBloque(ses.id, bl.id)} className="p-1.5 rounded-lg text-gray-300 dark:text-white/20 hover:text-red-400 hover:bg-red-500/10 transition-all shrink-0">
+                                <Trash2 size={14} />
+                              </button>
+                            )}
                           </div>
-                          {ses.bloques.length > 1 && (
-                            <button onClick={() => deleteBloque(ses.id, bl.id)} className="p-1.5 rounded-lg text-gray-300 dark:text-white/20 hover:text-red-400 hover:bg-red-500/10 transition-all shrink-0">
-                              <Trash2 size={14} />
-                            </button>
-                          )}
+                          {/* Lista de patrones */}
+                          <div className="space-y-1.5 pl-12">
+                            {bl.patrones.map((pt, pi) => (
+                              <div key={pt.id ?? pi} className="flex items-center gap-2">
+                                <select value={pt.patronMovimiento} onChange={e => updatePatronEntry(ses.id, bl.id, pi, e.target.value)}
+                                  className="flex-1 rounded-xl py-2 px-3 text-sm bg-gray-50 dark:bg-white/[0.05] border border-gray-200 dark:border-white/[0.08] text-gray-700 dark:text-white/70 font-medium cursor-pointer focus:outline-none focus:border-primary/50 focus:ring-2 focus:ring-primary/10 transition-all">
+                                  {PATRON_OPTIONS.map(o => <option key={o.value} value={o.value}>{o.label}</option>)}
+                                </select>
+                                <div className="flex items-center gap-1.5 shrink-0">
+                                  <button onClick={() => updatePatronCantidad(ses.id, bl.id, pi, -1)} disabled={pt.cantidad <= 1}
+                                    className="w-7 h-7 rounded-lg border border-gray-200 dark:border-white/[0.08] flex items-center justify-center text-gray-400 dark:text-white/30 hover:text-gray-900 dark:hover:text-white bg-white/60 dark:bg-white/[0.04] disabled:opacity-30 transition-all active:scale-[0.97]">
+                                    <Minus size={11} />
+                                  </button>
+                                  <span className="tabular-nums text-base font-black text-gray-700 dark:text-white/80 w-5 text-center">{pt.cantidad}</span>
+                                  <button onClick={() => updatePatronCantidad(ses.id, bl.id, pi, 1)} disabled={pt.cantidad >= 10}
+                                    className="w-7 h-7 rounded-lg border border-gray-200 dark:border-white/[0.08] flex items-center justify-center text-gray-400 dark:text-white/30 hover:text-gray-900 dark:hover:text-white bg-white/60 dark:bg-white/[0.04] disabled:opacity-30 transition-all active:scale-[0.97]">
+                                    <Plus size={11} />
+                                  </button>
+                                </div>
+                                {bl.patrones.length > 1 && (
+                                  <button onClick={() => removePatronFromBloque(ses.id, bl.id, pi)} className="p-1 rounded-lg text-gray-300 dark:text-white/20 hover:text-red-400 transition-all shrink-0 active:scale-[0.97]">
+                                    <X size={12} />
+                                  </button>
+                                )}
+                              </div>
+                            ))}
+                            {bl.patrones.length < 4 && (
+                              <button onClick={() => addPatronToBloque(ses.id, bl.id)} className="flex items-center gap-1 text-[10px] text-gray-400 dark:text-white/25 hover:text-primary transition-colors mt-0.5 active:scale-[0.97]">
+                                <Plus size={10} /> patrón
+                              </button>
+                            )}
+                          </div>
                         </div>
                       )
                     })}
                     <button onClick={() => {
                       const letra = String.fromCharCode(65 + ses.bloques.length)
-                      mut(prev => ({ ...prev, sesiones: prev.sesiones.map(s => s.id !== ses.id ? s : { ...s, bloques: [...s.bloques, { id: uid(), letra, orden: s.bloques.length, patronMovimiento: PATRON_OPTIONS[0].value, cantidadEjercicios: 3, ejercicios: [] }] }) }))
+                      mut(prev => ({ ...prev, sesiones: prev.sesiones.map(s => s.id !== ses.id ? s : { ...s, bloques: [...s.bloques, { id: uid(), letra, orden: s.bloques.length, patronMovimiento: null, cantidadEjercicios: null, patrones: [{ id: uid(), patronMovimiento: PATRON_OPTIONS[0].value, cantidad: 3, orden: 0 }], ejercicios: [] }] }) }))
                     }} className="flex items-center gap-2 text-xs font-semibold text-gray-400 dark:text-white/25 hover:text-primary dark:hover:text-primary transition-colors mt-1 ml-1">
                       <Plus size={12} /> Agregar bloque
                     </button>
@@ -681,7 +752,13 @@ export default function PlantillaViewPage() {
                             {/* Bloque header */}
                             <div className="flex items-center gap-3 px-4 py-3 border-b border-gray-100 dark:border-white/[0.05]">
                               <div className={`w-8 h-8 rounded-xl ${col.bg} border ${col.border} ${col.text} text-xs font-black flex items-center justify-center shrink-0`}>{bl.letra}</div>
-                              <span className="text-xs font-semibold text-gray-500 dark:text-white/40">{PATRON_LABELS[bl.patronMovimiento] ?? bl.patronMovimiento}</span>
+                              <div className="flex flex-wrap gap-1">
+                                {bl.patrones.map((pt, pi) => (
+                                  <span key={pi} className="text-[10px] font-semibold text-gray-500 dark:text-white/40 bg-gray-100 dark:bg-white/[0.06] rounded-md px-1.5 py-0.5">
+                                    {PATRON_LABELS[pt.patronMovimiento] ?? pt.patronMovimiento} ×{pt.cantidad}
+                                  </span>
+                                ))}
+                              </div>
                             </div>
                             {/* Ejercicios */}
                             <div className="px-4 py-3 space-y-2">
@@ -990,11 +1067,19 @@ export default function PlantillaViewPage() {
                     }
 
                     ses.bloques.forEach((bl, blIdx) => {
+                      // Normalizar patrones: usar array nuevo si existe, si no el legacy
+                      const patronesNorm = bl.patrones && bl.patrones.length > 0
+                        ? bl.patrones
+                        : bl.patronMovimiento
+                          ? [{ id: bl.id + '-leg', patronMovimiento: bl.patronMovimiento, cantidad: bl.cantidadEjercicios ?? 2, orden: 0 }]
+                          : [{ id: bl.id + '-empty', patronMovimiento: '', cantidad: 2, orden: 0 }]
+
                       rows.push(
                         <tr key={bl.id} className={`group/row hover:bg-gray-50/40 dark:hover:bg-white/[0.02] transition-colors ${semBorder(blIdx)}`}>
                           {sesCell(bl.id)}
-                          <td className="px-7 py-4 align-middle">
-                            <div className="flex items-center gap-1.5">
+                          {/* Bloque badge */}
+                          <td className="px-7 py-4 align-top">
+                            <div className="flex items-center gap-1.5 mt-0.5">
                               {isAdmin && renamingBloqueKey === `${ses.id}:${bl.id}` ? (
                                 <form onSubmit={e => { e.preventDefault(); renameBloque(ses.id, bl.id, bloqueLetraVal) }} className="flex items-center gap-1">
                                   <input autoFocus value={bloqueLetraVal} onChange={e => setBloqueLetraVal(e.target.value)} maxLength={3}
@@ -1014,32 +1099,47 @@ export default function PlantillaViewPage() {
                               )}
                             </div>
                           </td>
-                          <td className="px-7 py-4 align-middle">
-                            {isAdmin ? (
-                              <select value={bl.patronMovimiento} onChange={e => updateBloquePatron(ses.id, bl.id, e.target.value)}
-                                className="appearance-none bg-transparent text-xs text-gray-500 dark:text-white/55 font-medium cursor-pointer hover:text-primary dark:hover:text-primary outline-none border-none transition-colors">
-                                {PATRON_OPTIONS.map(o => <option key={o.value} value={o.value}>{o.label}</option>)}
-                              </select>
-                            ) : (
-                              <span className="text-xs text-gray-500 dark:text-white/55 font-medium whitespace-nowrap">{PATRON_LABELS[bl.patronMovimiento] ?? bl.patronMovimiento}</span>
-                            )}
-                          </td>
-                          <td className="px-8 py-4 align-middle">
-                            {isAdmin ? (
-                              <div className="flex items-center gap-2">
-                                <button onClick={() => updateCantidad(ses.id, bl.id, -1)} disabled={bl.cantidadEjercicios <= 1}
-                                  className="w-6 h-6 rounded-lg border border-gray-200 dark:border-white/[0.08] flex items-center justify-center text-gray-400 dark:text-white/30 hover:text-gray-900 dark:hover:text-white hover:border-gray-300 dark:hover:border-white/20 transition-colors disabled:opacity-30">
-                                  <Minus size={10} />
+                          {/* Patrón(es) — stack vertical */}
+                          <td className="px-7 py-3 align-top" colSpan={2}>
+                            <div className="space-y-1.5">
+                              {patronesNorm.map((pt, pi) => (
+                                <div key={pt.id ?? pi} className="flex items-center gap-2">
+                                  {isAdmin ? (
+                                    <select value={pt.patronMovimiento} onChange={e => updatePatronEntry(ses.id, bl.id, pi, e.target.value)}
+                                      className="flex-1 min-w-0 appearance-none bg-transparent text-xs text-gray-500 dark:text-white/55 font-medium cursor-pointer hover:text-primary dark:hover:text-primary outline-none border-none transition-colors">
+                                      {PATRON_OPTIONS.map(o => <option key={o.value} value={o.value}>{o.label}</option>)}
+                                    </select>
+                                  ) : (
+                                    <span className="text-xs text-gray-500 dark:text-white/55 font-medium whitespace-nowrap flex-1 min-w-0">{PATRON_LABELS[pt.patronMovimiento] ?? pt.patronMovimiento}</span>
+                                  )}
+                                  {isAdmin ? (
+                                    <div className="flex items-center gap-1 shrink-0">
+                                      <button onClick={() => updatePatronCantidad(ses.id, bl.id, pi, -1)} disabled={pt.cantidad <= 1}
+                                        className="w-5 h-5 rounded-md border border-gray-200 dark:border-white/[0.08] flex items-center justify-center text-gray-400 dark:text-white/30 hover:text-gray-900 dark:hover:text-white disabled:opacity-30 transition-colors active:scale-[0.97]">
+                                        <Minus size={9} />
+                                      </button>
+                                      <span className="tabular-nums text-xs font-semibold text-gray-700 dark:text-white/70 w-5 text-center select-none">{pt.cantidad}</span>
+                                      <button onClick={() => updatePatronCantidad(ses.id, bl.id, pi, 1)} disabled={pt.cantidad >= 10}
+                                        className="w-5 h-5 rounded-md border border-gray-200 dark:border-white/[0.08] flex items-center justify-center text-gray-400 dark:text-white/30 hover:text-gray-900 dark:hover:text-white disabled:opacity-30 transition-colors active:scale-[0.97]">
+                                        <Plus size={9} />
+                                      </button>
+                                      {patronesNorm.length > 1 && (
+                                        <button onClick={() => removePatronFromBloque(ses.id, bl.id, pi)} className="ml-0.5 text-gray-300 dark:text-white/20 hover:text-red-400 transition-colors active:scale-[0.97]">
+                                          <X size={10} />
+                                        </button>
+                                      )}
+                                    </div>
+                                  ) : (
+                                    <span className="text-xs tabular-nums text-gray-400 dark:text-white/35 shrink-0">×{pt.cantidad}</span>
+                                  )}
+                                </div>
+                              ))}
+                              {isAdmin && patronesNorm.length < 4 && (
+                                <button onClick={() => addPatronToBloque(ses.id, bl.id)} className="flex items-center gap-1 text-[10px] text-gray-400 dark:text-white/25 hover:text-primary transition-colors active:scale-[0.97] mt-0.5">
+                                  <Plus size={9} /> patrón
                                 </button>
-                                <span className="tabular-nums text-sm font-semibold text-gray-700 dark:text-white/70 w-5 text-center select-none">{bl.cantidadEjercicios}</span>
-                                <button onClick={() => updateCantidad(ses.id, bl.id, 1)} disabled={bl.cantidadEjercicios >= 10}
-                                  className="w-6 h-6 rounded-lg border border-gray-200 dark:border-white/[0.08] flex items-center justify-center text-gray-400 dark:text-white/30 hover:text-gray-900 dark:hover:text-white hover:border-gray-300 dark:hover:border-white/20 transition-colors disabled:opacity-30">
-                                  <Plus size={10} />
-                                </button>
-                              </div>
-                            ) : (
-                              <span className="text-xs text-gray-500 dark:text-white/40 tabular-nums">{bl.cantidadEjercicios}</span>
-                            )}
+                              )}
+                            </div>
                           </td>
                         </tr>
                       )
@@ -1110,17 +1210,22 @@ export default function PlantillaViewPage() {
                         )
                       }
 
+                      const patronesEsp = bl.patrones && bl.patrones.length > 0
+                        ? bl.patrones
+                        : bl.patronMovimiento
+                          ? [{ id: bl.id + '-leg', patronMovimiento: bl.patronMovimiento, cantidad: bl.cantidadEjercicios ?? 2, orden: 0 }]
+                          : []
+
                       const patronCell = (key: string, show: boolean) =>
                         !show ? <td key={`pc-${key}`} className="px-7 py-4 w-[130px]" /> : (
-                          <td key={`pc-${key}`} className="px-7 py-4 w-[130px] align-top">
-                            {isAdmin ? (
-                              <select value={bl.patronMovimiento} onChange={e => updateBloquePatron(ses.id, bl.id, e.target.value)}
-                                className="appearance-none bg-transparent text-xs text-gray-500 dark:text-white/55 font-medium cursor-pointer hover:text-primary dark:hover:text-primary outline-none border-none transition-colors">
-                                {PATRON_OPTIONS.map(o => <option key={o.value} value={o.value}>{o.label}</option>)}
-                              </select>
-                            ) : (
-                              <span className="text-xs text-gray-500 dark:text-white/55 font-medium whitespace-nowrap">{PATRON_LABELS[bl.patronMovimiento] ?? bl.patronMovimiento}</span>
-                            )}
+                          <td key={`pc-${key}`} className="px-4 py-3 w-[130px] align-top">
+                            <div className="flex flex-wrap gap-1">
+                              {patronesEsp.map((pt, pi) => (
+                                <span key={pi} className="text-[10px] font-semibold bg-gray-100 dark:bg-white/[0.06] text-gray-500 dark:text-white/40 rounded-md px-1.5 py-0.5 whitespace-nowrap">
+                                  {PATRON_LABELS[pt.patronMovimiento] ?? pt.patronMovimiento}
+                                </span>
+                              ))}
+                            </div>
                           </td>
                         )
 

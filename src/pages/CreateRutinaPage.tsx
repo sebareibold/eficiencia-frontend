@@ -24,7 +24,7 @@ import type {
   WizardState, WizardModo, ClienteResumen, SesionDraft, BloqueDraft,
   EjercicioDraft, PatronMovimientoEnum, PeriodoEntrenamiento,
   PlantillaRutinaData, TipoDistribucion, CrearCompletaPayload, Rutina,
-  WSemanaDraft, WSesionDraft, WBloqueDraft,
+  WSemanaDraft, WSesionDraft, WBloqueDraft, PatronEntry,
 } from '../types/rutina.types'
 import type { EjercicioCatalogo } from '../types/ejercicio-catalogo.types'
 
@@ -84,8 +84,7 @@ function crearBloqueVacio(letra: string, orden: number, cant = 2): BloqueDraft {
     _id: uid(),
     letra,
     orden,
-    patronMovimiento: null,
-    cantidadEjercicios: cant,
+    patrones: [{ _id: uid(), patronMovimiento: null, cantidad: cant }],
     ejercicios: Array.from({ length: cant }, crearEjercicioVacio),
   }
 }
@@ -98,56 +97,68 @@ function crearSesionVacia(numero: number, cantBloques = 3): SesionDraft {
   }
 }
 
+function normalizarPatrones(bp: PlantillaRutinaData['sesiones'][0]['bloques'][0]): PatronEntry[] {
+  if (bp.patrones && bp.patrones.length > 0) {
+    return bp.patrones.map(p => ({ _id: uid(), patronMovimiento: p.patronMovimiento as PatronMovimientoEnum, cantidad: p.cantidad }))
+  }
+  if (bp.patronMovimiento) {
+    return [{ _id: uid(), patronMovimiento: bp.patronMovimiento as PatronMovimientoEnum, cantidad: bp.cantidadEjercicios ?? 2 }]
+  }
+  return []
+}
+
 function generarEstructura(plantilla: PlantillaRutinaData, cantidadSesiones: number): SesionDraft[] {
   const sesionesPlantilla = plantilla.sesiones.slice(0, cantidadSesiones)
   return sesionesPlantilla.map((sp) => {
     if (plantilla.especializada) {
       // Plantilla especializada: pre-cargamos ejercicios reales con sus parámetros
-      const bloques: BloqueDraft[] = sp.bloques.map((bp, idx) => ({
-        _id: uid(),
-        letra: bp.letra,
-        orden: idx,
-        patronMovimiento: bp.patronMovimiento,
-        cantidadEjercicios: bp.ejercicios.length || bp.cantidadEjercicios,
-        ejercicios: bp.ejercicios.length > 0
-          ? bp.ejercicios.map(ej => ({
-              _id: uid(),
-              catalogoId: ej.catalogoId,
-              nombre: ej.nombre,
-              series: ej.series ?? undefined,
-              repeticiones: ej.repeticiones ?? undefined,
-              peso: ej.peso ?? undefined,
-              rir: ej.rir ?? undefined,
-              rpe: ej.rpe ?? undefined,
-              notas: ej.notas ?? undefined,
-            }))
-          : Array.from({ length: bp.cantidadEjercicios }, crearEjercicioVacio),
-      }))
+      const bloques: BloqueDraft[] = sp.bloques.map((bp, idx) => {
+        const patronesDraft = normalizarPatrones(bp)
+        const totalCant = patronesDraft.reduce((s, p) => s + p.cantidad, 0) || bp.cantidadEjercicios || 2
+        return {
+          _id: uid(),
+          letra: bp.letra,
+          orden: idx,
+          patrones: patronesDraft,
+          ejercicios: bp.ejercicios.length > 0
+            ? bp.ejercicios.map(ej => ({
+                _id: uid(),
+                catalogoId: ej.catalogoId,
+                nombre: ej.nombre,
+                series: ej.series ?? undefined,
+                repeticiones: ej.repeticiones ?? undefined,
+                peso: ej.peso ?? undefined,
+                rir: ej.rir ?? undefined,
+                rpe: ej.rpe ?? undefined,
+                notas: ej.notas ?? undefined,
+              }))
+            : Array.from({ length: totalCant }, crearEjercicioVacio),
+        }
+      })
       return { _id: uid(), numero: sp.numero, nombre: sp.nombre, bloques }
     }
 
-    // Plantilla básica: agrupa por letra y crea ejercicios vacíos.
-    // El seed puede crear N records por bloque (cantidadEjercicios:1 cada uno)
-    // mientras que PlantillaDetailPage crea 1 record con cantidadEjercicios:N.
-    // En ambos casos, el total de ejercicios = sum(cantidadEjercicios) por letra.
-    const byLetra = new Map<string, { patronMovimiento: PatronMovimientoEnum; count: number }>()
+    // Plantilla básica: agrupa por letra y apila los ejercicios en orden (patron A primero, patron B después).
+    const byLetra = new Map<string, { patrones: PatronEntry[]; count: number }>()
     for (const bp of sp.bloques) {
+      const patronesBp = normalizarPatrones(bp)
+      const totalCant = patronesBp.reduce((s, p) => s + p.cantidad, 0) || bp.cantidadEjercicios || 2
       const entry = byLetra.get(bp.letra)
       if (entry) {
-        entry.count += bp.cantidadEjercicios
+        entry.patrones.push(...patronesBp)
+        entry.count += totalCant
       } else {
-        byLetra.set(bp.letra, { patronMovimiento: bp.patronMovimiento, count: bp.cantidadEjercicios })
+        byLetra.set(bp.letra, { patrones: patronesBp, count: totalCant })
       }
     }
     const bloques: BloqueDraft[] = []
     let idx = 0
-    for (const [letra, { patronMovimiento, count }] of byLetra) {
+    for (const [letra, { patrones, count }] of byLetra) {
       bloques.push({
         _id: uid(),
         letra,
         orden: idx++,
-        patronMovimiento,
-        cantidadEjercicios: count,
+        patrones,
         ejercicios: Array.from({ length: count }, crearEjercicioVacio),
       })
     }
@@ -169,8 +180,7 @@ function rutinaToSesionesDraft(rutina: Rutina): SesionDraft[] {
       _id: uid(),
       letra: b.letra,
       orden: bi,
-      patronMovimiento: null,
-      cantidadEjercicios: b.ejerciciosPlan.length,
+      patrones: [],
       ejercicios: b.ejerciciosPlan.map(e => ({
         _id: uid(),
         catalogoId: e.catalogoId,
@@ -197,8 +207,7 @@ function rutinaToSesionesDraftSinPlan(rutina: Rutina): SesionDraft[] {
       _id: uid(),
       letra: b.letra,
       orden: bi,
-      patronMovimiento: null,
-      cantidadEjercicios: b.ejerciciosPlan.length,
+      patrones: [],
       ejercicios: b.ejerciciosPlan.map(e => ({
         _id: uid(),
         catalogoId: e.catalogoId,
@@ -442,7 +451,7 @@ function wizardReducer(state: WizardState, action: WizardAction): WizardState {
           bloques: ses.bloques.map(b => ({
             _id: uid(),
             letra: b.letra,
-            patronMovimiento: b.patronMovimiento,
+            patrones: b.patrones,
             ejercicios: b.ejercicios.map(e => ({ ...e, _id: uid() })),
           })),
         })),
@@ -471,7 +480,7 @@ function wizardReducer(state: WizardState, action: WizardAction): WizardState {
           bloques: ses.bloques.map(b => ({
             _id: uid(),
             letra: b.letra,
-            patronMovimiento: b.patronMovimiento,
+            patrones: b.patrones,
             ejercicios: b.ejercicios.map(e => ({ ...e, _id: uid() })),
           })),
         })),
@@ -535,7 +544,7 @@ function wizardReducer(state: WizardState, action: WizardAction): WizardState {
             const letra = LETRAS[ses.bloques.length] ?? String.fromCharCode(65 + ses.bloques.length)
             return {
               ...ses,
-              bloques: [...ses.bloques, { _id: uid(), letra, patronMovimiento: null, ejercicios: [crearEjercicioVacio()] }],
+              bloques: [...ses.bloques, { _id: uid(), letra, patrones: [], ejercicios: [crearEjercicioVacio()] }],
             }
           }),
         })),
@@ -2351,11 +2360,11 @@ export default function CreateRutinaPage() {
                         .filter(b => b.letra === bl.letra)
                         .reduce((sum, b) => sum + Math.max(b.ejercicios.length, 1), 0)
 
-                      // Patrones de cada slot de esta letra (en orden, sin filtrar duplicados para mostrar ambos si son distintos)
+                      // Patrones de cada slot de esta letra (en orden, multi-patron)
                       const patronesLetra = ses.bloques
                         .filter(b => b.letra === bl.letra)
-                        .map(b => b.patronMovimiento)
-                        .filter((p): p is NonNullable<typeof p> => p != null)
+                        .flatMap(b => b.patrones.map(p => p.patronMovimiento))
+                        .filter((p): p is string => p != null)
 
                       return (
                         <td key="bc" className="px-2 py-2 w-[76px] text-center align-top">
@@ -2431,7 +2440,7 @@ export default function CreateRutinaPage() {
                             ) : isAssigning ? (
                               <td colSpan={7} className="px-3 py-2">
                                 <SearchableExerciseSelector
-                                  patronHint={bl.patronMovimiento}
+                                  patronHint={bl.patrones[0]?.patronMovimiento ?? null}
                                   patrones={patrones}
                                   onSelect={catalogo => {
                                     dispatch({ type: 'UPDATE_EJ_W', sesionId: ses._id, bloqueId: bl._id, ejId: ej._id, changes: { catalogoId: catalogo.id, nombre: catalogo.nombre, _esReferencia: false } })
@@ -2864,8 +2873,7 @@ export default function CreateRutinaPage() {
                 _id: uid(),
                 letra: LETRAS[bi] ?? String.fromCharCode(65 + bi),
                 orden: bi,
-                patronMovimiento: null,
-                cantidadEjercicios: b.ejerciciosPlan.length,
+                patrones: [],
                 ejercicios: b.ejerciciosPlan.map(e => ({
                   _id: uid(),
                   nombre: '',
@@ -2947,7 +2955,7 @@ export default function CreateRutinaPage() {
               bloques: ses.bloques.map((b, bi) => ({
                 letra: b.letra,
                 orden: bi,
-                patronMovimiento: b.patronMovimiento ?? undefined,
+                patronMovimiento: b.patrones[0]?.patronMovimiento ?? undefined,
                 ejercicios: b.ejercicios
                   .filter(e => e.nombre && !e._esReferencia)
                   .map((e, ei) => ({
