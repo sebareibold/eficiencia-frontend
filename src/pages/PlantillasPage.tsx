@@ -160,7 +160,7 @@ export default function PlantillasPage({ embedded = false }: PlantillasPageProps
   const [plantillaToDelete, setPlantillaToDelete] = useState<PlantillaRutinaData | null>(null)
 
   const filtered   = plantillas.filter(p => {
-    if (search && !p.nombre.toLowerCase().includes(search.toLowerCase())) return false
+    if (search && !p.nombre.toLowerCase().startsWith(search.toLowerCase())) return false
     if (filtroEspecializada !== undefined && p.especializada !== filtroEspecializada) return false
     return true
   })

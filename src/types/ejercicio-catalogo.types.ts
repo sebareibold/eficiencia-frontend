@@ -38,4 +38,5 @@ export interface EjerciciosCatalogoFilters {
   nombre?: string
   dificultad?: Dificultad
   patronMovimiento?: string
+  startsWith?: boolean
 }

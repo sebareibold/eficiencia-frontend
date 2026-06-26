@@ -675,7 +675,7 @@ export default function PlantillaViewPage() {
                         const col = getBloqueColor(bl.letra)
                         const aejKey = `${ses.id}:${bl.id}`
                         const q = addingEjKey === aejKey ? newEjNombre : ''
-                        const results = q.trim() ? catalog.filter(c => c.nombre.toLowerCase().includes(q.toLowerCase())).slice(0, 8) : []
+                        const results = q.trim() ? catalog.filter(c => c.nombre.toLowerCase().startsWith(q.toLowerCase())).slice(0, 8) : []
                         return (
                           <div key={bl.id} className="rounded-2xl border border-white/50 dark:border-white/[0.08] bg-white/40 dark:bg-white/[0.04] backdrop-blur-xl overflow-hidden shadow-[0_2px_12px_rgba(0,0,0,0.04)]">
                             {/* Bloque header */}

@@ -118,6 +118,7 @@ export default function ExercisesPage() {
         nombre: search || undefined,
         dificultad: filterDif !== 'todos' ? filterDif as Dificultad : undefined,
         patronMovimiento: filterPatron || undefined,
+        startsWith: search ? true : undefined,
       })
       setItems(data)
       setPage(1)

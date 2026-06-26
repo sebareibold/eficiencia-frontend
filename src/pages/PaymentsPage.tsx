@@ -547,7 +547,7 @@ export default function PaymentsPage() {
     if (removedPaymentIds.has(p.id)) return false
     const matchMethod   = methodFilter   === 'all' || p.method === methodFilter
     const matchInvoiced = invoicedFilter === 'all' || (invoicedFilter === 'yes' && p.invoiced) || (invoicedFilter === 'no' && !p.invoiced)
-    const matchSearch   = !searchFilter  || p.clientName.toLowerCase().includes(searchFilter.toLowerCase())
+    const matchSearch   = !searchFilter  || p.clientName.toLowerCase().startsWith(searchFilter.toLowerCase())
     return matchMethod && matchInvoiced && matchSearch
   }), [payments, methodFilter, invoicedFilter, searchFilter, removedPaymentIds])
 

@@ -1,4 +1,5 @@
 import { useState, useEffect, useCallback, useRef } from 'react'
+import { createPortal } from 'react-dom'
 import { useParams, useNavigate, useSearchParams } from 'react-router-dom'
 import { motion, AnimatePresence } from 'framer-motion'
 import DotsLoader from '../components/ui/DotsLoader'
@@ -95,12 +96,22 @@ function CatalogoSearchInput({
 }) {
   const [q, setQ] = useState(value)
   const [open, setOpen] = useState(false)
+  const [pos, setPos] = useState({ top: 0, left: 0, width: 0 })
+  const wrapperRef = useRef<HTMLDivElement>(null)
+
   const filtered = q.trim().length >= 1
-    ? catalogo.filter(e => e.nombre.toLowerCase().includes(q.toLowerCase())).slice(0, 8)
+    ? catalogo.filter(e => e.nombre.toLowerCase().startsWith(q.toLowerCase())).slice(0, 8)
     : []
 
+  const updatePos = () => {
+    if (wrapperRef.current) {
+      const r = wrapperRef.current.getBoundingClientRect()
+      setPos({ top: r.bottom + 4, left: r.left, width: r.width })
+    }
+  }
+
   return (
-    <div className="relative">
+    <div className="relative" ref={wrapperRef}>
       <input
         value={q}
         autoFocus={autoFocus}
@@ -108,16 +119,20 @@ function CatalogoSearchInput({
           const v = e.target.value
           setQ(v)
           setOpen(true)
+          updatePos()
           onChange(v)
         }}
-        onFocus={() => setOpen(true)}
+        onFocus={() => { setOpen(true); updatePos() }}
         onBlur={() => setTimeout(() => setOpen(false), 150)}
         onKeyDown={onKeyDown}
         placeholder="Buscar ejercicio…"
         className={className}
       />
-      {open && filtered.length > 0 && (
-        <div className="absolute top-full left-0 right-0 mt-1 z-50 !bg-white dark:!bg-[#1A1A1A] border border-saas-border dark:border-white/[0.1] rounded-xl shadow-2xl max-h-48 overflow-y-auto">
+      {open && filtered.length > 0 && createPortal(
+        <div
+          style={{ position: 'fixed', top: pos.top, left: pos.left, width: pos.width, zIndex: 9999 }}
+          className="!bg-white dark:!bg-[#1A1A1A] border border-saas-border dark:border-white/[0.1] rounded-xl shadow-2xl max-h-48 overflow-y-auto"
+        >
           {filtered.map(ej => (
             <button
               key={ej.id}
@@ -141,7 +156,8 @@ function CatalogoSearchInput({
               )}
             </button>
           ))}
-        </div>
+        </div>,
+        document.body
       )}
     </div>
   )
@@ -404,7 +420,7 @@ function AddEjercicioPanel({ bloqueId, onAdd, onClose }: AddEjercicioPanelProps)
 
   useEffect(() => {
     setLoading(true)
-    ejerciciosApi.getAll({ nombre: debounced || undefined })
+    ejerciciosApi.getAll({ nombre: debounced || undefined, startsWith: debounced ? true : undefined })
       .then(setCatalogo)
       .finally(() => setLoading(false))
   }, [debounced])

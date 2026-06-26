@@ -776,6 +776,7 @@ function SearchableExerciseSelector({
       const data = await ejerciciosApi.getAll({
         nombre: q || undefined,
         patronMovimiento: p || undefined,
+        startsWith: true,
       })
       setResults(data)
     } catch {
