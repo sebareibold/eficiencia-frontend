@@ -28,6 +28,15 @@ const PATRON_LABELS: Partial<Record<string, string>> = {
   OTROS:             'Otros',
 }
 
+function getBloquePatrones(bl: { patronMovimiento?: string; ejerciciosPlan: Array<{ catalogo?: { patronMovimiento?: string } }> }): string {
+  const patrones = [...new Set(
+    bl.ejerciciosPlan.map(ej => ej.catalogo?.patronMovimiento).filter(Boolean) as string[]
+  )]
+  if (patrones.length > 0) return patrones.map(p => PATRON_LABELS[p] ?? p).join(' • ')
+  if (bl.patronMovimiento) return PATRON_LABELS[bl.patronMovimiento] ?? bl.patronMovimiento
+  return ''
+}
+
 const glassCard = 'rounded-[2rem] border border-white/50 dark:border-white/10 bg-white/30 dark:bg-black/30 backdrop-blur-3xl shadow-[0_8px_32px_rgba(0,0,0,0.04)] dark:shadow-[0_8px_32px_rgba(0,0,0,0.3)]'
 
 const AUTO_SAVE_MS = 4 * 60 * 1000
@@ -531,9 +540,9 @@ export default function EjecucionRutinaPage() {
                                   <span className="w-9 h-9 rounded-xl bg-primary/15 border border-primary/25 text-primary text-sm font-bold flex items-center justify-center mx-auto">
                                     {bl.letra}
                                   </span>
-                                  {bl.patronMovimiento && (
+                                  {getBloquePatrones(bl) && (
                                     <span className="text-[9px] text-gray-400 dark:text-white/25 block mt-1 leading-tight text-center whitespace-nowrap">
-                                      {PATRON_LABELS[bl.patronMovimiento] ?? bl.patronMovimiento}
+                                      {getBloquePatrones(bl)}
                                     </span>
                                   )}
                                 </td>

@@ -47,6 +47,15 @@ const PATRON_LABELS: Partial<Record<string, string>> = {
   OTROS:             'Otros',
 }
 
+function getBloquePatrones(bl: { patronMovimiento?: string; ejerciciosPlan: Array<{ catalogo?: { patronMovimiento?: string } }> }): string {
+  const patrones = [...new Set(
+    bl.ejerciciosPlan.map(ej => ej.catalogo?.patronMovimiento).filter(Boolean) as string[]
+  )]
+  if (patrones.length > 0) return patrones.map(p => PATRON_LABELS[p] ?? p).join(' • ')
+  if (bl.patronMovimiento) return PATRON_LABELS[bl.patronMovimiento] ?? bl.patronMovimiento
+  return ''
+}
+
 const DIAS = ['Lunes', 'Martes', 'Miércoles', 'Jueves', 'Viernes', 'Sábado']
 
 const DIA_SHORT: Record<string, string> = {
@@ -1662,9 +1671,9 @@ function InlineEditRutinaTable({ rutina, onCancel, onSaved, selectedSemanaId, on
                               <Trash2 className="w-2.5 h-2.5" />
                             </button>
                           </div>
-                          {bl.patronMovimiento && (
+                          {getBloquePatrones(bl) && (
                             <span className="text-xs leading-tight text-gray-400 dark:text-white/35 text-center whitespace-nowrap">
-                              {PATRON_LABELS[bl.patronMovimiento] ?? bl.patronMovimiento}
+                              {getBloquePatrones(bl)}
                             </span>
                           )}
                         </div>
@@ -1922,9 +1931,7 @@ export default function ClientRutinaPage() {
       for (const ses of sem.sesiones) {
         let firstBloqueOfDia = true
         for (const bl of ses.bloques) {
-          const patron = bl.patronMovimiento
-            ? (PATRON_LABELS[bl.patronMovimiento as PatronMovimientoEnum] ?? bl.patronMovimiento)
-            : ''
+          const patron = getBloquePatrones(bl)
           for (let ejIdx = 0; ejIdx < bl.ejerciciosPlan.length; ejIdx++) {
             const ej = bl.ejerciciosPlan[ejIdx]
             const exec = ej.ejecuciones[0]
@@ -2387,9 +2394,9 @@ export default function ClientRutinaPage() {
                       <td rowSpan={Math.max(1, bl.ejerciciosPlan.length)} className="px-1.5 py-3 text-center align-top border-r border-saas-border dark:border-white/[0.06]">
                         <div className="flex flex-col items-center gap-0.5">
                           <span className="w-7 h-7 rounded-lg bg-primary/15 border border-primary/25 text-primary text-xs font-bold flex items-center justify-center">{bl.letra}</span>
-                          {bl.patronMovimiento && (
+                          {getBloquePatrones(bl) && (
                             <span className="text-[10px] leading-tight text-gray-400 dark:text-white/35 text-center whitespace-nowrap">
-                              {PATRON_LABELS[bl.patronMovimiento] ?? bl.patronMovimiento}
+                              {getBloquePatrones(bl)}
                             </span>
                           )}
                         </div>
