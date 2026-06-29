@@ -6,6 +6,7 @@ export interface AttendanceRecord {
   shiftLabel: string
   date: string
   present: boolean
+  conAviso?: boolean
 }
 
 export interface AttendanceByShift {

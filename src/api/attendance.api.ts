@@ -17,6 +17,7 @@ function mapRecord(r: any): AttendanceRecord {
     shiftLabel,
     date: r.fecha,
     present: r.presente,
+    conAviso: r.conAviso ?? false,
   }
 }
 

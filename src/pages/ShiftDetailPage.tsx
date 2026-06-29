@@ -315,7 +315,7 @@ export default function ShiftDetailPage() {
   useEffect(() => {
     const next: Record<string, 'presente' | 'ausente' | 'con_aviso'> = {}
     for (const r of attendanceRecords) {
-      next[r.clientId] = r.present ? 'presente' : 'ausente'
+      next[r.clientId] = r.present ? 'presente' : r.conAviso ? 'con_aviso' : 'ausente'
     }
     setAttendanceStates(next)
   }, [attendanceRecords])
@@ -506,6 +506,8 @@ export default function ShiftDetailPage() {
   }
 
   function getAttendanceState(clientId: string): 'presente' | 'ausente' | 'con_aviso' {
+    // Si no hay registros guardados aún, default a 'ausente' (estado inicial neutro)
+    // Si hay registros y el cliente no aparece, también es ausente (el bulk save cubre a todos)
     return attendanceStates[clientId] ?? 'ausente'
   }
 
@@ -1411,6 +1413,13 @@ export default function ShiftDetailPage() {
                 <div className="flex items-center gap-2.5 rounded-xl bg-amber-500/10 border border-amber-500/20 px-4 py-3 text-sm text-amber-400">
                   <AlertTriangle size={16} className="shrink-0" />
                   <span>{dateError}</span>
+                </div>
+              )}
+
+              {!dateError && !loadingAttendance && attendanceRecords.length === 0 && (
+                <div className="flex items-center gap-2.5 rounded-xl bg-blue-500/10 border border-blue-500/20 px-4 py-3 text-sm text-blue-400">
+                  <AlertTriangle size={16} className="shrink-0" />
+                  <span>Asistencia no registrada para esta fecha. Todos aparecen como ausentes por defecto — marcá los presentes y guardá.</span>
                 </div>
               )}
 
