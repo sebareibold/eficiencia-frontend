@@ -180,7 +180,6 @@ function computeColumnLayout(shifts: Shift[]): ShiftLayout[] {
 // ─── Component ────────────────────────────────────────────────────────────────
 
 export default function ShiftsPage() {
-  const { shifts, isLoading, error, refetch } = useShifts()
   const { clients } = useClients()
   const addToast   = useUiStore(s => s.addToast)
   const user       = useAuthStore(s => s.user)
@@ -204,8 +203,14 @@ export default function ShiftsPage() {
   const [calendarRange, setCalendarRange] = useState<'1day' | '3days' | 'week' | 'month'>(() =>
     typeof window !== 'undefined' && window.innerWidth < 768 ? '1day' : 'week'
   )
+
+  // En vista 1-día pasar la fecha exacta; en el resto, pasar hoy para incluir recuperandos del día
+  const calendarFecha = viewMode === 'calendar' && calendarRange === '1day'
+    ? format(weekStart, 'yyyy-MM-dd')
+    : format(new Date(), 'yyyy-MM-dd')
+  const { shifts, isLoading, error, refetch } = useShifts({ fecha: calendarFecha })
   const [calendarSelectedDays, setCalendarSelectedDays] = useState<WeekDay[]>(DAYS)
-  const [calendarViewMode, setCalendarViewMode] = useState<'extended' | 'optimized'>('extended')
+  const [calendarViewMode, setCalendarViewMode] = useState<'extended' | 'optimized'>('optimized')
   const [showCalendarFilters, setShowCalendarFilters] = useState(false)
 
   // ── Timeline state

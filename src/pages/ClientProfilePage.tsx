@@ -9,8 +9,9 @@ import {
   MessageCircle, Tag, Dumbbell, BookOpen, Plus, ChevronDown, ChevronRight, ChevronLeft,
   BarChart2, PieChart as PieIcon, LineChart as LineChartIcon,
   Receipt, AlertTriangle, MapPin, User, Trophy, Trash2, Save,
+  CalendarX2, CalendarCheck2, RefreshCw,
 } from 'lucide-react'
-import { format, parseISO, addDays } from 'date-fns'
+import { format, parseISO, addDays, isValid, type Locale } from 'date-fns'
 import { es } from 'date-fns/locale'
 import {
   PieChart, Pie, Cell,
@@ -23,6 +24,9 @@ import { z } from 'zod'
 import { clientsApi } from '../api/clients.api'
 import { attendanceApi } from '../api/attendance.api'
 import { paymentsApi } from '../api/payments.api'
+import { reposicionesApi } from '../api/reposiciones.api'
+import type { AusenciaTurno } from '../types/reposicion.types'
+import ReposicionDrawer from '../components/reposiciones/ReposicionDrawer'
 import { membresiasClienteApi } from '../api/membresiasCliente.api'
 import { membershipsApi } from '../api/memberships.api'
 import { inscripcionesApi } from '../api/inscripciones.api'
@@ -473,6 +477,17 @@ function AttendanceTabContent({ attendance }: { attendance: AttendanceRecord[] }
 // Clientes cargados al menos una vez en esta sesión (sobrevive a unmount/remount)
 const loadedClientIds = new Set<string>()
 
+// Formatea una fecha ISO (puede ser date-only "YYYY-MM-DD" o datetime completo)
+function safeFormatDate(raw: string | null | undefined, pattern: string, locale?: Locale): string {
+  if (!raw) return '—'
+  try {
+    const d = parseISO(raw.slice(0, 10) + 'T12:00:00')
+    return isValid(d) ? format(d, pattern, locale ? { locale } : undefined) : '—'
+  } catch {
+    return '—'
+  }
+}
+
 // ─── Página principal ─────────────────────────────────────────────────────────
 export default function ClientProfilePage() {
   const { id } = useParams<{ id: string }>()
@@ -488,6 +503,8 @@ export default function ClientProfilePage() {
   const [navOpen, setNavOpen] = useState(false)
   const [deleteRutinaId, setDeleteRutinaId] = useState<string | null>(null)
   const [deletingRutina, setDeletingRutina] = useState(false)
+  const [deleteAusenciaId, setDeleteAusenciaId] = useState<string | null>(null)
+  const [deletingAusencia, setDeletingAusencia] = useState(false)
   const [client, setClient] = useState<Client | null>(null)
   const [ficha, setFicha] = useState<FichaEntrenamiento | null>(null)
   const [payments, setPayments] = useState<Payment[]>([])
@@ -531,6 +548,19 @@ export default function ClientProfilePage() {
   const [allShifts, setAllShifts] = useState<Shift[]>([])
   const [loadingShifts, setLoadingShifts] = useState(false)
   const [enrollingId, setEnrollingId] = useState<string | null>(null)
+
+  // Reposiciones
+  const [asistenciaTab, setAsistenciaTab] = useState<'estadisticas' | 'ausencias'>('estadisticas')
+  const [ausencias, setAusencias] = useState<AusenciaTurno[]>([])
+  const [loadingAusencias, setLoadingAusencias] = useState(false)
+  const [reposicionDrawerOpen, setReposicionDrawerOpen] = useState(false)
+  const [drawerAusencia, setDrawerAusencia] = useState<AusenciaTurno | null>(null)
+  const [drawerInscripcionId, setDrawerInscripcionId] = useState<string | null>(null)
+  const [drawerMode, setDrawerMode] = useState<'ausencia' | 'recuperar'>('ausencia')
+  const [chartView, setChartView] = useState<'mensual' | 'diasSemana'>('mensual')
+  const [leftTab, setLeftTab] = useState<'historial' | 'ausencias' | 'recuperos'>('historial')
+  const [deletingAttendanceId, setDeletingAttendanceId] = useState<string | null>(null)
+  const [cancelingRecupId, setCancelingRecupId] = useState<string | null>(null)
 
   const scrollToSection = (sectionId: string) => {
     const el = document.getElementById(sectionId)
@@ -634,6 +664,30 @@ export default function ClientProfilePage() {
       .then(shifts => setAllShifts(shifts))
       .finally(() => setLoadingShifts(false))
   }, [enrollOpen])
+
+  // Cargar ausencias del cliente
+  function loadAusencias() {
+    if (!id) return
+    setLoadingAusencias(true)
+    reposicionesApi.getAll({ clienteId: id })
+      .then(setAusencias)
+      .catch(() => {})
+      .finally(() => setLoadingAusencias(false))
+  }
+  useEffect(() => { loadAusencias() }, [id])
+
+  function openDrawerNuevaAusencia(inscripcionId: string) {
+    setDrawerInscripcionId(inscripcionId)
+    setDrawerAusencia(null)
+    setDrawerMode('ausencia')
+    setReposicionDrawerOpen(true)
+  }
+  function openDrawerRecuperar(ausencia: AusenciaTurno) {
+    setDrawerAusencia(ausencia)
+    setDrawerInscripcionId(null)
+    setDrawerMode('recuperar')
+    setReposicionDrawerOpen(true)
+  }
 
   async function onEdit(data: EditValues) {
     if (!client) return
@@ -759,6 +813,34 @@ export default function ClientProfilePage() {
     }
   }
 
+  async function handleDeleteAusencia() {
+    if (!deleteAusenciaId) return
+    setDeletingAusencia(true)
+    try {
+      await reposicionesApi.deleteAusencia(deleteAusenciaId)
+      addToast('Ausencia eliminada', 'success')
+      loadAusencias()
+    } catch {
+      addToast('Error al eliminar la ausencia', 'error')
+    } finally {
+      setDeletingAusencia(false)
+      setDeleteAusenciaId(null)
+    }
+  }
+
+  async function handleDeleteAttendance(recordId: string) {
+    setDeletingAttendanceId(recordId)
+    try {
+      await attendanceApi.deleteById(recordId)
+      setAttendance(prev => prev.filter(r => r.id !== recordId))
+      addToast('Registro de asistencia eliminado', 'success')
+    } catch {
+      addToast('Error al eliminar el registro', 'error')
+    } finally {
+      setDeletingAttendanceId(null)
+    }
+  }
+
   async function handleDeleteRutina() {
     if (!deleteRutinaId) return
     setDeletingRutina(true)
@@ -846,6 +928,92 @@ export default function ClientProfilePage() {
   // ─── Datos derivados ────────────────────────────────────────────────────────
   const presentDays = useMemo(() => attendance.filter(a => a.present).length, [attendance])
 
+  const ausenciasPendientes    = useMemo(() => ausencias.filter(a => a.recuperacion?.estado === 'PENDIENTE'), [ausencias])
+  const ausenciasRecuperadas   = useMemo(() => ausencias.filter(a => a.recuperacion?.estado === 'COMPLETADA'), [ausencias])
+  const conAvisoCount = useMemo(() => ausencias.filter(a => a.conAviso).length, [ausencias])
+  const recuperos = useMemo(
+    () => ausencias
+      .filter(a => a.conAviso && a.recuperacion && a.recuperacion.estado !== 'CANCELADA')
+      .sort((a, b) => (b.recuperacion!.fecha ?? '').localeCompare(a.recuperacion!.fecha ?? '')),
+    [ausencias]
+  )
+  const recuperosPendientesCount = useMemo(() => recuperos.filter(a => a.recuperacion?.estado === 'PENDIENTE').length, [recuperos])
+  // Créditos disponibles: ausencias con aviso SIN recuperación activa (ni pendiente ni completada)
+  // Decrementa al agendar una recuperación (no solo al completarla)
+  const creditosDisponibles = useMemo(
+    () => ausencias.filter(a => a.conAviso && (!a.recuperacion || a.recuperacion.estado === 'CANCELADA')).length,
+    [ausencias]
+  )
+  const porRecuperar = creditosDisponibles
+  const recoveryRate  = ausencias.length > 0 ? Math.round(ausenciasRecuperadas.length / ausencias.length * 100) : 0
+
+  // Timeline unificado: combina attendance + ausencias en 3 estados
+  const mergedTimeline = useMemo(() => {
+    // Normalizar a.fecha a YYYY-MM-DD (el backend devuelve ISO datetime completo)
+    const ausenciaMap = new Map(ausencias.map(a => [a.fecha.slice(0, 10), a]))
+    return attendance
+      .map(r => {
+        // r.date puede ser ISO datetime completo; normalizar a YYYY-MM-DD para los lookups
+        const dateKey = r.date.slice(0, 10)
+        return {
+          ...r,
+          dateKey,
+          state: r.present ? 'presente' as const
+            : ausenciaMap.has(dateKey) ? 'con_aviso' as const
+            : 'ausente' as const,
+          ausencia: ausenciaMap.get(dateKey),
+        }
+      })
+      .sort((a, b) => b.date.localeCompare(a.date))
+  }, [attendance, ausencias])
+
+  // Racha de presencias consecutivas (desde el registro más reciente)
+  const rachaActual = useMemo(() => {
+    const sorted = [...mergedTimeline].sort((a, b) => b.date.localeCompare(a.date))
+    let streak = 0
+    for (const r of sorted) {
+      if (r.state === 'presente') streak++
+      else break
+    }
+    return streak
+  }, [mergedTimeline])
+
+  // Días desde el último ingreso
+  const diasSinVenir = useMemo(() => {
+    const last = mergedTimeline.find(r => r.state === 'presente')
+    if (!last) return null
+    return Math.floor((Date.now() - new Date(last.date + 'T12:00:00').getTime()) / 86_400_000)
+  }, [mergedTimeline])
+
+  // Datos mensuales con los 3 estados (para el bar chart principal)
+  const monthlyStacked = useMemo(() => {
+    const map = new Map<string, { mes: string; presente: number; conAviso: number; ausente: number }>()
+    mergedTimeline.forEach(r => {
+      const key = r.date.slice(0, 7)
+      if (!map.has(key)) map.set(key, { mes: format(parseISO(key + '-01'), 'MMM yy', { locale: es }), presente: 0, conAviso: 0, ausente: 0 })
+      const cur = map.get(key)!
+      if (r.state === 'presente') cur.presente++
+      else if (r.state === 'con_aviso') cur.conAviso++
+      else cur.ausente++
+    })
+    return [...map.entries()].sort(([a], [b]) => a.localeCompare(b)).map(([, v]) => v)
+  }, [mergedTimeline])
+
+  // Patrón por día de semana
+  const byDayOfWeek = useMemo(() => {
+    const days = ['Lun', 'Mar', 'Mié', 'Jue', 'Vie', 'Sáb']
+    const counts = days.map(dia => ({ dia, presente: 0, conAviso: 0, ausente: 0 }))
+    mergedTimeline.forEach(r => {
+      const dow = (new Date(r.dateKey + 'T12:00:00').getDay() + 6) % 7
+      if (dow < 6) {
+        if (r.state === 'presente') counts[dow].presente++
+        else if (r.state === 'con_aviso') counts[dow].conAviso++
+        else counts[dow].ausente++
+      }
+    })
+    return counts.filter(d => d.presente + d.conAviso + d.ausente > 0)
+  }, [mergedTimeline])
+
   const shiftStats = useMemo(() => {
     const map = new Map<string | number, { present: number; total: number; lastDate: string }>()
     attendance.forEach(a => {
@@ -916,6 +1084,14 @@ export default function ClientProfilePage() {
     { value: 'turnos', label: 'Clases', count: 0, sublabel: planFreqGlobal ? `${inscripciones.length}/${planFreqGlobal}` : inscripciones.length > 0 ? String(inscripciones.length) : undefined },
     { value: 'asistencia', label: 'Asistencia', count: presentDays },
     { value: 'pagos', label: 'Pagos', count: payments.length },
+  ]
+
+  const NAV_SECTIONS = [
+    { id: 'rutinas', label: 'Rutina', icon: <Dumbbell size={12} /> },
+    { id: 'turnos', label: 'Clases', icon: <Clock size={12} /> },
+    { id: 'asistencia', label: 'Asistencia', icon: <Activity size={12} /> },
+    { id: 'membresias', label: 'Membresías', icon: <Tag size={12} /> },
+    { id: 'pagos', label: 'Pagos', icon: <CreditCard size={12} /> },
   ]
 
 
@@ -1380,11 +1556,11 @@ export default function ClientProfilePage() {
               <div className="space-y-1">
                 {[
                   { id: 'perfil',      label: 'Perfil',      icon: User,       show: true },
-                  { id: 'rutinas',     label: 'Rutinas',     icon: BookOpen,   show: can('clients', 'view_rutinas') },
-                  { id: 'clases',      label: 'Clases',      icon: Dumbbell,   show: true },
-                  { id: 'asistencia',  label: 'Asistencia',  icon: Activity,   show: true },
-                  { id: 'membresias',  label: 'Membresías',  icon: Tag,        show: can('clients', 'view_membresias') },
-                  { id: 'pagos',       label: 'Pagos',       icon: CreditCard, show: can('clients', 'view_pagos') },
+                  { id: 'rutinas',      label: 'Rutinas',      icon: BookOpen,      show: can('clients', 'view_rutinas') },
+                  { id: 'clases',       label: 'Clases',       icon: Dumbbell,      show: true },
+                  { id: 'asistencia',   label: 'Asistencia',   icon: Activity,      show: true },
+                  { id: 'membresias',   label: 'Membresías',   icon: Tag,           show: can('clients', 'view_membresias') },
+                  { id: 'pagos',        label: 'Pagos',        icon: CreditCard,    show: can('clients', 'view_pagos') },
                 ].filter(item => item.show).map(item => {
                   const Icon = item.icon
                   return (
@@ -1732,26 +1908,344 @@ export default function ClientProfilePage() {
           </motion.div>
 
           {/* ─── SECCIÓN 3: ASISTENCIA ───────────────────────────────────────── */}
-          <motion.div variants={fadeUpItem} id="asistencia" className={`${glassCard} p-6 space-y-5 scroll-mt-24`}>
-            <div className="flex items-center justify-between border-b border-gray-200 dark:border-white/[0.06] pb-3">
+          <motion.div variants={fadeUpItem} id="asistencia" className={`${glassCard} overflow-hidden scroll-mt-24`}>
+            {/* Header */}
+            <div className="flex items-center justify-between px-6 pt-6 pb-4 border-b border-gray-200 dark:border-white/[0.06]">
               <div className="flex items-center gap-3">
                 <div className="h-10 w-10 rounded-xl bg-primary/10 flex items-center justify-center shrink-0">
                   <Activity size={18} className="text-primary" />
                 </div>
                 <div>
                   <h3 className="text-lg font-black tracking-tight text-gray-900 dark:text-white">Asistencia y Estadísticas</h3>
-                  <p className="text-xs text-gray-500 dark:text-[#8A8A9A]">Registro de ingresos y estadísticas de asistencia</p>
+                  <p className="text-xs text-gray-500 dark:text-[#8A8A9A]">Registro de ingresos y análisis de presencia</p>
                 </div>
+              </div>
+              <div className="flex items-center gap-2">
+                {porRecuperar > 0 && (
+                  <span className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-amber-500/10 border border-amber-500/20 text-xs font-bold text-amber-600 dark:text-amber-400">
+                    <CalendarX2 size={11} /> {porRecuperar} a recuperar
+                  </span>
+                )}
+                {inscripciones.length > 0 && (
+                  <button
+                    onClick={() => navigate(`/clients/${id}/ausencia?inscripcionId=${inscripciones[0].id}&dias=${inscripciones[0].dias.join(',')}`)}
+                    className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-semibold text-gray-500 dark:text-[#8A8A9A] hover:text-gray-900 dark:hover:text-white hover:bg-gray-100 dark:hover:bg-white/[0.06] border border-transparent hover:border-gray-200 dark:hover:border-white/[0.08] transition-all"
+                  >
+                    <CalendarX2 size={12} /> Registrar ausencia
+                  </button>
+                )}
               </div>
             </div>
 
+            {/* Cuerpo */}
             {attendance.length === 0 ? (
-              <div className="border border-dashed border-gray-200 dark:border-white/10 rounded-2xl p-6 bg-white/40 dark:bg-white/[0.01]">
-                <EmptyState icon={Activity} message="Sin registros de asistencia" />
-              </div>
-            ) : (
-              <AttendanceTabContent attendance={attendance} />
-            )}
+              <div className="p-6"><EmptyState icon={Activity} message="Sin registros de asistencia" /></div>
+            ) : (() => {
+              const total     = mergedTimeline.length
+              const nPresente = mergedTimeline.filter(r => r.state === 'presente').length
+              const nConAviso = mergedTimeline.filter(r => r.state === 'con_aviso').length
+              const nAusente  = mergedTimeline.filter(r => r.state === 'ausente').length
+              const pct       = total > 0 ? Math.round(nPresente / total * 100) : 0
+              const isDark    = typeof document !== 'undefined' && document.documentElement.classList.contains('dark')
+              const tooltipStyle = { background: isDark ? '#1A1A1A' : '#fff', border: `1px solid ${isDark ? 'rgba(255,255,255,0.08)' : 'rgba(0,0,0,0.08)'}`, borderRadius: 10, fontSize: 11 }
+
+              return (
+                <div className="grid grid-cols-2 divide-x divide-gray-100 dark:divide-white/[0.06]">
+
+                  {/* ── Columna izquierda: stats + subnav + lista ── */}
+                  <div className="flex flex-col">
+                    {/* Stats 2×2 */}
+                    <div className="grid grid-cols-2 divide-x divide-y divide-gray-100 dark:divide-white/[0.06] border-b border-gray-200 dark:border-white/[0.06]">
+                      {[
+                        { label: 'Total',            value: total,     color: 'text-gray-900 dark:text-white' },
+                        { label: 'Presente',         value: nPresente, color: 'text-emerald-500' },
+                        { label: 'Ausencia c/aviso', value: nConAviso, color: 'text-blue-500' },
+                        { label: 'Ausencia s/aviso', value: nAusente,  color: 'text-red-500' },
+                      ].map(s => (
+                        <div key={s.label} className="py-4 text-center">
+                          <p className={`text-xl font-black tabular-nums ${s.color}`}>{s.value}</p>
+                          <p className="text-[10px] uppercase tracking-wider text-gray-400 dark:text-[#8A8A9A] mt-0.5">{s.label}</p>
+                        </div>
+                      ))}
+                    </div>
+
+                    {/* Subnav */}
+                    <div className="flex gap-1 px-3 py-2 border-b border-gray-100 dark:border-white/[0.06]">
+                      {([
+                        ['historial', 'Historial'],
+                        ['ausencias', `Ausencias c/aviso${nConAviso > 0 ? ` (${nConAviso})` : ''}`],
+                        ['recuperos', `Recuperos${recuperosPendientesCount > 0 ? ` (${recuperosPendientesCount})` : ''}`],
+                      ] as const).map(([v, l]) => (
+                        <button key={v} onClick={() => setLeftTab(v)}
+                          className={`flex-1 text-[11px] font-semibold py-1.5 rounded-lg transition-all ${
+                            leftTab === v
+                              ? 'bg-gray-200 dark:bg-white/[0.09] text-gray-900 dark:text-white'
+                              : 'text-gray-400 dark:text-[#8A8A9A] hover:text-gray-700 dark:hover:text-white'
+                          }`}
+                        >{l}</button>
+                      ))}
+                    </div>
+
+                    {/* Lista scrollable */}
+                    <div className="overflow-y-auto divide-y divide-gray-100 dark:divide-white/[0.05]" style={{ maxHeight: 260 }}>
+                      {leftTab === 'historial' ? (
+                        mergedTimeline.map(r => (
+                          <div key={r.id} className="flex items-center gap-2.5 px-4 py-2.5 hover:bg-black/[0.02] dark:hover:bg-white/[0.02] transition-colors">
+                            <div className={`h-2 w-2 rounded-full shrink-0 ${r.state === 'presente' ? 'bg-emerald-500' : r.state === 'con_aviso' ? 'bg-blue-500' : 'bg-red-500'}`} />
+                            <p className="text-xs font-semibold text-gray-900 dark:text-white flex-1 truncate capitalize">
+                              {safeFormatDate(r.dateKey + 'T12:00:00', "EEEE d 'de' MMM yyyy", es)}
+                            </p>
+                            <span className={`text-[10px] font-semibold shrink-0 ${r.state === 'presente' ? 'text-emerald-500' : r.state === 'con_aviso' ? 'text-blue-500' : 'text-red-400'}`}>
+                              {r.state === 'presente' ? 'Presente' : r.state === 'con_aviso' ? 'C/aviso' : 'S/aviso'}
+                            </span>
+                            <button
+                              onClick={() => navigate(`/shifts/${r.shiftId}?date=${r.dateKey}`)}
+                              className="text-gray-300 dark:text-[#555] hover:text-primary dark:hover:text-primary transition-colors shrink-0"
+                              title="Ver turno en esa fecha"
+                            >
+                              →
+                            </button>
+                            <button
+                              onClick={() => handleDeleteAttendance(r.id)}
+                              disabled={deletingAttendanceId === r.id}
+                              className="text-gray-300 dark:text-[#555] hover:text-red-400 dark:hover:text-red-400 transition-colors shrink-0 disabled:opacity-40"
+                              title="Eliminar registro"
+                            >
+                              {deletingAttendanceId === r.id
+                                ? <span className="text-[9px]">...</span>
+                                : <Trash2 size={11} />}
+                            </button>
+                          </div>
+                        ))
+                      ) : leftTab === 'ausencias' && ausencias.filter(a => a.conAviso).length === 0 ? (
+                        <div className="flex flex-col items-center justify-center py-8 text-center px-4">
+                          <CalendarCheck2 size={20} className="text-gray-300 dark:text-[#444] mb-2" />
+                          <p className="text-xs text-gray-400 dark:text-[#666]">Sin ausencias con aviso registradas</p>
+                        </div>
+                      ) : leftTab === 'ausencias' ? (
+                        ausencias.filter(a => a.conAviso).sort((a, b) => (b.fecha ?? '').localeCompare(a.fecha ?? '')).map(a => (
+                          <div
+                            key={a.id}
+                            onClick={() => navigate(`/clients/${id}/ausencia?ausenciaId=${a.id}`)}
+                            className="px-4 py-3 hover:bg-black/[0.03] dark:hover:bg-white/[0.03] transition-colors cursor-pointer group"
+                          >
+                            <div className="flex items-start gap-2">
+                              <div className="h-2 w-2 rounded-full bg-blue-500 shrink-0 mt-1.5" />
+                              <div className="flex-1 min-w-0">
+                                {/* Fecha completa con día */}
+                                <p className="text-xs font-bold text-gray-900 dark:text-white capitalize leading-tight">
+                                  {safeFormatDate(a.fecha, "EEEE d 'de' MMM yyyy", es)}
+                                </p>
+                                {/* Estado recuperación */}
+                                <span className={`text-[10px] font-semibold ${
+                                  a.recuperacion?.estado === 'COMPLETADA' ? 'text-emerald-500'
+                                  : a.recuperacion?.estado === 'PENDIENTE' ? 'text-amber-500'
+                                  : 'text-gray-400 dark:text-[#555]'
+                                }`}>
+                                  {a.recuperacion?.estado === 'COMPLETADA' ? '✓ Recuperada'
+                                    : a.recuperacion?.estado === 'PENDIENTE' ? `Pendiente${a.recuperacion.fecha ? ` — ${safeFormatDate(a.recuperacion.fecha, 'd MMM', es)}` : ''}${a.recuperacion.turnoDestino ? ` · ${a.recuperacion.turnoDestino.horaInicio}` : ''}`
+                                    : 'Sin recuperar'}
+                                </span>
+                                {/* Notas/motivo */}
+                                {a.notas && (
+                                  <p className="text-[11px] text-gray-500 dark:text-[#8A8A9A] mt-0.5 leading-snug">{a.notas}</p>
+                                )}
+                              </div>
+                              {/* Acciones */}
+                              <div className="flex items-center gap-1 shrink-0">
+                                <button
+                                  onClick={e => { e.stopPropagation(); setDeleteAusenciaId(a.id) }}
+                                  className="p-1.5 rounded-lg text-gray-300 dark:text-[#444] hover:text-red-500 hover:bg-red-50 dark:hover:bg-red-500/10 transition-all"
+                                  title="Eliminar ausencia"
+                                >
+                                  <Trash2 size={12} />
+                                </button>
+                                <ChevronRight size={12} className="text-gray-300 dark:text-[#444] group-hover:text-gray-400 dark:group-hover:text-[#666] transition-colors" />
+                              </div>
+                            </div>
+                          </div>
+                        ))
+                      ) : recuperos.length === 0 ? (
+                        <div className="flex flex-col items-center justify-center py-8 text-center px-4">
+                          <CalendarCheck2 size={20} className="text-gray-300 dark:text-[#444] mb-2" />
+                          <p className="text-xs text-gray-400 dark:text-[#666]">Sin recuperos registrados</p>
+                        </div>
+                      ) : (
+                        recuperos.map(a => {
+                          const rec = a.recuperacion!
+                          const isCanceling = cancelingRecupId === rec.id
+                          return (
+                            <div
+                              key={rec.id}
+                              className="px-4 py-3 hover:bg-black/[0.03] dark:hover:bg-white/[0.03] transition-colors group"
+                            >
+                              <div className="flex items-start gap-2">
+                                {/* Dot de estado */}
+                                <div className={`h-2 w-2 rounded-full shrink-0 mt-1.5 ${
+                                  rec.estado === 'COMPLETADA' ? 'bg-emerald-500' : 'bg-amber-400'
+                                }`} />
+                                <div className="flex-1 min-w-0">
+                                  {/* Fecha de recupero */}
+                                  <p className="text-xs font-bold text-gray-900 dark:text-white capitalize leading-tight">
+                                    {safeFormatDate(rec.fecha, "EEEE d 'de' MMM yyyy", es)}
+                                  </p>
+                                  {/* Turno destino */}
+                                  <p className="text-[11px] text-gray-500 dark:text-[#8A8A9A] mt-0.5">
+                                    {rec.turnoDestino.horaInicio}–{rec.turnoDestino.horaFin}
+                                    {rec.turnoDestino.diasSemana.length > 0 && (
+                                      <> · {rec.turnoDestino.diasSemana.join(', ')}</>
+                                    )}
+                                  </p>
+                                  {/* Ausencia origen */}
+                                  <p className="text-[10px] text-gray-400 dark:text-[#555] mt-0.5">
+                                    Ausencia: {safeFormatDate(a.fecha, "d MMM yyyy", es)}
+                                  </p>
+                                  {/* Estado badge */}
+                                  <span className={`inline-block mt-1 text-[10px] font-semibold px-1.5 py-0.5 rounded-md ${
+                                    rec.estado === 'COMPLETADA'
+                                      ? 'bg-emerald-500/10 text-emerald-500'
+                                      : 'bg-amber-400/10 text-amber-500'
+                                  }`}>
+                                    {rec.estado === 'COMPLETADA' ? '✓ Completada' : 'Pendiente'}
+                                  </span>
+                                </div>
+                                <div className="flex items-center gap-1 shrink-0">
+                                  {/* Cancelar recupero (solo PENDIENTE) */}
+                                  {rec.estado === 'PENDIENTE' && (
+                                    <button
+                                      disabled={isCanceling}
+                                      onClick={async () => {
+                                        setCancelingRecupId(rec.id)
+                                        try {
+                                          await reposicionesApi.cancelarRecuperacion(rec.id)
+                                          // Actualización optimista: marcar la recuperación como CANCELADA en el estado local
+                                          setAusencias(prev => prev.map(au =>
+                                            au.id === a.id && au.recuperacion
+                                              ? { ...au, recuperacion: { ...au.recuperacion, estado: 'CANCELADA' as const } }
+                                              : au
+                                          ))
+                                          addToast('Recupero cancelado', 'success')
+                                        } catch {
+                                          addToast('Error al cancelar el recupero', 'error')
+                                        } finally {
+                                          setCancelingRecupId(null)
+                                        }
+                                      }}
+                                      className="p-1.5 rounded-lg text-gray-300 dark:text-[#444] hover:text-red-500 hover:bg-red-500/10 transition-all opacity-0 group-hover:opacity-100 disabled:opacity-30 disabled:cursor-not-allowed"
+                                      title="Cancelar recupero"
+                                    >
+                                      {isCanceling
+                                        ? <span className="block h-3 w-3 rounded-full border border-current border-t-transparent animate-spin" />
+                                        : <Trash2 size={13} />
+                                      }
+                                    </button>
+                                  )}
+                                  {/* Ir al turno */}
+                                  <button
+                                    onClick={() => navigate(`/shifts/${rec.turnoDestinoId}`)}
+                                    className="p-1.5 rounded-lg text-gray-300 dark:text-[#444] hover:text-primary hover:bg-primary/10 transition-all shrink-0"
+                                    title="Ver turno"
+                                  >
+                                    <ChevronRight size={13} />
+                                  </button>
+                                </div>
+                              </div>
+                            </div>
+                          )
+                        })
+                      )}
+                    </div>
+                  </div>
+
+                  {/* ── Columna derecha: gráficos ── */}
+                  <div className="flex flex-col">
+                    {/* Torta — 3 estados */}
+                    <div className="p-4 border-b border-gray-100 dark:border-white/[0.06]">
+                      <div className="relative flex items-center justify-center">
+                        <ResponsiveContainer width="100%" height={160}>
+                          <PieChart>
+                            <Pie
+                              data={[
+                                { name: 'Presente',        value: nPresente, color: '#10B981' },
+                                { name: 'Ausencia c/aviso', value: nConAviso, color: '#3B82F6' },
+                                { name: 'Ausencia s/aviso', value: nAusente,  color: '#EF4444' },
+                              ].filter(d => d.value > 0)}
+                              cx="50%" cy="50%" innerRadius={46} outerRadius={68}
+                              paddingAngle={2} dataKey="value"
+                            >
+                              {['#10B981','#3B82F6','#EF4444'].map((c, i) => <Cell key={i} fill={c} />)}
+                            </Pie>
+                            <Tooltip contentStyle={tooltipStyle} />
+                          </PieChart>
+                        </ResponsiveContainer>
+                        <div className="absolute flex flex-col items-center pointer-events-none">
+                          <span className="text-2xl font-black text-gray-900 dark:text-white">{pct}%</span>
+                          <span className="text-[9px] uppercase tracking-wider text-gray-400">asistencia</span>
+                        </div>
+                      </div>
+                      <div className="flex gap-3 justify-center flex-wrap">
+                        {[
+                          { label: 'Presente',        color: 'bg-emerald-500', n: nPresente },
+                          { label: 'Ausencia c/aviso', color: 'bg-blue-500',    n: nConAviso },
+                          { label: 'Ausencia s/aviso', color: 'bg-red-500',     n: nAusente },
+                        ].map(l => (
+                          <div key={l.label} className="flex items-center gap-1">
+                            <span className={`h-1.5 w-1.5 rounded-full ${l.color}`} />
+                            <span className="text-[10px] text-gray-500 dark:text-[#8A8A9A]">{l.label} ({l.n})</span>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+
+                    {/* Toggle + Bar chart */}
+                    <div className="flex gap-1 px-3 py-2 border-b border-gray-100 dark:border-white/[0.06]">
+                      {([['mensual','Por mes'],['diasSemana','Por día']] as const).map(([v, l]) => (
+                        <button key={v} onClick={() => setChartView(v)}
+                          className={`flex-1 text-[11px] font-semibold py-1.5 rounded-lg transition-all ${
+                            chartView === v ? 'bg-gray-200 dark:bg-white/[0.09] text-gray-900 dark:text-white' : 'text-gray-400 dark:text-[#8A8A9A] hover:text-gray-700 dark:hover:text-white'
+                          }`}
+                        >{l}</button>
+                      ))}
+                    </div>
+                    <div className="px-2 py-3 flex-1">
+                      {chartView === 'mensual' ? (
+                        monthlyStacked.length < 2 ? (
+                          <p className="text-xs text-center text-gray-400 dark:text-[#555] py-6">Más datos disponibles con el tiempo</p>
+                        ) : (
+                          <ResponsiveContainer width="100%" height={130}>
+                            <BarChart data={monthlyStacked} barSize={12} margin={{ top: 0, right: 0, left: -28, bottom: 0 }}>
+                              <CartesianGrid vertical={false} stroke="rgba(128,128,128,0.07)" />
+                              <XAxis dataKey="mes" tick={{ fontSize: 9, fill: '#8A8A9A' }} axisLine={false} tickLine={false} />
+                              <YAxis tick={{ fontSize: 9, fill: '#8A8A9A' }} axisLine={false} tickLine={false} allowDecimals={false} />
+                              <Tooltip contentStyle={tooltipStyle} formatter={(v: number, n: string) => [v, n === 'presente' ? 'Presente' : n === 'conAviso' ? 'Ausencia c/aviso' : 'Ausencia s/aviso']} />
+                              <Bar dataKey="ausente"  stackId="a" fill="#EF4444" radius={[0,0,0,0]} />
+                              <Bar dataKey="conAviso" stackId="a" fill="#3B82F6" radius={[0,0,0,0]} />
+                              <Bar dataKey="presente" stackId="a" fill="#10B981" radius={[4,4,0,0]} />
+                            </BarChart>
+                          </ResponsiveContainer>
+                        )
+                      ) : (
+                        byDayOfWeek.length === 0 ? (
+                          <p className="text-xs text-center text-gray-400 dark:text-[#555] py-6">Sin datos</p>
+                        ) : (
+                          <ResponsiveContainer width="100%" height={130}>
+                            <BarChart data={byDayOfWeek} barSize={12} margin={{ top: 0, right: 0, left: -28, bottom: 0 }}>
+                              <CartesianGrid vertical={false} stroke="rgba(128,128,128,0.07)" />
+                              <XAxis dataKey="dia" tick={{ fontSize: 9, fill: '#8A8A9A' }} axisLine={false} tickLine={false} />
+                              <YAxis tick={{ fontSize: 9, fill: '#8A8A9A' }} axisLine={false} tickLine={false} allowDecimals={false} />
+                              <Tooltip contentStyle={tooltipStyle} formatter={(v: number, n: string) => [v, n === 'presente' ? 'Presente' : n === 'conAviso' ? 'Ausencia c/aviso' : 'Ausencia s/aviso']} />
+                              <Bar dataKey="ausente"  stackId="a" fill="#EF4444" radius={[0,0,0,0]} />
+                              <Bar dataKey="conAviso" stackId="a" fill="#3B82F6" radius={[0,0,0,0]} />
+                              <Bar dataKey="presente" stackId="a" fill="#10B981" radius={[4,4,0,0]} />
+                            </BarChart>
+                          </ResponsiveContainer>
+                        )
+                      )}
+                    </div>
+                  </div>
+                </div>
+              )
+            })()}
           </motion.div>
 
           {/* ─── SECCIÓN 4: MEMBRESÍAS ──────────────────────────────────────────── */}
@@ -2092,10 +2586,194 @@ export default function ClientProfilePage() {
               </div>
             )}
           </motion.div>}
+          {/* ─── SECCIÓN 6: REPOSICIONES (eliminada — movida a Sección 3 Asistencia) ─ */}
+          {false && <motion.div variants={fadeUpItem} id="reposiciones" className={`${glassCard} p-6 space-y-5 scroll-mt-24`}>
+            <div className="flex items-center justify-between border-b border-gray-200 dark:border-white/[0.06] pb-4">
+              <div className="flex items-center gap-3">
+                <div className="h-10 w-10 rounded-xl bg-amber-500/10 flex items-center justify-center shrink-0">
+                  <CalendarX2 size={18} className="text-amber-500" />
+                </div>
+                <div>
+                  <h3 className="text-lg font-black tracking-tight text-gray-900 dark:text-white">Ausencias y Recuperaciones</h3>
+                  <p className="text-xs text-gray-500 dark:text-[#8A8A9A]">Historial de faltas y clases recuperadas</p>
+                </div>
+              </div>
+              <div className="flex items-center gap-2">
+                <button
+                  onClick={loadAusencias}
+                  disabled={loadingAusencias}
+                  className="p-2 rounded-xl text-gray-400 hover:text-gray-600 dark:hover:text-white hover:bg-gray-100 dark:hover:bg-white/[0.06] transition-all active:scale-[0.92]"
+                  title="Recargar"
+                >
+                  <RefreshCw size={14} className={loadingAusencias ? 'animate-spin' : ''} />
+                </button>
+                {inscripciones.length > 0 && (
+                  <button
+                    onClick={() => navigate(`/clients/${id}/ausencia?inscripcionId=${inscripciones[0].id}&dias=${inscripciones[0].dias.join(',')}`)}
+                    className="flex items-center gap-1.5 px-3.5 py-2 rounded-xl
+                      bg-amber-500/10 hover:bg-amber-500/20
+                      text-amber-600 dark:text-amber-400
+                      border border-amber-500/20 hover:border-amber-500/30
+                      text-xs font-bold transition-all active:scale-[0.97]"
+                  >
+                    <CalendarX2 size={12} /> Registrar ausencia
+                  </button>
+                )}
+              </div>
+            </div>
+
+            {loadingAusencias ? (
+              <div className="space-y-2.5">
+                {[1, 2, 3].map(i => <Skeleton key={i} className="h-20 w-full rounded-2xl" />)}
+              </div>
+            ) : ausencias.length === 0 ? (
+              <div className="flex flex-col items-center gap-3 py-10">
+                <div className="h-14 w-14 rounded-2xl bg-gray-50 dark:bg-white/[0.03] border border-gray-100 dark:border-white/[0.06] flex items-center justify-center">
+                  <CalendarCheck2 size={22} className="text-gray-300 dark:text-[#444]" />
+                </div>
+                <div className="text-center">
+                  <p className="text-sm font-semibold text-gray-500 dark:text-[#8A8A9A]">Sin ausencias registradas</p>
+                  <p className="text-xs text-gray-400 dark:text-[#555] mt-1">¡Excelente asistencia!</p>
+                </div>
+              </div>
+            ) : (
+              <AnimatePresence initial={false}>
+                <div className="space-y-3">
+                  {ausencias.map(a => {
+                    const recup = a.recuperacion
+                    const estado = recup?.estado ?? 'SIN_RECUPERACION'
+
+                    const estadoCfg = {
+                      SIN_RECUPERACION: {
+                        icon: <CalendarX2 size={14} className="text-red-400 shrink-0" />,
+                        badge: 'bg-red-500/10 text-red-500 dark:text-red-400 border-red-500/20',
+                        label: 'Sin recuperar',
+                        dot: 'bg-red-500',
+                      },
+                      PENDIENTE: {
+                        icon: <CalendarCheck2 size={14} className="text-amber-400 shrink-0" />,
+                        badge: 'bg-amber-500/10 text-amber-600 dark:text-amber-400 border-amber-500/20',
+                        label: 'Recuperación pendiente',
+                        dot: 'bg-amber-500',
+                      },
+                      COMPLETADA: {
+                        icon: <CheckCircle2 size={14} className="text-emerald-400 shrink-0" />,
+                        badge: 'bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border-emerald-500/20',
+                        label: 'Recuperada',
+                        dot: 'bg-emerald-500',
+                      },
+                      CANCELADA: {
+                        icon: <XCircle size={14} className="text-gray-400 shrink-0" />,
+                        badge: 'bg-gray-500/10 text-gray-500 dark:text-gray-400 border-gray-500/20',
+                        label: 'Cancelada',
+                        dot: 'bg-gray-400',
+                      },
+                    }[estado] ?? {
+                      icon: <CalendarX2 size={14} className="text-red-400 shrink-0" />,
+                      badge: 'bg-red-500/10 text-red-500 dark:text-red-400 border-red-500/20',
+                      label: 'Sin recuperar',
+                      dot: 'bg-red-500',
+                    }
+
+                    return (
+                      <motion.div
+                        key={a.id}
+                        initial={{ opacity: 0, y: 6 }}
+                        animate={{ opacity: 1, y: 0 }}
+                        exit={{ opacity: 0, y: -4 }}
+                        transition={{ duration: 0.18, ease: [0.23, 1, 0.32, 1] }}
+                        className="flex items-start justify-between gap-3 rounded-2xl
+                          border border-gray-200 dark:border-white/[0.07]
+                          bg-white/40 dark:bg-white/[0.02]
+                          px-4 py-4
+                          group"
+                      >
+                        <div className="flex items-start gap-3 min-w-0 flex-1">
+                          {estadoCfg.icon}
+                          <div className="min-w-0 space-y-1">
+                            <div className="flex items-center gap-2 flex-wrap">
+                              <p className="text-sm font-bold text-gray-900 dark:text-white">
+                                {formatDate(a.fecha)}
+                              </p>
+                              <span className={`inline-flex items-center gap-1.5 text-[10px] font-bold px-2 py-0.5 rounded-full border ${estadoCfg.badge}`}>
+                                <span className={`h-1.5 w-1.5 rounded-full ${estadoCfg.dot}`} />
+                                {estadoCfg.label}
+                              </span>
+                              {a.conAviso && (
+                                <span className="inline-flex items-center text-[10px] font-bold px-2 py-0.5 rounded-full bg-blue-500/10 text-blue-500 dark:text-blue-400 border border-blue-500/20">
+                                  con aviso
+                                </span>
+                              )}
+                            </div>
+                            <p className="text-xs text-gray-500 dark:text-[#8A8A9A]">
+                              {a.inscripcion?.turno?.horaInicio} – {a.inscripcion?.turno?.horaFin}
+                            </p>
+                            {recup && estado === 'PENDIENTE' && (
+                              <p className="text-xs font-semibold text-amber-500 dark:text-amber-400 flex items-center gap-1">
+                                <CalendarCheck2 size={11} />
+                                {formatDate(recup.fecha)} · {recup.turnoDestino?.horaInicio} – {recup.turnoDestino?.horaFin}
+                              </p>
+                            )}
+                            {recup && estado === 'COMPLETADA' && (
+                              <p className="text-xs font-semibold text-emerald-500 dark:text-emerald-400 flex items-center gap-1">
+                                <CheckCircle2 size={11} />
+                                Recuperó el {formatDate(recup.fecha)}
+                              </p>
+                            )}
+                            {a.notas && (
+                              <p className="text-xs text-gray-400 dark:text-[#666] italic truncate">{a.notas}</p>
+                            )}
+                          </div>
+                        </div>
+                        {/* Acción: agendar recuperación */}
+                        {estado === 'SIN_RECUPERACION' && (
+                          <button
+                            onClick={() => openDrawerRecuperar(a)}
+                            className="shrink-0 flex items-center gap-1.5 px-3 py-1.5 rounded-xl
+                              text-xs font-bold
+                              text-primary border border-primary/20
+                              bg-primary/5 hover:bg-primary/10
+                              transition-all active:scale-[0.96]
+                              opacity-0 group-hover:opacity-100"
+                          >
+                            <CalendarCheck2 size={12} /> Agendar
+                          </button>
+                        )}
+                      </motion.div>
+                    )
+                  })}
+                </div>
+              </AnimatePresence>
+            )}
+          </motion.div>}
+
           <div className="h-[35vh]" />
         </motion.div>
       </div>
 
+
+      {/* ── REPOSICION DRAWER ────────────────────────────────────────────────── */}
+      <ReposicionDrawer
+        isOpen={reposicionDrawerOpen}
+        onClose={() => setReposicionDrawerOpen(false)}
+        onSuccess={loadAusencias}
+        mode={drawerMode}
+        ausencia={drawerAusencia ?? undefined}
+        inscripcionId={drawerInscripcionId ?? undefined}
+        clienteNombre={client ? `${client.name} ${client.lastName}` : undefined}
+        turnoLabel={
+          drawerInscripcionId
+            ? inscripciones.find(i => i.id === drawerInscripcionId)
+              ? (() => {
+                  const insc = inscripciones.find(i => i.id === drawerInscripcionId)
+                  return insc ? `${insc.startTime} – ${insc.endTime}` : undefined
+                })()
+              : undefined
+            : drawerAusencia?.inscripcion?.turno
+              ? `${drawerAusencia.inscripcion.turno.horaInicio} – ${drawerAusencia.inscripcion.turno.horaFin}`
+              : undefined
+        }
+      />
 
       {/* ── MODAL MEMBRESÍA ─────────────────────────────────────────────────── */}
       <Modal isOpen={membershipDetailOpen} onClose={() => setMembershipDetailOpen(false)} title="Membresía activa" size="md">
@@ -2360,6 +3038,16 @@ export default function ClientProfilePage() {
         isLoading={deletingRutina}
         onConfirm={() => void handleDeleteRutina()}
         onClose={() => setDeleteRutinaId(null)}
+      />
+
+      <ConfirmDialog
+        isOpen={deleteAusenciaId !== null}
+        title="Eliminar ausencia"
+        message="¿Eliminás esta ausencia? Si tiene una recuperación agendada, también se eliminará."
+        confirmLabel="Eliminar"
+        isLoading={deletingAusencia}
+        onConfirm={() => void handleDeleteAusencia()}
+        onClose={() => setDeleteAusenciaId(null)}
       />
 
     </motion.div>

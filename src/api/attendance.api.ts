@@ -35,6 +35,8 @@ export interface EfectividadAsistencia {
   totalSesiones: number
   sesionesPresente: number
   sesionesAusente: number
+  sesionesAusenteConAviso: number
+  sesionesAusenteSinAviso: number
   sesionesExcluidas: number
   efectividad: number | null  // porcentaje 0–100 o null si no hay datos
   detalle: string
@@ -45,11 +47,12 @@ export const attendanceApi = {
     api.get('/asistencia', { params: { turnoId: shiftId, fecha: date } })
       .then((r) => (Array.isArray(r.data) ? r.data : []).map(mapRecord)),
 
-  bulk: (shiftId: string, date: string, presentClientIds: string[]): Promise<void> =>
+  bulk: (shiftId: string, date: string, presentClientIds: string[], ausentesConAviso?: string[]): Promise<void> =>
     api.post('/asistencia/bulk', {
       turnoId: shiftId,
       fecha: date,
       clientesPresentes: presentClientIds,
+      ...(ausentesConAviso && ausentesConAviso.length > 0 && { ausentesConAviso }),
     }).then(() => undefined),
 
   getByClient: (clientId: string): Promise<AttendanceRecord[]> =>
@@ -63,4 +66,7 @@ export const attendanceApi = {
   efectividad: (clientId: string): Promise<EfectividadAsistencia> =>
     api.get(`/asistencia/efectividad/${clientId}`)
       .then((r) => r.data),
+
+  deleteById: (id: string): Promise<void> =>
+    api.delete(`/asistencia/${id}`).then(() => undefined),
 }

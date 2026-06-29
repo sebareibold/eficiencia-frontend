@@ -26,3 +26,6 @@ dist-ssr
 *.sln
 *.sw?
 .claude/worktrees/
+.claude
+/.claude
+CLAUDE.node_modules

@@ -65,8 +65,9 @@ export const professorsApi = {
 }
 
 export const shiftsApi = {
-  getAll: (): Promise<Shift[]> =>
-    api.get('/turnos').then((r) => (Array.isArray(r.data) ? r.data : []).map(mapTurno)),
+  getAll: (fecha?: string): Promise<Shift[]> =>
+    api.get('/turnos', fecha ? { params: { fecha } } : undefined)
+      .then((r) => (Array.isArray(r.data) ? r.data : []).map(mapTurno)),
 
   getById: (id: string | number): Promise<Shift> =>
     api.get(`/turnos/${id}`).then((r) => mapTurno(r.data)),

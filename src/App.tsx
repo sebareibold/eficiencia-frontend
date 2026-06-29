@@ -17,6 +17,7 @@ import LoginPage from './pages/LoginPage'
 const ClientsPage        = lazy(() => import('./pages/ClientsPage'))
 const ClientProfilePage  = lazy(() => import('./pages/ClientProfilePage'))
 const ClientRutinaPage   = lazy(() => import('./pages/ClientRutinaPage'))
+const AusenciaPage       = lazy(() => import('./pages/AusenciaPage'))
 const CreateClientPage   = lazy(() => import('./pages/CreateClientPage'))
 const PaymentsPage       = lazy(() => import('./pages/PaymentsPage'))
 const PaymentNewPage     = lazy(() => import('./pages/PaymentNewPage'))
@@ -65,9 +66,10 @@ export default function App() {
               <Route index element={<DefaultRedirect />} />
 
               <Route element={<PermissionGuard module="clients" />}>
-                <Route path={ROUTES.CLIENTS}        element={<ClientsPage />} />
-                <Route path={ROUTES.CLIENT_NEW}     element={<CreateClientPage />} />
-                <Route path={ROUTES.CLIENT_PROFILE} element={<ClientProfilePage />} />
+                <Route path={ROUTES.CLIENTS}         element={<ClientsPage />} />
+                <Route path={ROUTES.CLIENT_NEW}      element={<CreateClientPage />} />
+                <Route path={ROUTES.CLIENT_PROFILE}  element={<ClientProfilePage />} />
+                <Route path={ROUTES.CLIENT_AUSENCIA} element={<AusenciaPage />} />
               </Route>
 
               <Route element={<PermissionGuard module="payments" />}>

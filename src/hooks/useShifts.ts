@@ -2,10 +2,11 @@ import { useQuery } from '@tanstack/react-query'
 import { shiftsApi } from '../api/shifts.api'
 import { QK } from '../lib/queryKeys'
 
-export function useShifts() {
+export function useShifts(opts?: { fecha?: string }) {
+  const fecha = opts?.fecha
   const { data, isPending, error, refetch } = useQuery({
-    queryKey: QK.shifts.all(),
-    queryFn:  () => shiftsApi.getAll(),
+    queryKey: fecha ? ['shifts', 'date', fecha] : QK.shifts.all(),
+    queryFn:  () => shiftsApi.getAll(fecha),
     staleTime: 60_000,
   })
 

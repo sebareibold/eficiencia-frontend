@@ -1,11 +1,12 @@
 import { useState, useEffect, useMemo } from 'react'
-import { useParams, useNavigate } from 'react-router-dom'
+import { useParams, useNavigate, useSearchParams } from 'react-router-dom'
 import { motion, AnimatePresence } from 'framer-motion'
 import { pageVariants, tabContentVariants, staggerContainerFast, fadeUpItem } from '../lib/motion'
 import {
   ArrowLeft, Users, Clock, Dumbbell, UserPlus, ListPlus,
   X, Bell, Check, Trash2, Search, AlertTriangle, CheckCircle2, Pencil, Save,
   Hash, Tag, CalendarDays, GripVertical, Ban, Plus, ChevronLeft, ChevronRight,
+  RefreshCw,
 } from 'lucide-react'
 import { useForm } from 'react-hook-form'
 import { zodResolver } from '@hookform/resolvers/zod'
@@ -20,6 +21,8 @@ import type { CancelacionTurno } from '../types/cancelaciones.types'
 import { inscripcionesApi } from '../api/inscripciones.api'
 import { attendanceApi } from '../api/attendance.api'
 import { listaEsperaApi } from '../api/listaEspera.api'
+import { reposicionesApi } from '../api/reposiciones.api'
+import type { AusenciaTurno, RecuperacionClase } from '../types/reposicion.types'
 import { useListaEspera } from '../hooks/useListaEspera'
 import { useAttendance } from '../hooks/useAttendance'
 import { useClients } from '../hooks/useClients'
@@ -88,6 +91,7 @@ const ESPERA_LABEL: Record<string, string> = {
 export default function ShiftDetailPage() {
   const { id } = useParams<{ id: string }>()
   const navigate = useNavigate()
+  const [searchParams] = useSearchParams()
   const addToast = useUiStore(s => s.addToast)
   const user = useAuthStore(s => s.user)
   const isAdmin = user?.role === 'admin'
@@ -131,10 +135,37 @@ export default function ShiftDetailPage() {
   const [esperaTipoTab, setEsperaTipoTab] = useState<'INTERNA' | 'EXTERNA'>('INTERNA')
   const [actionLoadingIds, setActionLoadingIds] = useState<Set<string>>(new Set())
 
-  // Asistencia
-  const [selectedDate, setSelectedDate] = useState(format(new Date(), 'yyyy-MM-dd'))
-  const [present, setPresent] = useState<Set<string>>(new Set())
+  // Asistencia — fecha fija a la próxima ocurrencia del turno (o URL param si viene del historial)
+  const selectedDate = useMemo(() => {
+    const fromUrl = searchParams.get('date')
+    if (fromUrl && /^\d{4}-\d{2}-\d{2}$/.test(fromUrl)) return fromUrl
+    if (shift) {
+      const dows = shift.days.map(d => WEEKDAY_TO_JS[d])
+      const today = new Date(); today.setHours(0, 0, 0, 0)
+      for (let i = 0; i <= 6; i++) {
+        const candidate = new Date(today)
+        candidate.setDate(today.getDate() + i)
+        if (dows.includes(candidate.getDay())) {
+          const y = candidate.getFullYear()
+          const m = String(candidate.getMonth() + 1).padStart(2, '0')
+          const d = String(candidate.getDate()).padStart(2, '0')
+          return `${y}-${m}-${d}`
+        }
+      }
+    }
+    return format(new Date(), 'yyyy-MM-dd')
+  }, [shift?.id, searchParams])
+  const [attendanceStates, setAttendanceStates] = useState<Record<string, 'presente' | 'ausente' | 'con_aviso'>>({})
   const [isSavingAttendance, setIsSavingAttendance] = useState(false)
+  const [dragOverAttendCol, setDragOverAttendCol] = useState<'presente' | 'ausente' | 'con_aviso' | null>(null)
+  const [draggingAttendId, setDraggingAttendId] = useState<string | null>(null)
+
+  // Ausencias con aviso (para Resumen)
+  const [ausenciasHoy, setAusenciasHoy] = useState<AusenciaTurno[]>([])
+
+  // Recuperaciones del día (para Asistencia)
+  const [recuperacionesHoy, setRecuperacionesHoy] = useState<RecuperacionClase[]>([])
+  const [loadingRecuperaciones, setLoadingRecuperaciones] = useState(false)
 
   // Cancelaciones
   const [cancelaciones, setCancelaciones] = useState<CancelacionTurno[]>([])
@@ -145,6 +176,7 @@ export default function ShiftDetailPage() {
   const [savingCancelacion, setSavingCancelacion] = useState(false)
   const [deletingCancelacionId, setDeletingCancelacionId] = useState<string | null>(null)
 
+  // Reposiciones
   // Edit
   const [professors, setProfessors] = useState<{ id: string; name: string }[]>([])
   const [editSubmitting, setEditSubmitting] = useState(false)
@@ -242,10 +274,31 @@ export default function ShiftDetailPage() {
       .finally(() => setLoadingInscrip(false))
   }, [tab, id])
 
-  // Cargar asistencia cuando cambia fecha o tab
+  // Cargar todo lo sensible a la fecha cuando cambia selectedDate o el tab activo
   useEffect(() => {
-    if (tab !== 'asistencia' || !id || !selectedDate) return
-    fetchByShiftAndDate(id, selectedDate)
+    if (!id || !selectedDate) return
+    // Asistencia: siempre pre-cargar para que el tab Asistencia esté listo
+    if (tab === 'asistencia' || tab === 'resumen') {
+      fetchByShiftAndDate(id, selectedDate)
+    }
+  }, [tab, id, selectedDate])
+
+  // Cargar ausencias con aviso para el Resumen
+  useEffect(() => {
+    if (tab !== 'resumen' || !id) return
+    reposicionesApi.getAll({ turnoId: id, fecha: selectedDate })
+      .then(data => setAusenciasHoy(data.filter(a => a.conAviso)))
+      .catch(() => {/* silencioso — no bloquea el resumen */})
+  }, [tab, id, selectedDate])
+
+  // Cargar recuperaciones para Resumen y Asistencia
+  useEffect(() => {
+    if ((tab !== 'asistencia' && tab !== 'resumen') || !id || !selectedDate) return
+    setLoadingRecuperaciones(true)
+    reposicionesApi.getByTurnoFecha(id, selectedDate)
+      .then(recs => setRecuperacionesHoy(recs.filter(r => r.estado !== 'CANCELADA')))
+      .catch(() => setRecuperacionesHoy([]))
+      .finally(() => setLoadingRecuperaciones(false))
   }, [tab, id, selectedDate])
 
   // Cargar cancelaciones cuando se abre el tab
@@ -258,10 +311,13 @@ export default function ShiftDetailPage() {
       .finally(() => setLoadingCancelaciones(false))
   }, [tab, id])
 
-  // Sincronizar checkboxes asistencia
+  // Sincronizar attendanceStates con registros del backend
   useEffect(() => {
-    const presentIds = new Set(attendanceRecords.filter(r => r.present).map(r => r.clientId))
-    setPresent(presentIds)
+    const next: Record<string, 'presente' | 'ausente' | 'con_aviso'> = {}
+    for (const r of attendanceRecords) {
+      next[r.clientId] = r.present ? 'presente' : 'ausente'
+    }
+    setAttendanceStates(next)
   }, [attendanceRecords])
 
   // Sincronizar local inscripciones con datos del servidor (resetea cambios pendientes)
@@ -449,15 +505,62 @@ export default function ShiftDetailPage() {
     }
   }
 
+  function getAttendanceState(clientId: string): 'presente' | 'ausente' | 'con_aviso' {
+    return attendanceStates[clientId] ?? 'ausente'
+  }
+
+  function setAttendanceState(clientId: string, value: 'presente' | 'ausente' | 'con_aviso') {
+    setAttendanceStates(prev => ({ ...prev, [clientId]: value }))
+  }
+
+  function handleAttendDragStart(e: React.DragEvent, clientId: string) {
+    setDraggingAttendId(clientId)
+    e.dataTransfer.setData('attendClientId', clientId)
+    e.dataTransfer.effectAllowed = 'move'
+  }
+
+  function handleAttendDragOver(e: React.DragEvent, col: 'presente' | 'ausente' | 'con_aviso') {
+    e.preventDefault()
+    e.dataTransfer.dropEffect = 'move'
+    setDragOverAttendCol(col)
+  }
+
+  function handleAttendDragLeave(e: React.DragEvent) {
+    if (!(e.currentTarget as HTMLElement).contains(e.relatedTarget as Node)) {
+      setDragOverAttendCol(null)
+    }
+  }
+
+  function handleAttendDrop(e: React.DragEvent, targetCol: 'presente' | 'ausente' | 'con_aviso') {
+    e.preventDefault()
+    const clientId = e.dataTransfer.getData('attendClientId')
+    setDragOverAttendCol(null)
+    setDraggingAttendId(null)
+    if (!clientId) return
+    setAttendanceStates(prev => ({ ...prev, [clientId]: targetCol }))
+  }
+
   async function saveAttendance() {
     if (!id || dateError) return
     setIsSavingAttendance(true)
     try {
-      const activeClientIds = inscripciones.filter(i => i.estado === 'ACTIVA').map(i => i.clienteId)
-      const presentIds = activeClientIds.filter(cid => present.has(cid))
-      await attendanceApi.bulk(id, selectedDate, presentIds)
+      const regularClientIds = inscripciones.filter(i => i.estado === 'ACTIVA').map(i => i.clienteId)
+      const regularSet = new Set(regularClientIds)
+      // Recovering clients que NO están inscriptos regularmente en este turno
+      const recuperacionClientIds = recuperacionesHoy
+        .filter(r => !regularSet.has(r.clienteId))
+        .map(r => r.clienteId)
+      const allClientIds = [...regularClientIds, ...recuperacionClientIds]
+
+      const presentIds = allClientIds.filter(cid => getAttendanceState(cid) === 'presente')
+      // con_aviso solo aplica a inscriptos regulares (genera AusenciaTurno en su turno propio)
+      const conAvisoIds = regularClientIds.filter(cid => getAttendanceState(cid) === 'con_aviso')
+      await attendanceApi.bulk(id, selectedDate, presentIds, conAvisoIds)
       await fetchByShiftAndDate(id, selectedDate)
-      addToast('Asistencia guardada', 'success')
+      const msg = conAvisoIds.length > 0
+        ? `Asistencia guardada · ${conAvisoIds.length} crédito${conAvisoIds.length > 1 ? 's' : ''} generado${conAvisoIds.length > 1 ? 's' : ''}`
+        : 'Asistencia guardada'
+      addToast(msg, 'success')
     } catch {
       addToast('Error al guardar asistencia', 'error')
     } finally {
@@ -495,14 +598,7 @@ export default function ShiftDetailPage() {
     }
   }
 
-  function togglePresent(clientId: string) {
-    setPresent(prev => {
-      const next = new Set(prev)
-      if (next.has(clientId)) next.delete(clientId)
-      else next.add(clientId)
-      return next
-    })
-  }
+
 
   // ─── Loading / not found ──────────────────────────────────────────────────────
 
@@ -580,13 +676,19 @@ export default function ShiftDetailPage() {
     )
   }
 
-  const pctA = Math.min((shift.inscritosA / shift.cupoMaximoSalaA) * 100, 100)
-  const pctB = Math.min((shift.inscritosB / shift.cupoMaximoSalaB) * 100, 100)
   const activeInscrip = inscripciones.filter(i => i.estado === 'ACTIVA')
   const inscripA = activeInscrip.filter(i => i.sala === 'A')
   const inscripB = activeInscrip.filter(i => i.sala === 'B')
   const localInscripA = localInscripciones.filter(i => i.sala === 'A')
   const localInscripB = localInscripciones.filter(i => i.sala === 'B')
+
+  // Recuperandos del día que NO están ya inscriptos regularmente (van a Sala A)
+  const inscripIdSet = new Set(activeInscrip.map(i => i.clienteId))
+  const recuperandoHoy = recuperacionesHoy.filter(r => !inscripIdSet.has(r.clienteId))
+  // Cupo real de Sala A para selectedDate (inscriptos + recuperandos)
+  const realInscritosA = inscripA.length + recuperandoHoy.length
+  const pctA = Math.min((realInscritosA / shift.cupoMaximoSalaA) * 100, 100)
+  const pctB = Math.min((shift.inscritosB / shift.cupoMaximoSalaB) * 100, 100)
 
   const TABS: { value: DetailTab; label: string; badge?: number }[] = [
     { value: 'resumen',        label: 'Resumen',         badge: shift.enrolled },
@@ -631,7 +733,7 @@ export default function ShiftDetailPage() {
         {/* Top bar: dual color for A/B con difuminado en extremos */}
         <div className="relative h-[3px] w-full">
           <div
-            className={`absolute left-0 right-1/2 h-full rounded-full ${getOccupancyColor(shift.inscritosA, shift.cupoMaximoSalaA)}`}
+            className={`absolute left-0 right-1/2 h-full rounded-full ${getOccupancyColor(realInscritosA, shift.cupoMaximoSalaA)}`}
             style={{ maskImage: 'linear-gradient(to right, transparent 0%, black 25%, black 100%)' }}
           />
           <div
@@ -665,6 +767,21 @@ export default function ShiftDetailPage() {
                         {shift.days.map(d => DAY_LABELS[d]).join(' / ')}
                         {shift.recurrente && <span className="ml-2 text-[10px] font-semibold bg-primary/10 text-primary px-2 py-0.5 rounded-full">Recurrente</span>}
                       </p>
+                      {(() => {
+                        const dows = shift.days.map(d => WEEKDAY_TO_JS[d])
+                        const today = new Date(); today.setHours(0,0,0,0)
+                        let próxima: Date | null = null
+                        for (let i = 0; i <= 6; i++) {
+                          const candidate = new Date(today); candidate.setDate(today.getDate() + i)
+                          if (dows.includes(candidate.getDay())) { próxima = candidate; break }
+                        }
+                        if (!próxima) return null
+                        return (
+                          <p className="text-xs font-semibold text-gray-400 dark:text-[#6A6A7A] mt-0.5 capitalize">
+                            {format(próxima, "EEEE d 'de' MMMM", { locale: es })}
+                          </p>
+                        )
+                      })()}
                       <p className="text-sm text-[#8A8A9A] mt-1">
                         Prof. {shift.profesorNombre || '—'}
                       </p>
@@ -688,7 +805,7 @@ export default function ShiftDetailPage() {
                       </div>
                       <div className="flex-1 h-1.5 rounded-full bg-black/[0.06] dark:bg-white/[0.08] overflow-hidden">
                         <motion.div
-                          className={`h-full w-full rounded-full ${getOccupancyColor(shift.inscritosA, shift.cupoMaximoSalaA)}`}
+                          className={`h-full w-full rounded-full ${getOccupancyColor(realInscritosA, shift.cupoMaximoSalaA)}`}
                           style={{ transformOrigin: 'left' }}
                           initial={{ scaleX: 0 }}
                           animate={{ scaleX: pctA / 100 }}
@@ -696,7 +813,7 @@ export default function ShiftDetailPage() {
                         />
                       </div>
                       <span className="text-xs font-bold tabular-nums text-gray-900 dark:text-white w-14 text-right">
-                        {shift.inscritosA}/{shift.cupoMaximoSalaA}
+                        {realInscritosA}/{shift.cupoMaximoSalaA}
                       </span>
                     </div>
                     <div className="flex items-center gap-3">
@@ -913,11 +1030,18 @@ export default function ShiftDetailPage() {
           {tab === 'resumen' && (
           <motion.div key="resumen" {...tabContentVariants}>
             <div className="p-5 space-y-4">
-              {!loadingInscrip && activeInscrip.length > 0 && (
-                <p className="text-sm font-semibold text-gray-900 dark:text-white">
-                  {activeInscrip.length} inscripto{activeInscrip.length !== 1 ? 's' : ''}
-                </p>
-              )}
+              <div className="flex items-center justify-between gap-3 flex-wrap">
+                {!loadingInscrip && activeInscrip.length > 0 && (
+                  <p className="text-sm font-semibold text-gray-900 dark:text-white">
+                    {activeInscrip.length} inscripto{activeInscrip.length !== 1 ? 's' : ''}
+                  </p>
+                )}
+                {selectedDate && (
+                  <p className="text-sm font-bold text-primary capitalize ml-auto">
+                    {format(parseISO(selectedDate + 'T12:00:00'), "EEEE d 'de' MMMM", { locale: es })}
+                  </p>
+                )}
+              </div>
 
               {loadingInscrip ? (
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
@@ -939,46 +1063,79 @@ export default function ShiftDetailPage() {
                   </button>
                 </div>
               ) : (
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                  {/* Sala A */}
-                  <div>
-                    <div className="flex items-center gap-2 mb-3 pb-2.5 border-b border-blue-500/20">
-                      <span className="h-2.5 w-2.5 rounded-full bg-blue-400 shrink-0" />
-                      <h3 className="text-xs font-bold uppercase tracking-widest text-blue-500 dark:text-blue-400">Sala A</h3>
-                      <span className="ml-auto text-xs font-semibold tabular-nums text-gray-500 dark:text-[#8A8A9A]">
-                        {inscripA.length}/{shift.cupoMaximoSalaA}
-                      </span>
-                    </div>
-                    {inscripA.length === 0 ? (
-                      <p className="text-xs text-center text-[#8A8A9A] py-6">Sin clientes en Sala A</p>
-                    ) : (
-                      <div className="flex flex-col gap-2">
-                        {inscripA.map(insc => (
-                          <ResumenCard key={insc.id} insc={insc} clients={clients} sala="A" />
-                        ))}
+                (() => {
+                  const avisóIds = new Set(ausenciasHoy.map(a => a.clienteId))
+                  const totalSalaA = realInscritosA
+                  return (
+                    <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
+                      {/* Sala A */}
+                      <div>
+                        <div className="flex items-center gap-2 mb-3 pb-2.5 border-b border-blue-500/20">
+                          <span className="h-2.5 w-2.5 rounded-full bg-blue-400 shrink-0" />
+                          <h3 className="text-xs font-bold uppercase tracking-widest text-blue-500 dark:text-blue-400">Sala A</h3>
+                          <span className="ml-auto text-xs font-semibold tabular-nums text-gray-500 dark:text-[#8A8A9A]">
+                            {totalSalaA}/{shift.cupoMaximoSalaA}
+                          </span>
+                        </div>
+                        {inscripA.length === 0 && recuperandoHoy.length === 0 ? (
+                          <p className="text-xs text-center text-[#8A8A9A] py-6">Sin clientes en Sala A</p>
+                        ) : (
+                          <div className="flex flex-col gap-2">
+                            {inscripA.map(insc => (
+                              <ResumenCard key={insc.id} insc={insc} clients={clients} sala="A" aviso={avisóIds.has(insc.clienteId)} />
+                            ))}
+                            {recuperandoHoy.map(rec => (
+                              <div key={rec.id} className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 p-4 rounded-2xl border border-emerald-500/20 bg-emerald-500/[0.03] dark:bg-emerald-500/[0.04] backdrop-blur-xl hover:bg-emerald-500/[0.06] transition-all">
+                                <div className="flex items-center gap-3 min-w-0">
+                                  <div className="h-10 w-10 rounded-xl flex items-center justify-center shrink-0 bg-emerald-500/10">
+                                    <span className="text-xs font-black text-emerald-500">
+                                      {rec.cliente.nombre[0]}{rec.cliente.apellido[0]}
+                                    </span>
+                                  </div>
+                                  <div className="min-w-0">
+                                    <div className="flex items-center gap-2 flex-wrap">
+                                      <p className="text-sm font-bold text-gray-900 dark:text-white truncate">
+                                        {rec.cliente.nombre} {rec.cliente.apellido}
+                                      </p>
+                                      <span className="text-[10px] font-bold px-2 py-0.5 rounded-full shrink-0 bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border border-emerald-500/20">
+                                        Recupera hoy
+                                      </span>
+                                    </div>
+                                  </div>
+                                </div>
+                                <a
+                                  href={`/clients/${rec.clienteId}`}
+                                  className="flex items-center gap-1.5 self-end sm:self-center text-xs font-semibold px-3 py-2 rounded-xl border border-gray-200 dark:border-white/[0.08] bg-white/60 dark:bg-white/[0.04] text-gray-600 dark:text-[#8A8A9A] hover:text-gray-900 dark:hover:text-white hover:bg-white dark:hover:bg-white/[0.09] transition-all shrink-0"
+                                >
+                                  Ver perfil →
+                                </a>
+                              </div>
+                            ))}
+                          </div>
+                        )}
                       </div>
-                    )}
-                  </div>
-                  {/* Sala B */}
-                  <div>
-                    <div className="flex items-center gap-2 mb-3 pb-2.5 border-b border-purple-500/20">
-                      <span className="h-2.5 w-2.5 rounded-full bg-purple-400 shrink-0" />
-                      <h3 className="text-xs font-bold uppercase tracking-widest text-purple-500 dark:text-purple-400">Sala B</h3>
-                      <span className="ml-auto text-xs font-semibold tabular-nums text-gray-500 dark:text-[#8A8A9A]">
-                        {inscripB.length}/{shift.cupoMaximoSalaB}
-                      </span>
-                    </div>
-                    {inscripB.length === 0 ? (
-                      <p className="text-xs text-center text-[#8A8A9A] py-6">Sin clientes en Sala B</p>
-                    ) : (
-                      <div className="flex flex-col gap-2">
-                        {inscripB.map(insc => (
-                          <ResumenCard key={insc.id} insc={insc} clients={clients} sala="B" />
-                        ))}
+                      {/* Sala B */}
+                      <div>
+                        <div className="flex items-center gap-2 mb-3 pb-2.5 border-b border-purple-500/20">
+                          <span className="h-2.5 w-2.5 rounded-full bg-purple-400 shrink-0" />
+                          <h3 className="text-xs font-bold uppercase tracking-widest text-purple-500 dark:text-purple-400">Sala B</h3>
+                          <span className="ml-auto text-xs font-semibold tabular-nums text-gray-500 dark:text-[#8A8A9A]">
+                            {inscripB.length}/{shift.cupoMaximoSalaB}
+                          </span>
+                        </div>
+                        {inscripB.length === 0 ? (
+                          <p className="text-xs text-center text-[#8A8A9A] py-6">Sin clientes en Sala B</p>
+                        ) : (
+                          <div className="flex flex-col gap-2">
+                            {inscripB.map(insc => (
+                              <ResumenCard key={insc.id} insc={insc} clients={clients} sala="B" aviso={avisóIds.has(insc.clienteId)} />
+                            ))}
+                          </div>
+                        )}
                       </div>
-                    )}
-                  </div>
-                </div>
+                    </div>
+                  )
+                })()
               )}
             </div>
           </motion.div>
@@ -1231,18 +1388,14 @@ export default function ShiftDetailPage() {
           <motion.div key="asistencia" {...tabContentVariants}>
             <div className="p-5 space-y-5">
               <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 pb-4 border-b border-gray-200/50 dark:border-white/[0.06]">
-                <div className="flex items-center gap-3">
-                  <div className="flex items-center gap-2.5 bg-white/30 dark:bg-white/[0.06] backdrop-blur-xl border border-white/50 dark:border-white/[0.08] rounded-2xl px-3.5 py-2 hover:border-primary dark:hover:border-primary/50 transition-all shadow-sm">
-                    <span className="text-xs font-bold text-gray-500 dark:text-[#8A8A9A] uppercase tracking-wider">Fecha:</span>
-                    <input
-                      type="date"
-                      value={selectedDate}
-                      onChange={e => setSelectedDate(e.target.value)}
-                      className="bg-transparent border-0 p-0 text-sm font-semibold text-gray-900 dark:text-white focus:ring-0 focus:outline-none cursor-pointer [color-scheme:light] dark:[color-scheme:dark]"
-                    />
-                  </div>
+                <div className="flex flex-col gap-0.5">
+                  <span className="text-[10px] font-bold text-gray-500 dark:text-[#8A8A9A] uppercase tracking-wider">Fecha</span>
+                  {selectedDate && (
+                    <p className="text-sm font-black text-primary capitalize leading-none">
+                      {format(parseISO(selectedDate + 'T12:00:00'), "EEEE d 'de' MMMM", { locale: es })}
+                    </p>
+                  )}
                 </div>
-
                 <Button
                   onClick={saveAttendance}
                   isLoading={isSavingAttendance}
@@ -1261,62 +1414,111 @@ export default function ShiftDetailPage() {
                 </div>
               )}
 
-              {!dateError && (loadingAttendance || loadingInscrip ? (
-                <div className="space-y-3">
-                  {Array.from({ length: 6 }).map((_, i) => <Skeleton key={i} className="h-12 rounded-xl" />)}
+              {!dateError && (loadingAttendance || loadingInscrip || loadingRecuperaciones ? (
+                <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
+                  {Array.from({ length: 3 }).map((_, i) => (
+                    <div key={i} className="space-y-2">
+                      <Skeleton className="h-7 rounded-xl w-24" />
+                      {Array.from({ length: 3 }).map((_, j) => <Skeleton key={j} className="h-11 rounded-xl" />)}
+                    </div>
+                  ))}
                 </div>
               ) : (() => {
-                const presentCount = activeInscrip.filter(i => present.has(i.clienteId)).length
-                return (
-                  <>
-                    {activeInscrip.length > 0 && (
-                      <p className="text-xs text-[#8A8A9A]">
-                        {presentCount} presente{presentCount !== 1 ? 's' : ''} de {activeInscrip.length}
-                      </p>
-                    )}
-                    {activeInscrip.length === 0 ? (
-                      <EmptyState icon={Users} message="No hay clientes inscriptos activos" className="py-10" />
-                    ) : (
-                      <div className="space-y-3 p-4">
-                        {activeInscrip.map(insc => {
-                          const isPresent = present.has(insc.clienteId)
-                          const cardTheme = isPresent
-                            ? 'border-green-500/30 dark:border-green-500/20 bg-green-500/[0.04] dark:bg-green-500/[0.02] hover:bg-green-500/[0.08] dark:hover:bg-green-500/[0.04]'
-                            : 'border-red-500/30 dark:border-red-500/20 bg-red-500/[0.04] dark:bg-red-500/[0.02] hover:bg-red-500/[0.08] dark:hover:bg-red-500/[0.04]'
-                          const rightBg = isPresent
-                            ? 'bg-green-500/10 dark:bg-green-500/20 text-green-600 dark:text-green-400'
-                            : 'bg-red-500/10 dark:bg-red-500/20 text-red-600 dark:text-red-400'
-                          const lineStroke = isPresent
-                            ? 'text-green-500/30 dark:text-green-500/20'
-                            : 'text-red-500/30 dark:text-red-500/20'
+                // Entradas unificadas: inscriptos regulares + clientes que recuperan hoy
+                const regularEntries = activeInscrip.map(i => ({
+                  clienteId: i.clienteId,
+                  nombre: i.clienteNombre,
+                  sala: i.sala,
+                  esRecuperacion: false as const,
+                }))
+                const regularIds = new Set(activeInscrip.map(i => i.clienteId))
+                const recuperacionEntries = recuperacionesHoy
+                  .filter(r => !regularIds.has(r.clienteId)) // dedup si ya está inscripto
+                  .map(r => ({
+                    clienteId: r.clienteId,
+                    nombre: `${r.cliente.nombre} ${r.cliente.apellido}`,
+                    sala: 'A' as const,
+                    esRecuperacion: true as const,
+                  }))
+                const allEntries = [...regularEntries, ...recuperacionEntries]
 
-                          return (
-                            <label
-                              key={insc.id}
-                              className={`flex items-stretch rounded-2xl border transition-all duration-250 cursor-pointer overflow-hidden shadow-sm h-14 ${cardTheme}`}
-                            >
-                              <input type="checkbox" className="sr-only" checked={isPresent} onChange={() => togglePresent(insc.clienteId)} />
-                              <div className="flex-1 flex items-center px-5 gap-2 font-bold text-sm text-gray-900 dark:text-white truncate">
-                                <span className={`h-2 w-2 rounded-full shrink-0 ${insc.sala === 'A' ? 'bg-blue-400' : 'bg-purple-400'}`} />
-                                {insc.clienteNombre}
-                              </div>
-                              <div
-                                style={{ clipPath: 'polygon(24px 0, 100% 0, 100% 100%, 0 100%)' }}
-                                className={`relative w-32 sm:w-40 flex items-center justify-center font-black text-xs sm:text-sm tracking-wider uppercase shrink-0 transition-colors pl-6 -ml-6 ${rightBg}`}
-                              >
-                                <div className={`absolute left-0 top-0 bottom-0 w-6 pointer-events-none ${lineStroke}`}>
-                                  <svg className="h-full w-full" viewBox="0 0 24 100" preserveAspectRatio="none">
-                                    <line x1="0" y1="100" x2="24" y2="0" stroke="currentColor" strokeWidth="3" />
-                                  </svg>
-                                </div>
-                                <span className="relative z-10">{isPresent ? 'Presente' : 'Ausente'}</span>
-                              </div>
-                            </label>
-                          )
-                        })}
+                if (allEntries.length === 0) return (
+                  <EmptyState icon={Users} message="No hay clientes para esta fecha" className="py-10" />
+                )
+
+                const presenteList = allEntries.filter(e => getAttendanceState(e.clienteId) === 'presente')
+                const ausenteList  = allEntries.filter(e => getAttendanceState(e.clienteId) === 'ausente')
+                const conAvisoList = allEntries.filter(e => getAttendanceState(e.clienteId) === 'con_aviso')
+
+                const colDef = [
+                  {
+                    key: 'presente' as const,
+                    label: 'Presente',
+                    dot: 'bg-green-400',
+                    title: 'text-green-500 dark:text-green-400',
+                    border: dragOverAttendCol === 'presente' ? 'border-green-400/60 bg-green-500/[0.06]' : 'border-green-500/20 bg-green-500/[0.02]',
+                    emptyBorder: dragOverAttendCol === 'presente' ? 'border-green-400/50 text-green-400' : 'border-gray-200/40 dark:border-white/[0.06] text-[#8A8A9A]',
+                    clients: presenteList,
+                  },
+                  {
+                    key: 'ausente' as const,
+                    label: 'Ausente',
+                    dot: 'bg-red-400',
+                    title: 'text-red-500 dark:text-red-400',
+                    border: dragOverAttendCol === 'ausente' ? 'border-red-400/60 bg-red-500/[0.06]' : 'border-red-500/20 bg-red-500/[0.02]',
+                    emptyBorder: dragOverAttendCol === 'ausente' ? 'border-red-400/50 text-red-400' : 'border-gray-200/40 dark:border-white/[0.06] text-[#8A8A9A]',
+                    clients: ausenteList,
+                  },
+                  {
+                    key: 'con_aviso' as const,
+                    label: 'Con aviso',
+                    dot: 'bg-amber-400',
+                    title: 'text-amber-500 dark:text-amber-400',
+                    border: dragOverAttendCol === 'con_aviso' ? 'border-amber-400/60 bg-amber-500/[0.06]' : 'border-amber-500/20 bg-amber-500/[0.02]',
+                    emptyBorder: dragOverAttendCol === 'con_aviso' ? 'border-amber-400/50 text-amber-400' : 'border-gray-200/40 dark:border-white/[0.06] text-[#8A8A9A]',
+                    clients: conAvisoList,
+                  },
+                ]
+
+                return (
+                  <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
+                    {colDef.map(col => (
+                      <div
+                        key={col.key}
+                        onDragOver={e => handleAttendDragOver(e, col.key)}
+                        onDragLeave={handleAttendDragLeave}
+                        onDrop={e => handleAttendDrop(e, col.key)}
+                        className={`rounded-2xl border-2 p-3 min-h-[140px] transition-all duration-150 ${col.border}`}
+                      >
+                        <div className="flex items-center gap-2 mb-3">
+                          <span className={`h-2.5 w-2.5 rounded-full shrink-0 ${col.dot}`} />
+                          <span className={`text-xs font-bold uppercase tracking-widest ${col.title}`}>{col.label}</span>
+                          <span className="ml-auto text-xs font-semibold tabular-nums text-gray-500 dark:text-[#8A8A9A]">{col.clients.length}</span>
+                          {col.key === 'con_aviso' && (
+                            <span className="text-[10px] text-amber-400/70 font-medium">genera crédito</span>
+                          )}
+                        </div>
+                        <div className="space-y-1.5">
+                          {col.clients.map(entry => (
+                            <AttendanceDraggableCard
+                              key={entry.clienteId}
+                              clientId={entry.clienteId}
+                              nombre={entry.nombre}
+                              sala={entry.sala}
+                              esRecuperacion={entry.esRecuperacion}
+                              isDragging={draggingAttendId === entry.clienteId}
+                              onDragStart={handleAttendDragStart}
+                            />
+                          ))}
+                          {col.clients.length === 0 && (
+                            <div className={`flex items-center justify-center py-6 rounded-xl border-2 border-dashed transition-all ${col.emptyBorder}`}>
+                              <p className="text-xs">Arrastrá aquí</p>
+                            </div>
+                          )}
+                        </div>
                       </div>
-                    )}
-                  </>
+                    ))}
+                  </div>
                 )
               })())}
             </div>
@@ -1502,6 +1704,23 @@ export default function ShiftDetailPage() {
                 <div className="flex items-center gap-2">
                   <Ban size={16} className="text-red-400" />
                   <span className="text-sm font-bold text-gray-900 dark:text-white">Cancelaciones puntuales</span>
+                  {/* Tooltip info */}
+                  <div className="relative group">
+                    <button className="flex items-center justify-center h-4 w-4 rounded-full border border-gray-300 dark:border-white/20 text-gray-400 dark:text-[#8A8A9A] hover:border-red-400 hover:text-red-400 transition-colors text-[10px] font-bold leading-none">
+                      ?
+                    </button>
+                    <div className="pointer-events-none absolute left-0 top-6 z-50 w-72 opacity-0 group-hover:opacity-100 transition-opacity duration-150">
+                      <div className="rounded-2xl border border-red-500/20 bg-white dark:bg-[#1A1A1A] shadow-xl p-4 space-y-2">
+                        <p className="text-xs font-bold uppercase tracking-wider text-red-400">¿Para qué sirve?</p>
+                        <p className="text-xs text-gray-600 dark:text-[#8A8A9A] leading-relaxed">
+                          Marca que <span className="font-semibold text-gray-900 dark:text-white">este turno no se dictará en una fecha puntual</span> sin afectar los días siguientes. Útil para feriados, ausencia del profesor o cierres extraordinarios.
+                        </p>
+                        <p className="text-[11px] text-[#8A8A9A]">
+                          Para cierres de todo el gimnasio, usá Días Especiales en la sección Asistencia.
+                        </p>
+                      </div>
+                    </div>
+                  </div>
                 </div>
                 {isAdmin && (
                   <button
@@ -1613,6 +1832,8 @@ export default function ShiftDetailPage() {
           </motion.div>
           )}
 
+
+
         </AnimatePresence>
         </div>
       </div>
@@ -1632,7 +1853,7 @@ export default function ShiftDetailPage() {
 
 // ─── Sub-components ───────────────────────────────────────────────────────────
 
-function ResumenCard({ insc, clients, sala }: { insc: InscripcionEntry; clients: any[]; sala: 'A' | 'B' }) {
+function ResumenCard({ insc, clients, sala, aviso }: { insc: InscripcionEntry; clients: any[]; sala: 'A' | 'B'; aviso?: boolean }) {
   const clientData = clients.find(c => String(c.id) === String(insc.clienteId))
   const statusConfig: Record<string, { label: string; classes: string }> = {
     active:   { label: 'Activo',     classes: 'bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border border-emerald-500/20' },
@@ -1644,11 +1865,24 @@ function ResumenCard({ insc, clients, sala }: { insc: InscripcionEntry; clients:
     ? statusConfig[clientData.status]
     : { label: 'Inscripto', classes: 'bg-green-500/10 text-green-600 dark:text-green-400 border border-green-500/20' }
 
+  const avatarBg = aviso
+    ? 'bg-amber-500/15'
+    : sala === 'A' ? 'bg-blue-500/10' : 'bg-purple-500/10'
+  const avatarText = aviso
+    ? 'text-amber-500'
+    : sala === 'A' ? 'text-blue-500' : 'text-purple-500'
+  const cardBorder = aviso
+    ? 'border-amber-500/25 dark:border-amber-500/20'
+    : 'border-white/50 dark:border-white/[0.08]'
+  const cardBg = aviso
+    ? 'bg-amber-500/5 dark:bg-amber-500/[0.04]'
+    : 'bg-white/30 dark:bg-white/[0.05]'
+
   return (
-    <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 p-4 rounded-2xl border border-white/50 dark:border-white/[0.08] bg-white/30 dark:bg-white/[0.05] backdrop-blur-xl hover:bg-white/50 dark:hover:bg-white/[0.08] transition-all hover:shadow-sm">
+    <div className={`flex flex-col sm:flex-row sm:items-center justify-between gap-4 p-4 rounded-2xl border ${cardBorder} ${cardBg} backdrop-blur-xl hover:bg-white/50 dark:hover:bg-white/[0.08] transition-all hover:shadow-sm`}>
       <div className="flex items-center gap-3 min-w-0">
-        <div className={`h-10 w-10 rounded-xl flex items-center justify-center shrink-0 ${sala === 'A' ? 'bg-blue-500/10' : 'bg-purple-500/10'}`}>
-          <span className={`text-xs font-black ${sala === 'A' ? 'text-blue-500' : 'text-purple-500'}`}>
+        <div className={`h-10 w-10 rounded-xl flex items-center justify-center shrink-0 ${avatarBg}`}>
+          <span className={`text-xs font-black ${avatarText}`}>
             {insc.clienteNombre.split(' ').map(p => p[0]).slice(0, 2).join('').toUpperCase()}
           </span>
         </div>
@@ -1660,6 +1894,11 @@ function ResumenCard({ insc, clients, sala }: { insc: InscripcionEntry; clients:
             <span className={`text-[10px] font-bold px-2 py-0.5 rounded-full shrink-0 ${clientStatus.classes}`}>
               {clientStatus.label}
             </span>
+            {aviso && (
+              <span className="text-[10px] font-bold px-2 py-0.5 rounded-full shrink-0 bg-amber-500/10 text-amber-600 dark:text-amber-400 border border-amber-500/20">
+                Avisó que falta
+              </span>
+            )}
           </div>
           <div className="flex flex-wrap items-center gap-x-3 gap-y-1 mt-1.5">
             {clientData?.cuil && (
@@ -1674,10 +1913,6 @@ function ResumenCard({ insc, clients, sala }: { insc: InscripcionEntry; clients:
                 {clientData.planName}
               </span>
             )}
-            <span className="inline-flex items-center gap-1 text-[11px] text-gray-500 dark:text-[#8A8A9A]">
-              <CalendarDays size={10} className="shrink-0 opacity-60" />
-              Desde {format(new Date(insc.fechaDesde), "d MMM yyyy", { locale: es })}
-            </span>
           </div>
         </div>
       </div>
@@ -1688,6 +1923,44 @@ function ResumenCard({ insc, clients, sala }: { insc: InscripcionEntry; clients:
         Ver perfil →
       </a>
     </div>
+  )
+}
+
+function AttendanceDraggableCard({
+  clientId, nombre, sala, isDragging, onDragStart, esRecuperacion = false,
+}: {
+  clientId: string
+  nombre: string
+  sala: 'A' | 'B'
+  isDragging: boolean
+  onDragStart: (e: React.DragEvent, id: string) => void
+  esRecuperacion?: boolean
+}) {
+  return (
+    <motion.div
+      layout
+      initial={{ opacity: 0, scale: 0.97 }}
+      animate={{ opacity: isDragging ? 0.4 : 1, scale: 1 }}
+      draggable
+      onDragStart={e => onDragStart(e, clientId)}
+      className={`flex items-center gap-2 rounded-xl border px-3 py-2.5 cursor-grab active:cursor-grabbing select-none backdrop-blur-xl transition-colors ${
+        esRecuperacion
+          ? 'border-emerald-500/20 bg-emerald-500/[0.04] hover:bg-emerald-500/[0.08] dark:border-emerald-500/20 dark:bg-emerald-500/[0.05] dark:hover:bg-emerald-500/[0.09]'
+          : 'border-white/50 dark:border-white/[0.08] bg-white/30 dark:bg-white/[0.05] hover:bg-white/50 dark:hover:bg-white/[0.09]'
+      }`}
+    >
+      <GripVertical size={13} className="text-[#8A8A9A]/60 shrink-0" />
+      {esRecuperacion
+        ? <span className="h-2 w-2 rounded-full shrink-0 bg-emerald-400" />
+        : <span className={`h-2 w-2 rounded-full shrink-0 ${sala === 'A' ? 'bg-blue-400' : 'bg-purple-400'}`} />
+      }
+      <p className="flex-1 text-sm font-semibold text-gray-900 dark:text-white truncate min-w-0">{nombre}</p>
+      {esRecuperacion && (
+        <span className="text-[9px] font-bold uppercase tracking-wide text-emerald-600 dark:text-emerald-400 bg-emerald-500/10 border border-emerald-500/20 px-1.5 py-0.5 rounded-full shrink-0 whitespace-nowrap">
+          Recupera
+        </span>
+      )}
+    </motion.div>
   )
 }
 
@@ -1724,9 +1997,6 @@ function DraggableCard({
             </span>
           )}
         </div>
-        <p className="text-xs text-[#8A8A9A]">
-          Desde {format(new Date(insc.fechaDesde), "d MMM yyyy", { locale: es })}
-        </p>
       </div>
       <button
         disabled={bajandoId === insc.id}

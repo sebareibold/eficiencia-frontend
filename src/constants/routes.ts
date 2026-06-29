@@ -5,6 +5,7 @@ export const ROUTES = {
   CLIENT_NEW: '/clients/new',
   CLIENT_PROFILE: '/clients/:id',
   CLIENT_RUTINA: '/clients/:id/rutina',
+  CLIENT_AUSENCIA: '/clients/:id/ausencia',
   PAYMENTS: '/payments',
   PAYMENT_NEW: '/payments/new',
   PAYMENT_DETAIL: '/payments/:id',
