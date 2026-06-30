@@ -60,6 +60,7 @@ export interface Rutina {
   profesorId: string
   nombre: string
   descripcion?: string
+  terminologia?: string
   activa: boolean
   createdAt: string
   updatedAt: string
@@ -78,6 +79,7 @@ export interface CreateRutinaPayload {
 export interface UpdateRutinaPayload {
   nombre?: string
   descripcion?: string
+  terminologia?: string
   activa?: boolean
 }
 

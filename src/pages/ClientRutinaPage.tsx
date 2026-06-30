@@ -1351,7 +1351,7 @@ function InlineEditRutinaTable({ rutina, onCancel, onSaved, selectedSemanaId, on
   onSemanaChange: (id: string | null) => void
 }) {
   const {
-    draft, hasChanges, saving, initDraft, saveDraft, setMeta,
+    draft, hasChanges, saving, initDraft, saveDraft, setMeta, setTerminologia,
     addSemana, cloneSemana, deleteSemana, renameSemana,
     addSesion, renameSesion, setSesionNota, deleteSesion,
     addBloque, deleteBloque,
@@ -1400,6 +1400,8 @@ function InlineEditRutinaTable({ rutina, onCancel, onSaved, selectedSemanaId, on
   if (!draft) return <div className={`${glassCard} p-6`}><SkeletonRutinaPanel /></div>
 
   const activeSem = draft.semanas.find(s => s.id === selectedSemanaId) ?? draft.semanas[0]
+  const term = draft.terminologia?.trim() || 'Semana'
+  const termLetra = term.charAt(0).toUpperCase()
 
   // Mapa de ejecuciones originales para la columna Última (read-only)
   const origEjMap = new Map<string, EjercicioPlan>()
@@ -1485,18 +1487,18 @@ function InlineEditRutinaTable({ rutina, onCancel, onSaved, selectedSemanaId, on
       <div className="flex items-center gap-1.5 px-5 py-3 border-b border-white/40 dark:border-white/[0.05] flex-wrap">
         {draft.semanas.map(sem => {
           const isActive = activeSem?.id === sem.id
-          const label = sem.nombre?.trim() ? sem.nombre : `S${sem.numero}`
+          const label = sem.nombre?.trim() ? sem.nombre : `${termLetra}${sem.numero}`
           const isRen = renamingSemanaId === sem.id
           return (
             <span key={sem.id} className="flex items-center gap-0.5 shrink-0">
               {isRen ? (
                 <form
-                  onSubmit={e => { e.preventDefault(); renameSemana(sem.id, renameSemanaVal.trim() || `S${sem.numero}`); setRenamingSemanaId(null) }}
+                  onSubmit={e => { e.preventDefault(); renameSemana(sem.id, renameSemanaVal.trim() || `${termLetra}${sem.numero}`); setRenamingSemanaId(null) }}
                   className="flex items-center gap-1"
                 >
                   <input
                     autoFocus value={renameSemanaVal} onChange={e => setRenameSemanaVal(e.target.value)}
-                    onBlur={() => { renameSemana(sem.id, renameSemanaVal.trim() || `S${sem.numero}`); setRenamingSemanaId(null) }}
+                    onBlur={() => { renameSemana(sem.id, renameSemanaVal.trim() || `${termLetra}${sem.numero}`); setRenamingSemanaId(null) }}
                     className="w-16 bg-white dark:bg-white/[0.08] border border-primary/40 rounded-md px-1.5 py-0.5 text-[11px] text-saas-text dark:text-white focus:outline-none"
                   />
                   <button type="submit" className="p-0.5 rounded text-primary shrink-0"><Check className="w-3 h-3" /></button>
@@ -1534,8 +1536,18 @@ function InlineEditRutinaTable({ rutina, onCancel, onSaved, selectedSemanaId, on
           onClick={addSemana}
           className="flex items-center gap-1 px-2.5 py-1 rounded-lg text-xs text-gray-400 dark:text-white/40 hover:text-primary border border-dashed border-gray-300 dark:border-white/[0.12] hover:border-primary/40 transition-all"
         >
-          <Plus className="w-3 h-3" /> semana
+          <Plus className="w-3 h-3" /> {term.toLowerCase()}
         </button>
+        <div className="ml-auto flex items-center gap-1.5">
+          <span className="text-[10px] text-gray-400 dark:text-white/25 uppercase tracking-wider hidden sm:block">llamar:</span>
+          <input
+            value={term}
+            onChange={e => setTerminologia(e.target.value)}
+            placeholder="Semana"
+            title="Nombre de las unidades (ej: Semana, Mes, Bloque...)"
+            className="w-20 bg-transparent border border-gray-200 dark:border-white/[0.08] rounded-md px-1.5 py-0.5 text-[11px] text-gray-600 dark:text-white/55 focus:outline-none focus:border-primary/40 transition-colors"
+          />
+        </div>
       </div>
 
       {/* ── Agregar día ─────────────────────────────────────────────── */}
@@ -2334,6 +2346,10 @@ export default function ClientRutinaPage() {
                     type Ses = typeof rutina.semanas[0]['sesiones'][0]
                     type Sem = typeof rutina.semanas[0]
 
+                    const termView = rutina.terminologia?.trim() || 'Semana'
+                    const termLetraView = termView.charAt(0).toUpperCase()
+                    const termAbrevView = termView.slice(0, 3).toUpperCase()
+
                     const execSubCols = 5
 
                     const sesRS = (ses: Ses) =>
@@ -2430,7 +2446,7 @@ export default function ClientRutinaPage() {
                           Todas
                         </button>
                         {rutina.semanas.map(sem => {
-                          const label = sem.nombre?.trim() ? sem.nombre : `S${sem.numero}`
+                          const label = sem.nombre?.trim() ? sem.nombre : `${termLetraView}${sem.numero}`
                           const isActive = !isTodas && selectedSem?.id === sem.id
                           return (
                             <button
@@ -2506,7 +2522,7 @@ export default function ClientRutinaPage() {
                             <table className="w-full border-collapse text-base">
                               <thead>
                                 <tr className="border-b border-gray-200 dark:border-white/[0.06] bg-gray-50 dark:bg-[#111111]">
-                                  <th rowSpan={2} className="py-2 px-2 text-left text-xs font-semibold text-gray-600 dark:text-white/65 uppercase tracking-widest whitespace-nowrap border-r border-gray-200 dark:border-white/[0.06]">Sem</th>
+                                  <th rowSpan={2} className="py-2 px-2 text-left text-xs font-semibold text-gray-600 dark:text-white/65 uppercase tracking-widest whitespace-nowrap border-r border-gray-200 dark:border-white/[0.06]">{termAbrevView}</th>
                                   <th rowSpan={2} className="py-2 px-2 text-left text-xs font-semibold text-gray-600 dark:text-white/65 uppercase tracking-widest whitespace-nowrap border-r border-gray-200 dark:border-white/[0.06]">Día</th>
                                   <th rowSpan={2} className="py-2 px-2 text-center text-xs font-semibold text-gray-600 dark:text-white/65 uppercase tracking-widest whitespace-nowrap border-r border-gray-200 dark:border-white/[0.06]">Bloq</th>
                                   <th rowSpan={2} className="py-2 px-3 text-left text-xs font-semibold text-gray-600 dark:text-white/65 uppercase tracking-widest whitespace-nowrap border-r border-gray-200 dark:border-white/[0.06]">Ejercicio</th>

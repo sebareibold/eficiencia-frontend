@@ -77,6 +77,7 @@ type DraftState = {
 type Action =
   | { type: 'INIT'; rutina: Rutina }
   | { type: 'SET_META'; nombre: string; descripcion: string; activa: boolean }
+  | { type: 'SET_TERMINOLOGIA'; terminologia: string }
   | { type: 'ADD_SEMANA' }
   | { type: 'CLONE_SEMANA'; semanaId: string }
   | { type: 'DELETE_SEMANA'; semanaId: string }
@@ -175,6 +176,9 @@ function reducer(state: DraftState, action: Action): DraftState {
   switch (action.type) {
     case 'SET_META':
       return save({ ...d, nombre: action.nombre, descripcion: action.descripcion, activa: action.activa, _metaChanged: true })
+
+    case 'SET_TERMINOLOGIA':
+      return save({ ...d, terminologia: action.terminologia, _metaChanged: true })
 
     case 'ADD_SEMANA': {
       const numero = (d.semanas.at(-1)?.numero ?? 0) + 1
@@ -357,6 +361,7 @@ async function persistDraft(original: Rutina, draft: DraftRutina): Promise<void>
     await rutinasApi.update(draft.id, {
       nombre: draft.nombre,
       descripcion: draft.descripcion || undefined,
+      terminologia: draft.terminologia || undefined,
       activa: draft.activa,
     })
   }
@@ -517,6 +522,8 @@ export function useRutinaDraft() {
     saveDraft,
     setMeta: (nombre: string, descripcion: string, activa: boolean) =>
       dispatch({ type: 'SET_META', nombre, descripcion, activa }),
+    setTerminologia: (terminologia: string) =>
+      dispatch({ type: 'SET_TERMINOLOGIA', terminologia }),
     addSemana: () => dispatch({ type: 'ADD_SEMANA' }),
     cloneSemana: (semanaId: string) => dispatch({ type: 'CLONE_SEMANA', semanaId }),
     deleteSemana: (semanaId: string) => dispatch({ type: 'DELETE_SEMANA', semanaId }),
