@@ -17,7 +17,7 @@ import { membresiasClienteApi } from '../api/membresiasCliente.api'
 import { membershipsApi } from '../api/memberships.api'
 import { useUiStore } from '../store/uiStore'
 import { ROUTES } from '../constants/routes'
-import { MODALIDAD_LABELS, MODALIDADES } from '../types/membership.types'
+import { MODALIDAD_LABELS } from '../types/membership.types'
 import type { MembresiaCliente, Plan, Modalidad } from '../types/membership.types'
 import type { Client } from '../types/client.types'
 
@@ -65,9 +65,7 @@ const MODALIDAD_TO_METHOD: Record<string, 'cash' | 'transfer' | 'card'> = {
   MEMBRESIA_6_MESES:     'card',
 }
 
-const MEMB_ESTADO_LABEL: Record<string, string> = {
-  ACTIVA: 'Activa', PENDIENTE: 'Programada', VENCIDA: 'Expirada', CANCELADA: 'Cancelada',
-}
+
 
 // ── Estilos compartidos ───────────────────────────────────────────────────────
 
@@ -119,7 +117,6 @@ export default function PaymentNewPage() {
   const [submitError,    setSubmitError]    = useState<string | null>(null)
 
   // ── Selección de plan / modalidad (Step 2) ───────────────────────────────
-  const [wasJustCreated,    setWasJustCreated]    = useState(false)
   const [plans,             setPlans]             = useState<Plan[]>([])
   const [loadingPlans,      setLoadingPlans]      = useState(false)
   const [selectedPlanId,    setSelectedPlanId]    = useState('')
@@ -193,7 +190,6 @@ export default function PaymentNewPage() {
     setSubmitError(null)
     setShowNewClient(false)
     resetClient()
-    setWasJustCreated(false)
     setSelectedPlanId('')
     setSelectedModalidad('')
     setDisplayAmount('')
@@ -209,7 +205,6 @@ export default function PaymentNewPage() {
         email: data.email || undefined,
       })
       addToast(`Cliente ${created.name} ${created.lastName} creado`, 'success')
-      setWasJustCreated(true)
       pickClient(created)
     } catch {
       addToast('Error al crear el cliente', 'error')
@@ -234,8 +229,10 @@ export default function PaymentNewPage() {
     setDisplayAmount(Number(raw).toLocaleString('es-AR'))
     setValue('amount', raw, { shouldValidate: true })
     setValue('method', MODALIDAD_TO_METHOD[modalidad] ?? 'transfer', { shouldValidate: true })
+    // Solo vincular membresías realmente vigentes (fecha de vencimiento >= hoy)
     const match = membresias.find(
-      m => m.planId === selectedPlanId && m.modalidad === modalidad && m.estado === 'ACTIVA'
+      m => m.planId === selectedPlanId && m.modalidad === modalidad &&
+           m.estado === 'ACTIVA' && m.fechaVencimiento.slice(0, 10) >= today
     )
     setMembresiaId(match?.id ?? '')
   }
@@ -248,8 +245,13 @@ export default function PaymentNewPage() {
     try {
       let finalMembresiaId = membresiaId
 
-      // Para clientes nuevos sin membresía previa: crearla con el plan/modalidad elegido
-      if (wasJustCreated && selectedPlanId && selectedModalidad && !membresiaId) {
+      // Crear nueva membresía si no hay una vigente para ese plan+modalidad
+      // (aplica tanto a clientes nuevos como a clientes con membresía vencida)
+      const tieneVigente = membresias.some(
+        m => m.planId === selectedPlanId && m.modalidad === selectedModalidad &&
+             m.estado === 'ACTIVA' && m.fechaVencimiento.slice(0, 10) >= today
+      )
+      if (selectedPlanId && selectedModalidad && !tieneVigente) {
         const nueva = await membresiasClienteApi.create({
           clienteId: String(selectedClient.id),
           planId: selectedPlanId,
@@ -582,7 +584,10 @@ export default function PaymentNewPage() {
   // ── Contenido Paso 2: detalles del pago ───────────────────────────────────
   function Step2() {
     const selectedPlan     = plans.find(p => p.id === selectedPlanId)
-    const activeMembPlanId = membresias.find(m => m.estado === 'ACTIVA')?.planId ?? ''
+    // Solo contar como "actual" membresías que son vigentes por fecha real
+    const activeMembPlanId = membresias.find(
+      m => m.estado === 'ACTIVA' && m.fechaVencimiento.slice(0, 10) >= today
+    )?.planId ?? ''
 
     return (
       <div className="space-y-5">
@@ -688,7 +693,15 @@ export default function PaymentNewPage() {
                   </label>
                   <div className="grid grid-cols-2 gap-2">
                     {selectedPlan.tarifas.map(tarifa => {
-                      const isActive = selectedModalidad === tarifa.modalidad
+                      const isActive       = selectedModalidad === tarifa.modalidad
+                      const tieneVigBadge  = membresias.some(
+                        m => m.planId === selectedPlanId && m.modalidad === tarifa.modalidad &&
+                             m.estado === 'ACTIVA' && m.fechaVencimiento.slice(0, 10) >= today
+                      )
+                      const membVencida = !tieneVigBadge && membresias.find(
+                        m => m.planId === selectedPlanId && m.modalidad === tarifa.modalidad &&
+                             (m.estado === 'VENCIDA' || (m.estado === 'ACTIVA' && m.fechaVencimiento.slice(0, 10) < today))
+                      )
                       return (
                         <button
                           key={tarifa.modalidad}
@@ -705,6 +718,11 @@ export default function PaymentNewPage() {
                           <p className={`text-base font-black mt-0.5 ${isActive ? 'text-gray-900' : 'text-gray-900 dark:text-white'}`}>
                             ${tarifa.precio.toLocaleString('es-AR')}
                           </p>
+                          {membVencida && (
+                            <p className={`text-[10px] font-semibold mt-1 ${isActive ? 'text-gray-700' : 'text-amber-500 dark:text-amber-400'}`}>
+                              Vencida — período nuevo
+                            </p>
+                          )}
                         </button>
                       )
                     })}
