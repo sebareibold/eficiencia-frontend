@@ -908,7 +908,16 @@ function PermisosTab() {
 
 // ─── Tipos unificados de solicitud ────────────────────────────────────────────
 
-type ResetRequest = { id: string; usuario: { nombre: string; email: string }; createdAt: string; estado: string }
+type ResetRequest = {
+  id: string
+  usuario: { nombre: string; email: string }
+  createdAt: string
+  estado: string
+  expiresAt: string
+  used: boolean
+  aprobadaAt: string | null
+  completadaAt: string | null
+}
 
 type UnifiedItem =
   | { tipo: 'acceso'; data: SolicitudEntry }
@@ -999,13 +1008,50 @@ function UnifiedSolicitudCard({ item, actioningId, onAprobar, onRechazar, onElim
             </div>
           )}
 
+          {/* Fecha de solicitud */}
           <div className="flex items-center gap-2">
-            <span className="text-[11px] text-[#8A8A9A] w-16 shrink-0">Fecha</span>
+            <span className="text-[11px] text-[#8A8A9A] w-16 shrink-0">Solicitada</span>
             <span className="text-[11px] text-gray-600 dark:text-gray-400">
               {format(new Date(createdAt), "d MMM yyyy · HH:mm", { locale: es })}
             </span>
           </div>
 
+          {/* Campos específicos de reset — aprobación y estado del cambio */}
+          {isReset && (() => {
+            const r = item.data as ResetRequest
+            const aprobadaAt  = r.aprobadaAt  ? new Date(r.aprobadaAt)  : null
+            const completadaAt = r.completadaAt ? new Date(r.completadaAt) : null
+            const expirado = !r.used && r.estado === 'APROBADO' && new Date(r.expiresAt) < new Date()
+
+            return (<>
+              {aprobadaAt && (
+                <div className="flex items-center gap-2">
+                  <span className="text-[11px] text-[#8A8A9A] w-16 shrink-0">Aprobada</span>
+                  <span className="text-[11px] text-gray-600 dark:text-gray-400">
+                    {format(aprobadaAt, "d MMM yyyy · HH:mm", { locale: es })}
+                  </span>
+                </div>
+              )}
+              <div className="flex items-center gap-2">
+                <span className="text-[11px] text-[#8A8A9A] w-16 shrink-0">Cambio</span>
+                {completadaAt ? (
+                  <span className="inline-flex items-center gap-1 text-[11px] font-bold text-emerald-600 dark:text-emerald-400">
+                    <CheckCircle2 size={10} /> {format(completadaAt, "d MMM yyyy · HH:mm", { locale: es })}
+                  </span>
+                ) : expirado ? (
+                  <span className="text-[11px] font-bold text-orange-500 dark:text-orange-400">Link vencido sin usar</span>
+                ) : r.estado === 'APROBADO' ? (
+                  <span className="text-[11px] text-gray-400 italic">Link enviado, esperando...</span>
+                ) : r.estado === 'RECHAZADO' ? (
+                  <span className="text-[11px] font-bold text-red-500 dark:text-red-400">No realizado</span>
+                ) : (
+                  <span className="text-[11px] text-gray-400 italic">Pendiente de aprobación</span>
+                )}
+              </div>
+            </>)
+          })()}
+
+          {/* Fecha revisada — solo acceso */}
           {!isReset && (item.data as SolicitudEntry).revisadaAt && (
             <div className="flex items-center gap-2">
               <span className="text-[11px] text-[#8A8A9A] w-16 shrink-0">Revisada</span>

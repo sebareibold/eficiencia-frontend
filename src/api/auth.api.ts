@@ -62,7 +62,16 @@ export const authApi = {
   resetPassword: (token: string, nuevaPassword: string) =>
     api.post('/auth/reset-password', { token, nuevaPassword }),
 
-  getResetRequests: (): Promise<{ id: string; usuario: { nombre: string; email: string }; createdAt: string; estado: string }[]> =>
+  getResetRequests: (): Promise<{
+    id: string
+    usuario: { nombre: string; email: string }
+    createdAt: string
+    estado: string
+    expiresAt: string
+    used: boolean
+    aprobadaAt: string | null
+    completadaAt: string | null
+  }[]> =>
     api.get('/auth/reset-requests').then(r => r.data),
 
   aprobarReset: (id: string) =>
