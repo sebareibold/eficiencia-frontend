@@ -19,6 +19,7 @@ export const ROUTES = {
   DASHBOARD: '/dashboard',
   USERS: '/usuarios',
   USER_NEW: '/usuarios/new',
+  USER_DETAIL: '/usuarios/:id',
   SETTINGS: '/settings',
   EXERCISES: '/exercises',
   EXERCISE_NEW: '/exercises/new',

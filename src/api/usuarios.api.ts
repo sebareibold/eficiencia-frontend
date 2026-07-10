@@ -38,6 +38,9 @@ export const usuariosApi = {
   getAll: (): Promise<AppUser[]> =>
     api.get('/usuarios').then(r => toArray(r.data)),
 
+  getById: (id: string): Promise<AppUser> =>
+    api.get(`/usuarios/${id}`).then(r => r.data),
+
   create: (dto: CreateUserDto): Promise<AppUser> =>
     api.post('/usuarios', dto).then(r => r.data),
 

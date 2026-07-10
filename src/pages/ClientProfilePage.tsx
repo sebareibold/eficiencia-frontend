@@ -1234,7 +1234,7 @@ export default function ClientProfilePage() {
                   )}
                   {can('clients', 'delete') && !isEditing && (
                     <button
-                      onClick={() => setShowDeleteModal(true)}
+                      onClick={handleDeleteClient}
                       className="flex items-center gap-1.5 text-xs font-semibold px-3 py-1.5 rounded-xl border border-red-200 dark:border-red-500/20 bg-red-50 dark:bg-red-500/[0.06] text-red-500 hover:bg-red-100 dark:hover:bg-red-500/[0.12] transition-all"
                     >
                       <Trash2 size={12} />

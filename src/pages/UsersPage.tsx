@@ -24,7 +24,6 @@ import Button from '../components/ui/Button'
 import Modal from '../components/ui/Modal'
 import ConfirmDialog from '../components/ui/ConfirmDialog'
 import Input from '../components/ui/Input'
-import Select from '../components/ui/Select'
 import Skeleton from '../components/ui/Skeleton'
 
 // ─── Tipos y constantes ───────────────────────────────────────────────────────
@@ -66,18 +65,6 @@ const ROL_DESC: Record<string, string> = {
   CLIENTE_COMUN: 'Cuenta común para ver rutinas',
 }
 
-// ─── Schemas ──────────────────────────────────────────────────────────────────
-
-const editSchema = z.object({
-  nombre:   z.string().min(1, 'El nombre es requerido'),
-  email:    z.string().email('Email inválido'),
-  password: z.string().min(6, 'Mínimo 6 caracteres').or(z.literal('')).optional(),
-  rol:      z.enum(['ADMINISTRADOR', 'STAFF', 'PROFESOR']),
-  activo:   z.boolean().optional(),
-})
-
-type EditValues = z.infer<typeof editSchema>
-
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 
 const glassCard = 'rounded-3xl border border-white/50 dark:border-white/[0.08] bg-white/30 dark:bg-black/30 backdrop-blur-3xl shadow-[0_8px_32px_rgba(0,0,0,0.04)] dark:shadow-[0_8px_32px_rgba(0,0,0,0.25)]'
@@ -112,8 +99,6 @@ function UsuariosTab() {
   const [loading, setLoading]           = useState(true)
   const [search, setSearch]             = useState('')
   const [rolFilter, setRolFilter]       = useState<UserRole | 'all'>('all')
-  const [editTarget, setEditTarget]     = useState<AppUser | null>(null)
-  const [isSubmitting, setIsSubmitting] = useState(false)
   const [deletingId, setDeletingId]     = useState<string | null>(null)
   const [deleteTarget, setDeleteTarget] = useState<AppUser | null>(null)
 
@@ -127,33 +112,12 @@ function UsuariosTab() {
 
   useEffect(() => { load() }, [load])
 
-  const { register: regEdit, handleSubmit: hsEdit, formState: { errors: errEdit }, reset: resetEdit } = useForm<EditValues>({
-    resolver: zodResolver(editSchema),
-  })
-
   const filtered = users.filter(u => {
     const q = search.toLowerCase()
     const matchSearch = !q || u.nombre.toLowerCase().includes(q) || u.email.toLowerCase().includes(q)
     const matchRol = rolFilter === 'all' || u.rol === rolFilter
     return matchSearch && matchRol
   })
-
-  async function onEdit(data: EditValues) {
-    if (!editTarget) return
-    setIsSubmitting(true)
-    try {
-      const dto: any = { nombre: data.nombre, email: data.email, rol: data.rol, activo: data.activo }
-      if (data.password) dto.password = data.password
-      const updated = await usuariosApi.update(editTarget.id, dto)
-      setUsers(prev => prev.map(u => u.id === updated.id ? updated : u))
-      addToast('Usuario actualizado', 'success')
-      setEditTarget(null)
-    } catch (err: any) {
-      addToast(err?.response?.data?.message ?? 'Error al actualizar', 'error')
-    } finally {
-      setIsSubmitting(false)
-    }
-  }
 
   async function onDelete(user: AppUser) {
     setDeletingId(user.id)
@@ -167,11 +131,6 @@ function UsuariosTab() {
       setDeletingId(null)
       setDeleteTarget(null)
     }
-  }
-
-  function openEdit(u: AppUser) {
-    setEditTarget(u)
-    resetEdit({ nombre: u.nombre, email: u.email, rol: u.rol, activo: u.activo, password: '' })
   }
 
   const DEV_EMAIL = 'sebastianreibold2003@gmail.com'
@@ -263,7 +222,7 @@ function UsuariosTab() {
                   </div>
                 </div>
                 <div className="flex items-center gap-1 shrink-0">
-                  <button onClick={() => openEdit(u)} className="rounded-lg p-1.5 text-gray-400 hover:bg-gray-100 dark:hover:bg-white/[0.08] hover:text-gray-700 dark:hover:text-white transition-all">
+                  <button onClick={() => navigate(ROUTES.USER_DETAIL.replace(':id', u.id))} className="rounded-lg p-1.5 text-gray-400 hover:bg-gray-100 dark:hover:bg-white/[0.08] hover:text-gray-700 dark:hover:text-white transition-all">
                     <Edit2 size={14} />
                   </button>
                   {u.id !== currentUser?.id && u.rol !== 'ADMINISTRADOR' && (
@@ -328,7 +287,7 @@ function UsuariosTab() {
                     <td className="px-5 py-3.5">
                       <div className="flex items-center justify-end gap-1">
                         <button
-                          onClick={() => openEdit(u)}
+                          onClick={() => navigate(ROUTES.USER_DETAIL.replace(':id', u.id))}
                           className="rounded-lg p-1.5 text-gray-400 hover:bg-gray-100 dark:hover:bg-white/[0.08] hover:text-gray-700 dark:hover:text-white transition-all"
                         >
                           <Edit2 size={14} />
@@ -360,27 +319,6 @@ function UsuariosTab() {
           {Array.from({ length: 4 }).map((_, i) => <Skeleton key={i} className="h-20 rounded-2xl" />)}
         </div>
       )}
-
-      <Modal isOpen={!!editTarget} onClose={() => setEditTarget(null)} title="Editar usuario" size="md">
-        <form onSubmit={hsEdit(onEdit)} className="space-y-4">
-          <Input label="Nombre *" error={errEdit.nombre?.message} {...regEdit('nombre')} />
-          <Input label="Email *" type="email" error={errEdit.email?.message} {...regEdit('email')} />
-          <Input label="Nueva contraseña" type="password" placeholder="Dejar vacío para no cambiar" error={errEdit.password?.message} {...regEdit('password')} />
-          <Select label="Rol *" error={errEdit.rol?.message} options={[
-            { value: 'STAFF',         label: 'Staff' },
-            { value: 'PROFESOR',      label: 'Profesor' },
-            { value: 'ADMINISTRADOR', label: 'Administrador' },
-          ]} {...regEdit('rol')} />
-          <label className="flex items-center gap-3 cursor-pointer">
-            <input type="checkbox" {...regEdit('activo')} className="h-4 w-4 rounded accent-primary" />
-            <span className="text-sm font-medium text-gray-700 dark:text-gray-300">Usuario activo</span>
-          </label>
-          <div className="flex justify-end gap-2 pt-2">
-            <Button variant="ghost" type="button" onClick={() => setEditTarget(null)}>Cancelar</Button>
-            <Button type="submit" isLoading={isSubmitting}>Guardar cambios</Button>
-          </div>
-        </form>
-      </Modal>
 
       <ConfirmDialog
         isOpen={!!deleteTarget}
