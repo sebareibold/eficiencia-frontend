@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useRef } from 'react'
 import { useNavigate, useSearchParams } from 'react-router-dom'
 import { useQueryClient } from '@tanstack/react-query'
 import { motion } from 'framer-motion'
@@ -152,6 +152,12 @@ function ClientList({
   )
 }
 
+function addHour(time: string): string {
+  if (!time) return ''
+  const [h, m] = time.split(':').map(Number)
+  return `${String((h + 1) % 24).padStart(2, '0')}:${String(m).padStart(2, '0')}`
+}
+
 // ── Página principal ──────────────────────────────────────────────────────────
 
 export default function ShiftNewPage() {
@@ -187,6 +193,13 @@ export default function ShiftNewPage() {
   const formRecurrente = watch('recurrente') ?? true
   const clientIdsA     = watch('clientIdsA') || []
   const clientIdsB     = watch('clientIdsB') || []
+  const startTimeValue = watch('startTime')
+
+  const isFirstRender = useRef(true)
+  useEffect(() => {
+    if (isFirstRender.current) { isFirstRender.current = false; return }
+    if (startTimeValue) setValue('endTime', addHour(startTimeValue), { shouldValidate: true })
+  }, [startTimeValue]) // eslint-disable-line react-hooks/exhaustive-deps
 
   useEffect(() => {
     professorsApi.getAll()
@@ -300,8 +313,8 @@ export default function ShiftNewPage() {
 
             {/* Horario */}
             <div className="grid grid-cols-2 gap-4">
-              <Input label="Hora inicio *" type="time" error={errors.startTime?.message} {...register('startTime')} />
-              <Input label="Hora fin *"    type="time" error={errors.endTime?.message}   {...register('endTime')} />
+              <Input label="Hora inicio *" type="time" lang="es" error={errors.startTime?.message} {...register('startTime')} />
+              <Input label="Hora fin *"    type="time" lang="es" error={errors.endTime?.message}   {...register('endTime')} />
             </div>
 
             {/* Cupos */}
