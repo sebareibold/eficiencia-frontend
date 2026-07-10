@@ -27,6 +27,37 @@ function processQueue(error: unknown, token: string | null) {
 
 const SERVER_DOWN_STATUSES = [502, 503, 504]
 
+const MODULO_LABELS: Record<string, string> = {
+  clients:      'clientes',
+  payments:     'pagos',
+  shifts:       'turnos',
+  attendance:   'asistencia',
+  expenses:     'gastos',
+  memberships:  'membresías',
+  dashboard:    'el dashboard',
+  users:        'usuarios',
+  rutinas:      'rutinas',
+  exercises:    'ejercicios',
+  plantillas:   'plantillas',
+  reposiciones: 'reposiciones',
+}
+
+const ACCION_LABELS: Record<string, string> = {
+  read:   'ver',
+  create: 'crear',
+  update: 'editar',
+  delete: 'eliminar',
+  mark:   'marcar',
+}
+
+function buildPermisoMessage(modulo?: string, accion?: string): string {
+  if (!modulo || !accion) return 'No tenés permisos para realizar esta acción'
+  if (accion === 'mark') return 'No tenés permisos para marcar asistencia'
+  const moduloLabel = MODULO_LABELS[modulo] ?? modulo
+  const accionLabel = ACCION_LABELS[accion] ?? accion
+  return `No tenés permisos para ${accionLabel} ${moduloLabel}`
+}
+
 api.interceptors.response.use(
   (response) => {
     // Si había un error de servidor, lo limpiamos al recibir cualquier respuesta exitosa
@@ -50,6 +81,13 @@ api.interceptors.response.use(
     // Sin respuesta (ECONNREFUSED, timeout de red) o gateway errors → servidor caído
     if (!error.response || SERVER_DOWN_STATUSES.includes(error.response.status)) {
       useUiStore.getState().setServerDown(true)
+    }
+
+    if (error.response?.status === 403) {
+      const { modulo, accion } = (error.response.data ?? {}) as { modulo?: string; accion?: string }
+      const msg = buildPermisoMessage(modulo, accion)
+      console.error('[403 Forbidden]', { modulo, accion, url: originalRequest?.url })
+      useUiStore.getState().addToast(msg, 'error', 6000)
     }
 
     if (error.response?.status === 401 && !originalRequest._retry && !originalRequest.url?.includes('/auth/login')) {
