@@ -33,6 +33,9 @@ export default function Navbar() {
 
   const [mobileOpen, setMobileOpen] = useState(false)
   const [isDropdownOpen, setIsDropdownOpen] = useState(false)
+  const [showProfileCard, setShowProfileCard] = useState(false)
+  const [profileCardOffset, setProfileCardOffset] = useState(0)
+  const profileCardRef = useRef<HTMLDivElement>(null)
 
   const handleLogout = useCallback(async () => {
     try { await authApi.logout() } catch { /* ignorar errores de red */ }
@@ -87,6 +90,14 @@ export default function Navbar() {
     if (containerRef.current) obs.observe(containerRef.current)
     return () => obs.disconnect()
   }, [visibleTabs.length])
+
+  // ─── Profile card viewport clamping ───────────────────────────────────────
+  useLayoutEffect(() => {
+    if (!showProfileCard || !profileCardRef.current) return
+    const rect = profileCardRef.current.getBoundingClientRect()
+    const overflow = rect.right - (window.innerWidth - 8)
+    setProfileCardOffset(overflow > 0 ? -overflow : 0)
+  }, [showProfileCard])
 
   // ─── Close handlers ────────────────────────────────────────────────────────
   useEffect(() => {
@@ -322,8 +333,67 @@ export default function Navbar() {
             >
               <LogOut size={16} strokeWidth={2.5} />
             </button>
-            <div className="h-9 w-9 rounded-full border-2 border-white bg-white flex items-center justify-center text-xs font-bold text-gray-700 shadow-sm ml-2">
-              {initials}
+            <div
+              className="relative ml-2"
+              onMouseEnter={() => setShowProfileCard(true)}
+              onMouseLeave={() => setShowProfileCard(false)}
+            >
+              <div className="h-9 w-9 rounded-full border-2 border-white bg-white flex items-center justify-center text-xs font-bold text-gray-700 shadow-sm cursor-default select-none">
+                {initials}
+              </div>
+
+              <AnimatePresence>
+                {showProfileCard && (
+                  <div
+                    ref={profileCardRef}
+                    className="absolute top-full left-1/2 mt-3 z-50"
+                    style={{ transform: `translateX(calc(-50% + ${profileCardOffset}px))` }}
+                  >
+                  <motion.div
+                    initial={{ opacity: 0, y: 10, scale: 0.96 }}
+                    animate={{ opacity: 1, y: 0, scale: 1 }}
+                    exit={{ opacity: 0, y: 10, scale: 0.96 }}
+                    transition={{ duration: 0.2, ease: [0.23, 1, 0.32, 1] }}
+                    className="w-56 rounded-3xl bg-white/40 dark:bg-black/40 backdrop-blur-3xl border border-white/60 dark:border-white/10 shadow-[0_20px_60px_rgba(0,0,0,0.12),0_0_0_1px_rgba(255,255,255,0.3)] dark:shadow-[0_20px_60px_rgba(0,0,0,0.6),0_0_0_1px_rgba(255,255,255,0.05)] overflow-hidden"
+                  >
+                    {/* Franja de acento superior */}
+                    <div className="h-1 w-full bg-gradient-to-r from-primary/60 via-primary to-primary/60" />
+
+                    <div className="flex flex-col items-center gap-3 text-center p-5 pt-4">
+                      {/* Avatar con glow */}
+                      <div className="relative">
+                        <div className="absolute inset-0 rounded-full bg-primary/30 blur-md scale-110" />
+                        <div className="relative h-16 w-16 rounded-full bg-white/80 dark:bg-white/10 backdrop-blur-sm border-2 border-white/80 dark:border-white/20 flex items-center justify-center text-xl font-black text-gray-800 dark:text-white shadow-[0_8px_24px_rgba(0,0,0,0.12)]">
+                          {initials}
+                        </div>
+                      </div>
+
+                      {/* Nombre */}
+                      <div className="space-y-2">
+                        <p className="text-sm font-extrabold text-gray-900 dark:text-white leading-tight tracking-tight">
+                          {user?.name} {user?.lastName}
+                        </p>
+                        {/* Badge rol */}
+                        <span className="inline-flex items-center px-3 py-1 rounded-full text-[11px] font-bold bg-primary text-gray-900 shadow-[0_2px_8px_rgba(251,198,8,0.4)]">
+                          {user?.email === 'sebastianreibold2003@gmail.com'
+                            ? 'Desarrollador'
+                            : isAdmin
+                              ? 'Administrador'
+                              : user?.role === 'profesor'
+                                ? 'Profesor'
+                                : 'Staff'}
+                        </span>
+                      </div>
+
+                      {/* Email */}
+                      <p className="text-[11px] text-gray-400 dark:text-gray-500 truncate w-full">
+                        {user?.email}
+                      </p>
+                    </div>
+                  </motion.div>
+                  </div>
+                )}
+              </AnimatePresence>
             </div>
           </div>
         </div>

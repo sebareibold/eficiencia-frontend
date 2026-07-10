@@ -84,10 +84,14 @@ api.interceptors.response.use(
     }
 
     if (error.response?.status === 403) {
-      const { modulo, accion } = (error.response.data ?? {}) as { modulo?: string; accion?: string }
-      const msg = buildPermisoMessage(modulo, accion)
-      console.error('[403 Forbidden]', { modulo, accion, url: originalRequest?.url })
-      useUiStore.getState().addToast(msg, 'error', 6000)
+      const method = (originalRequest?.method ?? '').toUpperCase()
+      const isMutation = ['POST', 'PATCH', 'PUT', 'DELETE'].includes(method)
+      if (isMutation) {
+        const { modulo, accion } = (error.response.data ?? {}) as { modulo?: string; accion?: string }
+        const msg = buildPermisoMessage(modulo, accion)
+        console.error('[403 Forbidden]', { modulo, accion, url: originalRequest?.url })
+        useUiStore.getState().addToast(msg, 'error', 6000)
+      }
     }
 
     if (error.response?.status === 401 && !originalRequest._retry && !originalRequest.url?.includes('/auth/login')) {

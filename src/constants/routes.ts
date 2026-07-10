@@ -32,4 +32,5 @@ export const ROUTES = {
   RUTINA_CREAR: '/rutinas/crear',
   SECURITY: '/security',
   MANUAL: '/settings/manual',
+  RESET_PASSWORD: '/reset-password',
 } as const

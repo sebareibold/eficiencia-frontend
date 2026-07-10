@@ -15,6 +15,7 @@ import { es } from 'date-fns/locale'
 import { usuariosApi, type AppUser, type UserRole } from '../api/usuarios.api'
 import { permisosApi, type PermisoEntry } from '../api/permisos.api'
 import { solicitudesApi, type SolicitudEntry } from '../api/solicitudes.api'
+import { authApi } from '../api/auth.api'
 import { useUiStore } from '../store/uiStore'
 import { useAuthStore } from '../store/authStore'
 import { useSolicitudesStore } from '../store/solicitudesStore'
@@ -905,25 +906,37 @@ function PermisosTab() {
   )
 }
 
-// ─── Solicitud Card (forma de hoja/pedido) ────────────────────────────────────
+// ─── Tipos unificados de solicitud ────────────────────────────────────────────
 
-interface SolicitudCardProps {
-  s: SolicitudEntry
+type ResetRequest = { id: string; usuario: { nombre: string; email: string }; createdAt: string; estado: string }
+
+type UnifiedItem =
+  | { tipo: 'acceso'; data: SolicitudEntry }
+  | { tipo: 'reset';  data: ResetRequest }
+
+// ─── Unified Solicitud Card ────────────────────────────────────────────────────
+
+interface UnifiedCardProps {
+  item: UnifiedItem
   actioningId: string | null
   onAprobar:  (id: string) => void
   onRechazar: (id: string) => void
   onEliminar: (id: string) => void
 }
 
-function SolicitudCard({ s, actioningId, onAprobar, onRechazar, onEliminar }: SolicitudCardProps) {
-  const isPending   = s.estado === 'PENDIENTE'
-  const isActioning = actioningId === s.id
+function UnifiedSolicitudCard({ item, actioningId, onAprobar, onRechazar, onEliminar }: UnifiedCardProps) {
+  const isReset   = item.tipo === 'reset'
+  const id        = item.data.id
+  const nombre    = isReset ? (item.data as ResetRequest).usuario.nombre : (item.data as SolicitudEntry).nombre
+  const email     = isReset ? (item.data as ResetRequest).usuario.email  : (item.data as SolicitudEntry).email
+  const createdAt = item.data.createdAt
+  const estado    = isReset ? (item.data as ResetRequest).estado : (item.data as SolicitudEntry).estado
+  const isPending = estado === 'PENDIENTE'
+  const isActioning = actioningId === id
 
   const strip = isPending
     ? 'bg-amber-400'
-    : s.estado === 'APROBADO'
-      ? 'bg-emerald-500'
-      : 'bg-red-500'
+    : estado === 'APROBADO' ? 'bg-emerald-500' : 'bg-red-500'
 
   const avatarCls = isPending
     ? 'bg-amber-500/15 text-amber-600 dark:text-amber-400'
@@ -932,64 +945,84 @@ function SolicitudCard({ s, actioningId, onAprobar, onRechazar, onEliminar }: So
   return (
     <div className={`flex flex-col rounded-2xl border border-white/50 dark:border-white/[0.08] bg-white/30 dark:bg-white/[0.04] backdrop-blur-xl shadow-[0_8px_32px_rgba(0,0,0,0.04)] dark:shadow-[0_8px_32px_rgba(0,0,0,0.25)] overflow-hidden transition-opacity ${!isPending ? 'opacity-65 hover:opacity-100' : ''}`}>
 
-      {/* Tira de color superior — da el efecto de "pedido/hoja" */}
+      {/* Tira de color superior */}
       <div className={`h-1.5 w-full ${strip}`} />
 
       {/* Cuerpo */}
       <div className="flex-1 p-5 space-y-3.5">
 
-        {/* Avatar + nombre + badge de estado (procesadas) */}
+        {/* Avatar + nombre + badge estado (procesadas) */}
         <div className="flex items-start justify-between gap-2">
           <div className="flex items-center gap-3 min-w-0">
             <div className={`h-10 w-10 rounded-xl flex items-center justify-center shrink-0 text-sm font-black ${avatarCls}`}>
-              {s.nombre.charAt(0).toUpperCase()}
+              {nombre.charAt(0).toUpperCase()}
             </div>
             <div className="min-w-0">
-              <p className="font-bold text-sm text-gray-900 dark:text-white leading-tight truncate">{s.nombre}</p>
-              <p className="text-xs text-[#8A8A9A] mt-0.5 truncate">{s.email}</p>
+              <p className="font-bold text-sm text-gray-900 dark:text-white leading-tight truncate">{nombre}</p>
+              <p className="text-xs text-[#8A8A9A] mt-0.5 truncate">{email}</p>
             </div>
           </div>
           {!isPending && (
-            <span className={`inline-flex items-center rounded-full px-2 py-0.5 text-[11px] font-bold shrink-0 ${SOLICITUD_ESTADO_BADGE[s.estado]}`}>
-              {SOLICITUD_ESTADO_LABEL[s.estado]}
+            <span className={`inline-flex items-center rounded-full px-2 py-0.5 text-[11px] font-bold shrink-0 ${SOLICITUD_ESTADO_BADGE[estado]}`}>
+              {SOLICITUD_ESTADO_LABEL[estado]}
             </span>
           )}
         </div>
 
-        {/* Separador punteado — refuerza la estética de documento */}
+        {/* Separador punteado */}
         <div className="border-t border-dashed border-white/40 dark:border-white/[0.08]" />
 
-        {/* Datos del pedido */}
+        {/* Datos */}
         <div className="space-y-2">
+
+          {/* Tag de tipo — siempre visible */}
           <div className="flex items-center gap-2">
-            <span className="text-[11px] text-[#8A8A9A] w-16 shrink-0">Rol</span>
-            <span className={`inline-flex items-center rounded-full px-2.5 py-0.5 text-[11px] font-bold ${ROL_COLORS[s.rolSolicitado] ?? 'bg-gray-100 text-gray-600'}`}>
-              {ROL_LABELS[s.rolSolicitado] ?? s.rolSolicitado}
-            </span>
+            <span className="text-[11px] text-[#8A8A9A] w-16 shrink-0">Tipo</span>
+            {isReset ? (
+              <span className="inline-flex items-center gap-1 rounded-full px-2.5 py-0.5 text-[11px] font-bold bg-blue-500/10 text-blue-700 dark:text-blue-400 border border-blue-500/20">
+                <Lock size={9} /> Cambio de contraseña
+              </span>
+            ) : (
+              <span className="inline-flex items-center gap-1 rounded-full px-2.5 py-0.5 text-[11px] font-bold bg-violet-500/10 text-violet-700 dark:text-violet-400 border border-violet-500/20">
+                <UserCheck size={9} /> Nueva cuenta
+              </span>
+            )}
           </div>
+
+          {/* Rol — solo para solicitudes de acceso */}
+          {!isReset && (
+            <div className="flex items-center gap-2">
+              <span className="text-[11px] text-[#8A8A9A] w-16 shrink-0">Rol</span>
+              <span className={`inline-flex items-center rounded-full px-2.5 py-0.5 text-[11px] font-bold ${ROL_COLORS[(item.data as SolicitudEntry).rolSolicitado] ?? 'bg-gray-100 text-gray-600'}`}>
+                {ROL_LABELS[(item.data as SolicitudEntry).rolSolicitado] ?? (item.data as SolicitudEntry).rolSolicitado}
+              </span>
+            </div>
+          )}
+
           <div className="flex items-center gap-2">
             <span className="text-[11px] text-[#8A8A9A] w-16 shrink-0">Fecha</span>
             <span className="text-[11px] text-gray-600 dark:text-gray-400">
-              {format(new Date(s.createdAt), "d MMM yyyy · HH:mm", { locale: es })}
+              {format(new Date(createdAt), "d MMM yyyy · HH:mm", { locale: es })}
             </span>
           </div>
-          {s.revisadaAt && (
+
+          {!isReset && (item.data as SolicitudEntry).revisadaAt && (
             <div className="flex items-center gap-2">
               <span className="text-[11px] text-[#8A8A9A] w-16 shrink-0">Revisada</span>
               <span className="text-[11px] text-gray-500 dark:text-gray-500">
-                {format(new Date(s.revisadaAt), "d MMM yyyy", { locale: es })}
+                {format(new Date((item.data as SolicitudEntry).revisadaAt!), "d MMM yyyy", { locale: es })}
               </span>
             </div>
           )}
         </div>
       </div>
 
-      {/* Pie de hoja — acciones */}
+      {/* Pie — acciones */}
       <div className="border-t border-white/40 dark:border-white/[0.06] px-4 py-3 bg-white/20 dark:bg-white/[0.02]">
         {isPending ? (
           <div className="flex items-center gap-2">
             <button
-              onClick={() => onAprobar(s.id)}
+              onClick={() => onAprobar(id)}
               disabled={isActioning}
               className="flex-1 flex items-center justify-center gap-1.5 rounded-xl bg-emerald-500/10 px-3 py-2 text-xs font-semibold text-emerald-700 dark:text-emerald-400 hover:bg-emerald-500/20 transition-all disabled:opacity-50"
             >
@@ -999,25 +1032,28 @@ function SolicitudCard({ s, actioningId, onAprobar, onRechazar, onEliminar }: So
               Aprobar
             </button>
             <button
-              onClick={() => onRechazar(s.id)}
+              onClick={() => onRechazar(id)}
               disabled={isActioning}
               className="flex-1 flex items-center justify-center gap-1.5 rounded-xl bg-red-500/10 px-3 py-2 text-xs font-semibold text-red-600 dark:text-red-400 hover:bg-red-500/20 transition-all disabled:opacity-50"
             >
               <Ban size={13} /> Rechazar
             </button>
-            <button
-              onClick={() => onEliminar(s.id)}
-              disabled={isActioning}
-              title="Eliminar"
-              className="flex h-9 w-9 items-center justify-center rounded-xl text-gray-400 hover:text-red-500 hover:bg-red-500/10 transition-all disabled:opacity-50 shrink-0"
-            >
-              <Trash2 size={14} />
-            </button>
+            {/* Solo las solicitudes de acceso se pueden eliminar */}
+            {!isReset && (
+              <button
+                onClick={() => onEliminar(id)}
+                disabled={isActioning}
+                title="Eliminar"
+                className="flex h-9 w-9 items-center justify-center rounded-xl text-gray-400 hover:text-red-500 hover:bg-red-500/10 transition-all disabled:opacity-50 shrink-0"
+              >
+                <Trash2 size={14} />
+              </button>
+            )}
           </div>
         ) : (
           <div className="flex justify-end">
             <button
-              onClick={() => onEliminar(s.id)}
+              onClick={() => onEliminar(id)}
               disabled={isActioning}
               title="Eliminar"
               className="flex h-8 w-8 items-center justify-center rounded-xl text-gray-400 hover:text-red-500 hover:bg-red-500/10 transition-all disabled:opacity-50"
@@ -1031,85 +1067,149 @@ function SolicitudCard({ s, actioningId, onAprobar, onRechazar, onEliminar }: So
   )
 }
 
-// ─── Tab: Solicitudes de Acceso ────────────────────────────────────────────────
+// ─── Tab: Solicitudes (acceso + reset unificadas) ─────────────────────────────
 
 function SolicitudesTab() {
-  const addToast = useUiStore(s => s.addToast)
+  const addToast        = useUiStore(s => s.addToast)
   const setPendingCount = useSolicitudesStore(s => s.setPendingCount)
+
   const [solicitudes, setSolicitudes] = useState<SolicitudEntry[]>([])
+  const [resets, setResets]           = useState<ResetRequest[]>([])
   const [loading, setLoading]         = useState(true)
   const [actioningId, setActioningId] = useState<string | null>(null)
-  const [rechazarTarget, setRechazarTarget] = useState<string | null>(null)
+  const [rechazarTarget, setRechazarTarget] = useState<{ id: string; tipo: 'acceso' | 'reset' } | null>(null)
   const [eliminarTarget, setEliminarTarget] = useState<string | null>(null)
 
   const load = useCallback(() => {
     setLoading(true)
-    solicitudesApi.getAll()
-      .then(data => {
-        const filtered = data.filter(s => s.email !== 'sebastianreibold2003@gmail.com')
-        setSolicitudes(filtered)
-        setPendingCount(filtered.filter(s => s.estado === 'PENDIENTE').length)
-      })
-      .catch(() => addToast('Error al cargar solicitudes', 'error'))
-      .finally(() => setLoading(false))
+    Promise.all([
+      solicitudesApi.getAll().catch(() => [] as SolicitudEntry[]),
+      authApi.getResetRequests().catch(() => [] as ResetRequest[]),
+    ]).then(([sols, rsts]) => {
+      const filtered = sols.filter(s => s.email !== 'sebastianreibold2003@gmail.com')
+      setSolicitudes(filtered)
+      setResets(rsts)
+      setPendingCount(
+        filtered.filter(s => s.estado === 'PENDIENTE').length +
+        rsts.filter(r => r.estado === 'PENDIENTE').length
+      )
+    }).finally(() => setLoading(false))
   }, [])
 
   useEffect(() => { load() }, [load])
 
-  async function aprobar(id: string) {
+  // ── Acciones solicitudes de acceso ──
+  async function aprobarAcceso(id: string) {
     setActioningId(id)
     try {
       await solicitudesApi.aprobar(id)
       addToast('Solicitud aprobada — usuario creado correctamente', 'success')
       load()
-    } catch (err: any) {
-      addToast(err?.response?.data?.message ?? 'Error al aprobar', 'error')
-    } finally {
-      setActioningId(null)
-    }
+    } catch (err: unknown) {
+      addToast((err as { response?: { data?: { message?: string } } })?.response?.data?.message ?? 'Error al aprobar', 'error')
+    } finally { setActioningId(null) }
   }
 
-  async function rechazar(id: string) {
+  async function rechazarAcceso(id: string) {
     setActioningId(id)
     try {
       await solicitudesApi.rechazar(id)
       addToast('Solicitud rechazada', 'success')
       load()
-    } catch {
-      addToast('Error al rechazar', 'error')
-    } finally {
-      setActioningId(null)
-    }
+    } catch { addToast('Error al rechazar', 'error') }
+    finally { setActioningId(null) }
   }
 
-  async function eliminar(id: string) {
+  async function eliminarAcceso(id: string) {
     setActioningId(id)
     try {
       await solicitudesApi.remove(id)
       addToast('Solicitud eliminada', 'success')
       setSolicitudes(prev => {
         const next = prev.filter(s => s.id !== id)
-        setPendingCount(next.filter(s => s.estado === 'PENDIENTE').length)
+        setPendingCount(next.filter(s => s.estado === 'PENDIENTE').length + resets.length)
         return next
       })
-    } catch {
-      addToast('Error al eliminar', 'error')
-    } finally {
-      setActioningId(null)
-    }
+    } catch { addToast('Error al eliminar', 'error') }
+    finally { setActioningId(null) }
   }
 
-  const pendientes = solicitudes.filter(s => s.estado === 'PENDIENTE')
-  const procesadas = solicitudes.filter(s => s.estado !== 'PENDIENTE')
+  // ── Acciones reset de contraseña ──
+  async function aprobarReset(id: string) {
+    setActioningId(id)
+    try {
+      await authApi.aprobarReset(id)
+      addToast('Aprobado — link de recuperación enviado al usuario', 'success')
+      setResets(prev => {
+        const next = prev.map(r => r.id === id ? { ...r, estado: 'APROBADO' } : r)
+        setPendingCount(solicitudes.filter(s => s.estado === 'PENDIENTE').length + next.filter(r => r.estado === 'PENDIENTE').length)
+        return next
+      })
+    } catch (err: unknown) {
+      addToast((err as { response?: { data?: { message?: string } } })?.response?.data?.message ?? 'Error al aprobar', 'error')
+    } finally { setActioningId(null) }
+  }
+
+  async function rechazarReset(id: string) {
+    setActioningId(id)
+    try {
+      await authApi.rechazarReset(id)
+      addToast('Solicitud rechazada', 'success')
+      setResets(prev => {
+        const next = prev.map(r => r.id === id ? { ...r, estado: 'RECHAZADO' } : r)
+        setPendingCount(solicitudes.filter(s => s.estado === 'PENDIENTE').length + next.filter(r => r.estado === 'PENDIENTE').length)
+        return next
+      })
+    } catch { addToast('Error al rechazar', 'error') }
+    finally { setActioningId(null) }
+  }
+
+  // ── Dispatch por tipo ──
+  function handleAprobar(id: string, tipo: 'acceso' | 'reset') {
+    if (tipo === 'acceso') aprobarAcceso(id)
+    else aprobarReset(id)
+  }
+
+  function handleRechazar(id: string, tipo: 'acceso' | 'reset') {
+    setRechazarTarget({ id, tipo })
+  }
+
+  function confirmarRechazar() {
+    if (!rechazarTarget) return
+    if (rechazarTarget.tipo === 'acceso') rechazarAcceso(rechazarTarget.id)
+    else rechazarReset(rechazarTarget.id)
+    setRechazarTarget(null)
+  }
+
+  // ── Lista unificada ordenada por fecha (más reciente primero) ──
+  const allItems: UnifiedItem[] = [
+    ...solicitudes.map(s => ({ tipo: 'acceso' as const, data: s })),
+    ...resets.map(r    => ({ tipo: 'reset'  as const, data: r })),
+  ].sort((a, b) => new Date(b.data.createdAt).getTime() - new Date(a.data.createdAt).getTime())
+
+  const pendientes = allItems.filter(i => {
+    const estado = i.tipo === 'reset'
+      ? (i.data as ResetRequest).estado
+      : (i.data as SolicitudEntry).estado
+    return estado === 'PENDIENTE'
+  })
+  const procesadas = allItems.filter(i => {
+    const estado = i.tipo === 'reset'
+      ? (i.data as ResetRequest).estado
+      : (i.data as SolicitudEntry).estado
+    return estado !== 'PENDIENTE'
+  })
+
+  const totalPendientes = pendientes.length
 
   return (
     <div className="space-y-6">
       <div className="flex items-center justify-between">
         <div>
           <p className="text-sm font-semibold text-gray-900 dark:text-white">
-            {pendientes.length === 0 ? 'Sin solicitudes pendientes' : `${pendientes.length} solicitud${pendientes.length !== 1 ? 'es' : ''} pendiente${pendientes.length !== 1 ? 's' : ''}`}
+            {totalPendientes === 0 ? 'Sin solicitudes pendientes' : `${totalPendientes} solicitud${totalPendientes !== 1 ? 'es' : ''} pendiente${totalPendientes !== 1 ? 's' : ''}`}
           </p>
-          <p className="text-xs text-[#8A8A9A] mt-0.5">Revisá y aprobá o rechazá cada solicitud de acceso</p>
+          <p className="text-xs text-[#8A8A9A] mt-0.5">Revisá y aprobá o rechazá cada solicitud</p>
         </div>
         <button onClick={load} className="flex h-9 w-9 items-center justify-center rounded-xl border border-white/50 dark:border-white/[0.08] bg-white/60 dark:bg-white/[0.04] backdrop-blur-sm text-gray-400 hover:text-gray-700 dark:hover:text-white transition-colors">
           <RefreshCw size={14} />
@@ -1120,23 +1220,23 @@ function SolicitudesTab() {
         <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-3 gap-4">
           {Array.from({ length: 4 }).map((_, i) => <Skeleton key={i} className="h-52 rounded-2xl" />)}
         </div>
-      ) : solicitudes.length === 0 ? (
+      ) : allItems.length === 0 ? (
         <div className={`${glassCard} py-16 text-center`}>
           <ClipboardList size={28} className="mx-auto mb-3 text-[#8A8A9A] opacity-50" />
-          <p className="text-sm text-[#8A8A9A]">No hay solicitudes de acceso registradas</p>
+          <p className="text-sm text-[#8A8A9A]">No hay solicitudes registradas</p>
         </div>
       ) : (<>
         {pendientes.length > 0 && (
           <div className="space-y-3">
             <h3 className="text-xs font-bold uppercase tracking-wider text-[#8A8A9A]">Pendientes de revisión</h3>
             <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-3 gap-4">
-              {pendientes.map(s => (
-                <SolicitudCard
-                  key={s.id}
-                  s={s}
+              {pendientes.map(item => (
+                <UnifiedSolicitudCard
+                  key={`${item.tipo}-${item.data.id}`}
+                  item={item}
                   actioningId={actioningId}
-                  onAprobar={aprobar}
-                  onRechazar={(id) => setRechazarTarget(id)}
+                  onAprobar={(id) => handleAprobar(id, item.tipo)}
+                  onRechazar={(id) => handleRechazar(id, item.tipo)}
                   onEliminar={(id) => setEliminarTarget(id)}
                 />
               ))}
@@ -1148,13 +1248,13 @@ function SolicitudesTab() {
           <div className="space-y-3">
             <h3 className="text-xs font-bold uppercase tracking-wider text-[#8A8A9A]">Historial</h3>
             <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-3 gap-4">
-              {procesadas.map(s => (
-                <SolicitudCard
-                  key={s.id}
-                  s={s}
+              {procesadas.map(item => (
+                <UnifiedSolicitudCard
+                  key={`${item.tipo}-${item.data.id}`}
+                  item={item}
                   actioningId={actioningId}
-                  onAprobar={aprobar}
-                  onRechazar={(id) => setRechazarTarget(id)}
+                  onAprobar={(id) => handleAprobar(id, item.tipo)}
+                  onRechazar={(id) => handleRechazar(id, item.tipo)}
                   onEliminar={(id) => setEliminarTarget(id)}
                 />
               ))}
@@ -1166,10 +1266,10 @@ function SolicitudesTab() {
       <ConfirmDialog
         isOpen={rechazarTarget !== null}
         title="Rechazar solicitud"
-        message="La solicitud quedará marcada como rechazada y no podrá aprobarse después."
+        message="La solicitud quedará marcada como rechazada."
         confirmLabel="Rechazar"
         isLoading={actioningId !== null}
-        onConfirm={() => { if (rechazarTarget) { rechazar(rechazarTarget); setRechazarTarget(null) } }}
+        onConfirm={confirmarRechazar}
         onClose={() => setRechazarTarget(null)}
       />
       <ConfirmDialog
@@ -1178,7 +1278,7 @@ function SolicitudesTab() {
         message="Se eliminará permanentemente de la base de datos. Esta acción no se puede deshacer."
         confirmLabel="Eliminar"
         isLoading={actioningId !== null}
-        onConfirm={() => { if (eliminarTarget) { eliminar(eliminarTarget); setEliminarTarget(null) } }}
+        onConfirm={() => { if (eliminarTarget) { eliminarAcceso(eliminarTarget); setEliminarTarget(null) } }}
         onClose={() => setEliminarTarget(null)}
       />
     </div>

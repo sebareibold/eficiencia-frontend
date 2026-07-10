@@ -55,4 +55,19 @@ export const authApi = {
 
   changePassword: (data: { passwordActual: string; passwordNueva: string }) =>
     api.patch('/auth/change-password', data),
+
+  forgotPassword: (email: string) =>
+    api.post('/auth/forgot-password', { email }),
+
+  resetPassword: (token: string, nuevaPassword: string) =>
+    api.post('/auth/reset-password', { token, nuevaPassword }),
+
+  getResetRequests: (): Promise<{ id: string; usuario: { nombre: string; email: string }; createdAt: string; estado: string }[]> =>
+    api.get('/auth/reset-requests').then(r => r.data),
+
+  aprobarReset: (id: string) =>
+    api.patch(`/auth/reset-requests/${id}/aprobar`),
+
+  rechazarReset: (id: string) =>
+    api.patch(`/auth/reset-requests/${id}/rechazar`),
 }

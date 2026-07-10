@@ -18,6 +18,8 @@ import {
   Shield,
   ArrowRight,
   BookOpen,
+  Lock,
+  CheckCircle2,
 } from 'lucide-react'
 import { useUiStore } from '../store/uiStore'
 import { useSettingsStore } from '../store/settingsStore'
@@ -25,6 +27,7 @@ import { useAuthStore } from '../store/authStore'
 import { configuracionApi } from '../api/configuracion.api'
 import { notificacionesApi } from '../api/notificaciones.api'
 import { authApi } from '../api/auth.api'
+import { permisosApi, type PermisosMap } from '../api/permisos.api'
 import { ROUTES } from '../constants/routes'
 import { ManualContent } from './ManualPage'
 
@@ -751,15 +754,236 @@ function AccountSection() {
 }
 
 
+// ─── Permissions Section ──────────────────────────────────────────────────────
+
+const MODULO_LABELS: Record<string, string> = {
+  clients:      'Clientes',
+  payments:     'Pagos',
+  shifts:       'Turnos',
+  attendance:   'Asistencia',
+  expenses:     'Gastos',
+  memberships:  'Membresías',
+  dashboard:    'Dashboard',
+  users:        'Usuarios',
+  rutinas:      'Rutinas',
+  exercises:    'Ejercicios',
+  plantillas:   'Plantillas',
+  reposiciones: 'Reposiciones',
+}
+
+const ACCION_LABELS: Record<string, string> = {
+  read:   'Ver',
+  create: 'Crear',
+  update: 'Editar',
+  delete: 'Eliminar',
+  mark:   'Marcar asistencia',
+}
+
+// Módulos excluidos de la vista principal (aparecen como sub-filas de otro módulo o no aplican)
+const EXCLUDE_MODULES = ['dashboard', 'attendance', 'reposiciones']
+
+// Acciones principales por módulo (columnas de la matriz)
+const MODULE_ACTIONS: Record<string, string[]> = {
+  clients:      ['read', 'create', 'update', 'delete'],
+  payments:     ['read', 'create', 'update', 'delete'],
+  shifts:       ['read', 'create', 'update', 'delete'],
+  attendance:   ['read', 'mark', 'delete'],
+  expenses:     ['read', 'create', 'update', 'delete'],
+  memberships:  ['read', 'create', 'update', 'delete'],
+  users:        ['read', 'create', 'update', 'delete'],
+  rutinas:      ['read', 'create', 'update', 'delete'],
+  exercises:    ['read', 'create', 'update', 'delete'],
+  plantillas:   ['read', 'create', 'update', 'delete'],
+  reposiciones: ['read', 'create', 'update', 'delete'],
+}
+
+// Sub-acciones anidadas debajo de su módulo padre.
+// fromModule: si se define, el permiso se lee de permisos[fromModule][key] en vez del módulo padre.
+const MODULE_SUBACTIONS: Record<string, { key: string; label: string; fromModule?: string }[]> = {
+  clients: [
+    { key: 'view_pagos',      label: 'Ver pagos del cliente' },
+    { key: 'view_membresias', label: 'Ver membresías del cliente' },
+    { key: 'view_rutinas',    label: 'Ver rutinas del cliente' },
+    { key: 'read',   label: 'Ver reposiciones y ausencias del cliente',  fromModule: 'reposiciones' },
+    { key: 'create', label: 'Registrar ausencias y agendar recuperaciones', fromModule: 'reposiciones' },
+  ],
+  shifts: [
+    { key: 'mark',   label: 'Marcar asistencia a clases',          fromModule: 'attendance' },
+    { key: 'read',   label: 'Ver historial de asistencia',          fromModule: 'attendance' },
+    { key: 'delete', label: 'Eliminar registros de asistencia',     fromModule: 'attendance' },
+  ],
+}
+
+// Descripción de qué puede hacer el usuario en cada módulo según sus permisos
+const MODULE_DESCRIPTIONS: Record<string, string> = {
+  clients:      'Ver el listado de socios, acceder a su perfil, gestionar ausencias y reposiciones de clases.',
+  payments:     'Registrar cobros de cuotas, ver el historial de pagos y filtrar por método o período.',
+  shifts:       'Ver la grilla de turnos, horarios y cupos. Incluye marcar asistencia y ver el historial por clase.',
+  attendance:   'Consultar el historial de asistencia de los clientes y marcar presentes en cada clase.',
+  expenses:     'Ver y registrar los gastos del gimnasio (sueldos, fijos, variables) con resumen mensual.',
+  memberships:  'Gestionar las membresías de los clientes: crear, renovar, cancelar y ver el estado.',
+  users:        'Administrar los usuarios del sistema: crear cuentas de staff, profesores y administradores.',
+  rutinas:      'Crear y editar rutinas de entrenamiento, asignarlas a clientes y registrar ejecuciones.',
+  exercises:    'Acceder al catálogo de ejercicios con videos, patrones de movimiento y categorías.',
+  plantillas:   'Ver y usar plantillas de rutina predefinidas para crear rutinas rápidamente.',
+  reposiciones: 'Gestionar ausencias de clientes y agendar clases de recuperación en otro horario.',
+}
+
+const ACCION_ORDER = ['read', 'create', 'update', 'delete', 'mark']
+
+const ROL_LABELS: Record<string, string> = {
+  admin:    'Administrador',
+  staff:    'Staff',
+  profesor: 'Profesor',
+}
+
+function PermissionsSection() {
+  const { user } = useAuthStore()
+  const [permisos, setPermisos] = useState<PermisosMap | null>(null)
+  const [loading, setLoading] = useState(true)
+
+  useEffect(() => {
+    permisosApi.getForMyRole()
+      .then(setPermisos)
+      .catch(() => {})
+      .finally(() => setLoading(false))
+  }, [])
+
+  if (loading) {
+    return (
+      <div className="space-y-4 mt-4">
+        {[1, 2, 3, 4].map(i => (
+          <div key={i} className="h-24 rounded-3xl bg-gray-100/60 dark:bg-white/[0.04] animate-pulse" />
+        ))}
+      </div>
+    )
+  }
+
+  if (!permisos) {
+    return (
+      <div className="mt-4 flex items-center gap-3 rounded-2xl bg-red-50 dark:bg-red-900/10 border border-red-200 dark:border-red-800/30 px-5 py-4 text-sm text-red-600 dark:text-red-400">
+        <AlertCircle size={15} className="shrink-0" />
+        No se pudieron cargar los permisos.
+      </div>
+    )
+  }
+
+  // Todos los módulos excepto los excluidos (dashboard)
+  const modulosFiltrados = Object.entries(permisos).filter(
+    ([modulo]) => !EXCLUDE_MODULES.includes(modulo)
+  )
+
+  // Columnas fijas (las acciones principales)
+  const columnasActivas = ACCION_ORDER.filter(accion =>
+    modulosFiltrados.some(([m]) => (MODULE_ACTIONS[m] ?? ACCION_ORDER).includes(accion))
+  )
+
+  return (
+    <div className="mt-2">
+      <SectionCard>
+        <div className="overflow-x-auto">
+          <table className="w-full text-sm">
+            <thead>
+              <tr className="border-b border-gray-100/50 dark:border-white/[0.06]">
+                <th className="py-3 px-6 text-left text-[11px] font-extrabold uppercase tracking-widest text-gray-400 dark:text-gray-500 w-36">
+                  Sección
+                </th>
+                <th className="py-3 px-4 text-left text-[11px] font-extrabold uppercase tracking-widest text-gray-400 dark:text-gray-500">
+                  Descripción
+                </th>
+                {columnasActivas.map(accion => (
+                  <th key={accion} className="py-3 px-4 text-center text-[11px] font-extrabold uppercase tracking-widest text-gray-400 dark:text-gray-500 whitespace-nowrap">
+                    {ACCION_LABELS[accion] ?? accion}
+                  </th>
+                ))}
+              </tr>
+            </thead>
+            <tbody>
+              {modulosFiltrados.map(([modulo, acciones], idx, arr) => {
+                const relevantes = MODULE_ACTIONS[modulo] ?? ACCION_ORDER
+                const subacciones = MODULE_SUBACTIONS[modulo] ?? []
+                const isLast = idx === arr.length - 1 && subacciones.length === 0
+                return (
+                  <>
+                    {/* Fila principal del módulo */}
+                    <tr key={modulo} className="border-b border-gray-100/50 dark:border-white/[0.04]">
+                      <td className="py-4 px-6 font-semibold text-gray-800 dark:text-gray-200 whitespace-nowrap align-top">
+                        {MODULO_LABELS[modulo] ?? modulo}
+                      </td>
+                      <td className="py-4 px-4 text-xs text-gray-500 dark:text-gray-400 leading-relaxed max-w-xs align-top">
+                        {MODULE_DESCRIPTIONS[modulo] ?? ''}
+                      </td>
+                      {columnasActivas.map(accion => {
+                        const aplica = relevantes.includes(accion)
+                        const permitido = acciones[accion]
+                        return (
+                          <td key={accion} className="py-4 px-4 text-center align-middle">
+                            {!aplica ? (
+                              <span className="text-gray-300 dark:text-white/20">—</span>
+                            ) : permitido ? (
+                              <CheckCircle2 size={16} className="mx-auto text-emerald-500 dark:text-emerald-400" />
+                            ) : (
+                              <Lock size={14} className="mx-auto text-gray-400 dark:text-gray-500" />
+                            )}
+                          </td>
+                        )
+                      })}
+                    </tr>
+
+                    {/* Sub-filas debajo del módulo padre */}
+                    {subacciones.map((sub, si) => {
+                      const isLastSub = idx === arr.length - 1 && si === subacciones.length - 1
+                      const permitido = sub.fromModule
+                        ? (permisos[sub.fromModule]?.[sub.key] ?? false)
+                        : acciones[sub.key]
+                      return (
+                        <tr
+                          key={`${modulo}-${sub.key}`}
+                          className={`bg-gray-50/50 dark:bg-white/[0.02] ${!isLastSub ? 'border-b border-gray-100/30 dark:border-white/[0.025]' : ''}`}
+                        >
+                          <td className="py-2.5 pl-10 pr-4 whitespace-nowrap" colSpan={2}>
+                            <span className="flex items-center gap-2 text-xs text-gray-500 dark:text-gray-400">
+                              <span className="text-gray-300 dark:text-gray-600 select-none">└</span>
+                              {sub.label}
+                            </span>
+                          </td>
+                          {columnasActivas.map((accion, ci) => (
+                            <td key={accion} className="py-2.5 px-4 text-center">
+                              {ci === 0 ? (
+                                permitido ? (
+                                  <CheckCircle2 size={14} className="mx-auto text-emerald-500 dark:text-emerald-400" />
+                                ) : (
+                                  <Lock size={13} className="mx-auto text-gray-400 dark:text-gray-500" />
+                                )
+                              ) : (
+                                <span className="text-gray-300 dark:text-white/20">—</span>
+                              )}
+                            </td>
+                          ))}
+                        </tr>
+                      )
+                    })}
+                  </>
+                )
+              })}
+            </tbody>
+          </table>
+        </div>
+      </SectionCard>
+    </div>
+  )
+}
+
 // ─── Category definitions ─────────────────────────────────────────────────────
 
-type CategoryId = 'appearance' | 'notifications' | 'account' | 'manual'
+type CategoryId = 'appearance' | 'notifications' | 'account' | 'manual' | 'permissions'
 
 const CATEGORIES: {
   id: CategoryId
   label: string
   icon: React.ElementType
   adminOnly?: boolean
+  nonAdminOnly?: boolean
   keywords: string[]
 }[] = [
   {
@@ -786,6 +1010,13 @@ const CATEGORIES: {
     icon: BookOpen,
     keywords: ['manual', 'ayuda', 'guía', 'uso', 'documentación', 'cómo'],
   },
+  {
+    id: 'permissions',
+    label: 'Mis permisos',
+    icon: Lock,
+    nonAdminOnly: true,
+    keywords: ['permisos', 'acceso', 'rol', 'qué puedo', 'secciones'],
+  },
 ]
 
 // ─── Main Drawer ──────────────────────────────────────────────────────────────
@@ -802,6 +1033,7 @@ export default function SettingsPage() {
 
   const filteredCategories = CATEGORIES.filter((cat) => {
     if (cat.adminOnly && !isAdmin) return false
+    if (cat.nonAdminOnly && isAdmin) return false
     if (!search.trim()) return true
     const q = search.toLowerCase()
     return cat.label.toLowerCase().includes(q) || cat.keywords.some((k) => k.includes(q))
@@ -839,6 +1071,7 @@ export default function SettingsPage() {
     appearance: <AppearanceSection />,
     notifications: <NotificationsSection />,
     manual: <ManualContent />,
+    permissions: <PermissionsSection />,
   }
 
   const currentCategory =

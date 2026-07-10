@@ -84,9 +84,12 @@ export default function LoginPage() {
   const [showReqPassword, setShowReqPassword] = useState(false);
   const [isFocused, setIsFocused] = useState<string | null>(null);
   const [currentImage, setCurrentImage] = useState(0);
-  const [view, setView] = useState<'login' | 'request'>('login');
+  const [view, setView] = useState<'login' | 'request' | 'forgot' | 'forgot-sent'>('login');
   const [requestSent, setRequestSent] = useState(false);
   const [loginError, setLoginError] = useState<string | null>(null);
+  const [forgotEmail, setForgotEmail] = useState('');
+  const [forgotLoading, setForgotLoading] = useState(false);
+  const [forgotError, setForgotError] = useState<string | null>(null);
 
   useEffect(() => {
     const timer = setInterval(() => {
@@ -130,6 +133,22 @@ export default function LoginPage() {
       } else {
         setLoginError('No se pudo conectar al servidor. Verificá tu conexión.')
       }
+    }
+  }
+
+  async function onForgotSubmit(e: React.FormEvent) {
+    e.preventDefault()
+    setForgotError(null)
+    if (!forgotEmail.trim()) { setForgotError('Ingresá tu email'); return }
+    setForgotLoading(true)
+    try {
+      await authApi.forgotPassword(forgotEmail.trim())
+      setView('forgot-sent')
+    } catch (err: unknown) {
+      const msg = (err as { response?: { data?: { message?: string } } })?.response?.data?.message
+      setForgotError(msg || 'No se pudo enviar el email. Intentá de nuevo.')
+    } finally {
+      setForgotLoading(false)
     }
   }
 
@@ -288,7 +307,7 @@ export default function LoginPage() {
                         <div className="flex flex-col gap-2">
                           <div className="flex items-center justify-between">
                             <label className="text-sm font-bold tracking-tight text-gray-700 dark:text-gray-300 ml-1">Contraseña</label>
-                            <a href="#" className="text-xs font-bold text-[#FBC608] hover:text-[#D4A800]">¿Olvidaste tu contraseña?</a>
+                            <button type="button" onClick={() => { setView('forgot'); setForgotError(null); setForgotEmail('') }} className="text-xs font-bold text-[#FBC608] hover:text-[#D4A800] transition-colors">¿Olvidaste tu contraseña?</button>
                           </div>
                           <div className="relative">
                             <input
@@ -329,6 +348,102 @@ export default function LoginPage() {
                         </div>
                       </form>
                     </motion.div>
+                  ) : view === 'forgot' ? (
+                    <motion.div
+                      key="forgot-form"
+                      initial={{ opacity: 0, y: 10 }}
+                      animate={{ opacity: 1, y: 0 }}
+                      exit={{ opacity: 0, y: -10 }}
+                      transition={{ duration: 0.2 }}
+                      className="w-full flex flex-col"
+                    >
+                      <div className="text-center mb-[clamp(1rem,3vh,2.5rem)]">
+                        <div className="flex justify-center mb-[clamp(0.75rem,2.5vh,2rem)]">
+                          <img src="/logo.png" alt="Logo" className="h-[clamp(4rem,9vh,6.5rem)] w-auto object-contain drop-shadow-md" />
+                        </div>
+                        <h1 className="text-xl sm:text-2xl font-black tracking-tighter text-gray-900 dark:text-white">
+                          Recuperar contraseña
+                        </h1>
+                        <p className="mt-2 text-sm font-semibold text-gray-500 dark:text-gray-400 max-w-sm mx-auto">
+                          Ingresá tu email. Un administrador deberá aprobar la solicitud antes de que te llegue el link.
+                        </p>
+                      </div>
+
+                      <form onSubmit={onForgotSubmit} className="space-y-4">
+                        <div className="flex flex-col gap-2">
+                          <label className="text-sm font-bold tracking-tight text-gray-700 dark:text-gray-300 ml-1">Email</label>
+                          <input
+                            type="email"
+                            value={forgotEmail}
+                            onChange={(e) => { setForgotEmail(e.target.value); setForgotError(null) }}
+                            placeholder="tu@email.com"
+                            autoFocus
+                            className="w-full rounded-xl border border-gray-200 dark:border-white/10 bg-white/50 dark:bg-black/40 px-5 py-3 text-sm font-semibold text-gray-900 dark:text-white focus:bg-white dark:focus:bg-black/80 focus:outline-none focus:ring-4 focus:ring-[#FBC608]/10 shadow-sm"
+                          />
+                        </div>
+
+                        {forgotError && (
+                          <motion.div
+                            initial={{ opacity: 0, y: -6 }}
+                            animate={{ opacity: 1, y: 0 }}
+                            className="flex items-start gap-3 rounded-xl border border-red-400/30 bg-red-500/10 px-4 py-3"
+                          >
+                            <XCircle size={16} className="text-red-500 shrink-0 mt-0.5" />
+                            <p className="text-xs font-semibold text-red-600 dark:text-red-400">{forgotError}</p>
+                          </motion.div>
+                        )}
+
+                        <div className="pt-2 space-y-3">
+                          <button
+                            type="submit"
+                            disabled={forgotLoading}
+                            className="w-full inline-flex items-center justify-center gap-2.5 rounded-xl bg-[#FBC608] text-[#111827] font-bold py-3.5 text-sm shadow-md hover:bg-[#F5A623] active:bg-[#D4A800] transition-colors disabled:opacity-60"
+                          >
+                            {forgotLoading
+                              ? <><span className="h-4 w-4 rounded-full border-2 border-[#111]/20 border-t-[#111] animate-spin" /> Enviando...</>
+                              : 'Enviar link de recuperación'
+                            }
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => setView('login')}
+                            className="w-full text-center text-sm font-bold text-gray-500 dark:text-gray-400 hover:text-[#FBC608] transition-colors py-1.5"
+                          >
+                            Volver al inicio de sesión
+                          </button>
+                        </div>
+                      </form>
+                    </motion.div>
+
+                  ) : view === 'forgot-sent' ? (
+                    <motion.div
+                      key="forgot-sent"
+                      initial={{ opacity: 0, y: 10 }}
+                      animate={{ opacity: 1, y: 0 }}
+                      exit={{ opacity: 0, y: -10 }}
+                      transition={{ duration: 0.2 }}
+                      className="w-full flex flex-col items-center justify-center text-center gap-5 py-8"
+                    >
+                      <div className="flex items-center justify-center h-16 w-16 rounded-full bg-emerald-500/15">
+                        <CheckCircle2 size={32} className="text-emerald-500" />
+                      </div>
+                      <div>
+                        <h2 className="text-xl font-black tracking-tighter text-gray-900 dark:text-white">
+                          Solicitud enviada
+                        </h2>
+                        <p className="mt-2 text-sm font-semibold text-gray-500 dark:text-gray-400 max-w-xs mx-auto">
+                          Un administrador revisará tu solicitud y te enviará el link de recuperación al confirmarla.
+                        </p>
+                      </div>
+                      <button
+                        type="button"
+                        onClick={() => setView('login')}
+                        className="w-full rounded-xl bg-[#FBC608] text-[#111827] font-bold py-3 text-sm shadow-md hover:bg-[#F5A623] active:bg-[#D4A800] transition-colors"
+                      >
+                        Volver al inicio de sesión
+                      </button>
+                    </motion.div>
+
                   ) : (
                     <motion.div
                       key="request-form"
