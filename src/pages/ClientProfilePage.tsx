@@ -1,6 +1,7 @@
 import { useState, useEffect, useMemo } from 'react'
 import { createPortal } from 'react-dom'
 import { useParams, useNavigate } from 'react-router-dom'
+import { useQueryClient } from '@tanstack/react-query'
 import { motion, AnimatePresence } from 'framer-motion'
 import { staggerContainerFast, fadeUpItem } from '../lib/motion'
 import {
@@ -492,6 +493,7 @@ function safeFormatDate(raw: string | null | undefined, pattern: string, locale?
 export default function ClientProfilePage() {
   const { id } = useParams<{ id: string }>()
   const navigate = useNavigate()
+  const queryClient = useQueryClient()
   const addToast = useUiStore(s => s.addToast)
   const user = useAuthStore(s => s.user)
   const isAdmin = user?.role === 'admin'
@@ -896,6 +898,7 @@ export default function ClientProfilePage() {
     setIsDeleting(true)
     try {
       await clientsApi.remove(client.id)
+      queryClient.invalidateQueries({ queryKey: ['clients'] })
       addToast('Cliente eliminado', 'success')
       navigate(ROUTES.CLIENTS)
     } catch {

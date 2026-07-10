@@ -14,10 +14,11 @@ import { format } from 'date-fns'
 import { paymentsApi } from '../api/payments.api'
 import { clientsApi } from '../api/clients.api'
 import { membresiasClienteApi } from '../api/membresiasCliente.api'
+import { membershipsApi } from '../api/memberships.api'
 import { useUiStore } from '../store/uiStore'
 import { ROUTES } from '../constants/routes'
-import { MODALIDAD_LABELS } from '../types/membership.types'
-import type { MembresiaCliente } from '../types/membership.types'
+import { MODALIDAD_LABELS, MODALIDADES } from '../types/membership.types'
+import type { MembresiaCliente, Plan, Modalidad } from '../types/membership.types'
 import type { Client } from '../types/client.types'
 
 // ── Schemas ───────────────────────────────────────────────────────────────────
@@ -56,6 +57,13 @@ const METHOD_OPTIONS = [
   { value: 'transfer' as const, label: 'Transferencia', Icon: ArrowLeftRight, color: 'text-blue-600 dark:text-blue-400',       activeBg: 'bg-blue-500/10',    activeBorder: 'border-blue-500/40'    },
   { value: 'card'     as const, label: 'Débito',        Icon: CreditCard,     color: 'text-violet-600 dark:text-violet-400',   activeBg: 'bg-violet-500/10',  activeBorder: 'border-violet-500/40'  },
 ]
+
+const MODALIDAD_TO_METHOD: Record<string, 'cash' | 'transfer' | 'card'> = {
+  TRANSFERENCIA_MENSUAL: 'transfer',
+  EFECTIVO:              'cash',
+  MEMBRESIA_3_MESES:     'card',
+  MEMBRESIA_6_MESES:     'card',
+}
 
 const MEMB_ESTADO_LABEL: Record<string, string> = {
   ACTIVA: 'Activa', PENDIENTE: 'Programada', VENCIDA: 'Expirada', CANCELADA: 'Cancelada',
@@ -110,6 +118,13 @@ export default function PaymentNewPage() {
   const [submitting,     setSubmitting]     = useState(false)
   const [submitError,    setSubmitError]    = useState<string | null>(null)
 
+  // ── Selección de plan / modalidad (Step 2) ───────────────────────────────
+  const [wasJustCreated,    setWasJustCreated]    = useState(false)
+  const [plans,             setPlans]             = useState<Plan[]>([])
+  const [loadingPlans,      setLoadingPlans]      = useState(false)
+  const [selectedPlanId,    setSelectedPlanId]    = useState('')
+  const [selectedModalidad, setSelectedModalidad] = useState<Modalidad | ''>('')
+
   const {
     register: regPay,
     handleSubmit: submitPay,
@@ -145,6 +160,13 @@ export default function PaymentNewPage() {
     return () => clearTimeout(t)
   }, [clientQuery, searchClients])
 
+  // ── Cargar planes al entrar al Step 2 ────────────────────────────────────
+  useEffect(() => {
+    if (step !== 2 || plans.length > 0) return
+    setLoadingPlans(true)
+    membershipsApi.getAll().then(setPlans).catch(() => {}).finally(() => setLoadingPlans(false))
+  }, [step]) // eslint-disable-line react-hooks/exhaustive-deps
+
   // ── Seleccionar cliente y avanzar al paso 2 ───────────────────────────────
   function pickClient(c: Client) {
     setSelectedClient(c)
@@ -157,8 +179,7 @@ export default function PaymentNewPage() {
       .then(m => {
         const sorted = [...m].sort((a, b) => b.fechaInicio.localeCompare(a.fechaInicio))
         setMembresias(sorted)
-        const active = sorted.find(x => x.estado === 'ACTIVA')
-        setMembresiaId(active?.id ?? '')
+        setMembresiaId('')
       })
       .finally(() => setLoadingMemb(false))
     setStep(2)
@@ -172,6 +193,10 @@ export default function PaymentNewPage() {
     setSubmitError(null)
     setShowNewClient(false)
     resetClient()
+    setWasJustCreated(false)
+    setSelectedPlanId('')
+    setSelectedModalidad('')
+    setDisplayAmount('')
   }
 
   // ── Crear cliente inline ──────────────────────────────────────────────────
@@ -184,6 +209,7 @@ export default function PaymentNewPage() {
         email: data.email || undefined,
       })
       addToast(`Cliente ${created.name} ${created.lastName} creado`, 'success')
+      setWasJustCreated(true)
       pickClient(created)
     } catch {
       addToast('Error al crear el cliente', 'error')
@@ -192,12 +218,47 @@ export default function PaymentNewPage() {
     }
   }
 
+  // ── Seleccionar plan ──────────────────────────────────────────────────────
+  function handleSelectPlan(planId: string) {
+    setSelectedPlanId(planId)
+    setSelectedModalidad('')
+    setDisplayAmount('')
+    setValue('amount', '', { shouldValidate: false })
+    setMembresiaId('')
+  }
+
+  // ── Seleccionar modalidad → auto-llenar monto y vincular membresía ────────
+  function handleSelectModalidad(modalidad: Modalidad, precio: number) {
+    setSelectedModalidad(modalidad)
+    const raw = String(precio)
+    setDisplayAmount(Number(raw).toLocaleString('es-AR'))
+    setValue('amount', raw, { shouldValidate: true })
+    setValue('method', MODALIDAD_TO_METHOD[modalidad] ?? 'transfer', { shouldValidate: true })
+    const match = membresias.find(
+      m => m.planId === selectedPlanId && m.modalidad === modalidad && m.estado === 'ACTIVA'
+    )
+    setMembresiaId(match?.id ?? '')
+  }
+
   // ── Registrar pago ────────────────────────────────────────────────────────
   async function onSubmitPayment(data: PaymentValues) {
     if (!selectedClient) return
     setSubmitting(true)
     setSubmitError(null)
     try {
+      let finalMembresiaId = membresiaId
+
+      // Para clientes nuevos sin membresía previa: crearla con el plan/modalidad elegido
+      if (wasJustCreated && selectedPlanId && selectedModalidad && !membresiaId) {
+        const nueva = await membresiasClienteApi.create({
+          clienteId: String(selectedClient.id),
+          planId: selectedPlanId,
+          modalidad: selectedModalidad as Modalidad,
+          precio: Number(data.amount),
+        })
+        finalMembresiaId = nueva.id
+      }
+
       const payment = await paymentsApi.create({
         clientId: selectedClient.id as unknown as number,
         amount:   Number(data.amount),
@@ -205,7 +266,7 @@ export default function PaymentNewPage() {
         paidAt:   data.paidAt,
         invoiced: data.invoiced,
         notes:    data.notes || undefined,
-        ...(membresiaId && { membresiaId }),
+        ...(finalMembresiaId && { membresiaId: finalMembresiaId }),
       })
       addToast('Pago registrado', 'success')
       navigate(`/payments/${payment.id}`)
@@ -520,6 +581,9 @@ export default function PaymentNewPage() {
 
   // ── Contenido Paso 2: detalles del pago ───────────────────────────────────
   function Step2() {
+    const selectedPlan     = plans.find(p => p.id === selectedPlanId)
+    const activeMembPlanId = membresias.find(m => m.estado === 'ACTIVA')?.planId ?? ''
+
     return (
       <div className="space-y-5">
         {/* Cliente seleccionado */}
@@ -544,72 +608,186 @@ export default function PaymentNewPage() {
           </button>
         </div>
 
-        {/* Grid 2 columnas: izquierda = monto + método · derecha = fecha + membresía + notas + facturado */}
+        {/* Grid 2 columnas: izquierda = membresía + monto · derecha = método + fecha + notas + facturado */}
         <div className="grid grid-cols-1 md:grid-cols-2 gap-x-8 gap-y-5">
 
-          {/* ── Columna izquierda ── */}
-          <div className="space-y-5">
-            {/* Monto */}
+          {/* ── Columna izquierda: membresía → monto ── */}
+          <div className="space-y-4">
+
+            {/* Plan cards */}
             <div className="space-y-1.5">
               <label className="text-[11px] font-bold uppercase tracking-widest text-gray-400 dark:text-[#6A6A7A] flex items-center gap-1">
-                Monto <span className="text-primary text-[10px]">*</span>
+                Plan <span className="text-primary text-[10px]">*</span>
               </label>
-              <div className="relative">
-                <input type="hidden" {...regPay('amount')} />
-                <span className="pointer-events-none absolute left-3.5 top-1/2 -translate-y-1/2 text-sm font-bold text-gray-400 select-none">$</span>
-                <input
-                  type="text"
-                  inputMode="numeric"
-                  placeholder="0"
-                  autoFocus
-                  value={displayAmount}
-                  onChange={e => {
-                    const raw = e.target.value.replace(/\./g, '').replace(/\D/g, '')
-                    const formatted = raw ? Number(raw).toLocaleString('es-AR').replace(/,.*/, '') : ''
-                    setDisplayAmount(formatted)
-                    setValue('amount', raw, { shouldValidate: true })
-                  }}
-                  className={`${ic(true)} text-lg font-bold`}
-                />
-              </div>
-              {payErrors.amount && (
-                <p className="flex items-center gap-1.5 text-xs text-red-500 dark:text-red-400">
-                  <AlertCircle size={11} />{payErrors.amount.message}
-                </p>
+              {loadingPlans ? (
+                <div className="space-y-2">
+                  {[0, 1, 2].map(i => (
+                    <div key={i} className="h-14 rounded-xl bg-gray-100 dark:bg-white/[0.04] animate-pulse" style={{ opacity: 1 - i * 0.2 }} />
+                  ))}
+                </div>
+              ) : plans.length === 0 ? (
+                <p className="text-xs text-gray-400 py-1">Sin planes configurados.</p>
+              ) : (
+                <div className="space-y-2">
+                  {plans.map(plan => {
+                    const isSelected = selectedPlanId === plan.id
+                    const isCurrent  = plan.id === activeMembPlanId
+                    const minPrice   = plan.tarifas.length > 0
+                      ? Math.min(...plan.tarifas.map(t => t.precio))
+                      : null
+                    return (
+                      <button
+                        key={plan.id}
+                        type="button"
+                        onClick={() => handleSelectPlan(plan.id)}
+                        className={[
+                          'w-full flex items-center justify-between gap-3 px-4 py-3 rounded-xl border-2 text-left transition-all duration-150',
+                          isSelected
+                            ? 'border-primary bg-primary/10 dark:bg-primary/[0.08]'
+                            : 'border-gray-200 dark:border-white/[0.07] bg-white/40 dark:bg-white/[0.02] hover:border-primary/30 dark:hover:border-primary/20',
+                        ].join(' ')}
+                      >
+                        <div className="min-w-0">
+                          <div className="flex items-center gap-2">
+                            <p className={`text-sm font-bold truncate ${isSelected ? 'text-gray-900 dark:text-white' : 'text-gray-700 dark:text-gray-300'}`}>
+                              {plan.name}
+                            </p>
+                            {isCurrent && (
+                              <span className="shrink-0 text-[9px] font-black uppercase tracking-wider px-1.5 py-0.5 rounded-md bg-primary/20 text-primary">
+                                Actual
+                              </span>
+                            )}
+                          </div>
+                          <p className="text-xs text-gray-400 dark:text-[#6A6A7A]">{plan.classesPerWeek}x por semana</p>
+                        </div>
+                        {minPrice !== null && (
+                          <p className={`text-sm font-black shrink-0 ${isSelected ? 'text-primary' : 'text-gray-400 dark:text-[#5A5A6A]'}`}>
+                            desde ${minPrice.toLocaleString('es-AR')}
+                          </p>
+                        )}
+                      </button>
+                    )
+                  })}
+                </div>
               )}
             </div>
 
-            {/* Método — pills */}
-            <div className="space-y-1.5">
-              <label className="text-[11px] font-bold uppercase tracking-widest text-gray-400 dark:text-[#6A6A7A]">
-                Método <span className="text-primary text-[10px]">*</span>
-              </label>
-              <div className="grid grid-cols-3 gap-2">
-                {METHOD_OPTIONS.map(opt => {
-                  const active = watchedMethod === opt.value
-                  return (
-                    <button
-                      key={opt.value}
-                      type="button"
-                      onClick={() => setValue('method', opt.value, { shouldValidate: true })}
-                      className={[
-                        'flex flex-col items-center gap-2 px-3 py-3.5 rounded-2xl border-2 transition-all duration-200',
-                        active
-                          ? `${opt.activeBg} ${opt.activeBorder} ${opt.color}`
-                          : 'border-gray-200 dark:border-white/[0.07] bg-white/40 dark:bg-white/[0.02] text-gray-400 dark:text-[#5A5A6A] hover:bg-gray-50 dark:hover:bg-white/[0.04] hover:border-gray-300 dark:hover:border-white/[0.12]',
-                      ].join(' ')}
-                    >
-                      <opt.Icon size={17} />
-                      <span className="text-xs font-bold">{opt.label}</span>
-                    </button>
-                  )
-                })}
-              </div>
-            </div>
+            {/* Modalidad cards — aparecen al seleccionar un plan */}
+            <AnimatePresence>
+              {selectedPlanId && selectedPlan && (
+                <motion.div
+                  key="modalidad"
+                  initial={{ opacity: 0, y: -8 }}
+                  animate={{ opacity: 1, y: 0 }}
+                  exit={{ opacity: 0, y: -8 }}
+                  transition={{ duration: 0.15 }}
+                  className="space-y-1.5"
+                >
+                  <label className="text-[11px] font-bold uppercase tracking-widest text-gray-400 dark:text-[#6A6A7A] flex items-center gap-1">
+                    Modalidad <span className="text-primary text-[10px]">*</span>
+                  </label>
+                  <div className="grid grid-cols-2 gap-2">
+                    {selectedPlan.tarifas.map(tarifa => {
+                      const isActive = selectedModalidad === tarifa.modalidad
+                      return (
+                        <button
+                          key={tarifa.modalidad}
+                          type="button"
+                          onClick={() => handleSelectModalidad(tarifa.modalidad, tarifa.precio)}
+                          className={[
+                            'rounded-xl px-3 py-3 text-left border-2 transition-all duration-150',
+                            isActive
+                              ? 'border-primary bg-primary text-gray-900'
+                              : 'border-gray-200 dark:border-white/[0.07] bg-white/40 dark:bg-white/[0.02] text-gray-600 dark:text-gray-400 hover:border-primary/30 dark:hover:border-primary/20',
+                          ].join(' ')}
+                        >
+                          <p className="text-[11px] font-bold leading-tight">{MODALIDAD_LABELS[tarifa.modalidad]}</p>
+                          <p className={`text-base font-black mt-0.5 ${isActive ? 'text-gray-900' : 'text-gray-900 dark:text-white'}`}>
+                            ${tarifa.precio.toLocaleString('es-AR')}
+                          </p>
+                        </button>
+                      )
+                    })}
+                  </div>
+                </motion.div>
+              )}
+            </AnimatePresence>
+
+            {/* Monto — aparece al seleccionar modalidad, auto-llenado pero editable */}
+            <AnimatePresence>
+              {selectedModalidad && (
+                <motion.div
+                  key="monto"
+                  initial={{ opacity: 0, y: -8 }}
+                  animate={{ opacity: 1, y: 0 }}
+                  exit={{ opacity: 0, y: -8 }}
+                  transition={{ duration: 0.15 }}
+                  className="space-y-1.5"
+                >
+                  <label className="text-[11px] font-bold uppercase tracking-widest text-gray-400 dark:text-[#6A6A7A] flex items-center gap-1">
+                    Monto <span className="text-primary text-[10px]">*</span>
+                    <span className="font-normal normal-case tracking-normal opacity-60 text-[10px] ml-1">(editable)</span>
+                  </label>
+                  <div className="relative">
+                    <input type="hidden" {...regPay('amount')} />
+                    <span className="pointer-events-none absolute left-3.5 top-1/2 -translate-y-1/2 text-sm font-bold text-gray-400 select-none">$</span>
+                    <input
+                      type="text"
+                      inputMode="numeric"
+                      placeholder="0"
+                      value={displayAmount}
+                      onChange={e => {
+                        const raw = e.target.value.replace(/\./g, '').replace(/\D/g, '')
+                        const formatted = raw ? Number(raw).toLocaleString('es-AR').replace(/,.*/, '') : ''
+                        setDisplayAmount(formatted)
+                        setValue('amount', raw, { shouldValidate: true })
+                      }}
+                      className={`${ic(true)} text-lg font-bold`}
+                    />
+                  </div>
+                  {payErrors.amount && (
+                    <p className="flex items-center gap-1.5 text-xs text-red-500 dark:text-red-400">
+                      <AlertCircle size={11} />{payErrors.amount.message}
+                    </p>
+                  )}
+                </motion.div>
+              )}
+            </AnimatePresence>
+
           </div>
 
-          {/* ── Columna derecha ── */}
+          {/* ── Columna derecha: método + fecha + notas + facturado ── */}
           <div className="space-y-4">
+
+            {/* Método — derivado de la modalidad, solo informativo */}
+            <div className="space-y-1.5">
+              <label className="text-[11px] font-bold uppercase tracking-widest text-gray-400 dark:text-[#6A6A7A]">
+                Método de pago
+              </label>
+              {(() => {
+                const opt = METHOD_OPTIONS.find(o => o.value === watchedMethod)
+                if (!opt || !selectedModalidad) return (
+                  <div className="flex items-center gap-3 px-4 py-3 rounded-xl border border-dashed border-gray-200 dark:border-white/[0.07] text-gray-400 dark:text-[#5A5A6A]">
+                    <div className="h-8 w-8 rounded-lg bg-gray-100 dark:bg-white/[0.04] flex items-center justify-center">
+                      <Banknote size={15} />
+                    </div>
+                    <p className="text-xs text-gray-400 dark:text-[#5A5A6A]">Se determina al elegir la modalidad</p>
+                  </div>
+                )
+                return (
+                  <div className={`flex items-center gap-3 px-4 py-3 rounded-xl border ${opt.activeBorder} ${opt.activeBg}`}>
+                    <div className={`h-8 w-8 rounded-lg bg-white/50 dark:bg-black/20 flex items-center justify-center ${opt.color}`}>
+                      <opt.Icon size={15} />
+                    </div>
+                    <div>
+                      <p className={`text-sm font-bold ${opt.color}`}>{opt.label}</p>
+                      <p className="text-[10px] text-gray-400 dark:text-[#6A6A7A]">Definido por la modalidad</p>
+                    </div>
+                  </div>
+                )
+              })()}
+            </div>
+
             {/* Fecha */}
             <div className="space-y-1.5">
               <label className="text-[11px] font-bold uppercase tracking-widest text-gray-400 dark:text-[#6A6A7A]">
@@ -620,32 +798,6 @@ export default function PaymentNewPage() {
                 <p className="flex items-center gap-1.5 text-xs text-red-500 dark:text-red-400">
                   <AlertCircle size={11} />{payErrors.paidAt.message}
                 </p>
-              )}
-            </div>
-
-            {/* Membresía vinculada */}
-            <div className="space-y-1.5">
-              <label className="text-[11px] font-bold uppercase tracking-widest text-gray-400 dark:text-[#6A6A7A]">
-                Membresía{' '}
-                <span className="font-normal normal-case tracking-normal opacity-60 text-[10px]">(opcional)</span>
-              </label>
-              {loadingMemb ? (
-                <div className="h-11 rounded-xl bg-gray-100 dark:bg-white/[0.04] animate-pulse" />
-              ) : membresias.length === 0 ? (
-                <p className="text-xs text-gray-400 py-1">Sin membresías registradas</p>
-              ) : (
-                <select
-                  value={membresiaId}
-                  onChange={e => setMembresiaId(e.target.value)}
-                  className={ic()}
-                >
-                  <option value="">— Sin membresía —</option>
-                  {membresias.map(m => (
-                    <option key={m.id} value={m.id}>
-                      {m.plan.nombre} · {MODALIDAD_LABELS[m.modalidad] ?? m.modalidad} · {MEMB_ESTADO_LABEL[m.estado] ?? m.estado} · desde {m.fechaInicio.slice(0, 10)}
-                    </option>
-                  ))}
-                </select>
               )}
             </div>
 
@@ -677,6 +829,7 @@ export default function PaymentNewPage() {
                 <p className="text-xs text-gray-400">Comprobante fiscal entregado</p>
               </div>
             </label>
+
           </div>
         </div>
       </div>
