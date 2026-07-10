@@ -898,13 +898,13 @@ export default function ClientProfilePage() {
     setIsDeleting(true)
     try {
       await clientsApi.remove(client.id)
-      queryClient.invalidateQueries({ queryKey: ['clients'] })
       addToast('Cliente eliminado', 'success')
-      navigate(ROUTES.CLIENTS)
     } catch {
       addToast('Error al eliminar el cliente', 'error')
+    } finally {
+      queryClient.invalidateQueries({ queryKey: ['clients'] })
       setIsDeleting(false)
-      setShowDeleteModal(false)
+      navigate(ROUTES.CLIENTS)
     }
   }
 
