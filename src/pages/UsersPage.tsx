@@ -754,7 +754,7 @@ function PermisosTab() {
   }
 
   return (
-    <div className="space-y-4">
+    <div className="space-y-4 pb-20">
       {/* Refresh */}
       <div className="flex justify-end">
         <button
@@ -872,7 +872,7 @@ function PermisosTab() {
             animate={{ opacity: 1, y: 0 }}
             exit={{ opacity: 0, y: 12 }}
             transition={{ duration: 0.2 }}
-            className="sticky bottom-4 z-20 flex items-center justify-between gap-4 rounded-2xl border border-amber-500/30 bg-amber-500/10 backdrop-blur-xl px-5 py-3.5 shadow-lg"
+            className="sticky bottom-4 z-20 mt-6 flex items-center justify-between gap-4 rounded-2xl border border-amber-500/30 bg-amber-500/10 backdrop-blur-xl px-5 py-3.5 shadow-lg"
           >
             <p className="text-sm font-semibold text-amber-700 dark:text-amber-300">
               <span className="font-black">{pendingChanges.length}</span> cambio{pendingChanges.length !== 1 ? 's' : ''} sin guardar
