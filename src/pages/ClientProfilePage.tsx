@@ -1200,29 +1200,29 @@ export default function ClientProfilePage() {
                   </div>
                 </div>
                 {/* Derecha: botón Editar / Cancelar + Guardar */}
-                {isAdmin && (
-                  isEditing ? (
-                    <div className="flex items-center gap-2 shrink-0">
-                      <button
-                        type="button"
-                        onClick={() => { reset({ name: client.name, lastName: client.lastName, email: client.email ?? '', phone: client.phone ?? '', cuil: client.cuil ?? '', peso: ficha?.peso != null ? String(ficha.peso) : '', altura: ficha?.altura != null ? String(ficha.altura) : '', actividadDiaria: ficha?.actividadDiaria ?? '', objetivos: ficha?.objetivos ?? '', deportePractica: ficha?.deportePractica ?? '', experiencia: ficha?.experiencia ?? '', lesiones: ficha?.lesiones ?? '', patologiasBase: ficha?.patologiasBase ?? '' }); setIsEditing(false) }}
-                        className="flex items-center gap-1.5 text-xs font-semibold px-3 py-1.5 rounded-xl border border-gray-200 dark:border-white/[0.1] bg-white/70 dark:bg-white/[0.04] text-gray-700 dark:text-gray-300 hover:bg-white dark:hover:bg-white/[0.09] transition-all"
-                      >
-                        <XCircle size={12} />
-                        Cancelar
-                      </button>
-                      <button
-                        type="button"
-                        onClick={handleSubmit(onEdit)}
-                        disabled={isSaving}
-                        className="flex items-center gap-1.5 text-xs font-semibold px-3 py-1.5 rounded-xl bg-primary text-black hover:bg-primary-dark transition-all disabled:opacity-60"
-                      >
-                        <CheckCircle2 size={12} />
-                        {isSaving ? 'Guardando…' : 'Guardar'}
-                      </button>
-                    </div>
-                  ) : (
-                    <div className="flex items-center gap-2 shrink-0">
+                <div className="flex items-center gap-2 shrink-0">
+                  {can('clients', 'update') && (
+                    isEditing ? (
+                      <>
+                        <button
+                          type="button"
+                          onClick={() => { reset({ name: client.name, lastName: client.lastName, email: client.email ?? '', phone: client.phone ?? '', cuil: client.cuil ?? '', peso: ficha?.peso != null ? String(ficha.peso) : '', altura: ficha?.altura != null ? String(ficha.altura) : '', actividadDiaria: ficha?.actividadDiaria ?? '', objetivos: ficha?.objetivos ?? '', deportePractica: ficha?.deportePractica ?? '', experiencia: ficha?.experiencia ?? '', lesiones: ficha?.lesiones ?? '', patologiasBase: ficha?.patologiasBase ?? '' }); setIsEditing(false) }}
+                          className="flex items-center gap-1.5 text-xs font-semibold px-3 py-1.5 rounded-xl border border-gray-200 dark:border-white/[0.1] bg-white/70 dark:bg-white/[0.04] text-gray-700 dark:text-gray-300 hover:bg-white dark:hover:bg-white/[0.09] transition-all"
+                        >
+                          <XCircle size={12} />
+                          Cancelar
+                        </button>
+                        <button
+                          type="button"
+                          onClick={handleSubmit(onEdit)}
+                          disabled={isSaving}
+                          className="flex items-center gap-1.5 text-xs font-semibold px-3 py-1.5 rounded-xl bg-primary text-black hover:bg-primary-dark transition-all disabled:opacity-60"
+                        >
+                          <CheckCircle2 size={12} />
+                          {isSaving ? 'Guardando…' : 'Guardar'}
+                        </button>
+                      </>
+                    ) : (
                       <button
                         onClick={() => { reset({ name: client.name, lastName: client.lastName, email: client.email ?? '', phone: client.phone ?? '', cuil: client.cuil ?? '', peso: ficha?.peso != null ? String(ficha.peso) : '', altura: ficha?.altura != null ? String(ficha.altura) : '', actividadDiaria: ficha?.actividadDiaria ?? '', objetivos: ficha?.objetivos ?? '', deportePractica: ficha?.deportePractica ?? '', experiencia: ficha?.experiencia ?? '', lesiones: ficha?.lesiones ?? '', patologiasBase: ficha?.patologiasBase ?? '' }); setIsEditing(true) }}
                         className="flex items-center gap-1.5 text-xs font-semibold px-3 py-1.5 rounded-xl border border-gray-200 dark:border-white/[0.1] bg-white/70 dark:bg-white/[0.04] text-gray-700 dark:text-gray-300 hover:bg-white dark:hover:bg-white/[0.09] transition-all"
@@ -1230,16 +1230,18 @@ export default function ClientProfilePage() {
                         <Edit2 size={12} />
                         Editar
                       </button>
-                      <button
-                        onClick={() => setShowDeleteModal(true)}
-                        className="flex items-center gap-1.5 text-xs font-semibold px-3 py-1.5 rounded-xl border border-red-200 dark:border-red-500/20 bg-red-50 dark:bg-red-500/[0.06] text-red-500 hover:bg-red-100 dark:hover:bg-red-500/[0.12] transition-all"
-                      >
-                        <Trash2 size={12} />
-                        Eliminar
-                      </button>
-                    </div>
-                  )
-                )}
+                    )
+                  )}
+                  {can('clients', 'delete') && !isEditing && (
+                    <button
+                      onClick={() => setShowDeleteModal(true)}
+                      className="flex items-center gap-1.5 text-xs font-semibold px-3 py-1.5 rounded-xl border border-red-200 dark:border-red-500/20 bg-red-50 dark:bg-red-500/[0.06] text-red-500 hover:bg-red-100 dark:hover:bg-red-500/[0.12] transition-all"
+                    >
+                      <Trash2 size={12} />
+                      Eliminar
+                    </button>
+                  )}
+                </div>
               </div>
             </div>
           </div>

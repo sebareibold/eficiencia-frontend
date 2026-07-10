@@ -56,11 +56,9 @@ function mapTurno(t: any): Shift {
 
 export const professorsApi = {
   getAll: (): Promise<{ id: string; name: string }[]> =>
-    api.get('/usuarios').then(r => {
+    api.get('/usuarios/profesores').then(r => {
       const users: any[] = Array.isArray(r.data) ? r.data : (r.data?.data ?? [])
-      return users
-        .filter(u => u.profesor)
-        .map(u => ({ id: String(u.profesor.id), name: String(u.nombre) }))
+      return users.map(u => ({ id: String(u.profesor.id), name: String(u.nombre) }))
     }),
 }
 
