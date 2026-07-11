@@ -974,7 +974,7 @@ export default function ShiftsPage() {
                             {diaEsp?.tipo === 'HORARIO_REDUCIDO' && (
                               <div className="absolute inset-x-0 bottom-0 h-0.5 bg-amber-400" />
                             )}
-                            <p className={`text-xs font-bold capitalize ${isToday ? 'text-primary' : diaEsp ? (diaEsp.tipo === 'CIERRE_TOTAL' ? 'text-red-500 dark:text-red-400' : 'text-amber-600 dark:text-amber-400') : 'text-gray-500 dark:text-[#8A8A9A]'}`}>
+                            <p className={`text-xs font-bold capitalize ${isToday ? 'text-amber-700 dark:text-primary' : diaEsp ? (diaEsp.tipo === 'CIERRE_TOTAL' ? 'text-red-500 dark:text-red-400' : 'text-amber-600 dark:text-amber-400') : 'text-gray-500 dark:text-[#8A8A9A]'}`}>
                               {format(date, 'EEEE d', { locale: es })}
                             </p>
                             {diaEsp ? (

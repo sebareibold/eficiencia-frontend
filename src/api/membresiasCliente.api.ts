@@ -8,10 +8,13 @@ function mapMembresia(m: any): MembresiaCliente {
     clienteId: m.clienteId,
     planId: m.planId,
     modalidad: m.modalidad,
+    metodoPago: m.metodoPago ?? 'TRANSFERENCIA',
     precio: Number(m.precio),
     fechaInicio: m.fechaInicio,
     fechaVencimiento: m.fechaVencimiento,
     estado: m.estado,
+    descuentoProporcional: Number(m.descuentoProporcional ?? 0),
+    proporcionalPendiente: m.proporcionalPendiente ?? false,
     plan: {
       nombre: m.plan?.nombre ?? '',
       frecuenciaSemanal: m.plan?.frecuenciaSemanal ?? 0,
@@ -33,6 +36,8 @@ export const membresiasClienteApi = {
         modalidad: dto.modalidad,
         ...(dto.precio !== undefined && { precio: dto.precio }),
         ...(dto.fechaInicio !== undefined && { fechaInicio: dto.fechaInicio }),
+        ...(dto.metodoPago !== undefined && { metodoPago: dto.metodoPago }),
+        ...(dto.descuentoProporcional !== undefined && { descuentoProporcional: dto.descuentoProporcional }),
       })
       .then((r) => mapMembresia(r.data)),
 

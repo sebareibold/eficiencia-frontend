@@ -29,6 +29,7 @@ export interface TarifaVigente {
   id: string
   planId: string
   modalidad: Modalidad
+  metodoPago: string
   precio: number
   vigenteDesde: string
 }
@@ -58,8 +59,10 @@ export interface CreateMembresiaClienteDto {
   clienteId: string
   planId: string
   modalidad: Modalidad
-  precio?: number       // opcional: si se omite, el backend lo toma de TarifaVigente
-  fechaInicio?: string  // ISO date, default: hoy
+  precio?: number
+  fechaInicio?: string
+  metodoPago?: string
+  descuentoProporcional?: number
 }
 
 export interface MembresiaCliente {
@@ -67,9 +70,12 @@ export interface MembresiaCliente {
   clienteId: string
   planId: string
   modalidad: Modalidad
+  metodoPago: string
   precio: number
   fechaInicio: string
   fechaVencimiento: string
   estado: 'PENDIENTE' | 'ACTIVA' | 'VENCIDA' | 'CANCELADA'
+  descuentoProporcional: number
+  proporcionalPendiente: boolean
   plan: { nombre: string; frecuenciaSemanal: number }
 }

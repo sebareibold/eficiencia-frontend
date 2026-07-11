@@ -4,7 +4,7 @@ import type { TarifaVigente, Modalidad } from '../types/membership.types'
 
 export interface MatrizPrecios {
   [planId: string]: {
-    [modalidad: string]: { id: string; precio: number; vigenteDesde: string }
+    [modalidad_metodoPago: string]: { id: string; precio: number; vigenteDesde: string; metodoPago: string }
   }
 }
 
@@ -13,6 +13,7 @@ function mapTarifa(t: any): TarifaVigente {
     id: t.id,
     planId: t.planId,
     modalidad: t.modalidad as Modalidad,
+    metodoPago: t.metodoPago ?? 'TRANSFERENCIA',
     precio: Number(t.precio),
     vigenteDesde: t.vigenteDesde,
   }
@@ -27,9 +28,9 @@ export const tarifasApi = {
   getMatriz: (): Promise<MatrizPrecios> =>
     api.get('/tarifas/matriz').then((r) => r.data),
 
-  // Crear tarifa para un combo plan+modalidad (admin)
-  create: (planId: string, modalidad: Modalidad, precio: number): Promise<TarifaVigente> =>
-    api.post('/tarifas', { planId, modalidad, precio }).then((r) => mapTarifa(r.data)),
+  // Crear tarifa para un combo plan+modalidad+método (admin)
+  create: (planId: string, modalidad: Modalidad, metodoPago: string, precio: number): Promise<TarifaVigente> =>
+    api.post('/tarifas', { planId, modalidad, metodoPago, precio }).then((r) => mapTarifa(r.data)),
 
   // Actualizar precio de una tarifa vigente (archiva la actual, crea nueva)
   updatePrecio: (tarifaId: string, precio: number): Promise<TarifaVigente> =>

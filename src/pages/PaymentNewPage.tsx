@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback } from 'react'
+import { useState, useEffect, useCallback, useMemo } from 'react'
 import { useNavigate, useSearchParams } from 'react-router-dom'
 import { motion, AnimatePresence } from 'framer-motion'
 import { pageVariants } from '../lib/motion'
@@ -58,14 +58,18 @@ const METHOD_OPTIONS = [
   { value: 'card'     as const, label: 'Débito',        Icon: CreditCard,     color: 'text-violet-600 dark:text-violet-400',   activeBg: 'bg-violet-500/10',  activeBorder: 'border-violet-500/40'  },
 ]
 
-const MODALIDAD_TO_METHOD: Record<string, 'cash' | 'transfer' | 'card'> = {
-  TRANSFERENCIA_MENSUAL: 'transfer',
-  EFECTIVO:              'cash',
-  MEMBRESIA_3_MESES:     'card',
-  MEMBRESIA_6_MESES:     'card',
+const MODALIDAD_MESES: Record<string, number> = {
+  TRANSFERENCIA_MENSUAL: 1,
+  EFECTIVO:              1,
+  MEMBRESIA_3_MESES:     3,
+  MEMBRESIA_6_MESES:     6,
 }
 
-
+function metodoPagoToMethod(metodoPago: string): 'cash' | 'transfer' | 'card' {
+  if (metodoPago === 'EFECTIVO') return 'cash'
+  if (metodoPago === 'TRANSFERENCIA') return 'transfer'
+  return 'card' // DEBITO, EMPRESA
+}
 
 // ── Estilos compartidos ───────────────────────────────────────────────────────
 
@@ -94,12 +98,12 @@ export default function PaymentNewPage() {
   const [step, setStep] = useState<1 | 2>(1)
 
   // ── Paso 1: cliente ───────────────────────────────────────────────────────
-  const [clientQuery,    setClientQuery]    = useState('')
-  const [clientResults,  setClientResults]  = useState<Client[]>([])
-  const [loadingSearch,  setLoadingSearch]  = useState(false)
-  const [selectedClient, setSelectedClient] = useState<Client | null>(null)
-  const [showNewClient,  setShowNewClient]  = useState(false)
-  const [creatingClient, setCreatingClient] = useState(false)
+  const [clientQuery,      setClientQuery]      = useState('')
+  const [clientResults,    setClientResults]    = useState<Client[]>([])
+  const [loadingSearch,    setLoadingSearch]    = useState(false)
+  const [selectedClient,   setSelectedClient]   = useState<Client | null>(null)
+  const [pendingNewClient, setPendingNewClient] = useState<NewClientValues | null>(null)
+  const [showNewClient,    setShowNewClient]    = useState(false)
 
   const {
     register: regClient,
@@ -122,17 +126,31 @@ export default function PaymentNewPage() {
   const [selectedPlanId,    setSelectedPlanId]    = useState('')
   const [selectedModalidad, setSelectedModalidad] = useState<Modalidad | ''>('')
 
+  const [aplicarProporcional, setAplicarProporcional] = useState(false)
+
   const {
     register: regPay,
     handleSubmit: submitPay,
     formState: { errors: payErrors },
     watch,
     setValue,
+    getValues,
   } = useForm<PaymentValues>({
     resolver: zodResolver(paymentSchema),
     defaultValues: { method: 'transfer', paidAt: today, invoiced: false },
   })
-  const watchedMethod = watch('method')
+  const watchedMethod  = watch('method')
+  const watchedPaidAt  = watch('paidAt')
+
+  const descuentoEstimado = useMemo(() => {
+    if (!selectedModalidad || !displayAmount) return 0
+    const cuota = Number(displayAmount.replace(/\./g, '')) || 0
+    if (cuota === 0) return 0
+    const date = new Date((watchedPaidAt || today) + 'T12:00:00')
+    const day = date.getDate()
+    const daysInMonth = new Date(date.getFullYear(), date.getMonth() + 1, 0).getDate()
+    return Math.round(cuota * (day - 1) / daysInMonth)
+  }, [selectedModalidad, displayAmount, watchedPaidAt, today])
 
   // ── Pre-fill cliente desde ?clienteId= ───────────────────────────────────
   useEffect(() => {
@@ -185,6 +203,7 @@ export default function PaymentNewPage() {
   function backToStep1() {
     setStep(1)
     setSelectedClient(null)
+    setPendingNewClient(null)
     setMembresias([])
     setMembresiaId('')
     setSubmitError(null)
@@ -195,22 +214,14 @@ export default function PaymentNewPage() {
     setDisplayAmount('')
   }
 
-  // ── Crear cliente inline ──────────────────────────────────────────────────
-  async function onCreateClient(data: NewClientValues) {
-    setCreatingClient(true)
-    try {
-      const created = await clientsApi.create({
-        name: data.name, lastName: data.lastName,
-        phone: data.phone || undefined,
-        email: data.email || undefined,
-      })
-      addToast(`Cliente ${created.name} ${created.lastName} creado`, 'success')
-      pickClient(created)
-    } catch {
-      addToast('Error al crear el cliente', 'error')
-    } finally {
-      setCreatingClient(false)
-    }
+  // ── Crear cliente inline — solo guarda datos, la API se llama al confirmar el pago ──
+  function onCreateClient(data: NewClientValues) {
+    setPendingNewClient(data)
+    setMembresias([])
+    setMembresiaId('')
+    setShowNewClient(false)
+    resetClient()
+    setStep(2)
   }
 
   // ── Seleccionar plan ──────────────────────────────────────────────────────
@@ -228,41 +239,63 @@ export default function PaymentNewPage() {
     const raw = String(precio)
     setDisplayAmount(Number(raw).toLocaleString('es-AR'))
     setValue('amount', raw, { shouldValidate: true })
-    setValue('method', MODALIDAD_TO_METHOD[modalidad] ?? 'transfer', { shouldValidate: true })
+    const tarifa = selectedPlan?.tarifas.find(t => t.modalidad === modalidad)
+    setValue('method', tarifa ? metodoPagoToMethod(tarifa.metodoPago) : 'transfer', { shouldValidate: true })
     // Solo vincular membresías realmente vigentes (fecha de vencimiento >= hoy)
     const match = membresias.find(
       m => m.planId === selectedPlanId && m.modalidad === modalidad &&
            m.estado === 'ACTIVA' && m.fechaVencimiento.slice(0, 10) >= today
     )
     setMembresiaId(match?.id ?? '')
+    // Auto-activar proporcional si el pago es después del día 15
+    const paidAt = getValues('paidAt') || today
+    const day = new Date(paidAt + 'T12:00:00').getDate()
+    setAplicarProporcional(day >= 16)
   }
 
   // ── Registrar pago ────────────────────────────────────────────────────────
   async function onSubmitPayment(data: PaymentValues) {
-    if (!selectedClient) return
+    if (!selectedClient && !pendingNewClient) return
     setSubmitting(true)
     setSubmitError(null)
     try {
+      // Si es cliente nuevo, crearlo ahora antes de cualquier otra cosa
+      let clientId: string
+      if (selectedClient) {
+        clientId = String(selectedClient.id)
+      } else {
+        const created = await clientsApi.create({
+          name:     pendingNewClient!.name,
+          lastName: pendingNewClient!.lastName,
+          phone:    pendingNewClient!.phone  || undefined,
+          email:    pendingNewClient!.email  || undefined,
+        })
+        clientId = String(created.id)
+        addToast(`Cliente ${created.name} ${created.lastName} creado`, 'success')
+      }
+
       let finalMembresiaId = membresiaId
 
       // Crear nueva membresía si no hay una vigente para ese plan+modalidad
-      // (aplica tanto a clientes nuevos como a clientes con membresía vencida)
       const tieneVigente = membresias.some(
         m => m.planId === selectedPlanId && m.modalidad === selectedModalidad &&
              m.estado === 'ACTIVA' && m.fechaVencimiento.slice(0, 10) >= today
       )
       if (selectedPlanId && selectedModalidad && !tieneVigente) {
         const nueva = await membresiasClienteApi.create({
-          clienteId: String(selectedClient.id),
+          clienteId: clientId,
           planId: selectedPlanId,
           modalidad: selectedModalidad as Modalidad,
           precio: Number(data.amount),
+          ...(aplicarProporcional && descuentoEstimado > 0 && {
+            descuentoProporcional: descuentoEstimado,
+          }),
         })
         finalMembresiaId = nueva.id
       }
 
       const payment = await paymentsApi.create({
-        clientId: selectedClient.id as unknown as number,
+        clientId: clientId as unknown as number,
         amount:   Number(data.amount),
         method:   data.method,
         paidAt:   data.paidAt,
@@ -591,27 +624,31 @@ export default function PaymentNewPage() {
 
     return (
       <div className="space-y-5">
-        {/* Cliente seleccionado */}
-        <div className="flex items-center gap-3 px-4 py-3 rounded-2xl bg-primary/5 dark:bg-primary/[0.06] border border-primary/20 dark:border-primary/15">
-          <div className="h-8 w-8 rounded-xl bg-primary/15 flex items-center justify-center shrink-0">
-            <User size={14} className="text-primary" />
-          </div>
-          <div className="min-w-0 flex-1">
-            <p className="text-sm font-bold text-gray-900 dark:text-white truncate">
-              {selectedClient?.name} {selectedClient?.lastName}
-            </p>
-            {selectedClient?.planName && (
-              <p className="text-xs text-gray-500 dark:text-[#6A6A7A] truncate">{selectedClient.planName}</p>
-            )}
-          </div>
-          <button
-            type="button"
-            onClick={backToStep1}
-            className="shrink-0 text-xs font-semibold text-gray-400 hover:text-primary transition-colors"
-          >
-            Cambiar
-          </button>
-        </div>
+        {/* Cliente seleccionado / pendiente */}
+        {(() => {
+          const name = selectedClient
+            ? `${selectedClient.name} ${selectedClient.lastName}`
+            : `${pendingNewClient?.name} ${pendingNewClient?.lastName}`
+          const sub = selectedClient?.planName ?? (pendingNewClient ? 'Nuevo cliente — se creará al confirmar el pago' : '')
+          return (
+            <div className="flex items-center gap-3 px-4 py-3 rounded-2xl bg-primary/5 dark:bg-primary/[0.06] border border-primary/20 dark:border-primary/15">
+              <div className="h-8 w-8 rounded-xl bg-primary/15 flex items-center justify-center shrink-0">
+                <User size={14} className="text-primary" />
+              </div>
+              <div className="min-w-0 flex-1">
+                <p className="text-sm font-bold text-gray-900 dark:text-white truncate">{name}</p>
+                {sub && <p className="text-xs text-gray-500 dark:text-[#6A6A7A] truncate">{sub}</p>}
+              </div>
+              <button
+                type="button"
+                onClick={backToStep1}
+                className="shrink-0 text-xs font-semibold text-gray-400 hover:text-primary transition-colors"
+              >
+                Cambiar
+              </button>
+            </div>
+          )
+        })()}
 
         {/* Grid 2 columnas: izquierda = membresía + monto · derecha = método + fecha + notas + facturado */}
         <div className="grid grid-cols-1 md:grid-cols-2 gap-x-8 gap-y-5">
@@ -772,6 +809,7 @@ export default function PaymentNewPage() {
               )}
             </AnimatePresence>
 
+
           </div>
 
           {/* ── Columna derecha: método + fecha + notas + facturado ── */}
@@ -818,6 +856,68 @@ export default function PaymentNewPage() {
                 </p>
               )}
             </div>
+
+            {/* Descuento proporcional — siempre visible en columna derecha */}
+            {(() => {
+              const meses      = MODALIDAD_MESES[selectedModalidad || ''] || 1
+              const esMensual  = meses === 1
+              const cuota      = Number(displayAmount.replace(/\./g, '')) || 0
+              const proxPago   = Math.max(0, cuota - descuentoEstimado)
+              const labelTipo  = esMensual ? 'El próximo mes' : `La próxima cuota (cuota 2 de ${meses})`
+
+              const descripcionOn = selectedModalidad && descuentoEstimado > 0
+                ? `${labelTipo} pagaría $${proxPago.toLocaleString('es-AR')} (ahorro $${descuentoEstimado.toLocaleString('es-AR')})`
+                : selectedModalidad
+                  ? `${labelTipo} pagaría $${cuota.toLocaleString('es-AR')} (sin descuento)`
+                  : ''
+
+              return (
+                <div className="space-y-1.5">
+                  <label className="text-[11px] font-bold uppercase tracking-widest text-gray-400 dark:text-[#6A6A7A]">
+                    Proporcional
+                  </label>
+                  <button
+                    type="button"
+                    disabled={!selectedModalidad}
+                    onClick={() => setAplicarProporcional(v => !v)}
+                    className={[
+                      'w-full flex items-center justify-between gap-3 px-4 py-3 rounded-xl border-2 transition-all duration-200',
+                      !selectedModalidad
+                        ? 'border-gray-100 dark:border-white/[0.04] bg-gray-50/50 dark:bg-white/[0.01] opacity-50 cursor-not-allowed'
+                        : aplicarProporcional
+                          ? 'border-amber-400/50 bg-amber-500/[0.06] dark:bg-amber-500/[0.05]'
+                          : 'border-gray-200 dark:border-white/[0.07] bg-white/40 dark:bg-white/[0.02] hover:border-amber-300/40',
+                    ].join(' ')}
+                  >
+                    <div className="text-left min-w-0">
+                      <p className={`text-sm font-bold ${aplicarProporcional && selectedModalidad ? 'text-amber-700 dark:text-amber-400' : 'text-gray-600 dark:text-gray-300'}`}>
+                        Descuento por inicio a mitad de mes
+                      </p>
+                      <p className="text-xs text-gray-500 dark:text-[#6A6A7A] mt-1 leading-relaxed">
+                        {!selectedModalidad
+                          ? 'Se activa al elegir la modalidad'
+                          : aplicarProporcional && descuentoEstimado > 0
+                            ? <>
+                                <span className="block">Ahora pagaría <strong className="text-gray-700 dark:text-gray-200">${cuota.toLocaleString('es-AR')}</strong></span>
+                                <span className="block">{labelTipo} pagaría <strong className="text-amber-700 dark:text-amber-300">${proxPago.toLocaleString('es-AR')}</strong>{' (ahorro $'}{descuentoEstimado.toLocaleString('es-AR')}{' porque arranca a mitad de mes)'}</span>
+                              </>
+                            : <><span className="block">Sin descuento aplicado</span><span className="block">{labelTipo} pagaría <strong className="text-gray-700 dark:text-gray-200">${cuota.toLocaleString('es-AR')}</strong></span></>
+                        }
+                      </p>
+                    </div>
+                    <div className={[
+                      'relative shrink-0 h-6 w-11 rounded-full transition-colors duration-200',
+                      aplicarProporcional && selectedModalidad ? 'bg-amber-400' : 'bg-gray-300 dark:bg-white/[0.12]',
+                    ].join(' ')}>
+                      <div className={[
+                        'absolute top-1 h-4 w-4 rounded-full bg-white shadow transition-transform duration-200',
+                        aplicarProporcional && selectedModalidad ? 'translate-x-5' : 'translate-x-1',
+                      ].join(' ')} />
+                    </div>
+                  </button>
+                </div>
+              )
+            })()}
 
             {/* Notas */}
             <div className="space-y-1.5">
@@ -942,11 +1042,10 @@ export default function PaymentNewPage() {
                 <button
                   type="button"
                   onClick={submitClient(onCreateClient)}
-                  disabled={creatingClient}
-                  className="flex items-center gap-2 px-5 py-2.5 rounded-xl bg-primary text-black text-sm font-bold hover:bg-primary-dark disabled:opacity-60 transition-all"
+                  className="flex items-center gap-2 px-5 py-2.5 rounded-xl bg-primary text-black text-sm font-bold hover:bg-primary-dark transition-all"
                 >
-                  {creatingClient ? <Loader2 size={14} className="animate-spin" /> : <CheckCircle2 size={14} />}
-                  Crear y continuar
+                  <CheckCircle2 size={14} />
+                  Continuar
                 </button>
               ) : step === 2 ? (
                 /* Registrar pago */

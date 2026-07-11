@@ -7,6 +7,7 @@ function mapTarifa(t: any): TarifaVigente {
     id: t.id,
     planId: t.planId,
     modalidad: t.modalidad as Modalidad,
+    metodoPago: t.metodoPago ?? 'TRANSFERENCIA',
     precio: Number(t.precio),
     vigenteDesde: t.vigenteDesde,
   }

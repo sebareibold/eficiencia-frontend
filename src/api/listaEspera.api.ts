@@ -13,16 +13,23 @@ export type ListaEsperaClienteEntry = {
 }
 
 function mapEntry(e: any): ListaEsperaEntry {
+  let clienteNombre: string
+  if (e.cliente) {
+    clienteNombre = `${e.cliente.nombre} ${e.cliente.apellido}`
+  } else if (e.nombreExterno) {
+    clienteNombre = `${e.nombreExterno} ${e.apellidoExterno ?? ''}`.trim()
+  } else {
+    clienteNombre = e.clienteNombre ?? 'Contacto externo'
+  }
   return {
     id: String(e.id),
-    clienteId: String(e.clienteId),
+    clienteId: e.clienteId ? String(e.clienteId) : null,
     turnoId: String(e.turnoId),
     tipo: e.tipo,
     fechaSolicitud: e.fechaSolicitud,
     estado: e.estado,
-    clienteNombre: e.cliente
-      ? `${e.cliente.nombre} ${e.cliente.apellido}`
-      : (e.clienteNombre ?? 'Cliente desconocido'),
+    clienteNombre,
+    whatsappExterno: e.whatsappExterno ?? null,
   }
 }
 
@@ -50,11 +57,24 @@ export const listaEsperaApi = {
       (Array.isArray(r.data) ? r.data : []).map(mapEntryCliente)
     ),
 
-  create: (clienteId: string, turnoId: string, tipo: TipoEspera): Promise<ListaEsperaEntry> =>
-    api.post('/lista-espera', { clienteId, turnoId, tipo }).then(r => mapEntry(r.data)),
+  create: (
+    turnoId: string,
+    tipo: TipoEspera,
+    clienteId?: string,
+    externo?: { nombreExterno: string; apellidoExterno: string; whatsappExterno: string },
+  ): Promise<ListaEsperaEntry> =>
+    api.post('/lista-espera', {
+      turnoId,
+      tipo,
+      ...(clienteId ? { clienteId } : {}),
+      ...externo,
+    }).then(r => mapEntry(r.data)),
 
   updateEstado: (id: string, estado: EstadoEspera): Promise<ListaEsperaEntry> =>
     api.patch(`/lista-espera/${id}`, { estado }).then(r => mapEntry(r.data)),
+
+  updateExterno: (id: string, data: { nombreExterno: string; apellidoExterno: string; whatsappExterno: string }): Promise<ListaEsperaEntry> =>
+    api.patch(`/lista-espera/${id}`, data).then(r => mapEntry(r.data)),
 
   remove: (id: string): Promise<void> =>
     api.delete(`/lista-espera/${id}`),

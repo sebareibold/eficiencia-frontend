@@ -269,7 +269,7 @@ export default function ShiftNewPage() {
           <motion.div {...cardAnim(0)} className={`${cardCls} p-6 lg:p-8 space-y-6`}>
             <div className="flex items-center gap-3">
               <div className="flex h-10 w-10 items-center justify-center rounded-2xl bg-primary/10">
-                <Calendar size={18} className="text-primary" />
+                <Calendar size={18} className="text-amber-700 dark:text-primary" />
               </div>
               <div>
                 <p className="font-bold text-gray-900 dark:text-white">Datos del turno</p>
@@ -359,7 +359,7 @@ export default function ShiftNewPage() {
             <div className="flex items-center justify-between">
               <div className="flex items-center gap-3">
                 <div className="flex h-10 w-10 items-center justify-center rounded-2xl bg-primary/10">
-                  <Users size={18} className="text-primary" />
+                  <Users size={18} className="text-amber-700 dark:text-primary" />
                 </div>
                 <div>
                   <p className="font-bold text-gray-900 dark:text-white">Sala A</p>
@@ -367,7 +367,7 @@ export default function ShiftNewPage() {
                 </div>
               </div>
               {clientIdsA.length > 0 && (
-                <span className="text-xs font-bold px-2.5 py-1 rounded-xl bg-primary/10 text-primary">
+                <span className="text-xs font-bold px-2.5 py-1 rounded-xl bg-primary/25 text-amber-700 dark:text-primary">
                   {clientIdsA.length} sel.
                 </span>
               )}

@@ -6,7 +6,7 @@ import {
   ArrowLeft, Users, Clock, Dumbbell, UserPlus, ListPlus,
   X, Bell, Check, Trash2, Search, AlertTriangle, CheckCircle2, Pencil, Save,
   Hash, Tag, CalendarDays, GripVertical, Ban, Plus, ChevronLeft, ChevronRight,
-  RefreshCw,
+  RefreshCw, MessageSquare,
 } from 'lucide-react'
 import { useForm } from 'react-hook-form'
 import { zodResolver } from '@hookform/resolvers/zod'
@@ -18,11 +18,16 @@ import { clientsApi } from '../api/clients.api'
 import type { Client } from '../types/client.types'
 import { cancelacionesApi } from '../api/cancelaciones.api'
 import type { CancelacionTurno } from '../types/cancelaciones.types'
+import { excepcionesApi } from '../api/excepciones.api'
+import type { ExcepcionTurno } from '../types/excepcion.types'
 import { inscripcionesApi } from '../api/inscripciones.api'
 import { attendanceApi } from '../api/attendance.api'
 import { listaEsperaApi } from '../api/listaEspera.api'
 import { reposicionesApi } from '../api/reposiciones.api'
 import type { AusenciaTurno, RecuperacionClase } from '../types/reposicion.types'
+import { useQueryClient } from '@tanstack/react-query'
+import { QK } from '../lib/queryKeys'
+import type { ListaEsperaEntry } from '../types/listaEspera.types'
 import { useListaEspera } from '../hooks/useListaEspera'
 import { useAttendance } from '../hooks/useAttendance'
 import { useClients } from '../hooks/useClients'
@@ -74,7 +79,7 @@ const editSchema = z.object({
 })
 type EditValues = z.infer<typeof editSchema>
 
-type DetailTab = 'resumen' | 'inscripciones' | 'asistencia' | 'espera' | 'cancelaciones'
+type DetailTab = 'resumen' | 'inscripciones' | 'asistencia' | 'espera'
 
 const ESPERA_BADGE: Record<string, string> = {
   PENDIENTE:  'bg-amber-500/10 text-amber-400 border-amber-500/20',
@@ -94,6 +99,7 @@ export default function ShiftDetailPage() {
   const [searchParams] = useSearchParams()
   const addToast = useUiStore(s => s.addToast)
   const user = useAuthStore(s => s.user)
+  const queryClient = useQueryClient()
   const isAdmin = user?.role === 'admin'
 
   // Traer lista primero para poder inicializar el estado desde cache
@@ -132,8 +138,16 @@ export default function ShiftDetailPage() {
   const [addEsperaClientId, setAddEsperaClientId] = useState('')
   const [addEsperaTipo, setAddEsperaTipo] = useState<TipoEspera>('INTERNA')
   const [addEsperaSubmitting, setAddEsperaSubmitting] = useState(false)
-  const [esperaTipoTab, setEsperaTipoTab] = useState<'INTERNA' | 'EXTERNA'>('INTERNA')
+  const [esperaTipoTab, setEsperaTipoTab] = useState<'TODOS' | 'INTERNA' | 'EXTERNA'>('TODOS')
+  const [addExternoNombre, setAddExternoNombre] = useState('')
+  const [addExternoApellido, setAddExternoApellido] = useState('')
+  const [addExternoWhatsapp, setAddExternoWhatsapp] = useState('')
   const [actionLoadingIds, setActionLoadingIds] = useState<Set<string>>(new Set())
+  const [editingEsperaId, setEditingEsperaId] = useState<string | null>(null)
+  const [editExternoNombre, setEditExternoNombre] = useState('')
+  const [editExternoApellido, setEditExternoApellido] = useState('')
+  const [editExternoWhatsapp, setEditExternoWhatsapp] = useState('')
+  const [editEsperaSubmitting, setEditEsperaSubmitting] = useState(false)
 
   // Asistencia — fecha fija a la próxima ocurrencia del turno (o URL param si viene del historial)
   const selectedDate = useMemo(() => {
@@ -176,8 +190,20 @@ export default function ShiftDetailPage() {
   const [savingCancelacion, setSavingCancelacion] = useState(false)
   const [deletingCancelacionId, setDeletingCancelacionId] = useState<string | null>(null)
 
-  // Reposiciones
-  // Edit
+  // Excepciones puntuales
+  const [excepciones, setExcepciones] = useState<ExcepcionTurno[]>([])
+  const [loadingExcepciones, setLoadingExcepciones] = useState(false)
+  const [excepcionFormOpen, setExcepcionFormOpen] = useState(false)
+  const [excepcionFecha, setExcepcionFecha] = useState('')
+  const [excepcionHoraInicio, setExcepcionHoraInicio] = useState('')
+  const [excepcionHoraFin, setExcepcionHoraFin] = useState('')
+  const [excepcionProfesorId, setExcepcionProfesorId] = useState('')
+  const [excepcionMotivo, setExcepcionMotivo] = useState('')
+  const [savingExcepcion, setSavingExcepcion] = useState(false)
+  const [deletingExcepcionId, setDeletingExcepcionId] = useState<string | null>(null)
+  const [editMode, setEditMode] = useState<'general' | 'puntual'>('general')
+
+  // Edit general
   const [professors, setProfessors] = useState<{ id: string; name: string }[]>([])
   const [editSubmitting, setEditSubmitting] = useState(false)
 
@@ -301,15 +327,21 @@ export default function ShiftDetailPage() {
       .finally(() => setLoadingRecuperaciones(false))
   }, [tab, id, selectedDate])
 
-  // Cargar cancelaciones cuando se abre el tab
+  // Cargar cancelaciones y excepciones cuando se abre el modo edición
   useEffect(() => {
-    if (tab !== 'cancelaciones' || !id) return
+    if (!isEditingShift || !id) return
     setLoadingCancelaciones(true)
     cancelacionesApi.getByTurno(id)
       .then(setCancelaciones)
       .catch(() => addToast('Error al cargar cancelaciones', 'error'))
       .finally(() => setLoadingCancelaciones(false))
-  }, [tab, id])
+
+    setLoadingExcepciones(true)
+    excepcionesApi.getByTurno(id)
+      .then(setExcepciones)
+      .catch(() => addToast('Error al cargar modificaciones puntuales', 'error'))
+      .finally(() => setLoadingExcepciones(false))
+  }, [isEditingShift, id])
 
   // Sincronizar attendanceStates con registros del backend
   useEffect(() => {
@@ -473,35 +505,86 @@ export default function ShiftDetailPage() {
   }
 
   async function handleAddToWaitingList() {
-    if (!id || !addEsperaClientId) return
+    if (!id) return
+    const hasClient = addEsperaClientId !== ''
+    const hasExternal = addExternoNombre.trim() && addExternoApellido.trim() && addExternoWhatsapp.trim()
+    if (!hasClient && !hasExternal) return
     setAddEsperaSubmitting(true)
     try {
-      await listaEsperaApi.create(addEsperaClientId, id, addEsperaTipo)
+      if (hasClient) {
+        await listaEsperaApi.create(id, addEsperaTipo, addEsperaClientId)
+      } else {
+        await listaEsperaApi.create(id, addEsperaTipo, undefined, {
+          nombreExterno:   addExternoNombre.trim(),
+          apellidoExterno: addExternoApellido.trim(),
+          whatsappExterno: addExternoWhatsapp.trim(),
+        })
+      }
       addToast('Agregado a lista de espera', 'success')
-      setAddEsperaClientId(''); setAddEsperaClientSearch(''); setAddEsperaMode(false)
+      setAddEsperaClientId(''); setAddEsperaClientSearch('')
+      setAddExternoNombre(''); setAddExternoApellido(''); setAddExternoWhatsapp('')
+      setAddEsperaMode(false)
       refetchEspera()
-    } catch {
-      addToast('Error al agregar a lista de espera', 'error')
+    } catch (e: any) {
+      addToast(e?.response?.data?.message ?? 'Error al agregar a lista de espera', 'error')
     } finally {
       setAddEsperaSubmitting(false)
     }
   }
 
   async function handleEsperaAction(entryId: string, action: 'notificar' | 'aceptar' | 'rechazar' | 'eliminar') {
+    const qk = QK.listaEspera.byTurno(id ?? null)
+
+    if (action === 'eliminar') {
+      // Optimistic: sacar la entrada del cache inmediatamente
+      const prev = queryClient.getQueryData<ListaEsperaEntry[]>(qk)
+      queryClient.setQueryData<ListaEsperaEntry[]>(qk, old => old?.filter(e => e.id !== entryId) ?? [])
+      try {
+        await listaEsperaApi.remove(entryId)
+      } catch {
+        // Revertir si falla
+        queryClient.setQueryData(qk, prev)
+        addToast('Error al eliminar', 'error')
+      }
+      return
+    }
+
     setActionLoadingIds(prev => new Set([...prev, entryId]))
     try {
-      if (action === 'eliminar') {
-        await listaEsperaApi.remove(entryId)
-      } else {
-        const map = { notificar: 'NOTIFICADO', aceptar: 'ACEPTADO', rechazar: 'RECHAZADO' } as const
-        await listaEsperaApi.updateEstado(entryId, map[action] as EstadoEspera)
-      }
+      const map = { notificar: 'NOTIFICADO', aceptar: 'ACEPTADO', rechazar: 'RECHAZADO' } as const
+      await listaEsperaApi.updateEstado(entryId, map[action] as EstadoEspera)
       addToast('Acción realizada', 'success')
       refetchEspera()
     } catch {
       addToast('Error al procesar la acción', 'error')
     } finally {
       setActionLoadingIds(prev => { const s = new Set(prev); s.delete(entryId); return s })
+    }
+  }
+
+  function startEditEspera(entry: { id: string; clienteNombre: string; whatsappExterno: string | null }) {
+    const parts = entry.clienteNombre.split(' ')
+    setEditExternoNombre(parts[0] ?? '')
+    setEditExternoApellido(parts.slice(1).join(' '))
+    setEditExternoWhatsapp(entry.whatsappExterno ?? '')
+    setEditingEsperaId(entry.id)
+  }
+
+  async function handleEsperaSaveEdit(entryId: string) {
+    setEditEsperaSubmitting(true)
+    try {
+      await listaEsperaApi.updateExterno(entryId, {
+        nombreExterno:   editExternoNombre.trim(),
+        apellidoExterno: editExternoApellido.trim(),
+        whatsappExterno: editExternoWhatsapp.trim(),
+      })
+      addToast('Contacto actualizado', 'success')
+      setEditingEsperaId(null)
+      refetchEspera()
+    } catch {
+      addToast('Error al guardar cambios', 'error')
+    } finally {
+      setEditEsperaSubmitting(false)
     }
   }
 
@@ -597,6 +680,59 @@ export default function ShiftDetailPage() {
       addToast('Error al eliminar cancelación', 'error')
     } finally {
       setDeletingCancelacionId(null)
+    }
+  }
+
+  function openExcepcionForm() {
+    if (!shift) return
+    setExcepcionHoraInicio(shift.startTime)
+    setExcepcionHoraFin(shift.endTime)
+    setExcepcionProfesorId(shift.profesorId ?? '')
+    setExcepcionMotivo('')
+    setExcepcionFecha('')
+    setExcepcionFormOpen(true)
+  }
+
+  async function handleSaveExcepcion(fechaParam?: string) {
+    const fecha = fechaParam ?? excepcionFecha
+    if (!id || !fecha) return
+    setSavingExcepcion(true)
+    try {
+      const existente = excepciones.find(e => e.fecha === fecha)
+      if (existente) {
+        const actualizada = await excepcionesApi.update(existente.id, {
+          profesorId: excepcionProfesorId || null,
+          motivo:     excepcionMotivo     || null,
+        })
+        setExcepciones(prev => prev.map(e => e.id === existente.id ? actualizada : e))
+      } else {
+        const nueva = await excepcionesApi.create({
+          turnoId:    id,
+          fecha,
+          profesorId: excepcionProfesorId || undefined,
+          motivo:     excepcionMotivo     || undefined,
+        })
+        setExcepciones(prev => [...prev, nueva].sort((a, b) => a.fecha.localeCompare(b.fecha)))
+      }
+      addToast('Modificación puntual guardada', 'success')
+    } catch {
+      addToast('Error al guardar modificación puntual', 'error')
+    } finally {
+      setSavingExcepcion(false)
+    }
+  }
+
+  async function handleDeleteExcepcion(excId: string) {
+    setDeletingExcepcionId(excId)
+    const prev = excepciones
+    setExcepciones(old => old.filter(e => e.id !== excId))
+    try {
+      await excepcionesApi.remove(excId)
+    } catch {
+      setExcepciones(prev)
+      addToast('Error al eliminar modificación puntual', 'error')
+    } finally {
+      setDeletingExcepcionId(null)
     }
   }
 
@@ -697,7 +833,6 @@ export default function ShiftDetailPage() {
     { value: 'inscripciones',  label: 'Inscripciones',   badge: inscripciones.length },
     { value: 'asistencia',     label: 'Asistencia' },
     { value: 'espera',         label: 'Lista de espera', badge: esperaEntries.filter(e => e.estado === 'PENDIENTE').length },
-    { value: 'cancelaciones',  label: 'Cancelaciones',   badge: cancelaciones.length || undefined },
   ]
 
   return (
@@ -878,7 +1013,98 @@ export default function ShiftDetailPage() {
                 </button>
               </div>
 
-              <form onSubmit={editHandleSubmit(onEditSubmit)} className="space-y-4">
+              {/* Toggle General / Puntual */}
+              <div className="flex gap-1.5 mb-5 p-1 rounded-xl bg-gray-100 dark:bg-white/[0.04] border border-gray-200 dark:border-white/[0.06]">
+                {(['general', 'puntual'] as const).map(mode => (
+                  <button
+                    key={mode} type="button"
+                    onClick={() => { setEditMode(mode); setExcepcionFormOpen(false); setCancelacionFormOpen(false) }}
+                    className={`flex-1 rounded-lg py-1.5 text-xs font-semibold transition-all ${
+                      editMode === mode
+                        ? 'bg-white dark:bg-white/[0.10] text-gray-900 dark:text-white shadow-sm'
+                        : 'text-gray-500 dark:text-[#8A8A9A] hover:text-gray-700 dark:hover:text-white'
+                    }`}
+                  >
+                    {mode === 'general' ? 'Turno general' : 'Modificación puntual'}
+                  </button>
+                ))}
+              </div>
+
+              {/* ── Panel modificación puntual ── */}
+              {editMode === 'puntual' && shift && (() => {
+                const excepExistente = excepciones.find(e => e.fecha === selectedDate)
+                return (
+                  <div className="space-y-4">
+                    {/* Header: turno + fecha en contexto */}
+                    <div className="rounded-xl border border-white/[0.08] bg-white/[0.04] px-4 py-3">
+                      <p className="text-[10px] font-bold uppercase tracking-wider text-[#8A8A9A] mb-1">Modificación puntual del turno</p>
+                      <p className="text-sm font-bold text-gray-900 dark:text-white">{shift.startTime} – {shift.endTime}</p>
+                      <p className="text-xs text-[#8A8A9A]">{shift.days.map(d => DAY_LABELS[d]).join(' · ')}</p>
+                      <p className="text-xs font-semibold text-primary mt-1.5 capitalize">
+                        {format(new Date(selectedDate + 'T12:00:00'), "EEEE d 'de' MMMM yyyy", { locale: es })}
+                      </p>
+                    </div>
+
+                    {/* Formulario */}
+                    <div className="space-y-3 rounded-xl border border-white/[0.08] bg-white/[0.02] p-4">
+                      <div>
+                        <label className="text-[11px] font-semibold text-gray-500 dark:text-[#8A8A9A] mb-1 block">Profesor</label>
+                        <select
+                          value={excepcionProfesorId || excepExistente?.profesorId || shift.profesorId || ''}
+                          onChange={e => setExcepcionProfesorId(e.target.value)}
+                          className="w-full rounded-lg border border-gray-200 dark:border-white/[0.08] bg-white dark:bg-white/[0.04] px-2.5 py-1.5 text-xs text-gray-900 dark:text-white focus:outline-none focus:ring-1 focus:ring-primary">
+                          {professors.map(p => <option key={p.id} value={p.id}>{p.name}</option>)}
+                        </select>
+                      </div>
+                      <div>
+                        <label className="text-[11px] font-semibold text-gray-500 dark:text-[#8A8A9A] mb-1 block">Motivo <span className="font-normal">(opcional)</span></label>
+                        <input type="text"
+                          value={excepcionMotivo || excepExistente?.motivo || ''}
+                          onChange={e => setExcepcionMotivo(e.target.value)}
+                          placeholder="Ej: Cambio de horario por feriado"
+                          className="w-full rounded-lg border border-gray-200 dark:border-white/[0.08] bg-white dark:bg-white/[0.04] px-2.5 py-1.5 text-xs text-gray-900 dark:text-white placeholder:text-gray-400 dark:placeholder:text-[#8A8A9A] focus:outline-none focus:ring-1 focus:ring-primary" />
+                      </div>
+                      <div className="flex justify-end pt-1">
+                        <button type="button"
+                          onClick={() => handleSaveExcepcion(selectedDate)}
+                          disabled={savingExcepcion}
+                          className="flex items-center gap-1 rounded-lg bg-primary px-4 py-1.5 text-xs font-semibold text-gray-900 hover:bg-primary-dark transition-all disabled:opacity-50">
+                          {savingExcepcion ? '…' : <><Save size={11} /> Guardar modificación</>}
+                        </button>
+                      </div>
+                    </div>
+
+                    {/* Modificaciones ya registradas */}
+                    {loadingExcepciones ? (
+                      <div className="h-8 rounded-lg bg-white/[0.04] animate-pulse" />
+                    ) : excepciones.length > 0 && (
+                      <div className="space-y-1.5">
+                        <p className="text-[11px] font-semibold text-[#8A8A9A] uppercase tracking-wider">Ya registradas</p>
+                        {excepciones.map(exc => (
+                          <div key={exc.id} className="flex items-center gap-2 rounded-lg border border-primary/20 bg-primary/5 px-3 py-2">
+                            <Pencil size={11} className="text-primary shrink-0" />
+                            <div className="flex-1 min-w-0">
+                              <p className="text-xs font-semibold text-gray-900 dark:text-white truncate capitalize">
+                                {format(new Date(exc.fecha + 'T12:00:00'), "EEE d MMM yyyy", { locale: es })}
+                                {exc.horaInicio && <span className="text-[#8A8A9A] font-normal ml-1.5">· {exc.horaInicio}–{exc.horaFin}</span>}
+                                {exc.profesorNombre && <span className="text-[#8A8A9A] font-normal ml-1.5">· {exc.profesorNombre}</span>}
+                              </p>
+                              {exc.motivo && <p className="text-[11px] text-[#8A8A9A] truncate">{exc.motivo}</p>}
+                            </div>
+                            <button type="button" disabled={deletingExcepcionId === exc.id} onClick={() => handleDeleteExcepcion(exc.id)}
+                              className="flex h-5 w-5 shrink-0 items-center justify-center rounded-md bg-red-500/10 text-red-400 hover:bg-red-500/20 transition-all disabled:opacity-50">
+                              {deletingExcepcionId === exc.id ? '…' : <Trash2 size={10} />}
+                            </button>
+                          </div>
+                        ))}
+                      </div>
+                    )}
+                  </div>
+                )
+              })()}
+
+              {/* ── Formulario general ── */}
+              {editMode === 'general' && <form onSubmit={editHandleSubmit(onEditSubmit)} className="space-y-4">
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                   <div className="space-y-4">
                     <div>
@@ -970,6 +1196,101 @@ export default function ShiftDetailPage() {
                   </div>
                 </div>
 
+                {/* ── Cancelaciones puntuales ── */}
+                <div className="space-y-2 pt-2 border-t border-white/[0.08]">
+                  <div className="flex items-center justify-between">
+                    <div className="flex items-center gap-1.5">
+                      <Ban size={13} className="text-red-400" />
+                      <span className="text-xs font-bold text-gray-700 dark:text-[#8A8A9A] uppercase tracking-wider">Cancelaciones puntuales</span>
+                    </div>
+                    {isAdmin && (
+                      <button type="button" onClick={() => setCancelacionFormOpen(v => !v)}
+                        className="flex items-center gap-1 rounded-lg bg-red-500/10 px-2.5 py-1 text-xs font-semibold text-red-400 hover:bg-red-500/20 transition-all">
+                        <Plus size={11} /> Registrar
+                      </button>
+                    )}
+                  </div>
+
+                  <AnimatePresence>
+                    {cancelacionFormOpen && shift && (() => {
+                      // Generar próximas fechas del turno (próximas 6 semanas)
+                      const canceladasSet = new Set(cancelaciones.map(c => c.fecha.slice(0, 10)))
+                      const dows = shift.days.map(d => WEEKDAY_TO_JS[d])
+                      const proximas: string[] = []
+                      const hoy = new Date(); hoy.setHours(0, 0, 0, 0)
+                      for (let i = 0; proximas.length < 18; i++) {
+                        const d = new Date(hoy); d.setDate(hoy.getDate() + i)
+                        const iso = d.toISOString().slice(0, 10)
+                        if (dows.includes(d.getDay()) && !canceladasSet.has(iso)) proximas.push(iso)
+                      }
+                      return (
+                        <motion.div initial={{ opacity: 0, height: 0 }} animate={{ opacity: 1, height: 'auto' }} exit={{ opacity: 0, height: 0 }} className="overflow-hidden">
+                          <div className="flex flex-col gap-2 rounded-xl border border-red-500/20 bg-red-500/5 p-3">
+                            <label className="text-[11px] font-semibold text-gray-500 dark:text-[#8A8A9A]">Seleccioná la fecha a cancelar</label>
+                            <div className="flex flex-wrap gap-1.5">
+                              {proximas.map(iso => (
+                                <button
+                                  key={iso} type="button"
+                                  onClick={() => setCancelacionFecha(iso)}
+                                  className={`rounded-lg px-2.5 py-1 text-[11px] font-semibold transition-all border ${
+                                    cancelacionFecha === iso
+                                      ? 'bg-red-500 border-red-500 text-white'
+                                      : 'border-red-500/30 bg-red-500/5 text-red-400 hover:bg-red-500/15'
+                                  }`}
+                                >
+                                  {format(new Date(iso + 'T12:00:00'), "EEE d MMM", { locale: es })}
+                                </button>
+                              ))}
+                            </div>
+                            <div>
+                              <label className="text-[11px] font-semibold text-gray-500 dark:text-[#8A8A9A] mb-1 block">Motivo <span className="font-normal">(opcional)</span></label>
+                              <input type="text" value={cancelacionMotivo} onChange={e => setCancelacionMotivo(e.target.value)}
+                                placeholder="Ej: Feriado, ausencia del profesor…"
+                                className="w-full rounded-lg border border-gray-200 dark:border-white/[0.08] bg-white dark:bg-white/[0.04] px-2.5 py-1.5 text-xs text-gray-900 dark:text-white placeholder:text-gray-400 dark:placeholder:text-[#8A8A9A] focus:outline-none focus:ring-1 focus:ring-red-500/30" />
+                            </div>
+                            <div className="flex justify-end gap-2">
+                              <button type="button" onClick={() => { setCancelacionFormOpen(false); setCancelacionFecha(''); setCancelacionMotivo('') }}
+                                className="rounded-lg px-3 py-1 text-xs font-semibold text-gray-500 dark:text-[#8A8A9A] hover:text-gray-700 dark:hover:text-white transition-colors">
+                                Cancelar
+                              </button>
+                              <button type="button" onClick={handleAddCancelacion} disabled={!cancelacionFecha || savingCancelacion}
+                                className="flex items-center gap-1 rounded-lg bg-red-500 px-3 py-1 text-xs font-semibold text-white hover:bg-red-600 transition-all disabled:opacity-50">
+                                {savingCancelacion ? '…' : <><Check size={11} /> Guardar</>}
+                              </button>
+                            </div>
+                          </div>
+                        </motion.div>
+                      )
+                    })()}
+                  </AnimatePresence>
+
+                  {loadingCancelaciones ? (
+                    <div className="h-8 rounded-lg bg-white/[0.04] animate-pulse" />
+                  ) : cancelaciones.length === 0 ? (
+                    <p className="text-xs text-[#8A8A9A] py-1">Sin cancelaciones registradas.</p>
+                  ) : (
+                    <div className="space-y-1.5">
+                      {cancelaciones.map(c => (
+                        <div key={c.id} className="flex items-center gap-2 rounded-lg border border-red-500/20 bg-red-500/5 px-3 py-2">
+                          <Ban size={11} className="text-red-400 shrink-0" />
+                          <div className="flex-1 min-w-0">
+                            <p className="text-xs font-semibold text-gray-900 dark:text-white truncate">
+                              {format(parseISO(c.fecha), "EEE d MMM yyyy", { locale: es })}
+                            </p>
+                            {c.motivo && <p className="text-[11px] text-[#8A8A9A] truncate">{c.motivo}</p>}
+                          </div>
+                          {isAdmin && (
+                            <button type="button" disabled={deletingCancelacionId === c.id} onClick={() => handleDeleteCancelacion(c.id)}
+                              className="flex h-5 w-5 shrink-0 items-center justify-center rounded-md bg-red-500/10 text-red-400 hover:bg-red-500/20 transition-all disabled:opacity-50">
+                              {deletingCancelacionId === c.id ? '…' : <Trash2 size={10} />}
+                            </button>
+                          )}
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                </div>
+
                 <div className="flex items-center justify-between pt-4 border-t border-white/[0.08]">
                   <button
                     type="button" onClick={() => setIsConfirmDeleteShift(true)}
@@ -981,7 +1302,7 @@ export default function ShiftDetailPage() {
                     <Save size={14} /> Guardar cambios
                   </Button>
                 </div>
-              </form>
+              </form>}
             </motion.div>
           )}
           </AnimatePresence>
@@ -1543,303 +1864,269 @@ export default function ShiftDetailPage() {
                   {esperaEntries.length === 0 ? 'Lista de espera vacía' : `${esperaEntries.length} entrada${esperaEntries.length !== 1 ? 's' : ''}`}
                 </p>
                 <button
-                  onClick={() => { setAddEsperaMode(m => !m); setAddEsperaClientSearch(''); setAddEsperaClientId('') }}
-                  className="flex items-center gap-1.5 rounded-xl bg-primary/10 px-3 py-1.5 text-xs font-semibold text-primary hover:bg-primary/20 transition-all"
+                  onClick={() => { setAddEsperaMode(m => { if (!m) setAddEsperaTipo(esperaTipoTab === 'TODOS' ? 'INTERNA' : esperaTipoTab); return !m }); setAddEsperaClientSearch(''); setAddEsperaClientId(''); setAddExternoNombre(''); setAddExternoApellido(''); setAddExternoWhatsapp('') }}
+                  className="flex items-center gap-1.5 rounded-xl bg-primary/25 px-3 py-1.5 text-xs font-semibold text-amber-700 dark:text-primary hover:bg-primary/40 transition-all"
                 >
-                  <ListPlus size={13} /> Agregar a lista
+                  <ListPlus size={13} /> {addEsperaMode ? 'Cancelar' : 'Agregar a lista'}
                 </button>
               </div>
 
-              <AnimatePresence>
-                {addEsperaMode && (() => {
-                  const waitlistedIds = new Set(
-                    esperaEntries.filter(e => e.estado === 'PENDIENTE' || e.estado === 'NOTIFICADO').map(e => e.clienteId)
-                  )
-                  const filteredForEspera = clients
-                    .filter(c => !waitlistedIds.has(String(c.id)))
-                    .filter(c => !addEsperaClientSearch || `${c.name} ${c.lastName}`.toLowerCase().includes(addEsperaClientSearch.toLowerCase()))
-                    .slice(0, 8)
-                  return (
-                    <motion.div
-                      initial={{ opacity: 0, y: -8 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -8 }}
-                      className="rounded-xl border border-primary/20 bg-primary/5 p-3 space-y-3"
-                    >
-                      <div className="relative">
-                        <Search size={13} className="absolute left-3 top-1/2 -translate-y-1/2 text-[#8A8A9A]" />
-                        <input
-                          value={addEsperaClientSearch}
-                          onChange={e => { setAddEsperaClientSearch(e.target.value); setAddEsperaClientId('') }}
-                          placeholder="Buscar cliente..."
-                          className="w-full rounded-lg border border-white/[0.08] bg-white/[0.04] pl-8 pr-3 py-2 text-sm text-gray-900 dark:text-white placeholder:text-[#8A8A9A] outline-none focus:border-primary/40"
-                        />
-                      </div>
-                      <div className="space-y-1 max-h-36 overflow-y-auto">
-                        {filteredForEspera.length === 0 ? (
-                          <p className="text-xs text-[#8A8A9A] text-center py-2">
-                            {addEsperaClientSearch ? 'Sin resultados' : 'No hay clientes disponibles'}
-                          </p>
-                        ) : filteredForEspera.map(c => (
-                          <button key={c.id} type="button"
-                            onClick={() => setAddEsperaClientId(String(c.id))}
-                            className={`w-full flex items-center gap-2 px-3 py-2 rounded-lg text-left text-sm transition-all ${
-                              addEsperaClientId === String(c.id)
-                                ? 'bg-primary/10 border border-primary/30 text-primary'
-                                : 'hover:bg-black/5 dark:hover:bg-white/5 text-gray-900 dark:text-white'
-                            }`}
-                          >
-                            {c.name} {c.lastName}
-                          </button>
-                        ))}
-                      </div>
-                      {addEsperaClientId && (
-                        <div className="space-y-2">
-                          <div className="flex gap-2">
-                            {(['INTERNA', 'EXTERNA'] as const).map(t => (
-                              <button key={t} type="button" onClick={() => setAddEsperaTipo(t)}
-                                className={`flex-1 rounded-lg py-1.5 text-xs font-semibold transition-all border ${
-                                  addEsperaTipo === t
-                                    ? 'bg-gray-900 dark:bg-white text-white dark:text-gray-900 border-transparent'
-                                    : 'border-gray-200 dark:border-white/[0.08] text-gray-500 dark:text-[#8A8A9A]'
-                                }`}
-                              >
-                                {t === 'INTERNA' ? 'Interna (con membresía)' : 'Externa (sin membresía)'}
-                              </button>
-                            ))}
-                          </div>
-                          <Button size="sm" onClick={handleAddToWaitingList} isLoading={addEsperaSubmitting} className="w-full">
-                            Agregar a lista de espera
-                          </Button>
-                        </div>
-                      )}
-                    </motion.div>
-                  )
-                })()}
-              </AnimatePresence>
-
-              <div className="flex gap-1.5">
-                {(['INTERNA', 'EXTERNA'] as const).map(tipo => {
-                  const count = esperaEntries.filter(e => e.tipo === tipo).length
-                  return (
-                    <button key={tipo} onClick={() => setEsperaTipoTab(tipo)}
-                      className={`rounded-full px-4 py-1.5 text-xs font-semibold transition-all flex items-center gap-1.5 ${
-                        esperaTipoTab === tipo
-                          ? 'bg-gray-900 dark:bg-white text-white dark:text-gray-900'
-                          : 'border border-gray-200 dark:border-white/[0.08] bg-white dark:bg-white/[0.04] text-gray-500 dark:text-[#8A8A9A]'
-                      }`}
-                    >
-                      {tipo === 'INTERNA' ? 'Interna' : 'Externa'}
-                      {count > 0 && (
-                        <span className={`flex h-4 min-w-[1rem] items-center justify-center rounded-full text-[10px] font-bold px-1 ${
-                          esperaTipoTab === tipo
-                            ? 'bg-white/20 dark:bg-black/20 text-white dark:text-gray-900'
-                            : 'bg-gray-200 dark:bg-white/10 text-gray-600 dark:text-gray-300'
-                        }`}>{count}</span>
-                      )}
-                    </button>
-                  )
-                })}
-              </div>
-
-              {esperaLoading ? (
-                <div className="space-y-2">
-                  {[1,2,3].map(i => <div key={i} className="h-14 rounded-xl bg-white/[0.04] animate-pulse" />)}
-                </div>
-              ) : esperaError ? (
-                <div className="rounded-xl border border-red-500/20 bg-red-500/10 px-4 py-3">
-                  <p className="text-sm text-red-400">{esperaError}</p>
-                </div>
-              ) : (() => {
-                const filteredEspera = esperaEntries.filter(e => e.tipo === esperaTipoTab)
-                if (filteredEspera.length === 0) return (
-                  <EmptyState icon={Clock} message={`No hay entradas ${esperaTipoTab === 'INTERNA' ? 'internas' : 'externas'}`} className="py-10" />
-                )
-                return (
-                  <div className="space-y-1.5">
-                    {filteredEspera.map(entry => {
-                      const isActioning = actionLoadingIds.has(entry.id)
+              {/* Layout dos columnas cuando el panel está abierto */}
+              <div className="flex gap-3 items-start">
+                {/* Columna izquierda: pills + lista */}
+                <div className="flex-1 min-w-0 space-y-3">
+                  <div className="flex gap-1.5">
+                    {(['TODOS', 'INTERNA', 'EXTERNA'] as const).map(tipo => {
+                      const count = tipo === 'TODOS' ? esperaEntries.length : esperaEntries.filter(e => e.tipo === tipo).length
                       return (
-                        <motion.div
-                          key={entry.id} initial={{ opacity: 0, y: 4 }} animate={{ opacity: 1, y: 0 }}
-                          className="flex items-center gap-3 rounded-xl border border-white/50 dark:border-white/[0.08] bg-white/30 dark:bg-white/[0.05] backdrop-blur-xl px-3 py-2.5"
+                        <button key={tipo} onClick={() => setEsperaTipoTab(tipo)}
+                          className={`rounded-full px-4 py-1.5 text-xs font-semibold transition-all flex items-center gap-1.5 ${
+                            esperaTipoTab === tipo
+                              ? 'bg-gray-900 dark:bg-white text-white dark:text-gray-900'
+                              : 'border border-gray-200 dark:border-white/[0.08] bg-white dark:bg-white/[0.04] text-gray-500 dark:text-[#8A8A9A]'
+                          }`}
                         >
-                          <div className="flex-1 min-w-0">
-                            <p className="text-sm font-semibold text-gray-900 dark:text-white truncate">{entry.clienteNombre}</p>
-                            <p className="text-xs text-[#8A8A9A]">
-                              {format(new Date(entry.fechaSolicitud), "d MMM yyyy", { locale: es })}
-                            </p>
-                          </div>
-                          <span className={`shrink-0 rounded-full px-2.5 py-0.5 text-xs font-semibold border ${ESPERA_BADGE[entry.estado]}`}>
-                            {ESPERA_LABEL[entry.estado]}
-                          </span>
-                          <div className="flex items-center gap-1.5 shrink-0">
-                            {entry.estado === 'PENDIENTE' && (
-                              <button disabled={isActioning} onClick={() => handleEsperaAction(entry.id, 'notificar')}
-                                className="flex items-center gap-1 rounded-lg bg-primary/10 px-2.5 py-1.5 text-xs font-semibold text-primary hover:bg-primary/20 transition-all disabled:opacity-50">
-                                <Bell size={11} /> Notificar
-                              </button>
-                            )}
-                            {entry.estado === 'NOTIFICADO' && (<>
-                              <button disabled={isActioning} onClick={() => handleEsperaAction(entry.id, 'aceptar')}
-                                className="flex items-center gap-1 rounded-lg bg-green-500/10 px-2 py-1.5 text-xs font-semibold text-green-400 hover:bg-green-500/20 transition-all disabled:opacity-50">
-                                <Check size={11} /> Aceptó
-                              </button>
-                              <button disabled={isActioning} onClick={() => handleEsperaAction(entry.id, 'rechazar')}
-                                className="flex items-center gap-1 rounded-lg bg-red-500/10 px-2 py-1.5 text-xs font-semibold text-red-400 hover:bg-red-500/20 transition-all disabled:opacity-50">
-                                <X size={11} /> Rechazó
-                              </button>
-                            </>)}
-                            {(entry.estado === 'ACEPTADO' || entry.estado === 'RECHAZADO') && (
-                              <button disabled={isActioning} onClick={() => handleEsperaAction(entry.id, 'eliminar')}
-                                className="flex h-7 w-7 items-center justify-center rounded-lg bg-red-500/10 text-red-400 hover:bg-red-500/20 transition-all disabled:opacity-50">
-                                <Trash2 size={12} />
-                              </button>
-                            )}
-                          </div>
-                        </motion.div>
+                          {tipo === 'TODOS' ? 'Todos' : tipo === 'INTERNA' ? 'Interna' : 'Externa'}
+                          {count > 0 && (
+                            <span className={`flex h-4 min-w-[1rem] items-center justify-center rounded-full text-[10px] font-bold px-1 ${
+                              esperaTipoTab === tipo
+                                ? 'bg-white/20 dark:bg-black/20 text-white dark:text-gray-900'
+                                : 'bg-gray-200 dark:bg-white/10 text-gray-600 dark:text-gray-300'
+                            }`}>{count}</span>
+                          )}
+                        </button>
                       )
                     })}
                   </div>
-                )
-              })()}
+
+                  {/* Lista de entradas */}
+                  {esperaLoading ? (
+                    <div className="space-y-2">
+                      {[1,2,3].map(i => <div key={i} className="h-14 rounded-xl bg-white/[0.04] animate-pulse" />)}
+                    </div>
+                  ) : esperaError ? (
+                    <div className="rounded-xl border border-red-500/20 bg-red-500/10 px-4 py-3">
+                      <p className="text-sm text-red-400">{esperaError}</p>
+                    </div>
+                  ) : (() => {
+                    const filteredEspera = esperaTipoTab === 'TODOS'
+                      ? esperaEntries
+                      : esperaEntries.filter(e => e.tipo === esperaTipoTab)
+                    if (filteredEspera.length === 0) return (
+                      <EmptyState icon={Clock} message={`No hay entradas${esperaTipoTab === 'INTERNA' ? ' internas' : esperaTipoTab === 'EXTERNA' ? ' externas' : ''}`} className="py-10" />
+                    )
+                    return (
+                      <div className="grid grid-cols-2 gap-3">
+                        {filteredEspera.map(entry => {
+                          const isActioning = actionLoadingIds.has(entry.id)
+                          return (
+                            <motion.div
+                              key={entry.id} initial={{ opacity: 0, y: 4 }} animate={{ opacity: 1, y: 0 }}
+                              className="flex flex-col gap-2 rounded-xl border border-white/50 dark:border-white/[0.08] bg-white/30 dark:bg-white/[0.05] backdrop-blur-xl px-3 py-2.5"
+                            >
+                              {editingEsperaId === entry.id ? (
+                                /* Form inline de edición para contacto externo */
+                                <div className="space-y-1.5">
+                                  <input
+                                    value={editExternoNombre}
+                                    onChange={e => setEditExternoNombre(e.target.value)}
+                                    placeholder="Nombre"
+                                    className="w-full rounded-lg border border-gray-200 dark:border-white/[0.08] bg-white dark:bg-white/[0.06] px-2.5 py-1.5 text-xs text-gray-900 dark:text-white placeholder-gray-400 dark:placeholder-[#8A8A9A] focus:outline-none focus:ring-1 focus:ring-primary"
+                                  />
+                                  <input
+                                    value={editExternoApellido}
+                                    onChange={e => setEditExternoApellido(e.target.value)}
+                                    placeholder="Apellido"
+                                    className="w-full rounded-lg border border-gray-200 dark:border-white/[0.08] bg-white dark:bg-white/[0.06] px-2.5 py-1.5 text-xs text-gray-900 dark:text-white placeholder-gray-400 dark:placeholder-[#8A8A9A] focus:outline-none focus:ring-1 focus:ring-primary"
+                                  />
+                                  <input
+                                    value={editExternoWhatsapp}
+                                    onChange={e => setEditExternoWhatsapp(e.target.value)}
+                                    placeholder="WhatsApp"
+                                    className="w-full rounded-lg border border-gray-200 dark:border-white/[0.08] bg-white dark:bg-white/[0.06] px-2.5 py-1.5 text-xs text-gray-900 dark:text-white placeholder-gray-400 dark:placeholder-[#8A8A9A] focus:outline-none focus:ring-1 focus:ring-primary"
+                                  />
+                                  <div className="flex gap-1.5 pt-0.5">
+                                    <button
+                                      disabled={editEsperaSubmitting || !editExternoNombre.trim() || !editExternoApellido.trim()}
+                                      onClick={() => handleEsperaSaveEdit(entry.id)}
+                                      className="flex items-center gap-1 rounded-lg bg-primary/20 px-2.5 py-1 text-xs font-semibold text-amber-700 dark:text-primary hover:bg-primary/30 transition-all disabled:opacity-50"
+                                    >
+                                      <Save size={10} /> Guardar
+                                    </button>
+                                    <button
+                                      onClick={() => setEditingEsperaId(null)}
+                                      className="flex items-center gap-1 rounded-lg border border-gray-200 dark:border-white/[0.08] px-2.5 py-1 text-xs font-semibold text-gray-500 dark:text-[#8A8A9A] hover:bg-gray-100 dark:hover:bg-white/[0.05] transition-all"
+                                    >
+                                      Cancelar
+                                    </button>
+                                  </div>
+                                </div>
+                              ) : (<>
+                                <div className="flex items-start justify-between gap-2">
+                                  <div className="flex-1 min-w-0">
+                                    <p className="text-sm font-semibold text-gray-900 dark:text-white truncate">{entry.clienteNombre}</p>
+                                    <p className="text-xs text-[#8A8A9A]">
+                                      {format(new Date(entry.fechaSolicitud), "d MMM yyyy", { locale: es })}
+                                    </p>
+                                  </div>
+                                  <span className={`shrink-0 rounded-full px-2.5 py-0.5 text-xs font-semibold border ${ESPERA_BADGE[entry.estado]}`}>
+                                    {ESPERA_LABEL[entry.estado]}
+                                  </span>
+                                </div>
+                                <div className="flex items-center gap-1.5 flex-wrap">
+                                  {!entry.clienteId && entry.whatsappExterno && (
+                                    <a
+                                      href={`https://wa.me/${entry.whatsappExterno.replace(/\D/g, '')}`}
+                                      target="_blank" rel="noopener noreferrer"
+                                      className="flex items-center gap-1 text-xs text-emerald-400 hover:text-emerald-300 transition-colors"
+                                      onClick={e => e.stopPropagation()}
+                                    >
+                                      <MessageSquare size={10} />
+                                      {entry.whatsappExterno}
+                                    </a>
+                                  )}
+                                  {entry.estado === 'NOTIFICADO' && (<>
+                                    <button disabled={isActioning} onClick={() => handleEsperaAction(entry.id, 'aceptar')}
+                                      className="flex items-center gap-1 rounded-lg bg-green-500/10 px-2 py-1 text-xs font-semibold text-green-400 hover:bg-green-500/20 transition-all disabled:opacity-50">
+                                      <Check size={11} /> Aceptó
+                                    </button>
+                                    <button disabled={isActioning} onClick={() => handleEsperaAction(entry.id, 'rechazar')}
+                                      className="flex items-center gap-1 rounded-lg bg-red-500/10 px-2 py-1 text-xs font-semibold text-red-400 hover:bg-red-500/20 transition-all disabled:opacity-50">
+                                      <X size={11} /> Rechazó
+                                    </button>
+                                  </>)}
+                                  <div className="ml-auto flex items-center gap-1">
+                                    {entry.estado === 'PENDIENTE' && (
+                                      <button disabled={isActioning} onClick={() => handleEsperaAction(entry.id, 'notificar')}
+                                        className="flex h-6 w-6 items-center justify-center rounded-lg bg-primary/10 text-amber-700 dark:text-primary hover:bg-primary/20 transition-all disabled:opacity-50">
+                                        <Bell size={11} />
+                                      </button>
+                                    )}
+                                    {!entry.clienteId && (
+                                      <button disabled={isActioning} onClick={() => startEditEspera(entry)}
+                                        className="flex h-6 w-6 items-center justify-center rounded-lg bg-gray-100 dark:bg-white/[0.06] text-gray-500 dark:text-[#8A8A9A] hover:bg-gray-200 dark:hover:bg-white/10 transition-all disabled:opacity-50">
+                                        <Pencil size={11} />
+                                      </button>
+                                    )}
+                                    <button disabled={isActioning} onClick={() => handleEsperaAction(entry.id, 'eliminar')}
+                                      className="flex h-6 w-6 items-center justify-center rounded-lg bg-red-500/10 text-red-400 hover:bg-red-500/20 transition-all disabled:opacity-50">
+                                      <Trash2 size={11} />
+                                    </button>
+                                  </div>
+                                </div>
+                              </>)}
+                            </motion.div>
+                          )
+                        })}
+                      </div>
+                    )
+                  })()}
+                </div>{/* fin columna izquierda */}
+
+                {/* Columna derecha: panel de alta */}
+                <AnimatePresence>
+                  {addEsperaMode && (() => {
+                    const waitlistedIds = new Set(
+                      esperaEntries
+                        .filter(e => e.estado === 'PENDIENTE' || e.estado === 'NOTIFICADO')
+                        .map(e => e.clienteId)
+                        .filter(Boolean)
+                    )
+                    const filteredForEspera = clients
+                      .filter(c => !waitlistedIds.has(String(c.id)))
+                      .filter(c => !addEsperaClientSearch || `${c.name} ${c.lastName}`.toLowerCase().includes(addEsperaClientSearch.toLowerCase()))
+                      .slice(0, 8)
+                    const canSubmit = addEsperaTipo === 'INTERNA'
+                      ? addEsperaClientId !== ''
+                      : addExternoNombre.trim() !== '' && addExternoApellido.trim() !== '' && addExternoWhatsapp.trim() !== ''
+                    return (
+                      <motion.div
+                        initial={{ opacity: 0, x: 16 }} animate={{ opacity: 1, x: 0 }} exit={{ opacity: 0, x: 16 }}
+                        className="w-1/3 shrink-0 rounded-xl border border-primary/20 bg-primary/5 p-3 space-y-3"
+                      >
+                        {/* Tipo toggle */}
+                        <div className="flex gap-1.5">
+                          {(['INTERNA', 'EXTERNA'] as const).map(t => (
+                            <button key={t} type="button"
+                              onClick={() => { setAddEsperaTipo(t); setAddEsperaClientId(''); setAddEsperaClientSearch(''); setAddExternoNombre(''); setAddExternoApellido(''); setAddExternoWhatsapp('') }}
+                              className={`flex-1 rounded-lg py-1 text-[11px] font-semibold transition-all border ${
+                                addEsperaTipo === t
+                                  ? 'bg-gray-900 dark:bg-white text-white dark:text-gray-900 border-transparent'
+                                  : 'border-gray-200 dark:border-white/[0.08] text-gray-500 dark:text-[#8A8A9A]'
+                              }`}
+                            >
+                              {t === 'INTERNA' ? 'Interna' : 'Externa'}
+                            </button>
+                          ))}
+                        </div>
+
+                        {/* INTERNA: buscador de cliente registrado */}
+                        {addEsperaTipo === 'INTERNA' && (<>
+                          <div className="relative">
+                            <Search size={12} className="absolute left-2.5 top-1/2 -translate-y-1/2 text-[#8A8A9A]" />
+                            <input
+                              value={addEsperaClientSearch}
+                              onChange={e => { setAddEsperaClientSearch(e.target.value); setAddEsperaClientId('') }}
+                              placeholder="Buscar cliente..."
+                              className="w-full rounded-lg border border-white/[0.08] bg-white/[0.04] pl-7 pr-2 py-1.5 text-xs text-gray-900 dark:text-white placeholder:text-[#8A8A9A] outline-none focus:border-primary/40"
+                            />
+                          </div>
+                          <div className="space-y-1 max-h-40 overflow-y-auto">
+                            {filteredForEspera.length === 0 ? (
+                              <p className="text-xs text-[#8A8A9A] text-center py-2">
+                                {addEsperaClientSearch ? 'Sin resultados' : 'No hay clientes'}
+                              </p>
+                            ) : filteredForEspera.map(c => (
+                              <button key={c.id} type="button"
+                                onClick={() => setAddEsperaClientId(String(c.id))}
+                                className={`w-full flex items-center gap-2 px-2.5 py-1.5 rounded-lg text-left text-xs transition-all ${
+                                  addEsperaClientId === String(c.id)
+                                    ? 'bg-primary/10 border border-primary/30 text-primary'
+                                    : 'hover:bg-black/5 dark:hover:bg-white/5 text-gray-900 dark:text-white'
+                                }`}
+                              >
+                                {c.name} {c.lastName}
+                              </button>
+                            ))}
+                          </div>
+                        </>)}
+
+                        {/* EXTERNA: formulario de contacto sin cuenta */}
+                        {addEsperaTipo === 'EXTERNA' && (
+                          <div className="space-y-2">
+                            <input
+                              value={addExternoNombre}
+                              onChange={e => setAddExternoNombre(e.target.value)}
+                              placeholder="Nombre *"
+                              className="w-full rounded-lg border border-white/[0.08] bg-white/[0.04] px-2.5 py-1.5 text-xs text-gray-900 dark:text-white placeholder:text-[#8A8A9A] outline-none focus:border-primary/40"
+                            />
+                            <input
+                              value={addExternoApellido}
+                              onChange={e => setAddExternoApellido(e.target.value)}
+                              placeholder="Apellido *"
+                              className="w-full rounded-lg border border-white/[0.08] bg-white/[0.04] px-2.5 py-1.5 text-xs text-gray-900 dark:text-white placeholder:text-[#8A8A9A] outline-none focus:border-primary/40"
+                            />
+                            <input
+                              value={addExternoWhatsapp}
+                              onChange={e => setAddExternoWhatsapp(e.target.value)}
+                              placeholder="WhatsApp *"
+                              className="w-full rounded-lg border border-white/[0.08] bg-white/[0.04] px-2.5 py-1.5 text-xs text-gray-900 dark:text-white placeholder:text-[#8A8A9A] outline-none focus:border-primary/40"
+                            />
+                          </div>
+                        )}
+
+                        <Button size="sm" onClick={handleAddToWaitingList} isLoading={addEsperaSubmitting} className="w-full" disabled={!canSubmit}>
+                          Agregar
+                        </Button>
+                      </motion.div>
+                    )
+                  })()}
+                </AnimatePresence>
+              </div>{/* fin flex columnas */}
             </div>
           </motion.div>
           )}
 
-          {/* ══ CANCELACIONES ══ */}
-          {tab === 'cancelaciones' && (
-          <motion.div key="cancelaciones" {...tabContentVariants}>
-            <div className="p-5 space-y-4">
-              <div className="flex items-center justify-between">
-                <div className="flex items-center gap-2">
-                  <Ban size={16} className="text-red-400" />
-                  <span className="text-sm font-bold text-gray-900 dark:text-white">Cancelaciones puntuales</span>
-                  {/* Tooltip info */}
-                  <div className="relative group">
-                    <button className="flex items-center justify-center h-4 w-4 rounded-full border border-gray-300 dark:border-white/20 text-gray-400 dark:text-[#8A8A9A] hover:border-red-400 hover:text-red-400 transition-colors text-[10px] font-bold leading-none">
-                      ?
-                    </button>
-                    <div className="pointer-events-none absolute left-0 top-6 z-50 w-72 opacity-0 group-hover:opacity-100 transition-opacity duration-150">
-                      <div className="rounded-2xl border border-red-500/20 bg-white dark:bg-[#1A1A1A] shadow-xl p-4 space-y-2">
-                        <p className="text-xs font-bold uppercase tracking-wider text-red-400">¿Para qué sirve?</p>
-                        <p className="text-xs text-gray-600 dark:text-[#8A8A9A] leading-relaxed">
-                          Marca que <span className="font-semibold text-gray-900 dark:text-white">este turno no se dictará en una fecha puntual</span> sin afectar los días siguientes. Útil para feriados, ausencia del profesor o cierres extraordinarios.
-                        </p>
-                        <p className="text-[11px] text-[#8A8A9A]">
-                          Para cierres de todo el gimnasio, usá Días Especiales en la sección Asistencia.
-                        </p>
-                      </div>
-                    </div>
-                  </div>
-                </div>
-                {isAdmin && (
-                  <button
-                    onClick={() => setCancelacionFormOpen(v => !v)}
-                    className="flex items-center gap-1.5 rounded-xl bg-red-500/10 px-3 py-1.5 text-xs font-semibold text-red-400 hover:bg-red-500/20 transition-all"
-                  >
-                    <Plus size={12} /> Registrar cancelación
-                  </button>
-                )}
-              </div>
-
-              <AnimatePresence>
-                {cancelacionFormOpen && (
-                  <motion.div
-                    initial={{ opacity: 0, height: 0 }}
-                    animate={{ opacity: 1, height: 'auto' }}
-                    exit={{ opacity: 0, height: 0 }}
-                    className="overflow-hidden"
-                  >
-                    <div className="flex flex-col gap-3 rounded-2xl border border-red-500/20 bg-red-500/5 p-4">
-                      <p className="text-xs font-bold text-red-400 uppercase tracking-wider">Nueva cancelación</p>
-                      <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                        <div>
-                          <label className="text-xs font-semibold text-gray-500 dark:text-[#8A8A9A] mb-1 block">Fecha</label>
-                          <input
-                            type="date"
-                            value={cancelacionFecha}
-                            onChange={e => setCancelacionFecha(e.target.value)}
-                            className="w-full rounded-xl border border-gray-200 dark:border-white/[0.08] bg-white dark:bg-white/[0.04] px-3 py-2 text-sm text-gray-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-red-500/30"
-                          />
-                        </div>
-                        <div>
-                          <label className="text-xs font-semibold text-gray-500 dark:text-[#8A8A9A] mb-1 block">Motivo <span className="font-normal">(opcional)</span></label>
-                          <input
-                            type="text"
-                            value={cancelacionMotivo}
-                            onChange={e => setCancelacionMotivo(e.target.value)}
-                            placeholder="Ej: Feriado nacional"
-                            className="w-full rounded-xl border border-gray-200 dark:border-white/[0.08] bg-white dark:bg-white/[0.04] px-3 py-2 text-sm text-gray-900 dark:text-white placeholder:text-gray-400 dark:placeholder:text-[#8A8A9A] focus:outline-none focus:ring-2 focus:ring-red-500/30"
-                          />
-                        </div>
-                      </div>
-                      <div className="flex justify-end gap-2">
-                        <button onClick={() => { setCancelacionFormOpen(false); setCancelacionFecha(''); setCancelacionMotivo('') }}
-                          className="rounded-xl px-4 py-1.5 text-xs font-semibold text-gray-500 dark:text-[#8A8A9A] hover:text-gray-700 dark:hover:text-white transition-colors">
-                          Cancelar
-                        </button>
-                        <button
-                          onClick={handleAddCancelacion}
-                          disabled={!cancelacionFecha || savingCancelacion}
-                          className="flex items-center gap-1.5 rounded-xl bg-red-500 px-4 py-1.5 text-xs font-semibold text-white hover:bg-red-600 transition-all disabled:opacity-50"
-                        >
-                          {savingCancelacion ? '…' : <><Check size={12} /> Guardar</>}
-                        </button>
-                      </div>
-                    </div>
-                  </motion.div>
-                )}
-              </AnimatePresence>
-
-              {loadingCancelaciones ? (
-                <div className="space-y-2">
-                  {[1,2,3].map(i => <div key={i} className="h-14 rounded-xl bg-black/[0.04] dark:bg-white/[0.04] animate-pulse" />)}
-                </div>
-              ) : cancelaciones.length === 0 ? (
-                <div className="flex flex-col items-center justify-center gap-3 py-12 text-[#8A8A9A]">
-                  <div className="flex h-12 w-12 items-center justify-center rounded-2xl border border-white/[0.08] bg-white/[0.04]">
-                    <Ban size={20} className="opacity-50" />
-                  </div>
-                  <p className="text-sm">No hay cancelaciones registradas para este turno.</p>
-                </div>
-              ) : (
-                <div className="space-y-2">
-                  {cancelaciones.map(c => (
-                    <motion.div
-                      key={c.id}
-                      initial={{ opacity: 0, y: 4 }}
-                      animate={{ opacity: 1, y: 0 }}
-                      className="flex items-center gap-3 rounded-xl border border-red-500/20 bg-red-500/5 px-4 py-3"
-                    >
-                      <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-xl bg-red-500/10">
-                        <Ban size={14} className="text-red-400" />
-                      </div>
-                      <div className="flex-1 min-w-0">
-                        <p className="text-sm font-semibold text-gray-900 dark:text-white">
-                          {format(parseISO(c.fecha), "EEEE d 'de' MMMM yyyy", { locale: es })}
-                        </p>
-                        <p className="text-xs text-[#8A8A9A]">
-                          {c.motivo ?? 'Sin motivo especificado'}
-                        </p>
-                      </div>
-                      <span className="shrink-0 rounded-full border border-red-500/20 bg-red-500/10 px-2.5 py-0.5 text-xs font-semibold text-red-400">
-                        Cancelado
-                      </span>
-                      {isAdmin && (
-                        <button
-                          disabled={deletingCancelacionId === c.id}
-                          onClick={() => handleDeleteCancelacion(c.id)}
-                          className="flex h-7 w-7 shrink-0 items-center justify-center rounded-lg bg-red-500/10 text-red-400 hover:bg-red-500/20 transition-all disabled:opacity-50"
-                        >
-                          {deletingCancelacionId === c.id ? '…' : <Trash2 size={12} />}
-                        </button>
-                      )}
-                    </motion.div>
-                  ))}
-                </div>
-              )}
-            </div>
-          </motion.div>
-          )}
 
 
 
