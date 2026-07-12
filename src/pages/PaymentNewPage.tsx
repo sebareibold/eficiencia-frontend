@@ -1,5 +1,6 @@
 import { useState, useEffect, useCallback, useMemo } from 'react'
 import { useNavigate, useSearchParams } from 'react-router-dom'
+import { useQueryClient } from '@tanstack/react-query'
 import { motion, AnimatePresence } from 'framer-motion'
 import { pageVariants } from '../lib/motion'
 import {
@@ -91,6 +92,7 @@ const ic = (withIcon = false) => [
 export default function PaymentNewPage() {
   const navigate       = useNavigate()
   const [searchParams] = useSearchParams()
+  const queryClient    = useQueryClient()
   const addToast       = useUiStore(s => s.addToast)
   const today          = format(new Date(), 'yyyy-MM-dd')
 
@@ -239,12 +241,14 @@ export default function PaymentNewPage() {
     const raw = String(precio)
     setDisplayAmount(Number(raw).toLocaleString('es-AR'))
     setValue('amount', raw, { shouldValidate: true })
-    const tarifa = selectedPlan?.tarifas.find(t => t.modalidad === modalidad)
+    const plan = plans.find(p => p.id === selectedPlanId)
+    const tarifa = plan?.tarifas.find(t => t.modalidad === modalidad)
     setValue('method', tarifa ? metodoPagoToMethod(tarifa.metodoPago) : 'transfer', { shouldValidate: true })
-    // Solo vincular membresías realmente vigentes (fecha de vencimiento >= hoy)
+    // Vincular membresías vigentes (ACTIVA o PENDIENTE por bug histórico)
     const match = membresias.find(
       m => m.planId === selectedPlanId && m.modalidad === modalidad &&
-           m.estado === 'ACTIVA' && m.fechaVencimiento.slice(0, 10) >= today
+           (m.estado === 'ACTIVA' || m.estado === 'PENDIENTE') &&
+           m.fechaVencimiento.slice(0, 10) >= today
     )
     setMembresiaId(match?.id ?? '')
     // Auto-activar proporcional si el pago es después del día 15
@@ -272,15 +276,19 @@ export default function PaymentNewPage() {
         })
         clientId = String(created.id)
         addToast(`Cliente ${created.name} ${created.lastName} creado`, 'success')
+        queryClient.invalidateQueries({ queryKey: ['clients'] })
       }
 
       let finalMembresiaId = membresiaId
 
-      // Crear nueva membresía si no hay una vigente para ese plan+modalidad
+      // Crear nueva membresía si no hay una vigente para ese plan+modalidad.
+      // Acepta PENDIENTE por compatibilidad con membresías creadas antes del fix del backend.
       const tieneVigente = membresias.some(
         m => m.planId === selectedPlanId && m.modalidad === selectedModalidad &&
-             m.estado === 'ACTIVA' && m.fechaVencimiento.slice(0, 10) >= today
+             (m.estado === 'ACTIVA' || m.estado === 'PENDIENTE') &&
+             m.fechaVencimiento.slice(0, 10) >= today
       )
+      let esNuevaMembresia = false
       if (selectedPlanId && selectedModalidad && !tieneVigente) {
         const nueva = await membresiasClienteApi.create({
           clienteId: clientId,
@@ -292,6 +300,19 @@ export default function PaymentNewPage() {
           }),
         })
         finalMembresiaId = nueva.id
+        esNuevaMembresia = true
+      }
+
+      // Calcular cuotaNumero para todos los pagos vinculados a una membresía
+      let cuotaNumero: number | undefined = undefined
+      if (finalMembresiaId) {
+        if (esNuevaMembresia) {
+          cuotaNumero = 1
+        } else {
+          const pagosExistentes = await paymentsApi.getAll({ clientId: clientId, pageSize: 200 })
+          const countForMemb = pagosExistentes.data.filter(p => p.membresiaId === finalMembresiaId).length
+          cuotaNumero = countForMemb + 1
+        }
       }
 
       const payment = await paymentsApi.create({
@@ -302,6 +323,7 @@ export default function PaymentNewPage() {
         invoiced: data.invoiced,
         notes:    data.notes || undefined,
         ...(finalMembresiaId && { membresiaId: finalMembresiaId }),
+        ...(cuotaNumero !== undefined && { cuotaNumero }),
       })
       addToast('Pago registrado', 'success')
       navigate(`/payments/${payment.id}`)

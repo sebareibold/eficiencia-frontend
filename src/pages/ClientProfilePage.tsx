@@ -1,6 +1,7 @@
 import { useState, useEffect, useMemo } from 'react'
 import { createPortal } from 'react-dom'
 import { useParams, useNavigate } from 'react-router-dom'
+import { ROUTES } from '../constants/routes'
 import { useQueryClient } from '@tanstack/react-query'
 import { motion, AnimatePresence } from 'framer-motion'
 import { staggerContainerFast, fadeUpItem } from '../lib/motion'
@@ -898,13 +899,15 @@ export default function ClientProfilePage() {
     setIsDeleting(true)
     try {
       await clientsApi.remove(client.id)
-      addToast('Cliente eliminado', 'success')
-    } catch {
-      addToast('Error al eliminar el cliente', 'error')
-    } finally {
-      queryClient.invalidateQueries({ queryKey: ['clients'] })
-      setIsDeleting(false)
+      queryClient.removeQueries({ queryKey: ['clients'] })
+      setShowDeleteModal(false)
       navigate(ROUTES.CLIENTS)
+      addToast('Cliente eliminado', 'success')
+    } catch (err) {
+      console.error('[DELETE CLIENT ERROR]', err)
+      addToast('Error al eliminar el cliente', 'error')
+      setIsDeleting(false)
+      setShowDeleteModal(false)
     }
   }
 
@@ -1069,7 +1072,11 @@ export default function ClientProfilePage() {
     return Array.from({ length: n }, (_, i) => {
       const num = i + 1
       const fechaEsperada = addDays(new Date(client.membershipStartDate!), 30 * i)
-      const pago = payments.find(p => p.membresiaId === client.membershipId && p.cuotaNumero === num)
+      // Para planes de 1 cuota: pagos históricos sin cuotaNumero también cuentan como cuota 1
+      const pago = payments.find(p =>
+        p.membresiaId === client.membershipId &&
+        (p.cuotaNumero === num || (n === 1 && p.cuotaNumero === null))
+      )
       return { numero: num, fechaEsperada, pago: pago ?? null }
     })
   })()
@@ -1234,7 +1241,7 @@ export default function ClientProfilePage() {
                   )}
                   {can('clients', 'delete') && !isEditing && (
                     <button
-                      onClick={handleDeleteClient}
+                      onClick={() => setShowDeleteModal(true)}
                       className="flex items-center gap-1.5 text-xs font-semibold px-3 py-1.5 rounded-xl border border-red-200 dark:border-red-500/20 bg-red-50 dark:bg-red-500/[0.06] text-red-500 hover:bg-red-100 dark:hover:bg-red-500/[0.12] transition-all"
                     >
                       <Trash2 size={12} />
