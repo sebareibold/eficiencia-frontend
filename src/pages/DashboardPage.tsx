@@ -70,15 +70,16 @@ function ViewToggle({ value, onChange }: { value: ChartView; onChange: (v: Chart
           <button
             key={mode}
             onClick={() => onChange(mode)}
-            className={`relative inline-flex flex-1 sm:flex-none items-center justify-center rounded-full px-3.5 py-1.5 text-xs font-bold transition-all duration-300 cursor-pointer ${
+            className={`relative inline-flex flex-1 sm:flex-none items-center justify-center rounded-full px-3.5 py-1.5 text-xs font-bold transition-colors duration-200 cursor-pointer ${
               isActive
-                ? 'text-white dark:text-gray-900'
-                : 'text-gray-500 dark:text-[#8A8A9A] hover:text-gray-900 dark:hover:text-white'
+                ? 'text-white'
+                : 'text-gray-500 dark:text-gray-400 hover:text-gray-900 dark:hover:text-gray-900 hover:bg-black/[0.06] dark:hover:bg-white/80'
             }`}
           >
-            {isActive && (
-              <motion.div layoutId="view-toggle-pill" className="absolute inset-0 rounded-full bg-gray-900 dark:bg-white shadow-[0_2px_8px_rgba(0,0,0,0.15)]" style={{ zIndex: 0 }} transition={{ duration: 0.22, ease: [0.22, 1, 0.36, 1] }} />
-            )}
+            <span
+              className={`absolute inset-0 rounded-full bg-gray-900 shadow-[0_2px_8px_rgba(0,0,0,0.25)] transition-opacity duration-200 ${isActive ? 'opacity-100' : 'opacity-0 pointer-events-none'}`}
+              style={{ zIndex: 0 }}
+            />
             <span className="relative z-10">{label}</span>
           </button>
         )
@@ -585,13 +586,14 @@ export default function DashboardPage() {
                   onClick={() => { setPeriodMode(mode); if (mode !== 'range' && mode !== 'historic') setNavDate(today) }}
                   className={`relative inline-flex flex-1 sm:flex-none items-center justify-center rounded-full px-4 py-1.5 text-xs font-bold transition-colors duration-200 cursor-pointer ${
                     isActive
-                      ? 'text-white dark:text-gray-900'
-                      : 'text-gray-500 dark:text-[#8A8A9A] hover:text-gray-900 dark:hover:text-white'
+                      ? 'text-white'
+                      : 'text-gray-500 dark:text-gray-400 hover:text-gray-900 dark:hover:text-gray-900 hover:bg-black/[0.06] dark:hover:bg-white/80'
                   }`}
                 >
-                  {isActive && (
-                    <motion.div layoutId="period-pill" className="absolute inset-0 rounded-full bg-gray-900 dark:bg-white shadow-[0_2px_8px_rgba(0,0,0,0.15)]" style={{ zIndex: 0 }} transition={{ duration: 0.22, ease: [0.22, 1, 0.36, 1] }} />
-                  )}
+                  <span
+                    className={`absolute inset-0 rounded-full bg-gray-900 shadow-[0_2px_8px_rgba(0,0,0,0.25)] transition-opacity duration-200 ${isActive ? 'opacity-100' : 'opacity-0 pointer-events-none'}`}
+                    style={{ zIndex: 0 }}
+                  />
                   <span className="relative z-10">{label}</span>
                 </button>
               )
@@ -642,7 +644,7 @@ export default function DashboardPage() {
                 : 'border-white/50 dark:border-white/10 bg-white/30 dark:bg-black/30'
             }`}
           >
-            <div className={`flex h-9 w-9 lg:h-11 lg:w-11 shrink-0 items-center justify-center rounded-xl lg:rounded-2xl ${a && a.clientesEnDeuda > 0 ? 'bg-amber-500/20' : 'bg-white/20 dark:bg-white/10'}`}>
+            <div className={`flex h-9 w-9 lg:h-11 lg:w-11 shrink-0 items-center justify-center rounded-xl lg:rounded-2xl shadow-inner ${a && a.clientesEnDeuda > 0 ? 'bg-amber-500/20' : 'bg-white/20 dark:bg-white/10'}`}>
               <AlertCircle size={20} className={a && a.clientesEnDeuda > 0 ? 'text-amber-400' : 'text-gray-400'} />
             </div>
             <div>
@@ -671,7 +673,7 @@ export default function DashboardPage() {
                 : 'border-white/50 dark:border-white/10 bg-white/30 dark:bg-black/30'
             }`}
           >
-            <div className={`flex h-9 w-9 lg:h-11 lg:w-11 shrink-0 items-center justify-center rounded-xl lg:rounded-2xl ${a && a.cuotasPorCobrar > 0 ? 'bg-blue-500/20' : 'bg-white/20 dark:bg-white/10'}`}>
+            <div className={`flex h-9 w-9 lg:h-11 lg:w-11 shrink-0 items-center justify-center rounded-xl lg:rounded-2xl shadow-inner ${a && a.cuotasPorCobrar > 0 ? 'bg-blue-500/20' : 'bg-white/20 dark:bg-white/10'}`}>
               <CreditCard size={20} className={a && a.cuotasPorCobrar > 0 ? 'text-blue-400' : 'text-gray-400'} />
             </div>
             <div>
@@ -694,14 +696,13 @@ export default function DashboardPage() {
             variants={fadeUpItem}
             whileHover={{ scale: 1.01 }} whileTap={{ scale: 0.99 }}
             onClick={() => navigate(ROUTES.CLIENTS)}
-            className={`rounded-2xl lg:rounded-[2rem] border p-4 lg:p-6 text-left transition-all backdrop-blur-3xl flex items-start gap-3 lg:gap-4 ${
-              a && a.clientesSinTurno > 0
-                ? 'border-purple-500/30 bg-purple-500/10 hover:bg-purple-500/15'
-                : 'border-white/50 dark:border-white/10 bg-white/30 dark:bg-black/30'
-            }`}
+            className="rounded-2xl lg:rounded-[2rem] border p-4 lg:p-6 text-left transition-all backdrop-blur-3xl flex items-start gap-3 lg:gap-4 border-white/50 dark:border-white/10 bg-white/30 dark:bg-black/30"
+            style={a && a.clientesSinTurno > 0 ? {
+              backgroundImage: 'radial-gradient(circle at 100% 100%, rgba(139,92,246,0.09) 0%, transparent 35%)',
+            } : undefined}
           >
-            <div className={`flex h-9 w-9 lg:h-11 lg:w-11 shrink-0 items-center justify-center rounded-xl lg:rounded-2xl ${a && a.clientesSinTurno > 0 ? 'bg-purple-500/20' : 'bg-white/20 dark:bg-white/10'}`}>
-              <UserX size={20} className={a && a.clientesSinTurno > 0 ? 'text-purple-400' : 'text-gray-400'} />
+            <div className={`flex h-9 w-9 lg:h-11 lg:w-11 shrink-0 items-center justify-center rounded-xl lg:rounded-2xl shadow-inner ${a && a.clientesSinTurno > 0 ? 'bg-violet-500/20' : 'bg-white/20 dark:bg-white/10'}`}>
+              <UserX size={20} className={a && a.clientesSinTurno > 0 ? 'text-violet-400' : 'text-gray-400'} />
             </div>
             <div>
               {alertasHook.isLoading ? (
@@ -709,7 +710,7 @@ export default function DashboardPage() {
               ) : (
                 <>
                   <p className="text-2xl lg:text-3xl font-black tabular-nums text-gray-900 dark:text-white">{a?.clientesSinTurno ?? 0}</p>
-                  <p className={`text-sm font-bold mt-0.5 ${a && a.clientesSinTurno > 0 ? 'text-purple-400' : 'text-gray-500 dark:text-gray-400'}`}>
+                  <p className={`text-sm font-bold mt-0.5 ${a && a.clientesSinTurno > 0 ? 'text-violet-400' : 'text-gray-500 dark:text-gray-400'}`}>
                     {a && a.clientesSinTurno === 1 ? 'cliente activo sin turno' : 'clientes activos sin turno'}
                   </p>
                 </>
@@ -723,14 +724,13 @@ export default function DashboardPage() {
             variants={fadeUpItem}
             whileHover={{ scale: 1.01 }} whileTap={{ scale: 0.99 }}
             onClick={() => navigate(ROUTES.CLIENTS)}
-            className={`rounded-2xl lg:rounded-[2rem] border p-4 lg:p-6 text-left transition-all backdrop-blur-3xl flex items-start gap-3 lg:gap-4 ${
-              a && a.clientesBajaAsistencia > 0
-                ? 'border-teal-500/30 bg-teal-500/10 hover:bg-teal-500/15'
-                : 'border-white/50 dark:border-white/10 bg-white/30 dark:bg-black/30'
-            }`}
+            className="rounded-2xl lg:rounded-[2rem] border p-4 lg:p-6 text-left transition-all backdrop-blur-3xl flex items-start gap-3 lg:gap-4 border-white/50 dark:border-white/10 bg-white/30 dark:bg-black/30"
+            style={a && a.clientesBajaAsistencia > 0 ? {
+              backgroundImage: 'radial-gradient(circle at 100% 100%, rgba(16,185,129,0.09) 0%, transparent 35%)',
+            } : undefined}
           >
-            <div className={`flex h-9 w-9 lg:h-11 lg:w-11 shrink-0 items-center justify-center rounded-xl lg:rounded-2xl ${a && a.clientesBajaAsistencia > 0 ? 'bg-teal-500/20' : 'bg-white/20 dark:bg-white/10'}`}>
-              <Activity size={20} className={a && a.clientesBajaAsistencia > 0 ? 'text-teal-400' : 'text-gray-400'} />
+            <div className={`flex h-9 w-9 lg:h-11 lg:w-11 shrink-0 items-center justify-center rounded-xl lg:rounded-2xl shadow-inner ${a && a.clientesBajaAsistencia > 0 ? 'bg-emerald-500/20' : 'bg-white/20 dark:bg-white/10'}`}>
+              <Activity size={20} className={a && a.clientesBajaAsistencia > 0 ? 'text-emerald-400' : 'text-gray-400'} />
             </div>
             <div>
               {alertasHook.isLoading ? (
@@ -738,7 +738,7 @@ export default function DashboardPage() {
               ) : (
                 <>
                   <p className="text-2xl lg:text-3xl font-black tabular-nums text-gray-900 dark:text-white">{a?.clientesBajaAsistencia ?? 0}</p>
-                  <p className={`text-sm font-bold mt-0.5 ${a && a.clientesBajaAsistencia > 0 ? 'text-teal-400' : 'text-gray-500 dark:text-gray-400'}`}>
+                  <p className={`text-sm font-bold mt-0.5 ${a && a.clientesBajaAsistencia > 0 ? 'text-emerald-400' : 'text-gray-500 dark:text-gray-400'}`}>
                     {a && a.clientesBajaAsistencia === 1 ? 'cliente sin venir' : 'clientes sin venir'} hace 14 días
                   </p>
                 </>
