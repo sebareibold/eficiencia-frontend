@@ -40,6 +40,9 @@ export interface DashboardAlertas {
   clientesEnDeuda: number
   clientesActivos: number
   clientesVencidos: number
+  cuotasPorCobrar: number
+  clientesSinTurno: number
+  clientesBajaAsistencia: number
 }
 
 export interface DashboardFinanciero {

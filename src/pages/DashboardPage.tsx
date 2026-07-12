@@ -5,7 +5,7 @@ import { pageVariants, staggerContainerFast, fadeUpItem } from '../lib/motion'
 import {
   TrendingUp, TrendingDown, Users, DollarSign, RefreshCw,
   AlertTriangle, Clock, AlertCircle, CheckCircle2,
-  ChevronLeft, ChevronRight,
+  ChevronLeft, ChevronRight, CreditCard, UserX, Activity,
 } from 'lucide-react'
 import { format, startOfMonth, endOfMonth, addMonths, subMonths, parseISO } from 'date-fns'
 import { es } from 'date-fns/locale'
@@ -625,7 +625,7 @@ export default function DashboardPage() {
       {/* ══ SECCIÓN 2: ALERTAS — carga independientemente ══ */}
       <Section title="Alertas operativas" subtitle="Accionables, requieren atención hoy">
         <motion.div
-          className="grid grid-cols-1 md:grid-cols-3 gap-3 lg:gap-4"
+          className="grid grid-cols-2 lg:grid-cols-4 gap-3 lg:gap-4"
           variants={staggerContainerFast}
           initial="initial"
           animate="animate"
@@ -647,10 +647,7 @@ export default function DashboardPage() {
             </div>
             <div>
               {alertasHook.isLoading ? (
-                <div className="space-y-1.5 mt-0.5">
-                  <Skeleton className="h-8 lg:h-9 w-12" />
-                  <Skeleton className="h-4 w-32" />
-                </div>
+                <div className="space-y-1.5 mt-0.5"><Skeleton className="h-8 lg:h-9 w-12" /><Skeleton className="h-4 w-32" /></div>
               ) : (
                 <>
                   <p className="text-2xl lg:text-3xl font-black tabular-nums text-gray-900 dark:text-white">{a?.clientesEnDeuda ?? 0}</p>
@@ -663,67 +660,90 @@ export default function DashboardPage() {
             </div>
           </motion.button>
 
-          {/* Membresías vencen en 7 días */}
+          {/* Cuotas por cobrar esta semana */}
           <motion.button
             variants={fadeUpItem}
             whileHover={{ scale: 1.01 }} whileTap={{ scale: 0.99 }}
-            onClick={() => navigate(ROUTES.CLIENTS + '?estado=expiring')}
+            onClick={() => navigate(ROUTES.CLIENTS)}
             className={`rounded-2xl lg:rounded-[2rem] border p-4 lg:p-6 text-left transition-all backdrop-blur-3xl flex items-start gap-3 lg:gap-4 ${
-              a && a.membresiasPorVencer.en7dias > 0
-                ? 'border-orange-500/30 bg-orange-500/10 hover:bg-orange-500/15'
+              a && a.cuotasPorCobrar > 0
+                ? 'border-blue-500/30 bg-blue-500/10 hover:bg-blue-500/15'
                 : 'border-white/50 dark:border-white/10 bg-white/30 dark:bg-black/30'
             }`}
           >
-            <div className={`flex h-9 w-9 lg:h-11 lg:w-11 shrink-0 items-center justify-center rounded-xl lg:rounded-2xl ${a && a.membresiasPorVencer.en7dias > 0 ? 'bg-orange-500/20' : 'bg-white/20 dark:bg-white/10'}`}>
-              <AlertTriangle size={20} className={a && a.membresiasPorVencer.en7dias > 0 ? 'text-orange-400' : 'text-gray-400'} />
+            <div className={`flex h-9 w-9 lg:h-11 lg:w-11 shrink-0 items-center justify-center rounded-xl lg:rounded-2xl ${a && a.cuotasPorCobrar > 0 ? 'bg-blue-500/20' : 'bg-white/20 dark:bg-white/10'}`}>
+              <CreditCard size={20} className={a && a.cuotasPorCobrar > 0 ? 'text-blue-400' : 'text-gray-400'} />
             </div>
             <div>
               {alertasHook.isLoading ? (
-                <div className="space-y-1.5 mt-0.5">
-                  <Skeleton className="h-8 lg:h-9 w-12" />
-                  <Skeleton className="h-4 w-36" />
-                </div>
+                <div className="space-y-1.5 mt-0.5"><Skeleton className="h-8 lg:h-9 w-12" /><Skeleton className="h-4 w-36" /></div>
               ) : (
                 <>
-                  <p className="text-2xl lg:text-3xl font-black tabular-nums text-gray-900 dark:text-white">{a?.membresiasPorVencer.en7dias ?? 0}</p>
-                  <p className={`text-sm font-bold mt-0.5 ${a && a.membresiasPorVencer.en7dias > 0 ? 'text-orange-400' : 'text-gray-500 dark:text-gray-400'}`}>
-                    {a && a.membresiasPorVencer.en7dias === 1 ? 'membresía vence' : 'membresías vencen'} en 7 días
+                  <p className="text-2xl lg:text-3xl font-black tabular-nums text-gray-900 dark:text-white">{a?.cuotasPorCobrar ?? 0}</p>
+                  <p className={`text-sm font-bold mt-0.5 ${a && a.cuotasPorCobrar > 0 ? 'text-blue-400' : 'text-gray-500 dark:text-gray-400'}`}>
+                    {a && a.cuotasPorCobrar === 1 ? 'cuota vence' : 'cuotas vencen'} esta semana
                   </p>
                 </>
               )}
-              <p className="text-xs text-gray-400 dark:text-[#8A8A9A] mt-1">Tocá para ver el listado →</p>
+              <p className="text-xs text-gray-400 dark:text-[#8A8A9A] mt-1">Membresías 3 y 6 meses →</p>
             </div>
           </motion.button>
 
-          {/* Membresías vencen en 30 días */}
+          {/* Clientes sin turno inscripto */}
           <motion.button
             variants={fadeUpItem}
             whileHover={{ scale: 1.01 }} whileTap={{ scale: 0.99 }}
-            onClick={() => navigate(ROUTES.CLIENTS + '?estado=expiring')}
+            onClick={() => navigate(ROUTES.CLIENTS)}
             className={`rounded-2xl lg:rounded-[2rem] border p-4 lg:p-6 text-left transition-all backdrop-blur-3xl flex items-start gap-3 lg:gap-4 ${
-              a && a.membresiasPorVencer.en30dias > 0
-                ? 'border-yellow-500/30 bg-yellow-500/10 hover:bg-yellow-500/15'
+              a && a.clientesSinTurno > 0
+                ? 'border-purple-500/30 bg-purple-500/10 hover:bg-purple-500/15'
                 : 'border-white/50 dark:border-white/10 bg-white/30 dark:bg-black/30'
             }`}
           >
-            <div className={`flex h-9 w-9 lg:h-11 lg:w-11 shrink-0 items-center justify-center rounded-xl lg:rounded-2xl ${a && a.membresiasPorVencer.en30dias > 0 ? 'bg-yellow-500/20' : 'bg-white/20 dark:bg-white/10'}`}>
-              <Clock size={20} className={a && a.membresiasPorVencer.en30dias > 0 ? 'text-yellow-400' : 'text-gray-400'} />
+            <div className={`flex h-9 w-9 lg:h-11 lg:w-11 shrink-0 items-center justify-center rounded-xl lg:rounded-2xl ${a && a.clientesSinTurno > 0 ? 'bg-purple-500/20' : 'bg-white/20 dark:bg-white/10'}`}>
+              <UserX size={20} className={a && a.clientesSinTurno > 0 ? 'text-purple-400' : 'text-gray-400'} />
             </div>
             <div>
               {alertasHook.isLoading ? (
-                <div className="space-y-1.5 mt-0.5">
-                  <Skeleton className="h-8 lg:h-9 w-12" />
-                  <Skeleton className="h-4 w-36" />
-                </div>
+                <div className="space-y-1.5 mt-0.5"><Skeleton className="h-8 lg:h-9 w-12" /><Skeleton className="h-4 w-36" /></div>
               ) : (
                 <>
-                  <p className="text-2xl lg:text-3xl font-black tabular-nums text-gray-900 dark:text-white">{a?.membresiasPorVencer.en30dias ?? 0}</p>
-                  <p className={`text-sm font-bold mt-0.5 ${a && a.membresiasPorVencer.en30dias > 0 ? 'text-yellow-500 dark:text-yellow-400' : 'text-gray-500 dark:text-gray-400'}`}>
-                    {a && a.membresiasPorVencer.en30dias === 1 ? 'membresía vence' : 'membresías vencen'} en 30 días
+                  <p className="text-2xl lg:text-3xl font-black tabular-nums text-gray-900 dark:text-white">{a?.clientesSinTurno ?? 0}</p>
+                  <p className={`text-sm font-bold mt-0.5 ${a && a.clientesSinTurno > 0 ? 'text-purple-400' : 'text-gray-500 dark:text-gray-400'}`}>
+                    {a && a.clientesSinTurno === 1 ? 'cliente activo sin turno' : 'clientes activos sin turno'}
                   </p>
                 </>
               )}
-              <p className="text-xs text-gray-400 dark:text-[#8A8A9A] mt-1">Tocá para ver el listado →</p>
+              <p className="text-xs text-gray-400 dark:text-[#8A8A9A] mt-1">Membresía activa sin inscripción →</p>
+            </div>
+          </motion.button>
+
+          {/* Baja asistencia */}
+          <motion.button
+            variants={fadeUpItem}
+            whileHover={{ scale: 1.01 }} whileTap={{ scale: 0.99 }}
+            onClick={() => navigate(ROUTES.CLIENTS)}
+            className={`rounded-2xl lg:rounded-[2rem] border p-4 lg:p-6 text-left transition-all backdrop-blur-3xl flex items-start gap-3 lg:gap-4 ${
+              a && a.clientesBajaAsistencia > 0
+                ? 'border-teal-500/30 bg-teal-500/10 hover:bg-teal-500/15'
+                : 'border-white/50 dark:border-white/10 bg-white/30 dark:bg-black/30'
+            }`}
+          >
+            <div className={`flex h-9 w-9 lg:h-11 lg:w-11 shrink-0 items-center justify-center rounded-xl lg:rounded-2xl ${a && a.clientesBajaAsistencia > 0 ? 'bg-teal-500/20' : 'bg-white/20 dark:bg-white/10'}`}>
+              <Activity size={20} className={a && a.clientesBajaAsistencia > 0 ? 'text-teal-400' : 'text-gray-400'} />
+            </div>
+            <div>
+              {alertasHook.isLoading ? (
+                <div className="space-y-1.5 mt-0.5"><Skeleton className="h-8 lg:h-9 w-12" /><Skeleton className="h-4 w-36" /></div>
+              ) : (
+                <>
+                  <p className="text-2xl lg:text-3xl font-black tabular-nums text-gray-900 dark:text-white">{a?.clientesBajaAsistencia ?? 0}</p>
+                  <p className={`text-sm font-bold mt-0.5 ${a && a.clientesBajaAsistencia > 0 ? 'text-teal-400' : 'text-gray-500 dark:text-gray-400'}`}>
+                    {a && a.clientesBajaAsistencia === 1 ? 'cliente sin venir' : 'clientes sin venir'} hace 14 días
+                  </p>
+                </>
+              )}
+              <p className="text-xs text-gray-400 dark:text-[#8A8A9A] mt-1">Con membresía activa y turno →</p>
             </div>
           </motion.button>
 
