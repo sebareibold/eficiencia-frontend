@@ -2153,8 +2153,8 @@ function ResumenCard({ insc, clients, sala, aviso }: { insc: InscripcionEntry; c
   const clientData = clients.find(c => String(c.id) === String(insc.clienteId))
   const statusConfig: Record<string, { label: string; classes: string }> = {
     active:   { label: 'Activo',     classes: 'bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border border-emerald-500/20' },
-    expiring: { label: 'Por Vencer', classes: 'bg-amber-500/10 text-amber-600 dark:text-amber-400 border border-amber-500/20' },
-    debt:     { label: 'Deuda',      classes: 'bg-red-500/10 text-red-600 dark:text-red-400 border border-red-500/20' },
+    expiring: { label: 'Vencida',    classes: 'bg-amber-500/10 text-amber-600 dark:text-amber-400 border border-amber-500/20' },
+    debt:     { label: 'Vencida',    classes: 'bg-amber-500/10 text-amber-600 dark:text-amber-400 border border-amber-500/20' },
     inactive: { label: 'Inactivo',   classes: 'bg-gray-500/10 text-gray-600 dark:text-gray-400 border border-gray-500/20' },
   }
   const clientStatus = clientData?.status && statusConfig[clientData.status]

@@ -522,8 +522,7 @@ export function ManualContent() {
               <div className="space-y-2 pt-1">
                 {[
                   { badge: 'AL DÍA',       color: 'green' as BadgeColor, desc: 'Tiene una membresía activa y vigente.' },
-                  { badge: 'POR VENCER',    color: 'amber' as BadgeColor, desc: 'La membresía vence en menos de 7 días.' },
-                  { badge: 'EN DEUDA',      color: 'red'   as BadgeColor, desc: 'La membresía venció y no fue renovada.' },
+                  { badge: 'VENCIDA',       color: 'amber' as BadgeColor, desc: 'No tiene una membresía activa vigente en el sistema.' },
                   { badge: 'SIN MEMBRESÍA', color: 'gray'  as BadgeColor, desc: 'No tiene ninguna membresía registrada.' },
                 ].map(({ badge, color, desc }) => (
                   <div key={badge} className="flex items-center gap-3">
@@ -544,8 +543,8 @@ export function ManualContent() {
             </div>
 
             <InfoBox type="tip">
-              Un cliente puede ser <strong>INACTIVO + EN DEUDA</strong> al mismo tiempo. El estado
-              de actividad (si viene al gimnasio) y el estado de membresía (si debe plata) son
+              Un cliente puede ser <strong>INACTIVO + VENCIDA</strong> al mismo tiempo. El estado
+              de actividad (si viene al gimnasio) y el estado de membresía (si está al día o vencida) son
               completamente independientes.
             </InfoBox>
           </div>

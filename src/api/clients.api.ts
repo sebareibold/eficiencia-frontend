@@ -11,8 +11,7 @@ export interface PaginatedClients {
 
 function mapEstadoPago(estadoPago: string): ClientStatus {
   if (estadoPago === 'AL_DIA') return 'active'
-  if (estadoPago === 'EN_DEUDA') return 'debt'
-  return 'expiring' // VENCIDO
+  return 'expiring' // VENCIDO o EN_DEUDA (legacy)
 }
 
 function mapActividad(estado: string): 'active' | 'inactive' {

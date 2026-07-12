@@ -15,7 +15,7 @@ import Skeleton from '../components/ui/Skeleton'
 import type { Client } from '../types/client.types'
 
 type ActividadFilter = 'all' | 'active' | 'inactive'
-type MembresiaFilter = 'all' | 'active' | 'expiring' | 'debt'
+type MembresiaFilter = 'all' | 'active' | 'expiring'
 
 const ACTIVIDAD_FILTERS: { value: ActividadFilter; label: string }[] = [
   { value: 'all',      label: 'Todos' },
@@ -26,13 +26,11 @@ const ACTIVIDAD_FILTERS: { value: ActividadFilter; label: string }[] = [
 const MEMBRESIA_FILTERS: { value: MembresiaFilter; label: string }[] = [
   { value: 'all',      label: 'Todos' },
   { value: 'active',   label: 'Al día' },
-  { value: 'expiring', label: 'Por vencer' },
-  { value: 'debt',     label: 'En deuda' },
+  { value: 'expiring', label: 'Vencida' },
 ]
 
 function mapMembresiaToEstadoPago(s: MembresiaFilter): string | undefined {
   if (s === 'active')   return 'AL_DIA'
-  if (s === 'debt')     return 'EN_DEUDA'
   if (s === 'expiring') return 'VENCIDO'
   return undefined
 }
@@ -627,7 +625,7 @@ export default function ClientsPage() {
             const avatarColor =
               c.status === 'active'   ? 'bg-emerald-500/20 text-emerald-600 dark:text-emerald-400' :
               c.status === 'expiring' ? 'bg-amber-500/20 text-amber-600 dark:text-amber-400' :
-              c.status === 'debt'     ? 'bg-red-500/20 text-red-600 dark:text-red-400' :
+              c.status === 'debt'     ? 'bg-amber-500/20 text-amber-600 dark:text-amber-400' :
                                         'bg-gray-200/60 dark:bg-gray-700/40 text-gray-500 dark:text-gray-400'
             return (
               <motion.button

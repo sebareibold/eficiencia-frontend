@@ -10,7 +10,7 @@ interface BadgeProps {
 const DOT_CLASSES: Record<ClientStatus, string> = {
   active: 'bg-emerald-500',
   expiring: 'bg-amber-500',
-  debt: 'bg-red-500',
+  debt: 'bg-amber-500',
   inactive: 'bg-gray-400',
 }
 

@@ -474,8 +474,7 @@ export default function DashboardPage() {
   const piePagoData = c
     ? [
         { name: 'Al día',   value: c.distribucion.activos,  color: C.green },
-        { name: 'En deuda', value: c.distribucion.enDeuda,  color: C.orange },
-        { name: 'Vencidos', value: c.distribucion.vencidos, color: C.red },
+        { name: 'Vencida',  value: c.distribucion.enDeuda + c.distribucion.vencidos, color: C.orange },
       ].filter(d => d.value > 0)
     : []
 
@@ -632,19 +631,19 @@ export default function DashboardPage() {
           animate="animate"
         >
 
-          {/* Clientes en deuda */}
+          {/* Clientes con membresía vencida */}
           <motion.button
             variants={fadeUpItem}
             whileHover={{ scale: 1.01 }} whileTap={{ scale: 0.99 }}
-            onClick={() => navigate(ROUTES.CLIENTS + '?estado=debt')}
+            onClick={() => navigate(ROUTES.CLIENTS + '?estado=expiring')}
             className={`rounded-2xl lg:rounded-[2rem] border p-4 lg:p-6 text-left transition-all backdrop-blur-3xl flex items-start gap-3 lg:gap-4 ${
               a && a.clientesEnDeuda > 0
-                ? 'border-red-500/30 bg-red-500/10 hover:bg-red-500/15'
+                ? 'border-amber-500/30 bg-amber-500/10 hover:bg-amber-500/15'
                 : 'border-white/50 dark:border-white/10 bg-white/30 dark:bg-black/30'
             }`}
           >
-            <div className={`flex h-9 w-9 lg:h-11 lg:w-11 shrink-0 items-center justify-center rounded-xl lg:rounded-2xl ${a && a.clientesEnDeuda > 0 ? 'bg-red-500/20' : 'bg-white/20 dark:bg-white/10'}`}>
-              <AlertCircle size={20} className={a && a.clientesEnDeuda > 0 ? 'text-red-400' : 'text-gray-400'} />
+            <div className={`flex h-9 w-9 lg:h-11 lg:w-11 shrink-0 items-center justify-center rounded-xl lg:rounded-2xl ${a && a.clientesEnDeuda > 0 ? 'bg-amber-500/20' : 'bg-white/20 dark:bg-white/10'}`}>
+              <AlertCircle size={20} className={a && a.clientesEnDeuda > 0 ? 'text-amber-400' : 'text-gray-400'} />
             </div>
             <div>
               {alertasHook.isLoading ? (
@@ -655,8 +654,8 @@ export default function DashboardPage() {
               ) : (
                 <>
                   <p className="text-2xl lg:text-3xl font-black tabular-nums text-gray-900 dark:text-white">{a?.clientesEnDeuda ?? 0}</p>
-                  <p className={`text-sm font-bold mt-0.5 ${a && a.clientesEnDeuda > 0 ? 'text-red-400' : 'text-gray-500 dark:text-gray-400'}`}>
-                    {a && a.clientesEnDeuda === 1 ? 'cliente en deuda' : 'clientes en deuda'}
+                  <p className={`text-sm font-bold mt-0.5 ${a && a.clientesEnDeuda > 0 ? 'text-amber-400' : 'text-gray-500 dark:text-gray-400'}`}>
+                    {a && a.clientesEnDeuda === 1 ? 'cliente con membresía vencida' : 'clientes con membresía vencida'}
                   </p>
                 </>
               )}

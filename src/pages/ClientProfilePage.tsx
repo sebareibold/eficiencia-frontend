@@ -106,14 +106,14 @@ const ACTIVIDAD_OPTIONS = [
 function avatarColors(status: Client['status']) {
   if (status === 'active') return 'bg-emerald-500/15 text-emerald-600 dark:text-emerald-400'
   if (status === 'expiring') return 'bg-amber-500/15 text-amber-600 dark:text-amber-400'
-  if (status === 'debt') return 'bg-red-500/15 text-red-600 dark:text-red-400'
+  if (status === 'debt') return 'bg-amber-500/15 text-amber-600 dark:text-amber-400'
   return 'bg-gray-200/60 dark:bg-gray-700/40 text-gray-500 dark:text-gray-400'
 }
 
 function statusBarColor(status: Client['status']) {
   if (status === 'active') return 'bg-emerald-500'
   if (status === 'expiring') return 'bg-amber-500'
-  if (status === 'debt') return 'bg-red-500'
+  if (status === 'debt') return 'bg-amber-500'
   return 'bg-gray-400'
 }
 
@@ -137,8 +137,6 @@ const glassCard = 'rounded-[2rem] border border-gray-200 dark:border-white/10 bg
 // ─── Tooltip de estado ────────────────────────────────────────────────────────
 function getStatusTooltip(client: Client): string | null {
   if (client.status === 'active') return null
-  if (client.status === 'debt')
-    return 'El cliente fue marcado con pagos pendientes. Regularizá la deuda para volver al estado activo.'
   if (client.status === 'expiring') {
     if (!client.membershipExpiresAt) return 'No tiene ninguna membresía activa registrada.'
     const exp  = new Date(client.membershipExpiresAt)
@@ -162,16 +160,16 @@ function StatusBadge({ client, size = 'md' }: { client: Client; size?: 'sm' | 'm
   const activityDot = client.activityStatus === 'inactive' ? 'bg-gray-400' : 'bg-emerald-500'
   const activityLabel = client.activityStatus === 'inactive' ? 'INACTIVO' : 'ACTIVO'
 
-  // Badge de estado de pago: AL DÍA / POR VENCER / EN DEUDA
+  // Badge de estado de pago: AL DÍA / VENCIDA
   const paymentCls =
     client.status === 'active'   ? 'bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border border-emerald-500/20'
     : client.status === 'expiring' ? 'bg-amber-500/10 text-amber-600 dark:text-amber-400 border border-amber-500/20'
-    : client.status === 'debt'     ? 'bg-red-500/10 text-red-600 dark:text-red-400 border border-red-500/20'
+    : client.status === 'debt'     ? 'bg-amber-500/10 text-amber-600 dark:text-amber-400 border border-amber-500/20'
     : 'bg-gray-500/10 text-gray-500 dark:text-gray-400 border border-gray-500/20'
   const paymentDot =
     client.status === 'active'   ? 'bg-emerald-500'
     : client.status === 'expiring' ? 'bg-amber-500'
-    : client.status === 'debt'     ? 'bg-red-500'
+    : client.status === 'debt'     ? 'bg-amber-500'
     : 'bg-gray-400'
 
   return (
@@ -1114,12 +1112,12 @@ export default function ClientProfilePage() {
   const paymentCls =
     client.status === 'active'   ? 'bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border border-emerald-500/20'
     : client.status === 'expiring' ? 'bg-amber-500/10 text-amber-600 dark:text-amber-400 border border-amber-500/20'
-    : client.status === 'debt'     ? 'bg-red-500/10 text-red-600 dark:text-red-400 border border-red-500/20'
+    : client.status === 'debt'     ? 'bg-amber-500/10 text-amber-600 dark:text-amber-400 border border-amber-500/20'
     : 'bg-gray-500/10 text-gray-500 dark:text-gray-400 border border-gray-500/20'
   const paymentDot =
     client.status === 'active'   ? 'bg-emerald-500'
     : client.status === 'expiring' ? 'bg-amber-500'
-    : client.status === 'debt'     ? 'bg-red-500'
+    : client.status === 'debt'     ? 'bg-amber-500'
     : 'bg-gray-400'
   const paymentLabel      = getStatusLabel(client.status)
   const membershipTooltip = getStatusTooltip(client)
