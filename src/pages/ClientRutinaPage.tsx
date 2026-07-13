@@ -17,6 +17,7 @@ import { es } from 'date-fns/locale'
 import { DIFICULTAD_LABELS } from '../types/ejercicio-catalogo.types'
 import { rutinasApi } from '../api/rutinas.api'
 import { ejerciciosApi } from '../api/ejercicios.api'
+import { patronesApi, type PatronMovimientoConfig } from '../api/patrones.api'
 import { clientsApi } from '../api/clients.api'
 import { useAuthStore } from '../store/authStore'
 import { useRutinas } from '../hooks/useRutinas'
@@ -184,7 +185,7 @@ interface EjercicioDraftRowProps {
 }
 
 function EjercicioDraftRow({ ej, catalogo, onUpdate, onDelete }: EjercicioDraftRowProps) {
-  const [isEditing, setIsEditing] = useState(false)
+  const [isEditing, setIsEditing] = useState(!!ej._isNew && !!ej.nombre)
   const [confirmDelete, setConfirmDelete] = useState(false)
   const [expanded, setExpanded] = useState(false)
   const [selCatalogId, setSelCatalogId] = useState<string | undefined>(ej.catalogoId)
@@ -401,17 +402,24 @@ const DIFICULTAD_COLORS: Record<string, string> = {
 
 interface AddEjercicioPanelProps {
   bloqueId: string
-  onAdd: (bloqueId: string, nombre: string, catalogoId?: string, catalogo?: DraftEjercicio['catalogo']) => void
-  onClose: () => void
+  patronHint?: string | null
+  onAdd: (bloqueId: string, nombre: string, catalogoId?: string, catalogo?: DraftEjercicio['catalogo']) => string
+  onClose: (newEjId?: string, patron?: string) => void
 }
 
-function AddEjercicioPanel({ bloqueId, onAdd, onClose }: AddEjercicioPanelProps) {
+function AddEjercicioPanel({ bloqueId, patronHint, onAdd, onClose }: AddEjercicioPanelProps) {
   const addToast = useUiStore(s => s.addToast)
   const [search, setSearch] = useState('')
   const [debounced, setDebounced] = useState('')
+  const [patron, setPatron] = useState<string>(patronHint ?? '')
+  const [patrones, setPatrones] = useState<PatronMovimientoConfig[]>([])
   const [catalogo, setCatalogo] = useState<EjercicioCatalogo[]>([])
   const [loading, setLoading] = useState(true)
   const [creating, setCreating] = useState(false)
+
+  useEffect(() => {
+    patronesApi.getAll(true).then(setPatrones).catch(() => {})
+  }, [])
 
   useEffect(() => {
     const t = setTimeout(() => setDebounced(search), 300)
@@ -420,14 +428,18 @@ function AddEjercicioPanel({ bloqueId, onAdd, onClose }: AddEjercicioPanelProps)
 
   useEffect(() => {
     setLoading(true)
-    ejerciciosApi.getAll({ nombre: debounced || undefined, startsWith: debounced ? true : undefined })
+    ejerciciosApi.getAll({
+      nombre: debounced || undefined,
+      startsWith: debounced ? true : undefined,
+      patronMovimiento: patron || undefined,
+    })
       .then(setCatalogo)
       .finally(() => setLoading(false))
-  }, [debounced])
+  }, [debounced, patron])
 
   const handleSelect = (ej: EjercicioCatalogo) => {
-    onAdd(bloqueId, ej.nombre, ej.id, { nombre: ej.nombre, patronMovimiento: ej.patronMovimiento, videoUrl: ej.videoUrl })
-    onClose()
+    const newId = onAdd(bloqueId, ej.nombre, ej.id, { nombre: ej.nombre, patronMovimiento: ej.patronMovimiento, videoUrl: ej.videoUrl })
+    onClose(newId, patron || undefined)
   }
 
   const handleCrear = async () => {
@@ -435,8 +447,8 @@ function AddEjercicioPanel({ bloqueId, onAdd, onClose }: AddEjercicioPanelProps)
     setCreating(true)
     try {
       const nuevo = await ejerciciosApi.create({ nombre: search.trim() })
-      onAdd(bloqueId, nuevo.nombre, nuevo.id, { nombre: nuevo.nombre })
-      onClose()
+      const newId = onAdd(bloqueId, nuevo.nombre, nuevo.id, { nombre: nuevo.nombre })
+      onClose(newId, patron || undefined)
     } catch {
       addToast({ type: 'error', message: 'Error al crear ejercicio' })
       setCreating(false)
@@ -462,7 +474,19 @@ function AddEjercicioPanel({ bloqueId, onAdd, onClose }: AddEjercicioPanelProps)
             placeholder="Buscar en el catálogo..."
             className="flex-1 bg-transparent text-sm text-saas-text dark:text-white placeholder-gray-400 dark:placeholder-white/25 focus:outline-none"
           />
-          <button onClick={onClose} className="text-gray-300 dark:text-white/25 hover:text-gray-900 dark:hover:text-white transition-colors shrink-0">
+          {patrones.length > 0 && (
+            <select
+              value={patron}
+              onChange={e => setPatron(e.target.value)}
+              className="shrink-0 text-xs bg-transparent text-gray-500 dark:text-white/40 border border-gray-200 dark:border-white/[0.08] rounded-lg px-2 py-1 focus:outline-none focus:border-primary/50 cursor-pointer"
+            >
+              <option value="">Todos</option>
+              {patrones.map(p => (
+                <option key={p.clave} value={p.clave}>{p.label}</option>
+              ))}
+            </select>
+          )}
+          <button onClick={() => onClose()} className="text-gray-300 dark:text-white/25 hover:text-gray-900 dark:hover:text-white transition-colors shrink-0">
             <X className="w-3.5 h-3.5" />
           </button>
         </div>
@@ -776,10 +800,11 @@ interface DraftBloqueCardProps {
   onDeleteBloque: (sesionId: string, bloqueId: string) => void
   onDeleteEj: (ejercicioId: string) => void
   onUpdateEj: (ejercicioId: string, data: UpdateEjData) => void
-  onAddEj: (bloqueId: string, nombre: string, catalogoId?: string, catalogo?: DraftEjercicio['catalogo']) => void
+  onAddEj: (bloqueId: string, nombre: string, catalogoId?: string, catalogo?: DraftEjercicio['catalogo']) => string
+  onBloquePatronChange: (bloqueId: string, patron: string) => void
 }
 
-function DraftBloqueCard({ bloque, sesionId, catalogo, addingBloqueId, onSetAdding, onDeleteBloque, onDeleteEj, onUpdateEj, onAddEj }: DraftBloqueCardProps) {
+function DraftBloqueCard({ bloque, sesionId, catalogo, addingBloqueId, onSetAdding, onDeleteBloque, onDeleteEj, onUpdateEj, onAddEj, onBloquePatronChange }: DraftBloqueCardProps) {
   const [confirmDelete, setConfirmDelete] = useState(false)
   const isAdding = addingBloqueId === bloque.id
 
@@ -836,8 +861,9 @@ function DraftBloqueCard({ bloque, sesionId, catalogo, addingBloqueId, onSetAddi
             {isAdding && (
               <AddEjercicioPanel
                 bloqueId={bloque.id}
+                patronHint={bloque.patronMovimiento}
                 onAdd={onAddEj}
-                onClose={() => onSetAdding(null)}
+                onClose={(_, patron) => { onSetAdding(null); if (patron) onBloquePatronChange(bloque.id, patron) }}
               />
             )}
           </AnimatePresence>
@@ -1283,6 +1309,7 @@ function EditCard({ clienteId: _clienteId, rutina, onCancel, onSaved }: EditCard
                       onDeleteEj={deleteEjercicio}
                       onUpdateEj={updateEjercicio}
                       onAddEj={addEjercicio}
+                      onBloquePatronChange={updateBloquePatron}
                     />
                   ))}
                   <button
@@ -1355,7 +1382,7 @@ function InlineEditRutinaTable({ rutina, onCancel, onSaved, selectedSemanaId, on
     addSemana, cloneSemana, deleteSemana, renameSemana,
     addSesion, renameSesion, setSesionNota, deleteSesion,
     addBloque, deleteBloque,
-    addEjercicio, updateEjercicio, deleteEjercicio,
+    addEjercicio, updateEjercicio, deleteEjercicio, updateBloquePatron,
   } = useRutinaDraft()
 
   const [editingEjId, setEditingEjId] = useState<string | null>(null)
@@ -1718,7 +1745,7 @@ function InlineEditRutinaTable({ rutina, onCancel, onSaved, selectedSemanaId, on
                         {diaCell()}{blCell()}
                         <td colSpan={12} className="px-4 py-2">
                           {addingEjBloqueId === bl.id
-                            ? <AddEjercicioPanel bloqueId={bl.id} onAdd={addEjercicio} onClose={() => setAddingEjBloqueId(null)} />
+                            ? <AddEjercicioPanel bloqueId={bl.id} patronHint={bl.patronMovimiento} onAdd={addEjercicio} onClose={(newId, patron) => { setAddingEjBloqueId(null); if (newId) setEditingEjId(newId); if (patron) updateBloquePatron(bl.id, patron) }} />
                             : <button onClick={() => setAddingEjBloqueId(bl.id)} className="flex items-center gap-1.5 text-xs text-gray-400 dark:text-white/40 hover:text-primary transition-colors py-0.5"><Plus className="w-3 h-3" /> Agregar ejercicio</button>
                           }
                         </td>
@@ -1759,7 +1786,7 @@ function InlineEditRutinaTable({ rutina, onCancel, onSaved, selectedSemanaId, on
                       <td colSpan={12} className="px-4 py-1.5">
                         <AnimatePresence>
                           {addingEjBloqueId === bl.id
-                            ? <AddEjercicioPanel bloqueId={bl.id} onAdd={addEjercicio} onClose={() => setAddingEjBloqueId(null)} />
+                            ? <AddEjercicioPanel bloqueId={bl.id} patronHint={bl.patronMovimiento} onAdd={addEjercicio} onClose={(newId, patron) => { setAddingEjBloqueId(null); if (newId) setEditingEjId(newId); if (patron) updateBloquePatron(bl.id, patron) }} />
                             : <button onClick={() => setAddingEjBloqueId(bl.id)} className="flex items-center gap-1.5 text-[11px] text-gray-400 dark:text-white/40 hover:text-primary transition-colors py-0.5"><Plus className="w-3 h-3" /> ej. en bloque {bl.letra}</button>
                           }
                         </AnimatePresence>

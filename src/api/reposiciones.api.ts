@@ -47,6 +47,6 @@ export const reposicionesApi = {
   updateRecuperacion: (id: string, payload: UpdateRecuperacionPayload): Promise<RecuperacionClase> =>
     api.patch(`/reposiciones/recuperacion/${id}`, payload).then(unwrap),
 
-  cancelarRecuperacion: (id: string): Promise<RecuperacionClase> =>
-    api.delete(`/reposiciones/recuperacion/${id}`).then(unwrap),
+  cancelarRecuperacion: (id: string): Promise<void> =>
+    api.delete(`/reposiciones/recuperacion/${id}`).then(() => undefined),
 }

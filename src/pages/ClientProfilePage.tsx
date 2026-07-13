@@ -197,13 +197,13 @@ function StatusBadge({ client, size = 'md' }: { client: Client; size?: 'sm' | 'm
 }
 
 const DIA_SHORT: Record<string, string> = {
-  lunes: 'Lu', martes: 'Ma', miercoles: 'Mi', 'miércoles': 'Mi',
-  jueves: 'Ju', viernes: 'Vi', sabado: 'Sá', 'sábado': 'Sá', domingo: 'Do',
+  lunes: 'Lunes', martes: 'Martes', miercoles: 'Miércoles', 'miércoles': 'Miércoles',
+  jueves: 'Jueves', viernes: 'Viernes', sabado: 'Sábado', 'sábado': 'Sábado', domingo: 'Domingo',
 }
 
 const WEEKDAY_SHORT: Record<string, string> = {
-  monday: 'Lu', tuesday: 'Ma', wednesday: 'Mi', thursday: 'Ju',
-  friday: 'Vi', saturday: 'Sá', sunday: 'Do',
+  monday: 'Lunes', tuesday: 'Martes', wednesday: 'Miércoles', thursday: 'Jueves',
+  friday: 'Viernes', saturday: 'Sábado', sunday: 'Domingo',
 }
 
 
@@ -262,7 +262,7 @@ function AttendanceTabContent({ attendance }: { attendance: AttendanceRecord[] }
     attendance.forEach(a => {
       const key = a.date.slice(0, 7)
       if (!map.has(key)) {
-        map.set(key, { mes: format(parseISO(a.date), 'MMM yy', { locale: es }), presentes: 0, ausentes: 0 })
+        map.set(key, { mes: format(parseISO(a.date), 'MMMM yy', { locale: es }), presentes: 0, ausentes: 0 })
       }
       const cur = map.get(key)!
       if (a.present) cur.presentes++
@@ -354,7 +354,7 @@ function AttendanceTabContent({ attendance }: { attendance: AttendanceRecord[] }
               </div>
               <div className="flex-1 min-w-0">
                 <p className="text-xs font-semibold text-gray-900 dark:text-white leading-tight">
-                  {format(parseISO(a.date), "d MMM yyyy", { locale: es })}
+                  {format(parseISO(a.date), "d 'de' MMMM yyyy", { locale: es })}
                 </p>
                 <p className="text-[10px] text-gray-500 dark:text-[#8A8A9A] truncate">{a.shiftLabel}</p>
               </div>
@@ -504,7 +504,7 @@ export default function ClientProfilePage() {
   const [navOpen, setNavOpen] = useState(false)
   const [deleteRutinaId, setDeleteRutinaId] = useState<string | null>(null)
   const [deletingRutina, setDeletingRutina] = useState(false)
-  const [deleteAusenciaId, setDeleteAusenciaId] = useState<string | null>(null)
+  const [deleteAusenciaIds, setDeleteAusenciaIds] = useState<string[] | null>(null)
   const [deletingAusencia, setDeletingAusencia] = useState(false)
   const [client, setClient] = useState<Client | null>(null)
   const [ficha, setFicha] = useState<FichaEntrenamiento | null>(null)
@@ -562,6 +562,7 @@ export default function ClientProfilePage() {
   const [leftTab, setLeftTab] = useState<'historial' | 'ausencias' | 'recuperos'>('historial')
   const [deletingAttendanceId, setDeletingAttendanceId] = useState<string | null>(null)
   const [cancelingRecupId, setCancelingRecupId] = useState<string | null>(null)
+  const [expandedHistorialGroups, setExpandedHistorialGroups] = useState<Set<string>>(new Set())
 
   const scrollToSection = (sectionId: string) => {
     const el = document.getElementById(sectionId)
@@ -815,26 +816,38 @@ export default function ClientProfilePage() {
   }
 
   async function handleDeleteAusencia() {
-    if (!deleteAusenciaId) return
+    if (!deleteAusenciaIds || deleteAusenciaIds.length === 0) return
     setDeletingAusencia(true)
     try {
-      await reposicionesApi.deleteAusencia(deleteAusenciaId)
-      addToast('Ausencia eliminada', 'success')
+      await Promise.allSettled(deleteAusenciaIds.map(id => reposicionesApi.deleteAusencia(id)))
+      addToast(deleteAusenciaIds.length === 1 ? 'Ausencia eliminada' : `${deleteAusenciaIds.length} ausencias eliminadas`, 'success')
       loadAusencias()
     } catch {
       addToast('Error al eliminar la ausencia', 'error')
     } finally {
       setDeletingAusencia(false)
-      setDeleteAusenciaId(null)
+      setDeleteAusenciaIds(null)
     }
   }
 
-  async function handleDeleteAttendance(recordId: string) {
+  async function handleDeleteAttendance(
+    recordId: string,
+    opts?: { isAusenciaOnly?: boolean; ausenciaId?: string }
+  ) {
     setDeletingAttendanceId(recordId)
     try {
-      await attendanceApi.deleteById(recordId)
-      setAttendance(prev => prev.filter(r => r.id !== recordId))
-      addToast('Registro de asistencia eliminado', 'success')
+      if (opts?.isAusenciaOnly) {
+        // Es una AusenciaTurno directa — usar la API de reposiciones
+        await reposicionesApi.deleteAusencia(recordId)
+        setAusencias(prev => prev.filter(a => a.id !== recordId))
+      } else {
+        // Es un registro de Asistencia
+        await attendanceApi.deleteById(recordId)
+        setAttendance(prev => prev.filter(r => r.id !== recordId))
+        // Refrescar ausencias para que el contador sea correcto
+        loadAusencias()
+      }
+      addToast('Registro eliminado', 'success')
     } catch {
       addToast('Error al eliminar el registro', 'error')
     } finally {
@@ -955,21 +968,150 @@ export default function ClientProfilePage() {
   const mergedTimeline = useMemo(() => {
     // Normalizar a.fecha a YYYY-MM-DD (el backend devuelve ISO datetime completo)
     const ausenciaMap = new Map(ausencias.map(a => [a.fecha.slice(0, 10), a]))
-    return attendance
-      .map(r => {
-        // r.date puede ser ISO datetime completo; normalizar a YYYY-MM-DD para los lookups
-        const dateKey = r.date.slice(0, 10)
+
+    // Registros de asistencia bulk
+    const attendanceDates = new Set(attendance.map(r => r.date.slice(0, 10)))
+    const attendanceEntries = attendance.map(r => {
+      const dateKey = r.date.slice(0, 10)
+      return {
+        ...r,
+        dateKey,
+        state: r.present ? 'presente' as const
+          : ausenciaMap.has(dateKey) ? 'con_aviso' as const
+          : 'ausente' as const,
+        ausencia: ausenciaMap.get(dateKey),
+      }
+    })
+
+    // Ausencias registradas directamente (sin registro bulk de asistencia para esa fecha)
+    const ausenciasExtras = ausencias
+      .filter(a => !attendanceDates.has(a.fecha.slice(0, 10)))
+      .map(a => {
+        const dateKey = a.fecha.slice(0, 10)
         return {
-          ...r,
+          id: a.id,
+          date: a.fecha,
           dateKey,
-          state: r.present ? 'presente' as const
-            : ausenciaMap.has(dateKey) ? 'con_aviso' as const
-            : 'ausente' as const,
-          ausencia: ausenciaMap.get(dateKey),
+          present: false,
+          conAviso: a.conAviso,
+          state: (a.conAviso ? 'con_aviso' : 'ausente') as 'con_aviso' | 'ausente',
+          ausencia: a,
+          isAusenciaOnly: true as const,
+          shiftId: a.inscripcion?.turno?.id,
         }
       })
+
+    const attendanceWithFlag = attendanceEntries.map(r => ({ ...r, isAusenciaOnly: false as const }))
+
+    return [...attendanceWithFlag, ...ausenciasExtras]
       .sort((a, b) => b.date.localeCompare(a.date))
   }, [attendance, ausencias])
+
+  type TimelineEntry = ReturnType<typeof mergedTimeline>[number]
+  type TimelineDisplayItem =
+    | { type: 'single'; entry: TimelineEntry }
+    | { type: 'range'; key: string; entries: TimelineEntry[]; state: 'con_aviso' | 'ausente'; minDate: string; maxDate: string }
+
+  // displayTimeline: igual que mergedTimeline pero colapsa runs consecutivas de ausencias del mismo turno
+  const displayTimeline = useMemo((): TimelineDisplayItem[] => {
+    // Identificar runs: entradas no-presentes del mismo shiftId con brecha ≤ 8 días entre sí
+    const runKeyByEntryId = new Map<string, string>()
+    const runsByKey = new Map<string, TimelineEntry[]>()
+
+    // Agrupar entradas no-presentes por shiftId
+    const byShift = new Map<string, TimelineEntry[]>()
+    for (const r of mergedTimeline) {
+      if (r.state !== 'presente' && r.shiftId) {
+        if (!byShift.has(r.shiftId)) byShift.set(r.shiftId, [])
+        byShift.get(r.shiftId)!.push(r)
+      }
+    }
+
+    // Para cada turno, encontrar runs consecutivas
+    for (const items of byShift.values()) {
+      const asc = [...items].sort((a, b) => a.dateKey.localeCompare(b.dateKey))
+      let cur: TimelineEntry[] = []
+      const flushRun = () => {
+        if (cur.length > 1) {
+          const key = cur[0].id
+          for (const e of cur) runKeyByEntryId.set(e.id, key)
+          runsByKey.set(key, [...cur])
+        }
+        cur = []
+      }
+      for (const r of asc) {
+        if (cur.length === 0) {
+          cur.push(r)
+        } else {
+          const prev = cur[cur.length - 1]
+          const diffDays = Math.round(
+            (new Date(r.dateKey + 'T12:00:00').getTime() - new Date(prev.dateKey + 'T12:00:00').getTime()) / 86_400_000
+          )
+          if (diffDays <= 8) cur.push(r)
+          else { flushRun(); cur = [r] }
+        }
+      }
+      flushRun()
+    }
+
+    // Construir display items colapsando runs
+    const seenRunKeys = new Set<string>()
+    const result: TimelineDisplayItem[] = []
+
+    for (const r of mergedTimeline) { // ya ordenado desc
+      const runKey = runKeyByEntryId.get(r.id)
+      if (!runKey) {
+        result.push({ type: 'single', entry: r })
+      } else if (!seenRunKeys.has(runKey)) {
+        seenRunKeys.add(runKey)
+        const entries = runsByKey.get(runKey)! // ordenado asc
+        result.push({
+          type: 'range',
+          key: runKey,
+          entries,
+          state: entries[0].state as 'con_aviso' | 'ausente',
+          minDate: entries[0].dateKey,
+          maxDate: entries[entries.length - 1].dateKey,
+        })
+      }
+      // else: ya incluido en un range, omitir
+    }
+
+    return result
+  }, [mergedTimeline])
+
+
+  // Ausencias agrupadas por registro masivo (ventana de 60 s en createdAt)
+  const gruposAusencias = useMemo(() => {
+    // Agrupar por fechas consecutivas: brecha > 8 días entre ausencias adyacentes → nuevo grupo
+    // Cubre clases semanales (7 días exactos entre ausencias consecutivas) con margen para DST
+    const sorted = [...ausencias].sort((a, b) => a.fecha.slice(0, 10).localeCompare(b.fecha.slice(0, 10)))
+    const groups: AusenciaTurno[][] = []
+    let cur: AusenciaTurno[] = []
+    for (const a of sorted) {
+      if (cur.length === 0) {
+        cur.push(a)
+      } else {
+        const prev = cur[cur.length - 1]
+        const diffDays = Math.round(
+          (new Date(a.fecha.slice(0, 10) + 'T12:00:00').getTime() - new Date(prev.fecha.slice(0, 10) + 'T12:00:00').getTime()) / 86_400_000
+        )
+        if (diffDays <= 8) {
+          cur.push(a)
+        } else {
+          groups.push(cur)
+          cur = [a]
+        }
+      }
+    }
+    if (cur.length > 0) groups.push(cur)
+    // Ordenar grupos por fecha más reciente de sus items (desc)
+    return groups.sort((a, b) => {
+      const maxA = a.map(x => x.fecha.slice(0, 10)).sort().at(-1) ?? ''
+      const maxB = b.map(x => x.fecha.slice(0, 10)).sort().at(-1) ?? ''
+      return maxB.localeCompare(maxA)
+    })
+  }, [ausencias])
 
   // Racha de presencias consecutivas (desde el registro más reciente)
   const rachaActual = useMemo(() => {
@@ -994,7 +1136,7 @@ export default function ClientProfilePage() {
     const map = new Map<string, { mes: string; presente: number; conAviso: number; ausente: number }>()
     mergedTimeline.forEach(r => {
       const key = r.date.slice(0, 7)
-      if (!map.has(key)) map.set(key, { mes: format(parseISO(key + '-01'), 'MMM yy', { locale: es }), presente: 0, conAviso: 0, ausente: 0 })
+      if (!map.has(key)) map.set(key, { mes: format(parseISO(key + '-01'), 'MMMM yy', { locale: es }), presente: 0, conAviso: 0, ausente: 0 })
       const cur = map.get(key)!
       if (r.state === 'presente') cur.presente++
       else if (r.state === 'con_aviso') cur.conAviso++
@@ -1511,7 +1653,7 @@ export default function ClientProfilePage() {
                         <Trophy size={10} className={isPast ? 'opacity-40' : 'text-primary'} />
                         <span>{ev.nombre}</span>
                         <span className={`text-[10px] ${isPast ? 'opacity-50' : 'opacity-70'}`}>
-                          {format(evDate, "d MMM yyyy", { locale: es })}
+                          {format(evDate, "d 'de' MMMM yyyy", { locale: es })}
                         </span>
                         {isAdmin && !eventoForm && (
                           <div className="flex items-center gap-0.5 ml-1 opacity-0 group-hover:opacity-100 transition-opacity">
@@ -1948,7 +2090,7 @@ export default function ClientProfilePage() {
             </div>
 
             {/* Cuerpo */}
-            {attendance.length === 0 ? (
+            {mergedTimeline.length === 0 ? (
               <div className="p-6"><EmptyState icon={Activity} message="Sin registros de asistencia" /></div>
             ) : (() => {
               const total     = mergedTimeline.length
@@ -1982,9 +2124,9 @@ export default function ClientProfilePage() {
                     {/* Subnav */}
                     <div className="flex gap-1 px-3 py-2 border-b border-gray-100 dark:border-white/[0.06]">
                       {([
-                        ['historial', 'Historial'],
-                        ['ausencias', `Ausencias c/aviso${nConAviso > 0 ? ` (${nConAviso})` : ''}`],
-                        ['recuperos', `Recuperos${recuperosPendientesCount > 0 ? ` (${recuperosPendientesCount})` : ''}`],
+                        ['historial',  'Historial'],
+                        ['ausencias',  `Ausencias${ausencias.length > 0 ? ` (${ausencias.length})` : ''}`],
+                        ['recuperos',  `Recuperos${recuperosPendientesCount > 0 ? ` (${recuperosPendientesCount})` : ''}`],
                       ] as const).map(([v, l]) => (
                         <button key={v} onClick={() => setLeftTab(v)}
                           className={`flex-1 text-[11px] font-semibold py-1.5 rounded-lg transition-all ${
@@ -1999,24 +2141,92 @@ export default function ClientProfilePage() {
                     {/* Lista scrollable */}
                     <div className="overflow-y-auto divide-y divide-gray-100 dark:divide-white/[0.05]" style={{ maxHeight: 260 }}>
                       {leftTab === 'historial' ? (
-                        mergedTimeline.map(r => (
+                        displayTimeline.map(item => {
+                          if (item.type === 'range') {
+                            const isExp = expandedHistorialGroups.has(item.key)
+                            const stateColor = item.state === 'con_aviso' ? 'bg-blue-500' : 'bg-red-500'
+                            const stateLabel = item.state === 'con_aviso' ? 'C/aviso' : 'S/aviso'
+                            const stateTextColor = item.state === 'con_aviso' ? 'text-blue-500' : 'text-red-400'
+                            return (
+                              <div key={item.key} className="border-b border-gray-100 dark:border-white/[0.04] last:border-0">
+                                <button
+                                  onClick={() => setExpandedHistorialGroups(prev => {
+                                    const next = new Set(prev)
+                                    if (next.has(item.key)) next.delete(item.key)
+                                    else next.add(item.key)
+                                    return next
+                                  })}
+                                  className="w-full flex items-center gap-2.5 px-4 py-2.5 hover:bg-black/[0.02] dark:hover:bg-white/[0.02] transition-colors text-left"
+                                >
+                                  <div className={`h-2 w-2 rounded-full shrink-0 ${stateColor}`} />
+                                  <div className="flex-1 min-w-0">
+                                    <p className="text-xs font-semibold text-gray-900 dark:text-white capitalize">
+                                      {safeFormatDate(item.minDate + 'T12:00:00', "d 'de' MMMM", es)} – {safeFormatDate(item.maxDate + 'T12:00:00', "d 'de' MMMM yyyy", es)}
+                                    </p>
+                                    <p className="text-[10px] text-gray-400 dark:text-[#666]">{item.entries.length} ausencias</p>
+                                  </div>
+                                  <span className={`text-[10px] font-semibold shrink-0 ${stateTextColor}`}>{stateLabel}</span>
+                                  {/* Botón detalle grupo — solo si hay ausencias con ID */}
+                                  {(() => {
+                                    const ausenciaIds = item.entries.map(e => e.ausencia?.id).filter(Boolean) as string[]
+                                    return ausenciaIds.length > 0 && (
+                                      <button
+                                        onClick={e => { e.stopPropagation(); navigate(`/clients/${id}/ausencias-grupo?ids=${ausenciaIds.join(',')}`) }}
+                                        className="text-gray-300 dark:text-[#444] hover:text-primary transition-colors shrink-0 p-0.5"
+                                        title="Ver grupo y gestionar recuperaciones"
+                                      >
+                                        <CalendarCheck2 size={12} />
+                                      </button>
+                                    )
+                                  })()}
+                                  <ChevronRight size={12} className={`text-gray-300 dark:text-[#444] transition-transform duration-200 shrink-0 ${isExp ? 'rotate-90' : ''}`} />
+                                </button>
+                                {isExp && item.entries.slice().reverse().map(r => (
+                                  <div key={r.id} className="flex items-center gap-2.5 px-6 py-2 border-t border-gray-100 dark:border-white/[0.04] hover:bg-black/[0.02] dark:hover:bg-white/[0.02] transition-colors">
+                                    <div className={`h-1.5 w-1.5 rounded-full shrink-0 ${stateColor}`} />
+                                    <p className="text-[11px] font-semibold text-gray-900 dark:text-white flex-1 truncate capitalize">
+                                      {safeFormatDate(r.dateKey + 'T12:00:00', "EEEE d 'de' MMMM", es)}
+                                    </p>
+                                    {r.shiftId && (
+                                      <button onClick={() => navigate(`/shifts/${r.shiftId}?date=${r.dateKey}`)} className="text-gray-300 dark:text-[#555] hover:text-primary transition-colors shrink-0" title="Ver turno">→</button>
+                                    )}
+                                    <button
+                                      onClick={() => handleDeleteAttendance(r.id, { isAusenciaOnly: r.isAusenciaOnly, ausenciaId: r.ausencia?.id })}
+                                      disabled={deletingAttendanceId === r.id}
+                                      className="text-gray-300 dark:text-[#555] hover:text-red-400 transition-colors shrink-0 disabled:opacity-40"
+                                    >
+                                      {deletingAttendanceId === r.id ? <span className="text-[9px]">...</span> : <Trash2 size={11} />}
+                                    </button>
+                                  </div>
+                                ))}
+                              </div>
+                            )
+                          }
+
+                          const r = item.entry
+                          return (
                           <div key={r.id} className="flex items-center gap-2.5 px-4 py-2.5 hover:bg-black/[0.02] dark:hover:bg-white/[0.02] transition-colors">
                             <div className={`h-2 w-2 rounded-full shrink-0 ${r.state === 'presente' ? 'bg-emerald-500' : r.state === 'con_aviso' ? 'bg-blue-500' : 'bg-red-500'}`} />
                             <p className="text-xs font-semibold text-gray-900 dark:text-white flex-1 truncate capitalize">
-                              {safeFormatDate(r.dateKey + 'T12:00:00', "EEEE d 'de' MMM yyyy", es)}
+                              {safeFormatDate(r.dateKey + 'T12:00:00', "EEEE d 'de' MMMM yyyy", es)}
                             </p>
                             <span className={`text-[10px] font-semibold shrink-0 ${r.state === 'presente' ? 'text-emerald-500' : r.state === 'con_aviso' ? 'text-blue-500' : 'text-red-400'}`}>
                               {r.state === 'presente' ? 'Presente' : r.state === 'con_aviso' ? 'C/aviso' : 'S/aviso'}
                             </span>
+                            {r.shiftId && (
+                              <button
+                                onClick={() => navigate(`/shifts/${r.shiftId}?date=${r.dateKey}`)}
+                                className="text-gray-300 dark:text-[#555] hover:text-primary dark:hover:text-primary transition-colors shrink-0"
+                                title="Ver turno en esa fecha"
+                              >
+                                →
+                              </button>
+                            )}
                             <button
-                              onClick={() => navigate(`/shifts/${r.shiftId}?date=${r.dateKey}`)}
-                              className="text-gray-300 dark:text-[#555] hover:text-primary dark:hover:text-primary transition-colors shrink-0"
-                              title="Ver turno en esa fecha"
-                            >
-                              →
-                            </button>
-                            <button
-                              onClick={() => handleDeleteAttendance(r.id)}
+                              onClick={() => handleDeleteAttendance(r.id, {
+                                isAusenciaOnly: r.isAusenciaOnly,
+                                ausenciaId: r.ausencia?.id,
+                              })}
                               disabled={deletingAttendanceId === r.id}
                               className="text-gray-300 dark:text-[#555] hover:text-red-400 dark:hover:text-red-400 transition-colors shrink-0 disabled:opacity-40"
                               title="Eliminar registro"
@@ -2026,55 +2236,125 @@ export default function ClientProfilePage() {
                                 : <Trash2 size={11} />}
                             </button>
                           </div>
-                        ))
-                      ) : leftTab === 'ausencias' && ausencias.filter(a => a.conAviso).length === 0 ? (
+                          )
+                        })
+                      ) : leftTab === 'ausencias' && ausencias.length === 0 ? (
                         <div className="flex flex-col items-center justify-center py-8 text-center px-4">
                           <CalendarCheck2 size={20} className="text-gray-300 dark:text-[#444] mb-2" />
-                          <p className="text-xs text-gray-400 dark:text-[#666]">Sin ausencias con aviso registradas</p>
+                          <p className="text-xs text-gray-400 dark:text-[#666]">Sin ausencias registradas</p>
                         </div>
                       ) : leftTab === 'ausencias' ? (
-                        ausencias.filter(a => a.conAviso).sort((a, b) => (b.fecha ?? '').localeCompare(a.fecha ?? '')).map(a => (
-                          <div
-                            key={a.id}
-                            onClick={() => navigate(`/clients/${id}/ausencia?ausenciaId=${a.id}`)}
-                            className="px-4 py-3 hover:bg-black/[0.03] dark:hover:bg-white/[0.03] transition-colors cursor-pointer group"
-                          >
-                            <div className="flex items-start gap-2">
-                              <div className="h-2 w-2 rounded-full bg-blue-500 shrink-0 mt-1.5" />
-                              <div className="flex-1 min-w-0">
-                                {/* Fecha completa con día */}
-                                <p className="text-xs font-bold text-gray-900 dark:text-white capitalize leading-tight">
-                                  {safeFormatDate(a.fecha, "EEEE d 'de' MMM yyyy", es)}
-                                </p>
-                                {/* Estado recuperación */}
-                                <span className={`text-[10px] font-semibold ${
-                                  a.recuperacion?.estado === 'COMPLETADA' ? 'text-emerald-500'
-                                  : a.recuperacion?.estado === 'PENDIENTE' ? 'text-amber-500'
-                                  : 'text-gray-400 dark:text-[#555]'
-                                }`}>
-                                  {a.recuperacion?.estado === 'COMPLETADA' ? '✓ Recuperada'
-                                    : a.recuperacion?.estado === 'PENDIENTE' ? `Pendiente${a.recuperacion.fecha ? ` — ${safeFormatDate(a.recuperacion.fecha, 'd MMM', es)}` : ''}${a.recuperacion.turnoDestino ? ` · ${a.recuperacion.turnoDestino.horaInicio}` : ''}`
-                                    : 'Sin recuperar'}
-                                </span>
-                                {/* Notas/motivo */}
-                                {a.notas && (
-                                  <p className="text-[11px] text-gray-500 dark:text-[#8A8A9A] mt-0.5 leading-snug">{a.notas}</p>
-                                )}
+                        gruposAusencias.map((grupo, gi) => {
+                          const isBulk = grupo.length > 1
+                          const sortedItems = [...grupo].sort((a, b) => b.fecha.localeCompare(a.fecha))
+                          const minFecha = sortedItems[sortedItems.length - 1].fecha
+                          const maxFecha = sortedItems[0].fecha
+                          const allConAviso = grupo.every(a => a.conAviso)
+                          const someConAviso = grupo.some(a => a.conAviso)
+                          const avisoBadge = (
+                            <span className={`text-[9px] font-bold px-1.5 py-0.5 rounded-full shrink-0 ${
+                              allConAviso ? 'bg-blue-500/10 text-blue-500'
+                              : someConAviso ? 'bg-amber-500/10 text-amber-500'
+                              : 'bg-red-400/10 text-red-400'
+                            }`}>
+                              {allConAviso ? 'c/aviso' : someConAviso ? 'mixto' : 's/aviso'}
+                            </span>
+                          )
+
+                          if (isBulk) {
+                            const rangoLabel = minFecha === maxFecha
+                              ? safeFormatDate(minFecha, "EEEE d 'de' MMMM yyyy", es)
+                              : `${safeFormatDate(minFecha, "d 'de' MMMM", es)} – ${safeFormatDate(maxFecha, "d 'de' MMMM yyyy", es)}`
+                            const grupoIds = grupo.map(a => a.id)
+
+                            return (
+                              <div
+                                key={gi}
+                                onClick={() => navigate(`/clients/${id}/ausencias-grupo?ids=${grupoIds.join(',')}`)}
+                                className="flex items-center gap-2 px-4 py-3 hover:bg-black/[0.03] dark:hover:bg-white/[0.03] transition-colors cursor-pointer group border-b border-gray-100 dark:border-white/[0.04] last:border-0"
+                              >
+                                <CalendarX2 size={13} className="text-gray-400 dark:text-[#555] shrink-0" />
+                                <div className="flex-1 min-w-0">
+                                  <p className="text-xs font-bold text-gray-900 dark:text-white capitalize leading-tight">
+                                    {rangoLabel}
+                                  </p>
+                                  <p className="text-[10px] text-gray-400 dark:text-[#666] mt-0.5">
+                                    {grupo.length} ausencias
+                                  </p>
+                                </div>
+                                {avisoBadge}
+                                <div className="flex items-center gap-1 shrink-0">
+                                  <button
+                                    onClick={e => { e.stopPropagation(); navigate(`/clients/${id}/ausencia?editGroupIds=${grupoIds.join(',')}`) }}
+                                    className="p-1.5 rounded-lg text-gray-400 dark:text-[#666] hover:text-primary hover:bg-primary/10 transition-all"
+                                    title="Editar grupo de ausencias"
+                                  >
+                                    <Edit2 size={13} />
+                                  </button>
+                                  <button
+                                    onClick={e => { e.stopPropagation(); setDeleteAusenciaIds(grupoIds) }}
+                                    className="p-1.5 rounded-lg text-gray-400 dark:text-[#666] hover:text-red-500 hover:bg-red-50 dark:hover:bg-red-500/10 transition-all"
+                                    title="Eliminar grupo de ausencias"
+                                  >
+                                    <Trash2 size={13} />
+                                  </button>
+                                  <ChevronRight size={13} className="text-gray-300 dark:text-[#444] group-hover:text-gray-400 dark:group-hover:text-[#666] transition-colors" />
+                                </div>
                               </div>
-                              {/* Acciones */}
-                              <div className="flex items-center gap-1 shrink-0">
-                                <button
-                                  onClick={e => { e.stopPropagation(); setDeleteAusenciaId(a.id) }}
-                                  className="p-1.5 rounded-lg text-gray-300 dark:text-[#444] hover:text-red-500 hover:bg-red-50 dark:hover:bg-red-500/10 transition-all"
-                                  title="Eliminar ausencia"
-                                >
-                                  <Trash2 size={12} />
-                                </button>
-                                <ChevronRight size={12} className="text-gray-300 dark:text-[#444] group-hover:text-gray-400 dark:group-hover:text-[#666] transition-colors" />
+                            )
+                          }
+
+                          // Grupo de 1 item — render normal
+                          const a = sortedItems[0]
+                          return (
+                            <div
+                              key={gi}
+                              onClick={() => navigate(`/clients/${id}/ausencia?ausenciaId=${a.id}`)}
+                              className="hover:bg-black/[0.03] dark:hover:bg-white/[0.03] transition-colors cursor-pointer group border-b border-gray-100 dark:border-white/[0.04] last:border-0 px-4 py-3"
+                            >
+                              <div className="flex items-start gap-2">
+                                <div className={`h-2 w-2 rounded-full shrink-0 mt-1.5 ${a.conAviso ? 'bg-blue-500' : 'bg-red-400'}`} />
+                                <div className="flex-1 min-w-0">
+                                  <div className="flex items-center gap-1.5">
+                                    <p className="text-xs font-bold text-gray-900 dark:text-white capitalize leading-tight">
+                                      {safeFormatDate(a.fecha, "EEEE d 'de' MMMM yyyy", es)}
+                                    </p>
+                                    {avisoBadge}
+                                  </div>
+                                  <span className={`text-[10px] font-semibold ${
+                                    a.recuperacion?.estado === 'COMPLETADA' ? 'text-emerald-500'
+                                    : a.recuperacion?.estado === 'PENDIENTE' ? 'text-amber-500'
+                                    : 'text-gray-400 dark:text-[#555]'
+                                  }`}>
+                                    {a.recuperacion?.estado === 'COMPLETADA' ? '✓ Recuperada'
+                                      : a.recuperacion?.estado === 'PENDIENTE' ? `Pendiente${a.recuperacion.fecha ? ` — ${safeFormatDate(a.recuperacion.fecha, "d 'de' MMMM", es)}` : ''}${a.recuperacion.turnoDestino ? ` · ${a.recuperacion.turnoDestino.horaInicio}` : ''}`
+                                      : a.conAviso ? 'Sin recuperar' : '—'}
+                                  </span>
+                                  {a.notas && (
+                                    <p className="text-[11px] text-gray-500 dark:text-[#8A8A9A] mt-0.5 leading-snug">{a.notas}</p>
+                                  )}
+                                </div>
+                                <div className="flex items-center gap-1 shrink-0">
+                                  <button
+                                    onClick={e => { e.stopPropagation(); navigate(`/clients/${id}/ausencia?ausenciaId=${a.id}`) }}
+                                    className="p-1.5 rounded-lg text-gray-400 dark:text-[#666] hover:text-primary hover:bg-primary/10 transition-all"
+                                    title="Editar ausencia"
+                                  >
+                                    <Edit2 size={13} />
+                                  </button>
+                                  <button
+                                    onClick={e => { e.stopPropagation(); setDeleteAusenciaIds([a.id]) }}
+                                    className="p-1.5 rounded-lg text-gray-400 dark:text-[#666] hover:text-red-500 hover:bg-red-50 dark:hover:bg-red-500/10 transition-all"
+                                    title="Eliminar ausencia"
+                                  >
+                                    <Trash2 size={13} />
+                                  </button>
+                                  <ChevronRight size={13} className="text-gray-300 dark:text-[#444] group-hover:text-gray-400 dark:group-hover:text-[#666] transition-colors" />
+                                </div>
                               </div>
                             </div>
-                          </div>
-                        ))
+                          )
+                        })
                       ) : recuperos.length === 0 ? (
                         <div className="flex flex-col items-center justify-center py-8 text-center px-4">
                           <CalendarCheck2 size={20} className="text-gray-300 dark:text-[#444] mb-2" />
@@ -2097,7 +2377,7 @@ export default function ClientProfilePage() {
                                 <div className="flex-1 min-w-0">
                                   {/* Fecha de recupero */}
                                   <p className="text-xs font-bold text-gray-900 dark:text-white capitalize leading-tight">
-                                    {safeFormatDate(rec.fecha, "EEEE d 'de' MMM yyyy", es)}
+                                    {safeFormatDate(rec.fecha, "EEEE d 'de' MMMM yyyy", es)}
                                   </p>
                                   {/* Turno destino */}
                                   <p className="text-[11px] text-gray-500 dark:text-[#8A8A9A] mt-0.5">
@@ -2108,7 +2388,7 @@ export default function ClientProfilePage() {
                                   </p>
                                   {/* Ausencia origen */}
                                   <p className="text-[10px] text-gray-400 dark:text-[#555] mt-0.5">
-                                    Ausencia: {safeFormatDate(a.fecha, "d MMM yyyy", es)}
+                                    Ausencia: {safeFormatDate(a.fecha, "d 'de' MMMM yyyy", es)}
                                   </p>
                                   {/* Estado badge */}
                                   <span className={`inline-block mt-1 text-[10px] font-semibold px-1.5 py-0.5 rounded-md ${
@@ -2128,13 +2408,13 @@ export default function ClientProfilePage() {
                                         setCancelingRecupId(rec.id)
                                         try {
                                           await reposicionesApi.cancelarRecuperacion(rec.id)
-                                          // Actualización optimista: marcar la recuperación como CANCELADA en el estado local
+                                          // Actualización optimista: eliminar la recuperación del estado local
                                           setAusencias(prev => prev.map(au =>
-                                            au.id === a.id && au.recuperacion
-                                              ? { ...au, recuperacion: { ...au.recuperacion, estado: 'CANCELADA' as const } }
+                                            au.id === a.id
+                                              ? { ...au, recuperacion: null }
                                               : au
                                           ))
-                                          addToast('Recupero cancelado', 'success')
+                                          addToast('Recupero eliminado', 'success')
                                         } catch {
                                           addToast('Error al cancelar el recupero', 'error')
                                         } finally {
@@ -2152,7 +2432,7 @@ export default function ClientProfilePage() {
                                   )}
                                   {/* Ir al turno */}
                                   <button
-                                    onClick={() => navigate(`/shifts/${rec.turnoDestinoId}`)}
+                                    onClick={() => navigate(`/shifts/${rec.turnoDestinoId}?date=${rec.fecha.slice(0, 10)}`)}
                                     className="p-1.5 rounded-lg text-gray-300 dark:text-[#444] hover:text-primary hover:bg-primary/10 transition-all shrink-0"
                                     title="Ver turno"
                                   >
@@ -3051,13 +3331,15 @@ export default function ClientProfilePage() {
       />
 
       <ConfirmDialog
-        isOpen={deleteAusenciaId !== null}
-        title="Eliminar ausencia"
-        message="¿Eliminás esta ausencia? Si tiene una recuperación agendada, también se eliminará."
+        isOpen={deleteAusenciaIds !== null}
+        title={deleteAusenciaIds && deleteAusenciaIds.length > 1 ? 'Eliminar grupo de ausencias' : 'Eliminar ausencia'}
+        message={deleteAusenciaIds && deleteAusenciaIds.length > 1
+          ? `¿Eliminás las ${deleteAusenciaIds.length} ausencias del grupo? Si tienen recuperaciones agendadas, también se eliminarán.`
+          : '¿Eliminás esta ausencia? Si tiene una recuperación agendada, también se eliminará.'}
         confirmLabel="Eliminar"
         isLoading={deletingAusencia}
         onConfirm={() => void handleDeleteAusencia()}
-        onClose={() => setDeleteAusenciaId(null)}
+        onClose={() => setDeleteAusenciaIds(null)}
       />
 
     </motion.div>

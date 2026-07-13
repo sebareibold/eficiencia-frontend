@@ -89,9 +89,10 @@ type Action =
   | { type: 'DELETE_SESION'; semanaId: string; sesionId: string }
   | { type: 'ADD_BLOQUE'; sesionId: string }
   | { type: 'DELETE_BLOQUE'; sesionId: string; bloqueId: string }
-  | { type: 'ADD_EJERCICIO'; bloqueId: string; nombre: string; catalogoId?: string; catalogo?: DraftEjercicio['catalogo'] }
+  | { type: 'ADD_EJERCICIO'; id: string; bloqueId: string; nombre: string; catalogoId?: string; catalogo?: DraftEjercicio['catalogo'] }
   | { type: 'UPDATE_EJERCICIO'; ejercicioId: string; data: UpdateEjData }
   | { type: 'DELETE_EJERCICIO'; ejercicioId: string }
+  | { type: 'UPDATE_BLOQUE_PATRON'; bloqueId: string; patron: string }
   | { type: 'REORDER_SEMANAS'; fromId: string; toId: string }
 
 // ─── Helpers de conversión ────────────────────────────────────────────────────
@@ -278,7 +279,7 @@ function reducer(state: DraftState, action: Action): DraftState {
 
     case 'ADD_EJERCICIO': {
       const ej: DraftEjercicio = {
-        id: mkTempId(), bloqueId: action.bloqueId, catalogoId: action.catalogoId,
+        id: action.id, bloqueId: action.bloqueId, catalogoId: action.catalogoId,
         nombre: action.nombre, catalogo: action.catalogo,
         orden: 0, ejecuciones: [], _isNew: true, _changed: false,
       }
@@ -324,6 +325,20 @@ function reducer(state: DraftState, action: Action): DraftState {
               ...bl,
               ejerciciosPlan: bl.ejerciciosPlan.filter(ej => ej.id !== action.ejercicioId),
             })),
+          })),
+        })),
+      })
+
+    case 'UPDATE_BLOQUE_PATRON':
+      return save({
+        ...d,
+        semanas: d.semanas.map(s => ({
+          ...s,
+          sesiones: s.sesiones.map(ses => ({
+            ...ses,
+            bloques: ses.bloques.map(bl =>
+              bl.id === action.bloqueId ? { ...bl, patronMovimiento: action.patron } : bl
+            ),
           })),
         })),
       })
@@ -542,12 +557,17 @@ export function useRutinaDraft() {
     addBloque: (sesionId: string) => dispatch({ type: 'ADD_BLOQUE', sesionId }),
     deleteBloque: (sesionId: string, bloqueId: string) =>
       dispatch({ type: 'DELETE_BLOQUE', sesionId, bloqueId }),
-    addEjercicio: (bloqueId: string, nombre: string, catalogoId?: string, catalogo?: DraftEjercicio['catalogo']) =>
-      dispatch({ type: 'ADD_EJERCICIO', bloqueId, nombre, catalogoId, catalogo }),
+    addEjercicio: (bloqueId: string, nombre: string, catalogoId?: string, catalogo?: DraftEjercicio['catalogo']): string => {
+      const id = mkTempId()
+      dispatch({ type: 'ADD_EJERCICIO', id, bloqueId, nombre, catalogoId, catalogo })
+      return id
+    },
     updateEjercicio: (ejercicioId: string, data: UpdateEjData) =>
       dispatch({ type: 'UPDATE_EJERCICIO', ejercicioId, data }),
     deleteEjercicio: (ejercicioId: string) =>
       dispatch({ type: 'DELETE_EJERCICIO', ejercicioId }),
+    updateBloquePatron: (bloqueId: string, patron: string) =>
+      dispatch({ type: 'UPDATE_BLOQUE_PATRON', bloqueId, patron }),
     reorderSemanas: (fromId: string, toId: string) =>
       dispatch({ type: 'REORDER_SEMANAS', fromId, toId }),
   }

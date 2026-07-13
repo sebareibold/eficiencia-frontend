@@ -275,6 +275,7 @@ type WizardAction =
   | { type: 'UPDATE_EJ_W'; sesionId: string; bloqueId: string; ejId: string; changes: Partial<EjercicioDraft> }
   | { type: 'DELETE_EJ_W'; sesionId: string; bloqueId: string; ejId: string }
   | { type: 'REORDER_SEMANAS_W'; fromId: string; toId: string }
+  | { type: 'UPDATE_BLOQUE_PATRON_W'; bloqueId: string; patron: PatronMovimientoEnum }
 
 function wizardReducer(state: WizardState, action: WizardAction): WizardState {
   switch (action.type) {
@@ -636,6 +637,23 @@ function wizardReducer(state: WizardState, action: WizardAction): WizardState {
       return { ...state, semanasWizard: semanas }
     }
 
+    case 'UPDATE_BLOQUE_PATRON_W':
+      return {
+        ...state,
+        semanasWizard: state.semanasWizard.map(sem => ({
+          ...sem,
+          sesiones: sem.sesiones.map(ses => ({
+            ...ses,
+            bloques: ses.bloques.map(bl => {
+              if (bl._id !== action.bloqueId) return bl
+              if (bl.patrones.length === 0)
+                return { ...bl, patrones: [{ _id: uid(), patronMovimiento: action.patron, cantidad: 1 }] }
+              return { ...bl, patrones: [{ ...bl.patrones[0], patronMovimiento: action.patron }, ...bl.patrones.slice(1)] }
+            }),
+          })),
+        })),
+      }
+
     default:
       return state
   }
@@ -769,7 +787,7 @@ function SearchableExerciseSelector({
 }: {
   patronHint: PatronMovimientoEnum | null
   patrones: PatronMovimientoConfig[]
-  onSelect: (ej: EjercicioCatalogo) => void
+  onSelect: (ej: EjercicioCatalogo, patron: string) => void
   onCancel: () => void
 }) {
   const [search, setSearch] = useState('')
@@ -868,7 +886,7 @@ function SearchableExerciseSelector({
           {results.map(ej => (
             <div
               key={ej.id}
-              onClick={() => onSelect(ej)}
+              onClick={() => onSelect(ej, patron)}
               className="w-full text-left flex items-center justify-between gap-3 rounded-xl px-3 py-2.5 hover:bg-white/[0.06] transition-colors group cursor-pointer"
             >
               <div className="min-w-0">
@@ -988,7 +1006,7 @@ function EjercicioSlot({
         <SearchableExerciseSelector
           patronHint={patronBloque}
           patrones={patrones}
-          onSelect={(ej) => {
+          onSelect={(ej, _patron) => {
             onUpdate({
               catalogoId: ej.id,
               nombre: ej.nombre,
@@ -1181,37 +1199,37 @@ function EjWizardInlineCells({
       <td className="px-1.5 py-1.5 w-14">
         <input type="number" min={1} value={draft.series}
           onChange={e => setDraft(d => ({ ...d, series: e.target.value }))}
-          onKeyDown={e => { if (e.key === 'Escape') onCancel() }}
+          onKeyDown={e => { if (e.key === 'Enter') commit(); if (e.key === 'Escape') onCancel() }}
           placeholder="4" className={`${inp} text-center`} />
       </td>
       <td className="px-1.5 py-1.5 w-16">
         <input value={draft.repeticiones}
           onChange={e => setDraft(d => ({ ...d, repeticiones: e.target.value }))}
-          onKeyDown={e => { if (e.key === 'Escape') onCancel() }}
+          onKeyDown={e => { if (e.key === 'Enter') commit(); if (e.key === 'Escape') onCancel() }}
           placeholder="8-12" className={`${inp} text-center`} />
       </td>
       <td className="px-1.5 py-1.5 w-16">
         <input value={draft.peso}
           onChange={e => setDraft(d => ({ ...d, peso: e.target.value }))}
-          onKeyDown={e => { if (e.key === 'Escape') onCancel() }}
+          onKeyDown={e => { if (e.key === 'Enter') commit(); if (e.key === 'Escape') onCancel() }}
           placeholder="kg" className={`${inp} text-center`} />
       </td>
       <td className="px-1.5 py-1.5 w-20">
         <div className="flex gap-1">
           <input type="number" min={0} max={5} value={draft.rir}
             onChange={e => setDraft(d => ({ ...d, rir: e.target.value }))}
-            onKeyDown={e => { if (e.key === 'Escape') onCancel() }}
+            onKeyDown={e => { if (e.key === 'Enter') commit(); if (e.key === 'Escape') onCancel() }}
             placeholder="RIR" className={`${inp} text-center`} />
           <input type="number" min={1} max={10} value={draft.rpe}
             onChange={e => setDraft(d => ({ ...d, rpe: e.target.value }))}
-            onKeyDown={e => { if (e.key === 'Escape') onCancel() }}
+            onKeyDown={e => { if (e.key === 'Enter') commit(); if (e.key === 'Escape') onCancel() }}
             placeholder="RPE" className={`${inp} text-center`} />
         </div>
       </td>
       <td className="px-1.5 py-1.5 min-w-[120px]">
         <input value={draft.notas}
           onChange={e => setDraft(d => ({ ...d, notas: e.target.value }))}
-          onKeyDown={e => { if (e.key === 'Escape') onCancel() }}
+          onKeyDown={e => { if (e.key === 'Enter') commit(); if (e.key === 'Escape') onCancel() }}
           placeholder="Nota..." className={inp} />
       </td>
       <td className="px-1.5 py-1.5 w-16">
@@ -2442,9 +2460,11 @@ export default function CreateRutinaPage() {
                                 <SearchableExerciseSelector
                                   patronHint={bl.patrones[0]?.patronMovimiento ?? null}
                                   patrones={patrones}
-                                  onSelect={catalogo => {
+                                  onSelect={(catalogo, patron) => {
                                     dispatch({ type: 'UPDATE_EJ_W', sesionId: ses._id, bloqueId: bl._id, ejId: ej._id, changes: { catalogoId: catalogo.id, nombre: catalogo.nombre, _esReferencia: false } })
                                     setAssigningEjId(null)
+                                    setEditingEjId(ej._id)
+                                    if (patron) dispatch({ type: 'UPDATE_BLOQUE_PATRON_W', bloqueId: bl._id, patron: patron as PatronMovimientoEnum })
                                   }}
                                   onCancel={() => setAssigningEjId(null)}
                                 />

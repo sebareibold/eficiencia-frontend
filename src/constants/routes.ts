@@ -6,6 +6,7 @@ export const ROUTES = {
   CLIENT_PROFILE: '/clients/:id',
   CLIENT_RUTINA: '/clients/:id/rutina',
   CLIENT_AUSENCIA: '/clients/:id/ausencia',
+  CLIENT_AUSENCIA_GRUPO: '/clients/:id/ausencias-grupo',
   PAYMENTS: '/payments',
   PAYMENT_NEW: '/payments/new',
   PAYMENT_DETAIL: '/payments/:id',

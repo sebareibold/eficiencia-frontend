@@ -18,6 +18,7 @@ const ClientsPage        = lazy(() => import('./pages/ClientsPage'))
 const ClientProfilePage  = lazy(() => import('./pages/ClientProfilePage'))
 const ClientRutinaPage   = lazy(() => import('./pages/ClientRutinaPage'))
 const AusenciaPage       = lazy(() => import('./pages/AusenciaPage'))
+const AusenciaGrupoPage  = lazy(() => import('./pages/AusenciaGrupoPage'))
 const CreateClientPage   = lazy(() => import('./pages/CreateClientPage'))
 const PaymentsPage       = lazy(() => import('./pages/PaymentsPage'))
 const PaymentNewPage     = lazy(() => import('./pages/PaymentNewPage'))
@@ -73,6 +74,7 @@ export default function App() {
                 <Route path={ROUTES.CLIENT_NEW}      element={<CreateClientPage />} />
                 <Route path={ROUTES.CLIENT_PROFILE}  element={<ClientProfilePage />} />
                 <Route path={ROUTES.CLIENT_AUSENCIA} element={<AusenciaPage />} />
+                <Route path={ROUTES.CLIENT_AUSENCIA_GRUPO} element={<AusenciaGrupoPage />} />
               </Route>
 
               <Route element={<PermissionGuard module="payments" />}>
