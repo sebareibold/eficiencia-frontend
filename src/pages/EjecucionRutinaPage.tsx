@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useCallback, useRef } from 'react'
 import { useParams, useNavigate, useLocation } from 'react-router-dom'
 import { AnimatePresence, motion } from 'framer-motion'
-import { ArrowLeft, ExternalLink, Save, Eye, PenLine, ChevronRight, ChevronLeft } from 'lucide-react'
+import { ArrowLeft, ArrowRight, ExternalLink, Save, ChevronRight, ChevronLeft } from 'lucide-react'
 import { format, parseISO } from 'date-fns'
 import { rutinasApi } from '../api/rutinas.api'
 import DotsLoader from '../components/ui/DotsLoader'
@@ -45,8 +45,6 @@ const AUTO_SAVE_MS = 4 * 60 * 1000
 const EASE_OUT: [number, number, number, number] = [0.23, 1, 0.32, 1]
 
 // ─── Tipos ────────────────────────────────────────────────────────────────────
-
-type ViewMode = 'plan_ultima' | 'registrar'
 
 interface RowState { series: string; repeticiones: string; peso: string; rir: string; rpe: string; saved?: boolean }
 const emptyRow  = (): RowState => ({ series: '', repeticiones: '', peso: '', rir: '', rpe: '' })
@@ -124,11 +122,6 @@ function InputCells({ ejId, form, onChange }: {
 
 // ─── Página ───────────────────────────────────────────────────────────────────
 
-const VIEW_OPTS: { id: ViewMode; icon: React.ElementType; title: string }[] = [
-  { id: 'plan_ultima', icon: Eye,     title: 'Plan vs Última' },
-  { id: 'registrar',  icon: PenLine,  title: 'Registrar' },
-]
-
 export default function EjecucionRutinaPage() {
   const { clienteId } = useParams<{ clienteId: string }>()
   const navigate      = useNavigate()
@@ -136,14 +129,15 @@ export default function EjecucionRutinaPage() {
   const state         = location.state as LocationState | null
   const addToast      = useUiStore(s => s.addToast)
 
-  const [rutina, setRutina]             = useState<Rutina | null>(null)
-  const [loading, setLoading]           = useState(true)
-  const [selectedSemanaId, setSemanaId] = useState<string | null>(null)
-  const [forms, setForms]               = useState<Record<string, RowState>>({})
-  const [saving, setSaving]             = useState(false)
-  const [viewMode, setViewMode]         = useState<ViewMode>('registrar')
-  const [planExpanded, setPlanExpanded] = useState(false)
-  const [execOffset, setExecOffset]     = useState(0)
+  const [rutina, setRutina]               = useState<Rutina | null>(null)
+  const [loading, setLoading]             = useState(true)
+  const [selectedSemanaId, setSemanaId]   = useState<string | null>(null)
+  const [forms, setForms]                 = useState<Record<string, RowState>>({})
+  const [saving, setSaving]               = useState(false)
+  const [planExpanded, setPlanExpanded]   = useState(false)
+  const [ultimaExpanded, setUltimaExpanded] = useState(true)
+  const [hoyExpanded, setHoyExpanded]     = useState(true)
+  const [execOffset, setExecOffset]       = useState(0)
 
   const clienteName = state?.name && state?.lastName
     ? `${state.name} ${state.lastName}` : 'Cliente'
@@ -286,16 +280,19 @@ export default function EjecucionRutinaPage() {
     .flatMap(b => b.ejerciciosPlan)
     .filter(ej => forms[ej.id] && isUnsaved(forms[ej.id])) ?? []
 
-  // Número de columnas de datos según vista (para Sin bloques / Sin ejercicios)
-  const planCols = planExpanded ? 5 : 1
-  const dataCols = viewMode === 'plan_ultima' ? planCols + 5 : planCols + 5 + 5
-
   // Navegación entre ejecuciones anteriores
-  const allEjsSem = semana?.sesiones.flatMap(s => s.bloques.flatMap(b => b.ejerciciosPlan)) ?? []
-  const maxOffset = allEjsSem.reduce((mx, ej) => Math.max(mx, (ej.ejecuciones?.length ?? 0) - 1), 0)
+  const allEjsSem    = semana?.sesiones.flatMap(s => s.bloques.flatMap(b => b.ejerciciosPlan)) ?? []
+  const hasEjecuciones = allEjsSem.some(ej => (ej.ejecuciones?.length ?? 0) > 0)
+  const maxOffset    = allEjsSem.reduce((mx, ej) => Math.max(mx, (ej.ejecuciones?.length ?? 0) - 1), 0)
   const dateAtOffset = allEjsSem.reduce<string | null>(
     (found, ej) => found ?? (ej.ejecuciones[execOffset]?.fecha ?? null), null
   )
+
+  // Número de columnas de datos según secciones visibles (para Sin bloques / Sin ejercicios)
+  const planCols   = planExpanded   ? 5 : 1
+  const ultimaCols = !hasEjecuciones ? 0 : ultimaExpanded ? 5 : 1
+  const hoyCols    = hoyExpanded    ? 5 : 1
+  const dataCols   = planCols + ultimaCols + hoyCols
 
   const thBase = 'py-1.5 px-2 text-xs font-medium text-gray-500 dark:text-white/55 uppercase tracking-wide text-center'
   const div    = 'border-r border-gray-200 dark:border-white/[0.07]'
@@ -345,12 +342,12 @@ export default function EjecucionRutinaPage() {
       {!loading && rutina && semana && (
         <div className="space-y-3">
 
-          {/* ── Pill nav semanas + selector de vista ────────────────────────── */}
+          {/* ── Pill nav semanas ────────────────────────────────────────────── */}
           <motion.div
             initial={{ opacity: 0, y: 8 }}
             animate={{ opacity: 1, y: 0 }}
             transition={{ duration: 0.22, delay: 0.08, ease: EASE_OUT }}
-            className="flex items-center justify-between gap-3 flex-wrap"
+            className="flex items-center gap-3 flex-wrap"
           >
 
             {/* Semanas */}
@@ -370,27 +367,6 @@ export default function EjecucionRutinaPage() {
                     }`}
                   >
                     {label}
-                  </button>
-                )
-              })}
-            </div>
-
-            {/* Vista — solo iconos */}
-            <div className="flex items-center gap-1 p-1.5 rounded-2xl bg-white/25 dark:bg-black/20 backdrop-blur-xl border border-white/40 dark:border-white/[0.08] shadow-[0_2px_12px_rgba(0,0,0,0.04)] dark:shadow-[0_2px_12px_rgba(0,0,0,0.25)]">
-              {VIEW_OPTS.map(({ id, icon: Icon, title }) => {
-                const active = viewMode === id
-                return (
-                  <button
-                    key={id}
-                    title={title}
-                    onClick={() => setViewMode(id)}
-                    className={`p-2.5 rounded-xl transition-all duration-200 active:scale-[0.97] ${
-                      active
-                        ? 'bg-primary text-black shadow-[0_2px_10px_rgba(251,198,8,0.4)]'
-                        : 'text-gray-500 dark:text-white/35 hover:text-gray-800 dark:hover:text-white/65 hover:bg-white/50 dark:hover:bg-white/[0.07]'
-                    }`}
-                  >
-                    <Icon className="w-4 h-4" />
                   </button>
                 )
               })}
@@ -444,40 +420,84 @@ export default function EjecucionRutinaPage() {
                                 </AnimatePresence>
                               </button>
                             </th>
-                            {(viewMode === 'plan_ultima' || viewMode === 'registrar') && (
+                            {/* Última — solo si hay ejecuciones previas */}
+                            {hasEjecuciones && (
                               <th
-                                colSpan={5}
-                                className={`${thBase} text-gray-600 dark:text-white/45 ${viewMode === 'registrar' ? div : ''}`}
+                                colSpan={ultimaExpanded ? 5 : 1}
+                                className={`${thBase} text-gray-600 dark:text-white/45 ${hoyExpanded ? div : ''}`}
                               >
-                                <div className="flex items-center justify-center gap-1">
+                                {ultimaExpanded ? (
+                                  <div className="flex items-center justify-center gap-1">
+                                    <button
+                                      onClick={() => setUltimaExpanded(false)}
+                                      className="p-0.5 rounded hover:text-gray-800 dark:hover:text-white/70 transition-colors active:scale-[0.97]"
+                                      title="Ocultar columna"
+                                    >
+                                      <ChevronLeft className="w-3 h-3" />
+                                    </button>
+                                    <button
+                                      onClick={() => setExecOffset(o => o + 1)}
+                                      disabled={execOffset >= maxOffset}
+                                      className="p-0.5 rounded hover:text-gray-800 dark:hover:text-white/70 disabled:opacity-20 transition-colors active:scale-[0.97]"
+                                    >
+                                      <ArrowLeft className="w-3 h-3" />
+                                    </button>
+                                    <span>
+                                      {execOffset === 0 ? 'Última' : `Previa ×${execOffset}`}
+                                      {dateAtOffset && (
+                                        <span className="ml-1 font-normal opacity-60">
+                                          ({format(parseISO(dateAtOffset), 'dd/MM')})
+                                        </span>
+                                      )}
+                                    </span>
+                                    <button
+                                      onClick={() => setExecOffset(o => o - 1)}
+                                      disabled={execOffset === 0}
+                                      className="p-0.5 rounded hover:text-gray-800 dark:hover:text-white/70 disabled:opacity-20 transition-colors active:scale-[0.97]"
+                                    >
+                                      <ArrowRight className="w-3 h-3" />
+                                    </button>
+                                  </div>
+                                ) : (
                                   <button
-                                    onClick={() => setExecOffset(o => o + 1)}
-                                    disabled={execOffset >= maxOffset}
-                                    className="p-0.5 rounded hover:text-gray-800 dark:hover:text-white/70 disabled:opacity-20 transition-colors active:scale-[0.97]"
+                                    onClick={() => setUltimaExpanded(true)}
+                                    className="inline-flex items-center gap-1 hover:text-gray-900 dark:hover:text-white transition-colors active:scale-[0.97]"
+                                    title="Ver columna"
                                   >
-                                    <ChevronLeft className="w-3 h-3" />
-                                  </button>
-                                  <span>
-                                    {execOffset === 0 ? 'Última' : `Previa ×${execOffset}`}
-                                    {dateAtOffset && (
-                                      <span className="ml-1 font-normal opacity-60">
-                                        ({format(parseISO(dateAtOffset), 'dd/MM')})
-                                      </span>
-                                    )}
-                                  </span>
-                                  <button
-                                    onClick={() => setExecOffset(o => o - 1)}
-                                    disabled={execOffset === 0}
-                                    className="p-0.5 rounded hover:text-gray-800 dark:hover:text-white/70 disabled:opacity-20 transition-colors active:scale-[0.97]"
-                                  >
+                                    <span>Últ</span>
                                     <ChevronRight className="w-3 h-3" />
                                   </button>
-                                </div>
+                                )}
                               </th>
                             )}
-                            {viewMode === 'registrar' && (
-                              <th colSpan={5} className={`${thBase} text-emerald-700 dark:text-emerald-400/70`}>Hoy</th>
-                            )}
+                            {/* Hoy — colapsable */}
+                            <th
+                              colSpan={hoyExpanded ? 5 : 1}
+                              className={`${thBase} text-emerald-700 dark:text-emerald-400/70`}
+                            >
+                              <button
+                                onClick={() => setHoyExpanded(e => !e)}
+                                className="inline-flex items-center gap-1 hover:text-emerald-900 dark:hover:text-emerald-300 transition-colors active:scale-[0.97]"
+                                title={hoyExpanded ? 'Ocultar columna' : 'Ver columna'}
+                              >
+                                <AnimatePresence mode="wait" initial={false}>
+                                  <motion.span
+                                    key={hoyExpanded ? 'exp' : 'col'}
+                                    initial={{ opacity: 0, x: hoyExpanded ? -6 : 6 }}
+                                    animate={{ opacity: 1, x: 0 }}
+                                    exit={{ opacity: 0, x: hoyExpanded ? 6 : -6 }}
+                                    transition={{ duration: 0.15, ease: EASE_OUT }}
+                                    className="inline-flex items-center gap-1"
+                                  >
+                                    <span>Hoy</span>
+                                    {hoyExpanded
+                                      ? <ChevronLeft className="w-3 h-3" />
+                                      : <ChevronRight className="w-3 h-3" />
+                                    }
+                                  </motion.span>
+                                </AnimatePresence>
+                              </button>
+                            </th>
                           </tr>
                           {/* Fila sub-columnas */}
                           <tr className="bg-gray-50 dark:bg-[#111111] border-b border-gray-200 dark:border-white/[0.07]">
@@ -492,31 +512,33 @@ export default function EjecucionRutinaPage() {
                                     initial={{ opacity: 0, y: -3 }}
                                     animate={{ opacity: 1, y: 0 }}
                                     transition={{ duration: 0.16, delay: i * 0.035, ease: EASE_OUT }}
-                                    className={`${thBase} ${i === 4 ? div : ''}`}
+                                    className={`${thBase} ${i === 4 ? div : ''} ${i === 1 || i === 2 ? 'w-16' : 'w-12'}`}
                                   >
                                     {h}
                                   </motion.th>
                                 ))
                               : <th className={`${thBase} ${div} w-4`} />
                             }
-                            {/* Última — anchos explícitos para igualar sección Hoy */}
-                            {(viewMode === 'plan_ultima' || viewMode === 'registrar') && (
-                              (['Ser', 'Reps', 'Peso', 'RIR', 'RPE'] as const).map((h, i) => (
-                                <th
-                                  key={`u${h}`}
-                                  className={`${thBase} ${i === 4 && viewMode === 'registrar' ? div : ''} ${
-                                    i === 1 || i === 2 ? 'w-16' : 'w-12'
-                                  }`}
-                                >
-                                  {h}
-                                </th>
-                              ))
+                            {/* Última sub-cols — solo si hay ejecuciones */}
+                            {hasEjecuciones && (
+                              ultimaExpanded
+                                ? (['Ser', 'Reps', 'Peso', 'RIR', 'RPE'] as const).map((h, i) => (
+                                    <th
+                                      key={`u${h}`}
+                                      className={`${thBase} ${i === 4 && hoyExpanded ? div : ''} ${i === 1 || i === 2 ? 'w-16' : 'w-12'}`}
+                                    >
+                                      {h}
+                                    </th>
+                                  ))
+                                : <th className={`${thBase} ${hoyExpanded ? div : ''} w-8`} />
                             )}
-                            {viewMode === 'registrar' && (
-                              (['Ser', 'Reps', 'Peso', 'RIR', 'RPE'] as const).map((h, i) => (
-                                <th key={`r${h}`} className={`${thBase} text-emerald-700 dark:text-emerald-400/70 ${i === 1 || i === 2 ? 'w-16' : 'w-12'}`}>{h}</th>
-                              ))
-                            )}
+                            {/* Hoy sub-cols */}
+                            {hoyExpanded
+                              ? (['Ser', 'Reps', 'Peso', 'RIR', 'RPE'] as const).map((h, i) => (
+                                  <th key={`r${h}`} className={`${thBase} text-emerald-700 dark:text-emerald-400/70 ${i === 1 || i === 2 ? 'w-16' : 'w-12'}`}>{h}</th>
+                                ))
+                              : <th className={`${thBase} w-8`} />
+                            }
                           </tr>
                         </thead>
                         <tbody>
@@ -592,13 +614,15 @@ export default function EjecucionRutinaPage() {
                                       : <td className="w-6 border-r border-gray-200 dark:border-white/[0.06]" />
                                     }
 
-                                    {/* Última ejecución */}
-                                    {(viewMode === 'plan_ultima' || viewMode === 'registrar') && (
-                                      <UltimaCells exec={lastEj} withDivider={viewMode === 'registrar'} />
+                                    {/* Última ejecución — solo si hay ejecuciones */}
+                                    {hasEjecuciones && (
+                                      ultimaExpanded
+                                        ? <UltimaCells exec={lastEj} withDivider={hoyExpanded} />
+                                        : <td className={`w-8 ${hoyExpanded ? 'border-r border-gray-200 dark:border-white/[0.06]' : ''}`} />
                                     )}
 
                                     {/* Inputs Hoy */}
-                                    {viewMode === 'registrar' && (
+                                    {hoyExpanded && (
                                       <InputCells
                                         ejId={ej.id}
                                         form={form}
@@ -618,14 +642,14 @@ export default function EjecucionRutinaPage() {
                   {/* Footer */}
                   <div className="flex items-center justify-between px-6 py-4 border-t border-gray-200 dark:border-white/[0.06] bg-gray-50/40 dark:bg-white/[0.02]">
                     <span className="text-xs text-gray-400 dark:text-white/30">
-                      {viewMode === 'registrar'
+                      {hoyExpanded
                         ? filledEjs.length > 0
                           ? `${filledEjs.length} ejercicio${filledEjs.length > 1 ? 's' : ''} con datos`
                           : 'Completá los campos y guardá'
-                        : 'Comparación Plan vs Última ejecución'
+                        : 'Activá "Hoy" para registrar'
                       }
                     </span>
-                    {viewMode === 'registrar' && (
+                    {hoyExpanded && (
                       <button
                         onClick={() => saveAll(false)}
                         disabled={saving || filledEjs.length === 0}

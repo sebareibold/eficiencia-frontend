@@ -124,7 +124,7 @@ export default function EjecucionPage() {
     const t = setTimeout(async () => {
       setSearching(true)
       try {
-        const r = await api.get('/clientes/buscar', { params: { q: search, limit: 8, startsWith: 'true' } })
+        const r = await api.get('/clientes/buscar', { params: { q: search, limit: 8, startsWith: false } })
         const items: Array<{ id: string; nombre: string; apellido: string }> = r.data ?? []
         setResults(items.map(c => ({ id: c.id, name: c.nombre, lastName: c.apellido } as unknown as Client)))
       } catch { setResults([]) }
@@ -195,13 +195,9 @@ export default function EjecucionPage() {
                 animate={{ opacity: 1, y: 0, scale: 1 }}
                 exit={{ opacity: 0, y: -4, scale: 0.98 }}
                 transition={{ duration: 0.18, ease: EASE_OUT }}
-                className="absolute top-full left-[-1px] right-[-1px] bg-white/50 dark:bg-black/30 backdrop-blur-3xl border border-t-0 border-white/50 dark:border-white/[0.12] rounded-b-2xl z-20 shadow-[0_12px_32px_rgba(0,0,0,0.08)] dark:shadow-[0_12px_32px_rgba(0,0,0,0.4)]"
-                style={{
-                  maskImage: 'linear-gradient(to bottom, transparent 0%, black 12%, black 88%, transparent 100%)',
-                  WebkitMaskImage: 'linear-gradient(to bottom, transparent 0%, black 12%, black 88%, transparent 100%)',
-                }}
+                className="absolute top-full left-[-1px] right-[-1px] bg-white/50 dark:bg-black/30 backdrop-blur-3xl border border-t-0 border-white/50 dark:border-white/[0.12] rounded-b-2xl z-20"
               >
-                <div className="overflow-y-auto max-h-[336px] overscroll-contain">
+                <div className="overflow-y-auto max-h-[403px] overscroll-contain">
                   {results.map((c, i) => (
                     <button
                       key={c.id}
