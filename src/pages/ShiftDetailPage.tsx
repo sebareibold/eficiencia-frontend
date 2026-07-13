@@ -4,7 +4,7 @@ import { motion, AnimatePresence } from 'framer-motion'
 import { pageVariants, tabContentVariants, staggerContainerFast, fadeUpItem } from '../lib/motion'
 import {
   ArrowLeft, Users, Clock, Dumbbell, UserPlus, ListPlus,
-  X, Bell, Check, Trash2, Search, AlertTriangle, CheckCircle2, Pencil, Save,
+  X, Bell, Check, Trash2, Search, AlertTriangle, CheckCircle2, Pencil, Save, UserCheck,
   Hash, Tag, CalendarDays, GripVertical, Ban, Plus, ChevronLeft, ChevronRight,
   RefreshCw, MessageSquare,
 } from 'lucide-react'
@@ -589,13 +589,26 @@ export default function ShiftDetailPage() {
   }
 
   function getAttendanceState(clientId: string): 'presente' | 'ausente' | 'con_aviso' {
-    // Si no hay registros guardados aún, default a 'ausente' (estado inicial neutro)
-    // Si hay registros y el cliente no aparece, también es ausente (el bulk save cubre a todos)
-    return attendanceStates[clientId] ?? 'ausente'
+    return attendanceStates[clientId] ?? 'presente'
   }
 
   function setAttendanceState(clientId: string, value: 'presente' | 'ausente' | 'con_aviso') {
     setAttendanceStates(prev => ({ ...prev, [clientId]: value }))
+  }
+
+  function cycleAttendState(clientId: string) {
+    const current = getAttendanceState(clientId)
+    const next = current === 'ausente' ? 'presente' : current === 'presente' ? 'con_aviso' : 'ausente'
+    setAttendanceState(clientId, next)
+  }
+
+  function handleMarkAllPresent() {
+    const regularClientIds = inscripciones.filter(i => i.estado === 'ACTIVA').map(i => i.clienteId)
+    const regularSet = new Set(regularClientIds)
+    const recuperacionClientIds = recuperacionesHoy.filter(r => !regularSet.has(r.clienteId)).map(r => r.clienteId)
+    const next: Record<string, 'presente' | 'ausente' | 'con_aviso'> = {}
+    for (const cid of [...regularClientIds, ...recuperacionClientIds]) next[cid] = 'presente'
+    setAttendanceStates(next)
   }
 
   function handleAttendDragStart(e: React.DragEvent, clientId: string) {
@@ -1719,15 +1732,25 @@ export default function ShiftDetailPage() {
                     </p>
                   )}
                 </div>
-                <Button
-                  onClick={saveAttendance}
-                  isLoading={isSavingAttendance}
-                  disabled={!!dateError}
-                  className="rounded-2xl shadow-md hover:shadow-lg transition-all"
-                >
-                  <CheckCircle2 size={16} className="mr-1.5" />
-                  Guardar asistencia
-                </Button>
+                <div className="flex items-center gap-2">
+                  <button
+                    onClick={handleMarkAllPresent}
+                    disabled={!!dateError}
+                    className="flex items-center gap-1.5 rounded-2xl border border-green-500/30 bg-green-500/10 px-3 py-2 text-xs font-semibold text-green-600 dark:text-green-400 hover:bg-green-500/20 transition-all disabled:opacity-40 disabled:cursor-not-allowed"
+                  >
+                    <UserCheck size={14} />
+                    Todos presentes
+                  </button>
+                  <Button
+                    onClick={saveAttendance}
+                    isLoading={isSavingAttendance}
+                    disabled={!!dateError}
+                    className="rounded-2xl shadow-md hover:shadow-lg transition-all"
+                  >
+                    <CheckCircle2 size={16} className="mr-1.5" />
+                    Guardar asistencia
+                  </Button>
+                </div>
               </div>
 
               {dateError && (
@@ -1746,10 +1769,10 @@ export default function ShiftDetailPage() {
 
               {!dateError && (loadingAttendance || loadingInscrip || loadingRecuperaciones ? (
                 <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
-                  {Array.from({ length: 3 }).map((_, i) => (
+                  {Array.from({ length: 2 }).map((_, i) => (
                     <div key={i} className="space-y-2">
                       <Skeleton className="h-7 rounded-xl w-24" />
-                      {Array.from({ length: 3 }).map((_, j) => <Skeleton key={j} className="h-11 rounded-xl" />)}
+                      {Array.from({ length: 4 }).map((_, j) => <Skeleton key={j} className="h-10 rounded-xl" />)}
                     </div>
                   ))}
                 </div>
@@ -1763,7 +1786,7 @@ export default function ShiftDetailPage() {
                 }))
                 const regularIds = new Set(activeInscrip.map(i => i.clienteId))
                 const recuperacionEntries = recuperacionesHoy
-                  .filter(r => !regularIds.has(r.clienteId)) // dedup si ya está inscripto
+                  .filter(r => !regularIds.has(r.clienteId))
                   .map(r => ({
                     clienteId: r.clienteId,
                     nombre: `${r.cliente.nombre} ${r.cliente.apellido}`,
@@ -1776,78 +1799,53 @@ export default function ShiftDetailPage() {
                   <EmptyState icon={Users} message="No hay clientes para esta fecha" className="py-10" />
                 )
 
-                const presenteList = allEntries.filter(e => getAttendanceState(e.clienteId) === 'presente')
-                const ausenteList  = allEntries.filter(e => getAttendanceState(e.clienteId) === 'ausente')
-                const conAvisoList = allEntries.filter(e => getAttendanceState(e.clienteId) === 'con_aviso')
-
-                const colDef = [
-                  {
-                    key: 'presente' as const,
-                    label: 'Presente',
-                    dot: 'bg-green-400',
-                    title: 'text-green-500 dark:text-green-400',
-                    border: dragOverAttendCol === 'presente' ? 'border-green-400/60 bg-green-500/[0.06]' : 'border-green-500/20 bg-green-500/[0.02]',
-                    emptyBorder: dragOverAttendCol === 'presente' ? 'border-green-400/50 text-green-400' : 'border-gray-200/40 dark:border-white/[0.06] text-[#8A8A9A]',
-                    clients: presenteList,
-                  },
-                  {
-                    key: 'ausente' as const,
-                    label: 'Ausente',
-                    dot: 'bg-red-400',
-                    title: 'text-red-500 dark:text-red-400',
-                    border: dragOverAttendCol === 'ausente' ? 'border-red-400/60 bg-red-500/[0.06]' : 'border-red-500/20 bg-red-500/[0.02]',
-                    emptyBorder: dragOverAttendCol === 'ausente' ? 'border-red-400/50 text-red-400' : 'border-gray-200/40 dark:border-white/[0.06] text-[#8A8A9A]',
-                    clients: ausenteList,
-                  },
-                  {
-                    key: 'con_aviso' as const,
-                    label: 'Con aviso',
-                    dot: 'bg-amber-400',
-                    title: 'text-amber-500 dark:text-amber-400',
-                    border: dragOverAttendCol === 'con_aviso' ? 'border-amber-400/60 bg-amber-500/[0.06]' : 'border-amber-500/20 bg-amber-500/[0.02]',
-                    emptyBorder: dragOverAttendCol === 'con_aviso' ? 'border-amber-400/50 text-amber-400' : 'border-gray-200/40 dark:border-white/[0.06] text-[#8A8A9A]',
-                    clients: conAvisoList,
-                  },
-                ]
+                const asistenciaList = allEntries.filter(e => getAttendanceState(e.clienteId) !== 'con_aviso')
+                const conAvisoList   = allEntries.filter(e => getAttendanceState(e.clienteId) === 'con_aviso')
 
                 return (
-                  <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
-                    {colDef.map(col => (
-                      <div
-                        key={col.key}
-                        onDragOver={e => handleAttendDragOver(e, col.key)}
-                        onDragLeave={handleAttendDragLeave}
-                        onDrop={e => handleAttendDrop(e, col.key)}
-                        className={`rounded-2xl border-2 p-3 min-h-[140px] transition-all duration-150 ${col.border}`}
-                      >
-                        <div className="flex items-center gap-2 mb-3">
-                          <span className={`h-2.5 w-2.5 rounded-full shrink-0 ${col.dot}`} />
-                          <span className={`text-xs font-bold uppercase tracking-widest ${col.title}`}>{col.label}</span>
-                          <span className="ml-auto text-xs font-semibold tabular-nums text-gray-500 dark:text-[#8A8A9A]">{col.clients.length}</span>
-                          {col.key === 'con_aviso' && (
-                            <span className="text-[10px] text-amber-400/70 font-medium">genera crédito</span>
-                          )}
-                        </div>
-                        <div className="space-y-1.5">
-                          {col.clients.map(entry => (
-                            <AttendanceDraggableCard
-                              key={entry.clienteId}
-                              clientId={entry.clienteId}
-                              nombre={entry.nombre}
-                              sala={entry.sala}
-                              esRecuperacion={entry.esRecuperacion}
-                              isDragging={draggingAttendId === entry.clienteId}
-                              onDragStart={handleAttendDragStart}
-                            />
-                          ))}
-                          {col.clients.length === 0 && (
-                            <div className={`flex items-center justify-center py-6 rounded-xl border-2 border-dashed transition-all ${col.emptyBorder}`}>
-                              <p className="text-xs">Arrastrá aquí</p>
-                            </div>
-                          )}
-                        </div>
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                    {/* Columna 1 — Asistencia */}
+                    <div className="rounded-2xl border border-white/[0.08] bg-white/[0.02] p-3">
+                      <div className="flex items-center gap-2 mb-3">
+                        <span className="text-xs font-bold uppercase tracking-widest text-gray-500 dark:text-[#8A8A9A]">Asistencia</span>
+                        <span className="ml-auto text-xs font-semibold tabular-nums text-gray-500 dark:text-[#8A8A9A]">{asistenciaList.length}</span>
                       </div>
-                    ))}
+                      <div className="space-y-1.5">
+                        {asistenciaList.map(entry => (
+                          <AttendanceRowCard
+                            key={entry.clienteId}
+                            entry={entry}
+                            state={getAttendanceState(entry.clienteId) as 'presente' | 'ausente'}
+                            onToggle={() => setAttendanceState(entry.clienteId, getAttendanceState(entry.clienteId) === 'presente' ? 'ausente' : 'presente')}
+                            onConAviso={() => setAttendanceState(entry.clienteId, 'con_aviso')}
+                          />
+                        ))}
+                      </div>
+                    </div>
+
+                    {/* Columna 2 — Con aviso */}
+                    <div className="rounded-2xl border border-amber-500/20 bg-amber-500/[0.02] p-3">
+                      <div className="flex items-center gap-2 mb-3">
+                        <span className="h-2.5 w-2.5 rounded-full shrink-0 bg-amber-400" />
+                        <span className="text-xs font-bold uppercase tracking-widest text-amber-500 dark:text-amber-400">Con aviso</span>
+                        <span className="text-[10px] text-amber-400/60 font-medium">genera crédito</span>
+                        <span className="ml-auto text-xs font-semibold tabular-nums text-amber-500 dark:text-amber-400">{conAvisoList.length}</span>
+                      </div>
+                      <div className="space-y-1.5">
+                        {conAvisoList.map(entry => (
+                          <ConAvisoRowCard
+                            key={entry.clienteId}
+                            entry={entry}
+                            onUndo={() => setAttendanceState(entry.clienteId, 'ausente')}
+                          />
+                        ))}
+                        {conAvisoList.length === 0 && (
+                          <div className="flex items-center justify-center py-6 rounded-xl border-2 border-dashed border-amber-500/20">
+                            <p className="text-xs text-amber-400/40">Ningún cliente avisó</p>
+                          </div>
+                        )}
+                      </div>
+                    </div>
                   </div>
                 )
               })())}
@@ -2222,40 +2220,71 @@ function ResumenCard({ insc, clients, sala, aviso }: { insc: InscripcionEntry; c
   )
 }
 
-function AttendanceDraggableCard({
-  clientId, nombre, sala, isDragging, onDragStart, esRecuperacion = false,
-}: {
-  clientId: string
-  nombre: string
-  sala: 'A' | 'B'
-  isDragging: boolean
-  onDragStart: (e: React.DragEvent, id: string) => void
-  esRecuperacion?: boolean
+type AttendanceEntry = { clienteId: string; nombre: string; sala: 'A' | 'B'; esRecuperacion: boolean }
+
+function AttendanceRowCard({ entry, state, onToggle, onConAviso }: {
+  entry: AttendanceEntry
+  state: 'presente' | 'ausente'
+  onToggle: () => void
+  onConAviso: () => void
 }) {
   return (
-    <motion.div
-      layout
-      initial={{ opacity: 0, scale: 0.97 }}
-      animate={{ opacity: isDragging ? 0.4 : 1, scale: 1 }}
-      draggable
-      onDragStart={e => onDragStart(e, clientId)}
-      className={`flex items-center gap-2 rounded-xl border px-3 py-2.5 cursor-grab active:cursor-grabbing select-none backdrop-blur-xl transition-colors ${
-        esRecuperacion
-          ? 'border-emerald-500/20 bg-emerald-500/[0.04] hover:bg-emerald-500/[0.08] dark:border-emerald-500/20 dark:bg-emerald-500/[0.05] dark:hover:bg-emerald-500/[0.09]'
-          : 'border-white/50 dark:border-white/[0.08] bg-white/30 dark:bg-white/[0.05] hover:bg-white/50 dark:hover:bg-white/[0.09]'
-      }`}
+    <motion.div layout initial={{ opacity: 0 }} animate={{ opacity: 1 }}
+      className="flex items-center gap-2 rounded-xl border border-white/[0.08] bg-white/[0.03] px-3 py-2 backdrop-blur-xl"
     >
-      <GripVertical size={13} className="text-[#8A8A9A]/60 shrink-0" />
-      {esRecuperacion
+      {entry.esRecuperacion
         ? <span className="h-2 w-2 rounded-full shrink-0 bg-emerald-400" />
-        : <span className={`h-2 w-2 rounded-full shrink-0 ${sala === 'A' ? 'bg-blue-400' : 'bg-purple-400'}`} />
+        : <span className={`h-2 w-2 rounded-full shrink-0 ${entry.sala === 'A' ? 'bg-blue-400' : 'bg-purple-400'}`} />
       }
-      <p className="flex-1 text-sm font-semibold text-gray-900 dark:text-white truncate min-w-0">{nombre}</p>
-      {esRecuperacion && (
+      <p className="flex-1 text-sm font-semibold text-gray-900 dark:text-white truncate min-w-0">{entry.nombre}</p>
+      {entry.esRecuperacion && (
         <span className="text-[9px] font-bold uppercase tracking-wide text-emerald-600 dark:text-emerald-400 bg-emerald-500/10 border border-emerald-500/20 px-1.5 py-0.5 rounded-full shrink-0 whitespace-nowrap">
           Recupera
         </span>
       )}
+      <button
+        onClick={onToggle}
+        className={`relative inline-flex h-6 w-11 shrink-0 items-center rounded-full border-2 transition-colors duration-200 focus:outline-none ${
+          state === 'presente' ? 'bg-green-500 border-green-500' : 'bg-red-500/30 border-red-500/40'
+        }`}
+      >
+        <span className={`inline-block h-4 w-4 rounded-full bg-white shadow transition-transform duration-200 ${
+          state === 'presente' ? 'translate-x-5' : 'translate-x-0.5'
+        }`} />
+      </button>
+      <button
+        onClick={onConAviso}
+        title="Con aviso"
+        className="rounded-lg p-1.5 text-amber-500/40 hover:text-amber-400 hover:bg-amber-500/10 transition-all"
+      >
+        <Bell size={13} />
+      </button>
+    </motion.div>
+  )
+}
+
+function ConAvisoRowCard({ entry, onUndo }: { entry: AttendanceEntry; onUndo: () => void }) {
+  return (
+    <motion.div layout initial={{ opacity: 0 }} animate={{ opacity: 1 }}
+      className="flex items-center gap-2 rounded-xl border border-amber-500/20 bg-amber-500/[0.05] px-3 py-2 backdrop-blur-xl"
+    >
+      {entry.esRecuperacion
+        ? <span className="h-2 w-2 rounded-full shrink-0 bg-emerald-400" />
+        : <span className={`h-2 w-2 rounded-full shrink-0 ${entry.sala === 'A' ? 'bg-blue-400' : 'bg-purple-400'}`} />
+      }
+      <p className="flex-1 text-sm font-semibold text-gray-900 dark:text-white truncate min-w-0">{entry.nombre}</p>
+      {entry.esRecuperacion && (
+        <span className="text-[9px] font-bold uppercase tracking-wide text-emerald-600 dark:text-emerald-400 bg-emerald-500/10 border border-emerald-500/20 px-1.5 py-0.5 rounded-full shrink-0 whitespace-nowrap">
+          Recupera
+        </span>
+      )}
+      <button
+        onClick={onUndo}
+        title="Quitar aviso"
+        className="rounded-lg p-1.5 text-gray-400 hover:text-red-400 hover:bg-red-500/10 transition-all"
+      >
+        <X size={13} />
+      </button>
     </motion.div>
   )
 }
