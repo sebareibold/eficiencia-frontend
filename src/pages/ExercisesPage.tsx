@@ -125,7 +125,7 @@ export default function ExercisesPage() {
         nombre: search || undefined,
         categoriaId: filterCategoria || undefined,
         patronMovimiento: filterPatron || undefined,
-        startsWith: search ? true : undefined,
+        startsWith: false,
       })
       setItems(data)
       setPage(1)

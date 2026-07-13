@@ -101,7 +101,7 @@ function CatalogoSearchInput({
   const wrapperRef = useRef<HTMLDivElement>(null)
 
   const filtered = q.trim().length >= 1
-    ? catalogo.filter(e => e.nombre.toLowerCase().startsWith(q.toLowerCase())).slice(0, 8)
+    ? catalogo.filter(e => e.nombre.toLowerCase().includes(q.toLowerCase())).slice(0, 8)
     : []
 
   const updatePos = () => {
@@ -430,7 +430,7 @@ function AddEjercicioPanel({ bloqueId, patronHint, onAdd, onClose }: AddEjercici
     setLoading(true)
     ejerciciosApi.getAll({
       nombre: debounced || undefined,
-      startsWith: debounced ? true : undefined,
+      startsWith: false,
       patronMovimiento: patron || undefined,
     })
       .then(setCatalogo)
