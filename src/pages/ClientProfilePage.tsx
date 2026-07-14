@@ -1926,7 +1926,7 @@ export default function ClientProfilePage() {
                         <span className="ml-1.5 tabular-nums text-gray-400 dark:text-white/40">{inscripciones.length}{planFreq ? `/${planFreq}` : ''}</span>
                       )}
                     </span>
-                    {isAdmin && (
+                    {can('shifts', 'create') && (
                       <button
                         onClick={() => { if (!limiteAlcanzado) setEnrollOpen(true) }}
                         disabled={limiteAlcanzado}
@@ -1999,13 +1999,15 @@ export default function ClientProfilePage() {
                               {insc.dias.map(d => DIA_SHORT[d.toLowerCase()] ?? d).join(' · ')}
                             </p>
                           </div>
-                          <button
-                            onClick={() => handleDarDeBaja(insc.id)}
-                            className="flex items-center gap-1.5 text-xs font-semibold text-red-500 hover:text-red-400 shrink-0 px-3 py-1.5 rounded-xl hover:bg-red-500/10 transition-all border border-transparent hover:border-red-500/10"
-                          >
-                            <XCircle size={13} />
-                            Dar de baja
-                          </button>
+                          {(isAdmin || user?.role === 'staff') && (
+                            <button
+                              onClick={() => handleDarDeBaja(insc.id)}
+                              className="flex items-center gap-1.5 text-xs font-semibold text-red-500 hover:text-red-400 shrink-0 px-3 py-1.5 rounded-xl hover:bg-red-500/10 transition-all border border-transparent hover:border-red-500/10"
+                            >
+                              <XCircle size={13} />
+                              Dar de baja
+                            </button>
+                          )}
                         </div>
                       ))}
                     </div>
@@ -2550,7 +2552,7 @@ export default function ClientProfilePage() {
                   <p className="text-xs text-gray-500 dark:text-[#8A8A9A]">Historial completo de membresías del cliente</p>
                 </div>
               </div>
-              {isAdmin && (
+              {can('memberships', 'create') && (
                 <button
                   onClick={() => setNewMembresiaOpen(true)}
                   className="flex items-center gap-2 rounded-xl btn-action px-4 py-2.5 text-sm"
@@ -2570,7 +2572,7 @@ export default function ClientProfilePage() {
                   <Tag size={20} className="text-gray-400 dark:text-[#8A8A9A]" />
                 </div>
                 <p className="text-sm text-gray-500 dark:text-[#8A8A9A]">Sin membresías registradas</p>
-                {isAdmin && (
+                {can('memberships', 'create') && (
                   <button onClick={() => setNewMembresiaOpen(true)} className="text-xs text-primary hover:underline transition-colors">
                     Crear la primera membresía →
                   </button>
@@ -2616,7 +2618,7 @@ export default function ClientProfilePage() {
                             <span className="text-sm font-black text-gray-900 dark:text-white tabular-nums">
                               {formatCurrency(m.precio)}
                             </span>
-                            {isAdmin && (m.estado === 'ACTIVA' || m.estado === 'PENDIENTE') && (
+                            {can('memberships', 'update') && (m.estado === 'ACTIVA' || m.estado === 'PENDIENTE') && (
                               <button
                                 onClick={() => handleCancelarMembresia(m.id)}
                                 className="text-xs font-semibold text-gray-400 hover:text-amber-400 transition-colors px-2.5 py-1.5 rounded-xl hover:bg-amber-500/10 border border-transparent hover:border-amber-500/20"
@@ -2624,7 +2626,7 @@ export default function ClientProfilePage() {
                                 Cancelar
                               </button>
                             )}
-                            {isAdmin && (
+                            {can('memberships', 'delete') && (
                               <button
                                 onClick={() => handleEliminarMembresia(m.id)}
                                 className="text-xs font-semibold text-gray-400 hover:text-red-400 transition-colors px-2.5 py-1.5 rounded-xl hover:bg-red-500/10 border border-transparent hover:border-red-500/20"
