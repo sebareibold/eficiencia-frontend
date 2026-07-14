@@ -47,6 +47,27 @@ const DAY_LABELS: Record<WeekDay, string> = {
   thursday: 'Jueves', friday: 'Viernes', saturday: 'Sábado', sunday: 'Domingo',
 }
 
+// ── Skeleton lista de clientes ────────────────────────────────────────────────
+
+function ClientListSkeleton() {
+  return (
+    <div className="flex flex-col gap-3 flex-1 animate-pulse">
+      <div className="h-8 rounded-2xl bg-white/20 dark:bg-white/[0.06]" />
+      <div className="space-y-1.5">
+        {Array.from({ length: 8 }).map((_, i) => (
+          <div key={i} className="flex items-center gap-2.5 p-2.5 rounded-xl border border-white/10 dark:border-white/[0.04]">
+            <div className="h-[18px] w-[18px] rounded-md bg-white/20 dark:bg-white/[0.08] shrink-0" />
+            <div className="flex-1 space-y-1.5">
+              <div className="h-3 rounded-md bg-white/20 dark:bg-white/[0.08]" style={{ width: `${55 + (i % 4) * 10}%` }} />
+              <div className="h-2.5 rounded-md bg-white/10 dark:bg-white/[0.05] w-2/5" />
+            </div>
+          </div>
+        ))}
+      </div>
+    </div>
+  )
+}
+
 // ── Sub-componente lista de clientes ──────────────────────────────────────────
 
 function ClientList({
@@ -165,7 +186,7 @@ export default function ShiftNewPage() {
   const [params]      = useSearchParams()
   const addToast      = useUiStore(s => s.addToast)
   const queryClient   = useQueryClient()
-  const { clients }   = useClients({ limit: 1000, estado: 'active' })
+  const { clients, isLoading: clientsLoading } = useClients({ limit: 1000, estado: 'active' })
 
   const [isSubmitting, setIsSubmitting] = useState(false)
   const [professors,   setProfessors]   = useState<{ id: string; name: string }[]>([])
@@ -373,15 +394,17 @@ export default function ShiftNewPage() {
               )}
             </div>
             <div className="border-t border-white/20 dark:border-white/10" />
-            <ClientList
-              sala="A"
-              clients={clients.map(c => ({ ...c, id: String(c.id) }))}
-              selectedIds={clientIdsA}
-              blockedIds={clientIdsB}
-              onToggle={(id, checked) =>
-                setValue('clientIdsA', checked ? [...clientIdsA, id] : clientIdsA.filter(x => x !== id))
-              }
-            />
+            {clientsLoading ? <ClientListSkeleton /> : (
+              <ClientList
+                sala="A"
+                clients={clients.map(c => ({ ...c, id: String(c.id) }))}
+                selectedIds={clientIdsA}
+                blockedIds={clientIdsB}
+                onToggle={(id, checked) =>
+                  setValue('clientIdsA', checked ? [...clientIdsA, id] : clientIdsA.filter(x => x !== id))
+                }
+              />
+            )}
           </motion.div>
 
           {/* ── Col 3: Sala B ── */}
@@ -403,15 +426,17 @@ export default function ShiftNewPage() {
               )}
             </div>
             <div className="border-t border-white/20 dark:border-white/10" />
-            <ClientList
-              sala="B"
-              clients={clients.map(c => ({ ...c, id: String(c.id) }))}
-              selectedIds={clientIdsB}
-              blockedIds={clientIdsA}
-              onToggle={(id, checked) =>
-                setValue('clientIdsB', checked ? [...clientIdsB, id] : clientIdsB.filter(x => x !== id))
-              }
-            />
+            {clientsLoading ? <ClientListSkeleton /> : (
+              <ClientList
+                sala="B"
+                clients={clients.map(c => ({ ...c, id: String(c.id) }))}
+                selectedIds={clientIdsB}
+                blockedIds={clientIdsA}
+                onToggle={(id, checked) =>
+                  setValue('clientIdsB', checked ? [...clientIdsB, id] : clientIdsB.filter(x => x !== id))
+                }
+              />
+            )}
           </motion.div>
 
         </div>

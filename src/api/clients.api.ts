@@ -74,7 +74,7 @@ export const clientsApi = {
         page:  params?.page  ?? 1,
         limit: params?.limit ?? 20,
         ...(params?.search     && { search:     params.search }),
-        ...(params?.estado     && { estado:     params.estado }),
+        ...(params?.estado     && { estado: params.estado === 'active' ? 'ACTIVO' : params.estado === 'inactive' ? 'INACTIVO' : params.estado }),
         ...(params?.estadoPago && { estadoPago: params.estadoPago }),
         ...(params?.desde      && { desde:      params.desde }),
         ...(params?.hasta      && { hasta:      params.hasta }),
