@@ -129,6 +129,7 @@ export default function PaymentNewPage() {
   const [selectedModalidad, setSelectedModalidad] = useState<Modalidad | ''>('')
 
   const [aplicarProporcional, setAplicarProporcional] = useState(false)
+  const [reactivarCliente,   setReactivarCliente]   = useState(true)
 
   const {
     register: regPay,
@@ -326,6 +327,14 @@ export default function PaymentNewPage() {
         ...(cuotaNumero !== undefined && { cuotaNumero }),
       })
       addToast('Pago registrado', 'success')
+
+      // Reactivar cliente si estaba inactivo y el usuario eligió Sí
+      if (reactivarCliente && selectedClient?.activityStatus === 'inactive') {
+        await clientsApi.update(clientId, { estado: 'ACTIVO' })
+        queryClient.invalidateQueries({ queryKey: ['clients'] })
+        addToast(`${selectedClient.name} ${selectedClient.lastName} pasó a activo`, 'success')
+      }
+
       navigate(`/payments/${payment.id}`)
     } catch {
       setSubmitError('Ocurrió un error al registrar el pago. Por favor intentá de nuevo.')
@@ -969,6 +978,39 @@ export default function PaymentNewPage() {
                 <p className="text-xs text-gray-400">Comprobante fiscal entregado</p>
               </div>
             </label>
+
+            {/* Reactivar cliente — solo si está inactivo */}
+            {selectedClient?.activityStatus === 'inactive' && (
+              <div className="space-y-2">
+                <div className="flex items-center gap-2">
+                  <p className="text-[11px] font-bold uppercase tracking-widest text-gray-400 dark:text-[#6A6A7A]">Alerta</p>
+                  <p className="text-[11px] font-semibold text-orange-500 dark:text-orange-400">Este cliente estaba inactivo</p>
+                </div>
+                <label className="flex items-center justify-between gap-3 cursor-pointer select-none group pt-0.5">
+                  <div>
+                    <p className="text-sm font-semibold text-gray-700 dark:text-gray-300 group-hover:text-gray-900 dark:group-hover:text-white transition-colors">
+                      {reactivarCliente ? 'Activar al registrar el pago' : 'Mantener inactivo'}
+                    </p>
+                    <p className="text-xs text-gray-400">
+                      {reactivarCliente ? 'El cliente pasará a estado activo' : 'El cliente seguirá en estado inactivo'}
+                    </p>
+                  </div>
+                  <button
+                    type="button"
+                    role="switch"
+                    aria-checked={reactivarCliente}
+                    onClick={() => setReactivarCliente(v => !v)}
+                    style={{ transition: 'background-color 200ms ease-out' }}
+                    className={`relative inline-flex h-5 w-9 shrink-0 rounded-full ${reactivarCliente ? 'bg-primary' : 'bg-gray-300 dark:bg-white/20'}`}
+                  >
+                    <span
+                      style={{ transition: 'transform 200ms ease-out' }}
+                      className={`mt-0.5 ml-0.5 inline-block h-4 w-4 rounded-full bg-white shadow-sm ${reactivarCliente ? 'translate-x-4' : 'translate-x-0'}`}
+                    />
+                  </button>
+                </label>
+              </div>
+            )}
 
           </div>
         </div>
