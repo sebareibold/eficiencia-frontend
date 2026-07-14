@@ -380,7 +380,7 @@ export default function PaymentNewPage() {
               {/* Indicador cuadrado */}
               <div
                 className={[
-                  'relative z-20 flex h-10 w-10 items-center justify-center rounded-xl text-sm font-black transition-all duration-300',
+                  'relative z-20 flex h-10 w-10 items-center justify-center rounded-xl text-sm font-black [transition:background-color_250ms_ease-out,box-shadow_250ms_ease-out,transform_200ms_ease-out]',
                   curr
                     ? 'bg-primary text-black ring-4 ring-primary/25 shadow-[0_0_24px_rgba(251,198,8,0.45),0_0_48px_rgba(251,198,8,0.18)] scale-110'
                     : done
@@ -502,8 +502,8 @@ export default function PaymentNewPage() {
                       onClick={() => pickClient(c)}
                       initial={{ opacity: 0, x: -8 }}
                       animate={{ opacity: 1, x: 0 }}
-                      transition={{ duration: 0.12, delay: i * 0.02, ease: 'easeOut' }}
-                      className="w-full flex items-center justify-between gap-3 px-4 py-3 hover:bg-primary/5 transition-colors text-left group"
+                      transition={{ duration: 0.15, delay: i * 0.03, ease: [0.22, 1, 0.36, 1] }}
+                      className="w-full flex items-center justify-between gap-3 px-4 py-3 text-left group active:scale-[0.99] [transition:background-color_120ms_ease-out,transform_100ms_ease-out] hover:bg-primary/5"
                     >
                       <div className="flex items-center gap-3 min-w-0">
                         <div className="h-8 w-8 rounded-xl bg-primary/10 flex items-center justify-center shrink-0 text-xs font-black text-primary">
@@ -714,7 +714,7 @@ export default function PaymentNewPage() {
                         type="button"
                         onClick={() => handleSelectPlan(plan.id)}
                         className={[
-                          'w-full flex items-center justify-between gap-3 px-4 py-3 rounded-xl border-2 text-left transition-all duration-150',
+                          'w-full flex items-center justify-between gap-3 px-4 py-3 rounded-xl border-2 text-left active:scale-[0.98] [transition:background-color_150ms_ease-out,border-color_150ms_ease-out,transform_100ms_ease-out]',
                           isSelected
                             ? 'border-primary bg-primary/10 dark:bg-primary/[0.08]'
                             : 'border-gray-200 dark:border-white/[0.07] bg-white/40 dark:bg-white/[0.02] hover:border-primary/30 dark:hover:border-primary/20',
@@ -750,10 +750,10 @@ export default function PaymentNewPage() {
               {selectedPlanId && selectedPlan && (
                 <motion.div
                   key="modalidad"
-                  initial={{ opacity: 0, y: -8 }}
+                  initial={{ opacity: 0, y: 10 }}
                   animate={{ opacity: 1, y: 0 }}
-                  exit={{ opacity: 0, y: -8 }}
-                  transition={{ duration: 0.15 }}
+                  exit={{ opacity: 0, y: -6 }}
+                  transition={{ duration: 0.18, ease: [0.22, 1, 0.36, 1] }}
                   className="space-y-1.5"
                 >
                   <label className="text-[11px] font-bold uppercase tracking-widest text-gray-400 dark:text-[#6A6A7A] flex items-center gap-1">
@@ -776,7 +776,7 @@ export default function PaymentNewPage() {
                           type="button"
                           onClick={() => handleSelectModalidad(tarifa.modalidad, tarifa.precio)}
                           className={[
-                            'rounded-xl px-3 py-3 text-left border-2 transition-all duration-150',
+                            'rounded-xl px-3 py-3 text-left border-2 active:scale-[0.97] [transition:background-color_150ms_ease-out,border-color_150ms_ease-out,color_150ms_ease-out,transform_100ms_ease-out]',
                             isActive
                               ? 'border-primary bg-primary text-gray-900'
                               : 'border-gray-200 dark:border-white/[0.07] bg-white/40 dark:bg-white/[0.02] text-gray-600 dark:text-gray-400 hover:border-primary/30 dark:hover:border-primary/20',
@@ -804,10 +804,10 @@ export default function PaymentNewPage() {
               {selectedModalidad && (
                 <motion.div
                   key="monto"
-                  initial={{ opacity: 0, y: -8 }}
+                  initial={{ opacity: 0, y: 10 }}
                   animate={{ opacity: 1, y: 0 }}
-                  exit={{ opacity: 0, y: -8 }}
-                  transition={{ duration: 0.15 }}
+                  exit={{ opacity: 0, y: -6 }}
+                  transition={{ duration: 0.18, ease: [0.22, 1, 0.36, 1] }}
                   className="space-y-1.5"
                 >
                   <label className="text-[11px] font-bold uppercase tracking-widest text-gray-400 dark:text-[#6A6A7A] flex items-center gap-1">
@@ -1057,10 +1057,10 @@ export default function PaymentNewPage() {
           <AnimatePresence mode="wait">
             <motion.div
               key={step}
-              initial={{ opacity: 0, y: 8 }}
+              initial={{ opacity: 0, y: 12 }}
               animate={{ opacity: 1, y: 0 }}
-              exit={{ opacity: 0, y: -8 }}
-              transition={{ duration: 0.18, ease: 'easeOut' }}
+              exit={{ opacity: 0, y: -6 }}
+              transition={{ duration: 0.2, ease: [0.22, 1, 0.36, 1] }}
               className="min-h-0"
             >
               {StepHeader({ stepId: step })}
@@ -1106,7 +1106,7 @@ export default function PaymentNewPage() {
                 <button
                   type="button"
                   onClick={submitClient(onCreateClient)}
-                  className="flex items-center gap-2 px-5 py-2.5 rounded-xl bg-primary text-black text-sm font-bold hover:bg-primary-dark transition-all"
+                  className="flex items-center gap-2 px-5 py-2.5 rounded-xl btn-action text-sm font-bold"
                 >
                   <CheckCircle2 size={14} />
                   Continuar
@@ -1117,7 +1117,7 @@ export default function PaymentNewPage() {
                   type="button"
                   onClick={submitPay(onSubmitPayment)}
                   disabled={submitting}
-                  className="flex items-center gap-2 px-5 py-2.5 rounded-xl bg-primary text-black text-sm font-bold hover:bg-primary-dark disabled:opacity-60 transition-all"
+                  className="flex items-center gap-2 px-5 py-2.5 rounded-xl btn-action text-sm font-bold disabled:opacity-60"
                 >
                   {submitting ? <Loader2 size={14} className="animate-spin" /> : <CheckCircle2 size={14} />}
                   Registrar pago
