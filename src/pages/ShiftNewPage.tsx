@@ -1,7 +1,7 @@
 import { useState, useEffect, useRef } from 'react'
 import { useNavigate, useSearchParams } from 'react-router-dom'
 import { useQueryClient } from '@tanstack/react-query'
-import { motion } from 'framer-motion'
+import { motion, AnimatePresence } from 'framer-motion'
 import { pageVariants } from '../lib/motion'
 
 const ease = [0.22, 1, 0.36, 1] as const
@@ -9,7 +9,12 @@ const cardAnim = (delay: number) => ({
   initial: { opacity: 0, y: 20 },
   animate: { opacity: 1, y: 0, transition: { duration: 0.35, ease, delay } },
 })
-import { ArrowLeft, Calendar, Users, ChevronRight, X, Check } from 'lucide-react'
+
+import { createPortal } from 'react-dom'
+import {
+  ArrowLeft, Calendar, Users, ChevronRight, X, Check,
+  CheckCircle2, ExternalLink, Clock, Repeat2, UserRound,
+} from 'lucide-react'
 import { useForm } from 'react-hook-form'
 import { zodResolver } from '@hookform/resolvers/zod'
 import { z } from 'zod'
@@ -21,7 +26,7 @@ import { ROUTES } from '../constants/routes'
 import { QK } from '../lib/queryKeys'
 import Input from '../components/ui/Input'
 import Select from '../components/ui/Select'
-import type { WeekDay } from '../types/shift.types'
+import type { WeekDay, Shift } from '../types/shift.types'
 
 // ── Schema ────────────────────────────────────────────────────────────────────
 
@@ -47,7 +52,22 @@ const DAY_LABELS: Record<WeekDay, string> = {
   thursday: 'Jueves', friday: 'Viernes', saturday: 'Sábado', sunday: 'Domingo',
 }
 
-// ── Skeleton lista de clientes ────────────────────────────────────────────────
+// ── Success modal data ────────────────────────────────────────────────────────
+
+interface CreatedShiftInfo {
+  id: string
+  days: WeekDay[]
+  startTime: string
+  endTime: string
+  profesorNombre: string
+  cupoSalaA: number
+  cupoSalaB: number
+  recurrente: boolean
+  clientCountA: number
+  clientCountB: number
+}
+
+// ── Skeleton ──────────────────────────────────────────────────────────────────
 
 function ClientListSkeleton() {
   return (
@@ -68,14 +88,10 @@ function ClientListSkeleton() {
   )
 }
 
-// ── Sub-componente lista de clientes ──────────────────────────────────────────
+// ── ClientList ────────────────────────────────────────────────────────────────
 
 function ClientList({
-  sala,
-  clients,
-  selectedIds,
-  blockedIds,
-  onToggle,
+  sala, clients, selectedIds, blockedIds, onToggle,
 }: {
   sala: 'A' | 'B'
   clients: { id: string | number; name: string; lastName: string; email?: string }[]
@@ -84,84 +100,64 @@ function ClientList({
   onToggle: (id: string, checked: boolean) => void
 }) {
   const [search, setSearch] = useState('')
-
   const filtered = clients.filter(c =>
     `${c.name} ${c.lastName}`.toLowerCase().includes(search.toLowerCase())
   )
-
-  const salaColor = sala === 'A'
-    ? { dot: 'bg-primary', ring: 'border-primary bg-primary', row: 'border-primary/40 bg-primary/5 dark:bg-primary/10' }
-    : { dot: 'bg-blue-500', ring: 'border-blue-500 bg-blue-500', row: 'border-blue-500/40 bg-blue-500/5 dark:bg-blue-500/10' }
+  const sc = sala === 'A'
+    ? { ring: 'border-primary bg-primary', row: 'border-primary/40 bg-primary/5 dark:bg-primary/10' }
+    : { ring: 'border-blue-500 bg-blue-500', row: 'border-blue-500/40 bg-blue-500/5 dark:bg-blue-500/10' }
 
   return (
     <div className="flex flex-col gap-3 flex-1">
-      {/* Buscador */}
       <div className="relative">
         <span className="absolute left-3.5 top-1/2 -translate-y-1/2 text-gray-400 pointer-events-none">
-          <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5"><circle cx="11" cy="11" r="8"/><path d="m21 21-4.35-4.35"/></svg>
+          <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5">
+            <circle cx="11" cy="11" r="8"/><path d="m21 21-4.35-4.35"/>
+          </svg>
         </span>
         <input
-          type="text"
-          placeholder="Buscar cliente..."
-          value={search}
+          type="text" placeholder="Buscar cliente..." value={search}
           onChange={e => setSearch(e.target.value)}
           className="w-full rounded-2xl border border-white/30 dark:border-white/10 bg-white/60 dark:bg-white/[0.06] pl-9 pr-4 py-2 text-xs text-gray-900 dark:text-white placeholder:text-gray-400 focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/20 transition-all"
         />
       </div>
-
-      {/* Lista */}
       <div className="overflow-y-auto max-h-[360px] space-y-1 pr-0.5">
         {clients.length === 0 ? (
           <p className="text-xs text-gray-500 text-center py-6">No hay clientes</p>
         ) : filtered.length === 0 ? (
           <p className="text-xs text-gray-500 text-center py-6">Sin resultados</p>
         ) : filtered.map(c => {
-          const id        = String(c.id)
-          const isSelected = selectedIds.includes(id)
-          const isBlocked  = blockedIds.includes(id)
-
+          const id    = String(c.id)
+          const isSel = selectedIds.includes(id)
+          const isBlk = blockedIds.includes(id)
           return (
-            <label
-              key={id}
-              className={`flex items-center gap-2.5 p-2.5 rounded-xl border transition-all select-none ${
-                isBlocked
-                  ? 'opacity-30 cursor-not-allowed border-white/10 dark:border-white/[0.04]'
-                  : isSelected
-                  ? `cursor-pointer ${salaColor.row}`
-                  : 'cursor-pointer border-white/20 dark:border-white/[0.06] hover:bg-white/40 dark:hover:bg-white/[0.04]'
-              }`}
-            >
-              <div className={`flex h-4.5 w-4.5 h-[18px] w-[18px] shrink-0 items-center justify-center rounded-md border-2 transition-all ${
-                isSelected ? salaColor.ring : 'border-gray-300 dark:border-white/20'
-              }`}>
-                {isSelected && <Check size={10} strokeWidth={3} className="text-white dark:text-gray-900" />}
+            <label key={id} className={`flex items-center gap-2.5 p-2.5 rounded-xl border transition-all select-none ${
+              isBlk
+                ? 'opacity-30 cursor-not-allowed border-white/10 dark:border-white/[0.04]'
+                : isSel
+                ? `cursor-pointer ${sc.row}`
+                : 'cursor-pointer border-white/20 dark:border-white/[0.06] hover:bg-white/40 dark:hover:bg-white/[0.04]'
+            }`}>
+              <div className={`flex h-[18px] w-[18px] shrink-0 items-center justify-center rounded-md border-2 transition-all ${isSel ? sc.ring : 'border-gray-300 dark:border-white/20'}`}>
+                {isSel && <Check size={10} strokeWidth={3} className="text-white dark:text-gray-900" />}
               </div>
-              <input
-                type="checkbox"
-                className="sr-only"
-                disabled={isBlocked}
-                checked={isSelected}
-                onChange={e => onToggle(id, e.target.checked)}
-              />
+              <input type="checkbox" className="sr-only" disabled={isBlk} checked={isSel}
+                onChange={e => onToggle(id, e.target.checked)} />
               <div className="flex-1 min-w-0">
                 <p className="text-xs font-semibold text-gray-900 dark:text-white truncate leading-tight">
                   {c.name} {c.lastName}
                 </p>
-                {c.email && (
-                  <p className="text-[10px] text-gray-500 dark:text-[#8A8A9A] truncate">{c.email}</p>
-                )}
+                {c.email && <p className="text-[10px] text-gray-500 dark:text-[#8A8A9A] truncate">{c.email}</p>}
               </div>
-              {isBlocked && (
+              {isBlk && (
                 <span className="text-[9px] font-bold text-gray-400 dark:text-[#8A8A9A] shrink-0">
                   Sala {sala === 'A' ? 'B' : 'A'}
                 </span>
               )}
-              {isSelected && !isBlocked && (
-                <button
-                  type="button"
+              {isSel && !isBlk && (
+                <button type="button"
                   onClick={e => { e.preventDefault(); e.stopPropagation(); onToggle(id, false) }}
-                  className="flex h-5 w-5 shrink-0 items-center justify-center rounded-md bg-red-500/10 text-red-500 hover:bg-red-500 hover:text-white transition-all"
-                >
+                  className="flex h-5 w-5 shrink-0 items-center justify-center rounded-md bg-red-500/10 text-red-500 hover:bg-red-500 hover:text-white transition-all">
                   <X size={10} strokeWidth={3} />
                 </button>
               )}
@@ -179,18 +175,144 @@ function addHour(time: string): string {
   return `${String((h + 1) % 24).padStart(2, '0')}:${String(m).padStart(2, '0')}`
 }
 
-// ── Página principal ──────────────────────────────────────────────────────────
+// ── Success Modal ─────────────────────────────────────────────────────────────
+
+function SuccessModal({ shifts, onGoToShifts, onViewShift }: {
+  shifts: CreatedShiftInfo[]
+  onGoToShifts: () => void
+  onViewShift: (id: string) => void
+}) {
+  const multiple = shifts.length > 1
+  return createPortal(
+    <>
+      <motion.div
+        initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
+        className="fixed inset-0 z-[9999] bg-black/30 backdrop-blur-md"
+        onClick={onGoToShifts}
+      />
+      <div className="fixed inset-0 z-[9999] flex items-center justify-center p-4 pointer-events-none">
+      <motion.div
+        initial={{ opacity: 0, scale: 0.94, y: 20 }}
+        animate={{ opacity: 1, scale: 1, y: 0, transition: { duration: 0.32, ease: [0.22, 1, 0.36, 1] } }}
+        exit={{ opacity: 0, scale: 0.97, y: 10, transition: { duration: 0.18, ease: [0.4, 0, 1, 1] } }}
+        className="relative w-full max-w-2xl pointer-events-auto"
+      >
+        <div className="relative overflow-hidden rounded-[2rem] bg-white dark:bg-[#111111] p-8 shadow-[0_32px_80px_rgba(0,0,0,0.18)] dark:shadow-[0_32px_80px_rgba(0,0,0,0.6)] ring-1 ring-black/5 dark:ring-white/[0.08]">
+          {/* Blobs */}
+          <div className="pointer-events-none absolute -top-20 -right-20 w-64 h-64 rounded-full bg-primary/20 blur-[80px]" />
+          <div className="pointer-events-none absolute -bottom-20 -left-20 w-56 h-56 rounded-full bg-primary/10 blur-[70px]" />
+
+          {/* Header */}
+          <div className="flex items-center gap-5 mb-7 relative">
+            <motion.div
+              initial={{ scale: 0.6, opacity: 0 }}
+              animate={{ scale: 1, opacity: 1, transition: { duration: 0.4, delay: 0.1, ease: [0.22, 1, 0.36, 1] } }}
+              className="flex h-14 w-14 shrink-0 items-center justify-center rounded-[1.25rem] bg-primary/15"
+            >
+              <CheckCircle2 size={28} className="text-primary" />
+            </motion.div>
+            <div>
+              <h2 className="text-2xl font-black text-gray-900 dark:text-white">
+                {multiple ? `¡${shifts.length} turnos creados!` : '¡Turno creado!'}
+              </h2>
+              <p className="text-sm text-gray-500 dark:text-gray-400 mt-0.5">
+                {multiple ? 'Podés ir a ver el que quieras.' : 'El turno quedó registrado correctamente.'}
+              </p>
+            </div>
+          </div>
+
+          {/* Shift cards */}
+          <div className="space-y-3 mb-6 max-h-[52vh] overflow-y-auto pr-1">
+            {shifts.map((s, i) => (
+              <motion.div key={s.id}
+                initial={{ opacity: 0, y: 8 }}
+                animate={{ opacity: 1, y: 0, transition: { duration: 0.22, delay: 0.15 + i * 0.07, ease: [0.22, 1, 0.36, 1] } }}
+                className="rounded-2xl border border-gray-100 dark:border-white/10 bg-gray-50 dark:bg-white/[0.04] p-4"
+              >
+                {/* Fila superior: día + horario + botón ver */}
+                <div className="flex items-start justify-between gap-3 mb-3">
+                  <div className="flex items-center gap-2.5 min-w-0">
+                    <div className="h-2.5 w-2.5 rounded-full bg-primary shrink-0 mt-0.5" />
+                    <div className="min-w-0">
+                      <p className="text-base font-black text-gray-900 dark:text-white leading-tight truncate">
+                        {s.days.map(d => DAY_LABELS[d]).join(' · ')}
+                      </p>
+                      <div className="flex items-center gap-1.5 mt-0.5">
+                        <Clock size={11} className="text-gray-400 shrink-0" />
+                        <p className="text-xs font-semibold text-gray-500 dark:text-gray-400">
+                          {s.startTime} → {s.endTime}
+                        </p>
+                        {s.recurrente && (
+                          <span className="flex items-center gap-1 text-[10px] font-bold text-primary/80 bg-primary/10 px-1.5 py-0.5 rounded-md">
+                            <Repeat2 size={9} /> Recurrente
+                          </span>
+                        )}
+                      </div>
+                    </div>
+                  </div>
+                  <button
+                    onClick={() => onViewShift(s.id)}
+                    className="flex items-center gap-1.5 shrink-0 rounded-xl bg-primary/10 hover:bg-primary/20 text-primary px-3 py-1.5 text-xs font-bold transition-colors active:scale-[0.96]"
+                  >
+                    Ver turno <ExternalLink size={11} />
+                  </button>
+                </div>
+
+                {/* Fila inferior: detalles */}
+                <div className="flex flex-wrap items-center gap-2 pt-2.5 border-t border-gray-100 dark:border-white/[0.06]">
+                  {s.profesorNombre && (
+                    <span className="flex items-center gap-1.5 text-[11px] font-semibold text-gray-600 dark:text-gray-300 bg-gray-100 dark:bg-white/[0.06] px-2.5 py-1 rounded-lg">
+                      <UserRound size={11} className="text-gray-400" />
+                      {s.profesorNombre}
+                    </span>
+                  )}
+                  <span className="flex items-center gap-1.5 text-[11px] font-semibold text-amber-700 dark:text-primary bg-primary/10 px-2.5 py-1 rounded-lg">
+                    <Users size={11} />
+                    {`Sala A: ${s.cupoSalaA ?? 0} cupos`}
+                    {s.clientCountA > 0 && <span className="text-gray-500 dark:text-gray-400">{` · ${s.clientCountA} inscriptos`}</span>}
+                  </span>
+                  <span className="flex items-center gap-1.5 text-[11px] font-semibold text-blue-600 dark:text-blue-400 bg-blue-500/10 px-2.5 py-1 rounded-lg">
+                    <Users size={11} />
+                    {`Sala B: ${s.cupoSalaB ?? 0} cupos`}
+                    {s.clientCountB > 0 && <span className="text-gray-500 dark:text-gray-400">{` · ${s.clientCountB} inscriptos`}</span>}
+                  </span>
+                </div>
+              </motion.div>
+            ))}
+          </div>
+
+          <button
+            onClick={onGoToShifts}
+            className="w-full rounded-2xl border border-gray-200 dark:border-white/20 bg-gray-50 dark:bg-white/[0.06] py-3 text-sm font-bold text-gray-600 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-white/10 transition-all active:scale-[0.98]"
+          >
+            Volver a turnos
+          </button>
+        </div>
+      </motion.div>
+      </div>
+    </>,
+    document.body
+  )
+}
+
+// ── Page ──────────────────────────────────────────────────────────────────────
 
 export default function ShiftNewPage() {
-  const navigate      = useNavigate()
-  const [params]      = useSearchParams()
-  const addToast      = useUiStore(s => s.addToast)
-  const queryClient   = useQueryClient()
+  const navigate    = useNavigate()
+  const [params]    = useSearchParams()
+  const addToast    = useUiStore(s => s.addToast)
+  const queryClient = useQueryClient()
   const { clients, isLoading: clientsLoading } = useClients({ limit: 1000, estado: 'active' })
 
-  const [isSubmitting, setIsSubmitting] = useState(false)
-  const [professors,   setProfessors]   = useState<{ id: string; name: string }[]>([])
-  const [profsLoading, setProfsLoading] = useState(true)
+  const [isSubmitting,  setIsSubmitting]  = useState(false)
+  const [professors,    setProfessors]    = useState<{ id: string; name: string }[]>([])
+  const [profsLoading,  setProfsLoading]  = useState(true)
+  const [successShifts, setSuccessShifts] = useState<CreatedShiftInfo[]>([])
+  const [showSuccess,   setShowSuccess]   = useState(false)
+
+  // true = un solo turno compartido entre todos los días
+  // false (default) = un turno separado por cada día
+  const [mismoTurno, setMismoTurno] = useState(false)
 
   const prefillDay   = params.get('day') as WeekDay | null
   const prefillStart = params.get('start') ?? ''
@@ -215,12 +337,19 @@ export default function ShiftNewPage() {
   const clientIdsA     = watch('clientIdsA') || []
   const clientIdsB     = watch('clientIdsB') || []
   const startTimeValue = watch('startTime')
+  const watchedCupoA   = watch('cupoMaximoSalaA')
+  const watchedCupoB   = watch('cupoMaximoSalaB')
+
+  // Si baja a 1 día, resetear toggle
+  useEffect(() => {
+    if (formDays.length < 2) setMismoTurno(false)
+  }, [formDays.length])
 
   const isFirstRender = useRef(true)
   useEffect(() => {
     if (isFirstRender.current) { isFirstRender.current = false; return }
     if (startTimeValue) setValue('endTime', addHour(startTimeValue), { shouldValidate: true })
-  }, [startTimeValue]) // eslint-disable-line react-hooks/exhaustive-deps
+  }, [startTimeValue]) // eslint-disable-line
 
   useEffect(() => {
     professorsApi.getAll()
@@ -232,25 +361,76 @@ export default function ShiftNewPage() {
   async function onSubmit(data: FormValues) {
     setIsSubmitting(true)
     try {
-      const turno = await shiftsApi.create({
-        days:            data.days,
-        recurrente:      data.recurrente,
-        startTime:       data.startTime,
-        endTime:         data.endTime,
-        cupoMaximoSalaA: Number(data.cupoMaximoSalaA),
-        cupoMaximoSalaB: Number(data.cupoMaximoSalaB),
-        profesorId:      data.profesorId,
-      })
+      const created: CreatedShiftInfo[] = []
 
-      await Promise.allSettled([
-        ...data.clientIdsA.map(id => inscripcionesApi.enroll(id, String(turno.id), 'A')),
-        ...data.clientIdsB.map(id => inscripcionesApi.enroll(id, String(turno.id), 'B')),
-      ])
+      if (mismoTurno || data.days.length === 1) {
+        // Un solo turno con todos los días
+        const turno = await shiftsApi.create({
+          days:            data.days,
+          recurrente:      data.recurrente,
+          startTime:       data.startTime,
+          endTime:         data.endTime,
+          cupoMaximoSalaA: Number(data.cupoMaximoSalaA),
+          cupoMaximoSalaB: Number(data.cupoMaximoSalaB),
+          profesorId:      data.profesorId,
+        })
+        await Promise.allSettled([
+          ...data.clientIdsA.map(id => inscripcionesApi.enroll(id, String(turno.id), 'A')),
+          ...data.clientIdsB.map(id => inscripcionesApi.enroll(id, String(turno.id), 'B')),
+        ])
+        queryClient.setQueryData<Shift[]>(QK.shifts.all(), old => [...(old ?? []), turno])
+        created.push({
+          id: String(turno.id),
+          days: data.days,
+          startTime: data.startTime,
+          endTime: data.endTime,
+          profesorNombre: professors.find(p => p.id === data.profesorId)?.name ?? '',
+          cupoSalaA: Number(watchedCupoA),
+          cupoSalaB: Number(watchedCupoB),
+          recurrente: data.recurrente,
+          clientCountA: data.clientIdsA.length,
+          clientCountB: data.clientIdsB.length,
+        })
+      } else {
+        // Un turno separado por cada día
+        const results = await Promise.allSettled(
+          data.days.map(async day => {
+            const turno = await shiftsApi.create({
+              days:            [day],
+              recurrente:      data.recurrente,
+              startTime:       data.startTime,
+              endTime:         data.endTime,
+              cupoMaximoSalaA: Number(data.cupoMaximoSalaA),
+              cupoMaximoSalaB: Number(data.cupoMaximoSalaB),
+              profesorId:      data.profesorId,
+            })
+            await Promise.allSettled([
+              ...data.clientIdsA.map(id => inscripcionesApi.enroll(id, String(turno.id), 'A')),
+              ...data.clientIdsB.map(id => inscripcionesApi.enroll(id, String(turno.id), 'B')),
+            ])
+            queryClient.setQueryData<Shift[]>(QK.shifts.all(), old => [...(old ?? []), turno])
+            return {
+              id: String(turno.id),
+              days: [day] as WeekDay[],
+              startTime: data.startTime,
+              endTime: data.endTime,
+              profesorNombre: professors.find(p => p.id === data.profesorId)?.name ?? '',
+              cupoSalaA: Number(watchedCupoA),
+              cupoSalaB: Number(watchedCupoB),
+              recurrente: data.recurrente,
+              clientCountA: data.clientIdsA.length,
+              clientCountB: data.clientIdsB.length,
+            }
+          })
+        )
+        results.forEach(r => { if (r.status === 'fulfilled') created.push(r.value) })
+      }
 
-      queryClient.setQueryData<import('../types/shift.types').Shift[]>(QK.shifts.all(), old => [...(old ?? []), turno])
       queryClient.invalidateQueries({ queryKey: QK.shifts.all() })
-      addToast('Turno creado exitosamente', 'success')
-      navigate(`/shifts/${turno.id}`)
+
+      if (created.length === 0) { addToast('Error al crear el turno', 'error'); return }
+      setSuccessShifts(created)
+      setShowSuccess(true)
     } catch {
       addToast('Error al crear el turno', 'error')
     } finally {
@@ -258,20 +438,26 @@ export default function ShiftNewPage() {
     }
   }
 
+  const multiDay   = formDays.length >= 2
+  const submitLabel = isSubmitting
+    ? 'Creando...'
+    : multiDay && !mismoTurno
+    ? `Crear ${formDays.length} turnos`
+    : 'Crear turno'
+
   const cardCls = 'rounded-[2rem] border border-white/50 dark:border-white/10 bg-white/30 dark:bg-black/30 backdrop-blur-3xl shadow-[0_8px_32px_rgba(0,0,0,0.04)] dark:shadow-[0_8px_32px_rgba(0,0,0,0.3)]'
 
   return (
     <motion.div {...pageVariants} className="space-y-6 pb-10 relative z-10">
 
-      {/* ── Blob de fondo ── */}
+      {/* Blob */}
       <div className="pointer-events-none fixed inset-0 -z-10 overflow-hidden">
         <div className="absolute -bottom-20 -right-20 w-[480px] h-[480px] rounded-full bg-primary/15 blur-[120px]" />
       </div>
 
-      {/* ── Header ── */}
+      {/* Header */}
       <div className="flex items-center gap-4">
-        <button
-          onClick={() => navigate(ROUTES.SHIFTS)}
+        <button onClick={() => navigate(ROUTES.SHIFTS)}
           className="flex h-10 w-10 items-center justify-center rounded-2xl border border-white/50 dark:border-white/10 bg-white/30 dark:bg-black/30 backdrop-blur-xl text-gray-600 dark:text-gray-300 transition-all hover:scale-105 hover:bg-white/50 dark:hover:bg-black/50"
         >
           <ArrowLeft size={18} />
@@ -282,7 +468,7 @@ export default function ShiftNewPage() {
         </div>
       </div>
 
-      {/* ── Formulario ── */}
+      {/* Form */}
       <form onSubmit={handleSubmit(onSubmit)}>
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
 
@@ -297,11 +483,10 @@ export default function ShiftNewPage() {
                 <p className="text-xs text-gray-500 dark:text-[#8A8A9A]">Días, horario, cupos y profesor</p>
               </div>
             </div>
-
             <div className="border-t border-white/20 dark:border-white/10" />
 
             {/* Días */}
-            <div className="space-y-2">
+            <div className="space-y-3">
               <label className="text-xs font-extrabold uppercase tracking-widest text-gray-500 dark:text-gray-400">
                 Días de la semana *
               </label>
@@ -310,8 +495,7 @@ export default function ShiftNewPage() {
                   const selected = formDays.includes(d)
                   return (
                     <motion.button key={d} type="button"
-                      whileTap={{ scale: 0.94 }}
-                      transition={{ duration: 0.1 }}
+                      whileTap={{ scale: 0.94 }} transition={{ duration: 0.1 }}
                       onClick={() => {
                         if (selected) setValue('days', formDays.filter(x => x !== d), { shouldValidate: true })
                         else setValue('days', [...formDays, d], { shouldValidate: true })
@@ -331,6 +515,36 @@ export default function ShiftNewPage() {
                 <p className="text-xs text-red-500">{(errors.days as { message?: string }).message}</p>
               )}
             </div>
+
+            {/* Toggle "mismo turno" — solo visible con 2+ días */}
+            <AnimatePresence>
+              {multiDay && (
+                <motion.div
+                  initial={{ opacity: 0, y: -6 }}
+                  animate={{ opacity: 1, y: 0, transition: { duration: 0.2, ease: [0.22, 1, 0.36, 1] } }}
+                  exit={{ opacity: 0, y: -4, transition: { duration: 0.15 } }}
+                  className="flex items-center justify-between gap-4 p-4 rounded-2xl border border-white/30 dark:border-white/10 bg-white/40 dark:bg-white/[0.04]"
+                >
+                  <div>
+                    <p className="text-sm font-bold text-gray-900 dark:text-white">
+                      {mismoTurno ? 'Un turno que se repite' : 'Turnos separados por día'}
+                    </p>
+                    <p className="text-xs text-gray-500 dark:text-[#8A8A9A] mt-0.5">
+                      {mismoTurno
+                        ? `Un solo turno en ${formDays.map(d => DAY_LABELS[d]).join(' y ')}`
+                        : `Se crearán ${formDays.length} turnos independientes`}
+                    </p>
+                  </div>
+                  <button type="button" role="switch" aria-checked={mismoTurno}
+                    onClick={() => setMismoTurno(v => !v)}
+                    className="relative shrink-0"
+                  >
+                    <div className={`w-11 h-6 rounded-full transition-colors ${mismoTurno ? 'bg-primary' : 'bg-gray-200 dark:bg-white/10'}`} />
+                    <div className={`absolute top-1 w-4 h-4 bg-white rounded-full shadow transition-transform ${mismoTurno ? 'translate-x-6' : 'translate-x-1'}`} />
+                  </button>
+                </motion.div>
+              )}
+            </AnimatePresence>
 
             {/* Horario */}
             <div className="grid grid-cols-2 gap-4">
@@ -354,14 +568,13 @@ export default function ShiftNewPage() {
               error={errors.profesorId?.message}
               {...register('profesorId')}
             />
-
             {professors.length === 0 && !profsLoading && (
               <p className="text-xs text-amber-600 dark:text-amber-400 bg-amber-500/10 border border-amber-500/20 rounded-xl px-3 py-2">
                 No hay profesores. Creá un usuario con rol Profesor primero.
               </p>
             )}
 
-            {/* Recurrencia */}
+            {/* Recurrente */}
             <label className="flex items-center justify-between gap-4 p-4 rounded-2xl border border-white/30 dark:border-white/10 bg-white/40 dark:bg-white/[0.04] cursor-pointer select-none">
               <div>
                 <p className="text-sm font-bold text-gray-900 dark:text-white">Recurrente semanal</p>
@@ -441,17 +654,14 @@ export default function ShiftNewPage() {
 
         </div>
 
-        {/* ── Acción ── */}
+        {/* Acciones */}
         <div className="flex items-center justify-end gap-3 pt-4">
-          <button
-            type="button"
-            onClick={() => navigate(ROUTES.SHIFTS)}
+          <button type="button" onClick={() => navigate(ROUTES.SHIFTS)}
             className="rounded-2xl border border-white/30 dark:border-white/10 bg-white/40 dark:bg-white/[0.04] px-6 py-3 text-sm font-bold text-gray-600 dark:text-gray-300 hover:bg-white/60 dark:hover:bg-white/10 transition-all"
           >
             Cancelar
           </button>
-          <motion.button
-            type="submit"
+          <motion.button type="submit"
             disabled={isSubmitting}
             whileTap={!isSubmitting ? { scale: 0.97 } : undefined}
             transition={{ duration: 0.1 }}
@@ -460,10 +670,22 @@ export default function ShiftNewPage() {
             {isSubmitting
               ? <span className="h-4 w-4 animate-spin rounded-full border-2 border-gray-900/30 border-t-gray-900" />
               : <ChevronRight size={16} />}
-            {isSubmitting ? 'Creando...' : 'Crear turno'}
+            {submitLabel}
           </motion.button>
         </div>
       </form>
+
+      {/* Modal de éxito */}
+      <AnimatePresence>
+        {showSuccess && (
+          <SuccessModal
+            shifts={successShifts}
+            onGoToShifts={() => navigate(ROUTES.SHIFTS)}
+            onViewShift={id => navigate(`/shifts/${id}`)}
+          />
+        )}
+      </AnimatePresence>
+
     </motion.div>
   )
 }
