@@ -1580,7 +1580,7 @@ export default function ClientProfilePage() {
                 {isAdmin && !eventoForm && (
                   <button
                     onClick={() => { setEditingEvento(null); setEventoForm({ nombre: '', fecha: '', observacion: '' }) }}
-                    className="flex items-center gap-1 text-[11px] font-semibold text-primary hover:text-primary-dark transition-colors"
+                    className="flex items-center gap-1.5 rounded-xl btn-action px-3 py-1.5 text-xs"
                   >
                     <Plus size={11} /> Agregar
                   </button>
@@ -1939,7 +1939,7 @@ export default function ClientProfilePage() {
                         onClick={() => { if (!limiteAlcanzado) setEnrollOpen(true) }}
                         disabled={limiteAlcanzado}
                         title={limiteAlcanzado ? `Límite del plan alcanzado (${planFreq} días/semana)` : undefined}
-                        className={`flex items-center gap-1.5 text-xs font-semibold transition-colors ${limiteAlcanzado ? 'text-gray-500 dark:text-gray-600 cursor-not-allowed opacity-50' : 'text-primary hover:text-primary-dark'}`}
+                        className={`flex items-center gap-1.5 rounded-xl btn-action px-4 py-2.5 text-sm ${limiteAlcanzado ? 'opacity-50 cursor-not-allowed' : ''}`}
                       >
                         <Plus size={13} />
                         Añadir turno
@@ -2088,14 +2088,14 @@ export default function ClientProfilePage() {
                     <CalendarX2 size={11} /> {porRecuperar} a recuperar
                   </span>
                 )}
-                {inscripciones.length > 0 && (
-                  <button
-                    onClick={() => navigate(`/clients/${id}/ausencia?inscripcionId=${inscripciones[0].id}&dias=${inscripciones[0].dias.join(',')}`)}
-                    className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-semibold text-gray-500 dark:text-[#8A8A9A] hover:text-gray-900 dark:hover:text-white hover:bg-gray-100 dark:hover:bg-white/[0.06] border border-transparent hover:border-gray-200 dark:hover:border-white/[0.08] transition-all"
-                  >
-                    <CalendarX2 size={12} /> Registrar ausencia
-                  </button>
-                )}
+                <button
+                  disabled={inscripciones.length === 0}
+                  onClick={() => inscripciones.length > 0 && navigate(`/clients/${id}/ausencia?inscripcionId=${inscripciones[0].id}&dias=${inscripciones[0].dias.join(',')}`)}
+                  title={inscripciones.length === 0 ? 'No disponible porque el cliente no tiene ningún turno asignado' : undefined}
+                  className={`flex items-center gap-1.5 rounded-xl btn-action px-4 py-2.5 text-sm ${inscripciones.length === 0 ? 'opacity-40 cursor-not-allowed saturate-50' : ''}`}
+                >
+                  <CalendarX2 size={12} /> Registrar ausencia
+                </button>
               </div>
             </div>
 
@@ -2907,18 +2907,14 @@ export default function ClientProfilePage() {
                 >
                   <RefreshCw size={14} className={loadingAusencias ? 'animate-spin' : ''} />
                 </button>
-                {inscripciones.length > 0 && (
-                  <button
-                    onClick={() => navigate(`/clients/${id}/ausencia?inscripcionId=${inscripciones[0].id}&dias=${inscripciones[0].dias.join(',')}`)}
-                    className="flex items-center gap-1.5 px-3.5 py-2 rounded-xl
-                      bg-amber-500/10 hover:bg-amber-500/20
-                      text-amber-600 dark:text-amber-400
-                      border border-amber-500/20 hover:border-amber-500/30
-                      text-xs font-bold transition-all active:scale-[0.97]"
-                  >
-                    <CalendarX2 size={12} /> Registrar ausencia
-                  </button>
-                )}
+                <button
+                  disabled={inscripciones.length === 0}
+                  onClick={() => inscripciones.length > 0 && navigate(`/clients/${id}/ausencia?inscripcionId=${inscripciones[0].id}&dias=${inscripciones[0].dias.join(',')}`)}
+                  title={inscripciones.length === 0 ? 'No disponible porque el cliente no tiene ningún turno asignado' : undefined}
+                  className={`flex items-center gap-1.5 rounded-xl btn-action px-4 py-2.5 text-sm ${inscripciones.length === 0 ? 'opacity-40 cursor-not-allowed saturate-50' : ''}`}
+                >
+                  <CalendarX2 size={12} /> Registrar ausencia
+                </button>
               </div>
             </div>
 
