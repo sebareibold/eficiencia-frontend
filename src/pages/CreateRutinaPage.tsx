@@ -275,6 +275,8 @@ type WizardAction =
   | { type: 'UPDATE_EJ_W'; sesionId: string; bloqueId: string; ejId: string; changes: Partial<EjercicioDraft> }
   | { type: 'DELETE_EJ_W'; sesionId: string; bloqueId: string; ejId: string }
   | { type: 'REORDER_SEMANAS_W'; fromId: string; toId: string }
+  | { type: 'REORDER_SESIONES_W'; semanaId: string; fromId: string; toId: string }
+  | { type: 'RENAME_SESIONES_BY_POSITION_W'; semanaId: string }
   | { type: 'UPDATE_BLOQUE_PATRON_W'; bloqueId: string; patron: PatronMovimientoEnum }
 
 function wizardReducer(state: WizardState, action: WizardAction): WizardState {
@@ -635,6 +637,31 @@ function wizardReducer(state: WizardState, action: WizardAction): WizardState {
       const [moved] = semanas.splice(from, 1)
       semanas.splice(to, 0, moved)
       return { ...state, semanasWizard: semanas }
+    }
+
+    case 'REORDER_SESIONES_W': {
+      const semIdx = state.semanasWizard.findIndex(s => s._id === action.semanaId)
+      if (semIdx === -1) return state
+      const sem = state.semanasWizard[semIdx]
+      const from = sem.sesiones.findIndex(s => s._id === action.fromId)
+      const to   = sem.sesiones.findIndex(s => s._id === action.toId)
+      if (from === -1 || to === -1 || from === to) return state
+      const sesiones = [...sem.sesiones]
+      const [moved] = sesiones.splice(from, 1)
+      sesiones.splice(to, 0, moved)
+      const newSemanas = [...state.semanasWizard]
+      newSemanas[semIdx] = { ...sem, sesiones }
+      return { ...state, semanasWizard: newSemanas }
+    }
+
+    case 'RENAME_SESIONES_BY_POSITION_W': {
+      const semIdx = state.semanasWizard.findIndex(s => s._id === action.semanaId)
+      if (semIdx === -1) return state
+      const sem = state.semanasWizard[semIdx]
+      const sesiones = sem.sesiones.map((s, i) => ({ ...s, nombre: `Día ${i + 1}` }))
+      const newSemanas = [...state.semanasWizard]
+      newSemanas[semIdx] = { ...sem, sesiones }
+      return { ...state, semanasWizard: newSemanas }
     }
 
     case 'UPDATE_BLOQUE_PATRON_W':
@@ -2067,6 +2094,10 @@ export default function CreateRutinaPage() {
     const [renameSesionVal, setRenameSesionVal] = useState('')
     const [dragSemanaId, setDragSemanaId] = useState<string | null>(null)
     const [dragOverSemanaId, setDragOverSemanaId] = useState<string | null>(null)
+    const [dragSesionId, setDragSesionId] = useState<string | null>(null)
+    const [dragSesionSemanaId, setDragSesionSemanaId] = useState<string | null>(null)
+    const [dragOverSesionId, setDragOverSesionId] = useState<string | null>(null)
+    const [renameDialogSemanaId, setRenameDialogSemanaId] = useState<string | null>(null)
     const [guiaExpanded, setGuiaExpanded] = useState(false)
 
     return (
@@ -2177,24 +2208,41 @@ export default function CreateRutinaPage() {
             <tbody
               onDragOver={e => {
                 e.preventDefault()
-                if (!dragSemanaId) return
                 let el: Element | null = e.target as Element
                 while (el && el.tagName !== 'TR') el = el.parentElement
-                const sid = (el as HTMLTableRowElement | null)?.dataset.semId
-                if (sid && sid !== dragSemanaId) setDragOverSemanaId(sid)
+                const tr = el as HTMLTableRowElement | null
+                if (dragSemanaId) {
+                  const sid = tr?.dataset.semId
+                  if (sid && sid !== dragSemanaId) setDragOverSemanaId(sid)
+                } else if (dragSesionId) {
+                  const sesId = tr?.dataset.sesId
+                  if (sesId && sesId !== dragSesionId) setDragOverSesionId(sesId)
+                }
               }}
               onDrop={e => {
                 e.preventDefault()
                 let el: Element | null = e.target as Element
                 while (el && el.tagName !== 'TR') el = el.parentElement
-                const sid = (el as HTMLTableRowElement | null)?.dataset.semId
-                if (dragSemanaId && sid && sid !== dragSemanaId) {
-                  dispatch({ type: 'REORDER_SEMANAS_W', fromId: dragSemanaId, toId: sid })
+                const tr = el as HTMLTableRowElement | null
+                if (dragSemanaId) {
+                  const sid = tr?.dataset.semId
+                  if (sid && sid !== dragSemanaId) {
+                    dispatch({ type: 'REORDER_SEMANAS_W', fromId: dragSemanaId, toId: sid })
+                  }
+                  setDragSemanaId(null)
+                  setDragOverSemanaId(null)
+                } else if (dragSesionId && dragSesionSemanaId) {
+                  const sesId = tr?.dataset.sesId
+                  if (sesId && sesId !== dragSesionId) {
+                    dispatch({ type: 'REORDER_SESIONES_W', semanaId: dragSesionSemanaId, fromId: dragSesionId, toId: sesId })
+                    setRenameDialogSemanaId(dragSesionSemanaId)
+                  }
+                  setDragSesionId(null)
+                  setDragSesionSemanaId(null)
+                  setDragOverSesionId(null)
                 }
-                setDragSemanaId(null)
-                setDragOverSemanaId(null)
               }}
-              onDragEnd={() => { setDragSemanaId(null); setDragOverSemanaId(null) }}
+              onDragEnd={() => { setDragSemanaId(null); setDragOverSemanaId(null); setDragSesionId(null); setDragSesionSemanaId(null); setDragOverSesionId(null) }}
             >
               {state.semanasWizard.flatMap((sem, semIdx): React.ReactNode[] => {
                 const semLabel = sem.nombre?.trim() ? sem.nombre : `S${sem.numero}`
@@ -2302,8 +2350,9 @@ export default function CreateRutinaPage() {
                     if (shown) return <td key="dc" className={`w-[110px] ${C}`} />
 
                     const isRenamingSes = renamingSesionId === ses._id
+                    const isDragOverSes = dragOverSesionId === ses._id
                     return (
-                      <td key="dc" className="px-3 py-2.5 w-[110px] align-top">
+                      <td key="dc" className={`px-3 py-2.5 w-[110px] align-top ${isDragOverSes ? 'bg-primary/[0.04]' : ''}`}>
                         <div className="flex flex-col gap-0.5 group/dia">
                           {ses.nombre?.trim() && (
                             <span className="text-[10px] text-gray-500 dark:text-white/40 font-medium whitespace-nowrap">{ses.dia}</span>
@@ -2327,6 +2376,14 @@ export default function CreateRutinaPage() {
                             </form>
                           ) : (
                             <div className="flex items-center gap-1">
+                              <div
+                                draggable
+                                onDragStart={e => { e.stopPropagation(); setDragSesionId(ses._id); setDragSesionSemanaId(sem._id); e.dataTransfer.effectAllowed = 'move' }}
+                                className="cursor-grab active:cursor-grabbing p-0.5 rounded text-gray-300 dark:text-white/25 hover:text-gray-500 dark:hover:text-white/60 transition-colors shrink-0"
+                                title="Arrastrar para reordenar"
+                              >
+                                <GripVertical className="w-2.5 h-2.5" />
+                              </div>
                               <span
                                 className="text-sm text-gray-700 dark:text-white/70 font-semibold whitespace-nowrap cursor-pointer hover:text-primary dark:hover:text-primary transition-colors"
                                 title="Click para personalizar nombre"
@@ -2348,7 +2405,7 @@ export default function CreateRutinaPage() {
 
                   if (ses.bloques.length === 0) {
                     rows.push(
-                      <tr key={`${ses._id}-empty`} data-sem-id={sem._id} className={diaBorder}>
+                      <tr key={`${ses._id}-empty`} data-sem-id={sem._id} data-ses-id={ses._id} className={diaBorder}>
                         {semCell()}{diaCell()}
                         <td colSpan={7} className="px-4 py-2.5">
                           <div className="flex items-center gap-3">
@@ -2417,7 +2474,7 @@ export default function CreateRutinaPage() {
                     if (bl.ejercicios.length === 0) {
                       const bt = sesIdx === 0 && blqIdx === 0 ? diaBorder : blBorder
                       rows.push(
-                        <tr key={`${bl._id}-empty`} data-sem-id={sem._id} className={bt}>
+                        <tr key={`${bl._id}-empty`} data-sem-id={sem._id} data-ses-id={ses._id} className={bt}>
                           {semCell()}{diaCell()}{blCell()}
                           <td colSpan={6} className="px-4 py-2">
                             <button onClick={() => dispatch({ type: 'ADD_EJ_W', bloqueId: bl._id, nombre: '' })} className="flex items-center gap-1.5 text-xs text-gray-400 dark:text-white/40 hover:text-primary transition-colors py-0.5">
@@ -2442,7 +2499,7 @@ export default function CreateRutinaPage() {
 
                       rows.push(
                         <Fragment key={ej._id}>
-                          <tr data-sem-id={sem._id} className={`transition-colors ${isEditing ? 'bg-primary/[0.02] ring-1 ring-inset ring-primary/10' : 'group/ejrow hover:bg-white/[0.03]'} ${bt}`}>
+                          <tr data-sem-id={sem._id} data-ses-id={ses._id} className={`transition-colors ${isEditing ? 'bg-primary/[0.02] ring-1 ring-inset ring-primary/10' : 'group/ejrow hover:bg-white/[0.03]'} ${bt}`}>
                             {semCell()}{diaCell()}{blCell()}
 
                             {isEditing ? (
@@ -2644,6 +2701,36 @@ export default function CreateRutinaPage() {
             </tbody>
           </table>
         </div>
+
+        {/* Dialog renombrado días post-reorder */}
+        <AnimatePresence>
+          {renameDialogSemanaId && (
+            <motion.div
+              initial={{ opacity: 0, y: -4 }}
+              animate={{ opacity: 1, y: 0 }}
+              exit={{ opacity: 0, y: -4 }}
+              className="mx-4 mb-3 flex items-center gap-2 flex-wrap bg-primary/10 border border-primary/20 rounded-xl px-3 py-2"
+            >
+              <span className="text-[11px] text-gray-600 dark:text-white/60 flex-1 min-w-[160px]">
+                ¿Renombrar los días automáticamente? <span className="text-gray-400 dark:text-white/35">(Día 1, Día 2…)</span>
+              </span>
+              <div className="flex items-center gap-1.5 shrink-0">
+                <button
+                  onClick={() => { dispatch({ type: 'RENAME_SESIONES_BY_POSITION_W', semanaId: renameDialogSemanaId }); setRenameDialogSemanaId(null) }}
+                  className="px-2.5 py-1 rounded-lg bg-primary/15 text-primary text-[11px] font-semibold hover:bg-primary/25 transition-colors"
+                >
+                  Sí, renombrar
+                </button>
+                <button
+                  onClick={() => setRenameDialogSemanaId(null)}
+                  className="px-2.5 py-1 rounded-lg border border-white/[0.1] text-[11px] text-gray-400 dark:text-white/40 hover:text-gray-900 dark:hover:text-white transition-colors"
+                >
+                  No, manual
+                </button>
+              </div>
+            </motion.div>
+          )}
+        </AnimatePresence>
       </div>
       </div>
     )

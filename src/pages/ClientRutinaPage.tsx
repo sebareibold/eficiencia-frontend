@@ -926,16 +926,22 @@ interface SemanaTreeItemProps {
   onCloneSemana: (id: string) => void
   onRenameSemana: (id: string, nombre: string) => void
   onUpdateObs: (id: string, obs: string) => void
+  onReorderSesiones: (semanaId: string, fromId: string, toId: string) => void
+  onRenameSesionesByPosition: (semanaId: string) => void
 }
 
 function SemanaTreeItem({
   semana, isLast, selectedSesionId, onSelectSesion,
   onAddSesion, onDeleteSesion, onDeleteSemana, onCloneSemana, onRenameSemana, onUpdateObs,
+  onReorderSesiones, onRenameSesionesByPosition,
 }: SemanaTreeItemProps) {
   const [renaming, setRenaming] = useState(false)
   const [renameVal, setRenameVal] = useState(semana.nombre ?? '')
   const [showDayDropdown, setShowDayDropdown] = useState(false)
   const [confirmDelete, setConfirmDelete] = useState(false)
+  const [dragSesionId, setDragSesionId] = useState<string | null>(null)
+  const [dragOverSesionId, setDragOverSesionId] = useState<string | null>(null)
+  const [showRenameDialog, setShowRenameDialog] = useState(false)
 
   const label = semana.nombre?.trim() ? semana.nombre : `S${semana.numero}`
 
@@ -1016,37 +1022,88 @@ function SemanaTreeItem({
         {semana.sesiones.length === 0 ? (
           <p className="text-[11px] text-gray-300 dark:text-white/25 py-1">Sin días — agregá uno</p>
         ) : (
-          <div className="flex items-center gap-2 flex-wrap py-1">
-            {semana.sesiones.map(ses => {
-              const isSelected = selectedSesionId === ses.id
-              return (
-                <div key={ses.id} className="relative flex items-center group/day">
-                  {/* Conector horizontal desde la línea al día */}
-                  <div className="absolute -left-5 top-1/2 w-4 h-px bg-white/[0.07]" />
-                  <button
-                    onClick={() => onSelectSesion(ses.id)}
-                    className={`flex items-center gap-1.5 px-3 py-1.5 rounded-xl border text-xs font-semibold transition-all ${
-                      isSelected
-                        ? 'bg-primary/15 border-primary/40 text-primary'
-                        : 'bg-gray-50 dark:bg-white/[0.03] border-saas-border dark:border-white/[0.08] text-gray-500 dark:text-white/55 hover:bg-gray-100 dark:hover:bg-white/[0.07] hover:text-gray-900 dark:hover:text-white hover:border-gray-300 dark:hover:border-white/[0.2]'
-                    }`}
+          <>
+            <div className="flex items-center gap-2 flex-wrap py-1">
+              {semana.sesiones.map(ses => {
+                const isSelected = selectedSesionId === ses.id
+                const isDragOver = dragOverSesionId === ses.id
+                return (
+                  <div
+                    key={ses.id}
+                    className="relative flex items-center group/day"
+                    draggable
+                    onDragStart={e => { e.stopPropagation(); setDragSesionId(ses.id); e.dataTransfer.effectAllowed = 'move' }}
+                    onDragOver={e => { e.preventDefault(); if (dragSesionId && ses.id !== dragSesionId) setDragOverSesionId(ses.id) }}
+                    onDrop={e => {
+                      e.preventDefault()
+                      if (dragSesionId && ses.id !== dragSesionId) {
+                        onReorderSesiones(semana.id, dragSesionId, ses.id)
+                        setShowRenameDialog(true)
+                      }
+                      setDragSesionId(null)
+                      setDragOverSesionId(null)
+                    }}
+                    onDragEnd={() => { setDragSesionId(null); setDragOverSesionId(null) }}
                   >
-                    <span className="text-[10px] font-bold tracking-wider">{DIA_SHORT[ses.dia] ?? ses.dia.slice(0, 3).toUpperCase()}</span>
-                    <span className="font-normal opacity-70">{ses.nombre?.trim() ? ses.nombre : ses.dia}</span>
-                    <span className={`ml-1 text-[10px] ${isSelected ? 'text-primary/70' : 'text-gray-400 dark:text-white/30'}`}>
-                      {ses.bloques.reduce((a, b) => a + b.ejerciciosPlan.length, 0)} ej.
-                    </span>
-                  </button>
-                  <button
-                    onClick={() => onDeleteSesion(semana.id, ses.id)}
-                    className="ml-0.5 p-1 rounded-lg text-gray-200 dark:text-white/15 hover:text-red-400 transition-colors opacity-0 group-hover/day:opacity-100"
-                  >
-                    <X className="w-2.5 h-2.5" />
-                  </button>
-                </div>
-              )
-            })}
-          </div>
+                    {/* Conector horizontal desde la línea al día */}
+                    <div className="absolute -left-5 top-1/2 w-4 h-px bg-white/[0.07]" />
+                    <div className={`flex items-center gap-1.5 rounded-xl border transition-all ${isDragOver ? 'scale-105 border-primary/50 bg-primary/10' : ''}`}>
+                      <GripVertical className="w-2.5 h-2.5 text-gray-300 dark:text-white/20 cursor-grab active:cursor-grabbing ml-1 shrink-0" />
+                      <button
+                        onClick={() => onSelectSesion(ses.id)}
+                        className={`flex items-center gap-1.5 px-2 py-1.5 rounded-xl text-xs font-semibold transition-all ${
+                          isSelected
+                            ? 'bg-primary/15 text-primary'
+                            : 'bg-gray-50 dark:bg-white/[0.03] text-gray-500 dark:text-white/55 hover:bg-gray-100 dark:hover:bg-white/[0.07] hover:text-gray-900 dark:hover:text-white'
+                        }`}
+                      >
+                        <span className="text-[10px] font-bold tracking-wider">{DIA_SHORT[ses.dia] ?? ses.dia.slice(0, 3).toUpperCase()}</span>
+                        <span className="font-normal opacity-70">{ses.nombre?.trim() ? ses.nombre : ses.dia}</span>
+                        <span className={`ml-1 text-[10px] ${isSelected ? 'text-primary/70' : 'text-gray-400 dark:text-white/30'}`}>
+                          {ses.bloques.reduce((a, b) => a + b.ejerciciosPlan.length, 0)} ej.
+                        </span>
+                      </button>
+                    </div>
+                    <button
+                      onClick={() => onDeleteSesion(semana.id, ses.id)}
+                      className="ml-0.5 p-1 rounded-lg text-gray-200 dark:text-white/15 hover:text-red-400 transition-colors opacity-0 group-hover/day:opacity-100"
+                    >
+                      <X className="w-2.5 h-2.5" />
+                    </button>
+                  </div>
+                )
+              })}
+            </div>
+            {/* Dialog post-reorder */}
+            <AnimatePresence>
+              {showRenameDialog && (
+                <motion.div
+                  initial={{ opacity: 0, y: -4 }}
+                  animate={{ opacity: 1, y: 0 }}
+                  exit={{ opacity: 0, y: -4 }}
+                  className="mt-1.5 flex items-center gap-2 flex-wrap bg-primary/10 border border-primary/20 rounded-xl px-3 py-2"
+                >
+                  <span className="text-[11px] text-gray-600 dark:text-white/60 flex-1 min-w-[160px]">
+                    ¿Renombrar los días automáticamente? <span className="text-gray-400 dark:text-white/35">(Día 1, Día 2…)</span>
+                  </span>
+                  <div className="flex items-center gap-1.5 shrink-0">
+                    <button
+                      onClick={() => { onRenameSesionesByPosition(semana.id); setShowRenameDialog(false) }}
+                      className="px-2.5 py-1 rounded-lg bg-primary/15 text-primary text-[11px] font-semibold hover:bg-primary/25 transition-colors"
+                    >
+                      Sí, renombrar
+                    </button>
+                    <button
+                      onClick={() => setShowRenameDialog(false)}
+                      className="px-2.5 py-1 rounded-lg border border-saas-border dark:border-white/[0.08] text-[11px] text-gray-400 dark:text-white/40 hover:text-gray-900 dark:hover:text-white transition-colors"
+                    >
+                      No, manual
+                    </button>
+                  </div>
+                </motion.div>
+              )}
+            </AnimatePresence>
+          </>
         )}
 
         {/* Botón agregar día */}
@@ -1086,7 +1143,7 @@ interface EditCardProps {
 
 function EditCard({ clienteId: _clienteId, rutina, onCancel, onSaved }: EditCardProps) {
   const draft_ = useRutinaDraft()
-  const { draft, hasChanges, saving, initDraft, saveDraft, setMeta, addSemana, cloneSemana, deleteSemana, renameSemana, updateSemanaObs, addSesion, deleteSesion, addBloque, deleteBloque, addEjercicio, updateEjercicio, deleteEjercicio } = draft_
+  const { draft, hasChanges, saving, initDraft, saveDraft, setMeta, addSemana, cloneSemana, deleteSemana, renameSemana, updateSemanaObs, addSesion, deleteSesion, reorderSesiones, renameSesionesByPosition, addBloque, deleteBloque, addEjercicio, updateEjercicio, deleteEjercicio } = draft_
 
   const [selectedSesionId, setSelectedSesionId] = useState<string | null>(null)
   const [addingBloqueId, setAddingBloqueId] = useState<string | null>(null)
@@ -1259,6 +1316,8 @@ function EditCard({ clienteId: _clienteId, rutina, onCancel, onSaved }: EditCard
                   onCloneSemana={cloneSemana}
                   onRenameSemana={renameSemana}
                   onUpdateObs={updateSemanaObs}
+                  onReorderSesiones={reorderSesiones}
+                  onRenameSesionesByPosition={renameSesionesByPosition}
                 />
               ))}
             </div>

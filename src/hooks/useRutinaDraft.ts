@@ -94,6 +94,8 @@ type Action =
   | { type: 'DELETE_EJERCICIO'; ejercicioId: string }
   | { type: 'UPDATE_BLOQUE_PATRON'; bloqueId: string; patron: string }
   | { type: 'REORDER_SEMANAS'; fromId: string; toId: string }
+  | { type: 'REORDER_SESIONES'; semanaId: string; fromId: string; toId: string }
+  | { type: 'RENAME_SESIONES_BY_POSITION'; semanaId: string }
 
 // ─── Helpers de conversión ────────────────────────────────────────────────────
 
@@ -353,6 +355,31 @@ function reducer(state: DraftState, action: Action): DraftState {
       return save({ ...d, semanas })
     }
 
+    case 'REORDER_SESIONES': {
+      const semIdx = d.semanas.findIndex(s => s.id === action.semanaId)
+      if (semIdx === -1) return state
+      const semana = d.semanas[semIdx]
+      const from = semana.sesiones.findIndex(s => s.id === action.fromId)
+      const to   = semana.sesiones.findIndex(s => s.id === action.toId)
+      if (from === -1 || to === -1 || from === to) return state
+      const sesiones = [...semana.sesiones]
+      const [moved] = sesiones.splice(from, 1)
+      sesiones.splice(to, 0, moved)
+      const newSemanas = [...d.semanas]
+      newSemanas[semIdx] = { ...semana, sesiones }
+      return save({ ...d, semanas: newSemanas })
+    }
+
+    case 'RENAME_SESIONES_BY_POSITION': {
+      const semIdx = d.semanas.findIndex(s => s.id === action.semanaId)
+      if (semIdx === -1) return state
+      const semana = d.semanas[semIdx]
+      const sesiones = semana.sesiones.map((s, i) => ({ ...s, nombre: `Día ${i + 1}` }))
+      const newSemanas = [...d.semanas]
+      newSemanas[semIdx] = { ...semana, sesiones }
+      return save({ ...d, semanas: newSemanas })
+    }
+
     default:
       return state
   }
@@ -570,5 +597,9 @@ export function useRutinaDraft() {
       dispatch({ type: 'UPDATE_BLOQUE_PATRON', bloqueId, patron }),
     reorderSemanas: (fromId: string, toId: string) =>
       dispatch({ type: 'REORDER_SEMANAS', fromId, toId }),
+    reorderSesiones: (semanaId: string, fromId: string, toId: string) =>
+      dispatch({ type: 'REORDER_SESIONES', semanaId, fromId, toId }),
+    renameSesionesByPosition: (semanaId: string) =>
+      dispatch({ type: 'RENAME_SESIONES_BY_POSITION', semanaId }),
   }
 }
