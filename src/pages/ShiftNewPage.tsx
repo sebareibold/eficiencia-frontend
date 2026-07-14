@@ -165,7 +165,7 @@ export default function ShiftNewPage() {
   const [params]      = useSearchParams()
   const addToast      = useUiStore(s => s.addToast)
   const queryClient   = useQueryClient()
-  const { clients }   = useClients()
+  const { clients }   = useClients({ limit: 1000, estado: 'active' })
 
   const [isSubmitting, setIsSubmitting] = useState(false)
   const [professors,   setProfessors]   = useState<{ id: string; name: string }[]>([])
