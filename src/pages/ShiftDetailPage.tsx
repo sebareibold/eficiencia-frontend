@@ -34,6 +34,7 @@ import { useClients } from '../hooks/useClients'
 import { useShifts } from '../hooks/useShifts'
 import { useUiStore } from '../store/uiStore'
 import { useAuthStore } from '../store/authStore'
+import { usePermissions } from '../hooks/usePermissions'
 import Button from '../components/ui/Button'
 import Input from '../components/ui/Input'
 import Select from '../components/ui/Select'
@@ -101,6 +102,7 @@ export default function ShiftDetailPage() {
   const user = useAuthStore(s => s.user)
   const queryClient = useQueryClient()
   const isAdmin = user?.role === 'admin'
+  const { can } = usePermissions()
 
   // Traer lista primero para poder inicializar el estado desde cache
   const { shifts } = useShifts()
@@ -936,7 +938,7 @@ export default function ShiftDetailPage() {
                         Prof. {shift.profesorNombre || '—'}
                       </p>
                     </div>
-                    {isAdmin && (
+                    {can('shifts', 'update') && (
                       <button
                         onClick={() => setIsEditingShift(true)}
                         className="flex items-center gap-1.5 text-xs font-semibold px-3 py-1.5 rounded-xl border border-gray-200 dark:border-white/[0.1] bg-white/70 dark:bg-white/[0.04] text-gray-700 dark:text-gray-300 hover:bg-white dark:hover:bg-white/[0.09] transition-all"
@@ -1497,12 +1499,14 @@ export default function ShiftDetailPage() {
                   <p className="text-sm font-semibold text-gray-900 dark:text-white">
                     {localInscripciones.length === 0 ? 'Sin inscriptos activos' : `${localInscripciones.length} inscripto${localInscripciones.length !== 1 ? 's' : ''}`}
                   </p>
-                  <button
-                    onClick={() => { setAddClientMode(m => !m); setAddClientSearch(''); setAddClientId(''); setClientSearchResults([]) }}
-                    className="flex items-center gap-1.5 rounded-xl bg-primary/10 px-3 py-1.5 text-xs font-semibold text-primary hover:bg-primary/20 transition-all"
-                  >
-                    <UserPlus size={13} /> Agregar cliente
-                  </button>
+                  {can('shifts', 'create') && (
+                    <button
+                      onClick={() => { setAddClientMode(m => !m); setAddClientSearch(''); setAddClientId(''); setClientSearchResults([]) }}
+                      className="flex items-center gap-1.5 rounded-xl bg-primary/10 px-3 py-1.5 text-xs font-semibold text-primary hover:bg-primary/20 transition-all"
+                    >
+                      <UserPlus size={13} /> Agregar cliente
+                    </button>
+                  )}
                 </div>
 
                 {/* Panel agregar cliente */}
@@ -1631,6 +1635,8 @@ export default function ShiftDetailPage() {
                             isPending={pendingChanges.has(insc.id)}
                             isDragging={draggingId === insc.id}
                             bajandoId={bajandoId}
+                            canWrite={can('shifts', 'update')}
+                            canDelete={can('shifts', 'delete')}
                             onDarDeBaja={handleDarDeBaja}
                             onDragStart={handleDragStart}
                           />
@@ -1672,6 +1678,8 @@ export default function ShiftDetailPage() {
                             isPending={pendingChanges.has(insc.id)}
                             isDragging={draggingId === insc.id}
                             bajandoId={bajandoId}
+                            canWrite={can('shifts', 'update')}
+                            canDelete={can('shifts', 'delete')}
                             onDarDeBaja={handleDarDeBaja}
                             onDragStart={handleDragStart}
                           />
@@ -1861,12 +1869,14 @@ export default function ShiftDetailPage() {
                 <p className="text-sm font-semibold text-gray-900 dark:text-white">
                   {esperaEntries.length === 0 ? 'Lista de espera vacía' : `${esperaEntries.length} entrada${esperaEntries.length !== 1 ? 's' : ''}`}
                 </p>
-                <button
-                  onClick={() => { setAddEsperaMode(m => { if (!m) setAddEsperaTipo(esperaTipoTab === 'TODOS' ? 'INTERNA' : esperaTipoTab); return !m }); setAddEsperaClientSearch(''); setAddEsperaClientId(''); setAddExternoNombre(''); setAddExternoApellido(''); setAddExternoWhatsapp('') }}
-                  className="flex items-center gap-1.5 rounded-xl bg-primary/25 px-3 py-1.5 text-xs font-semibold text-amber-700 dark:text-primary hover:bg-primary/40 transition-all"
-                >
-                  <ListPlus size={13} /> {addEsperaMode ? 'Cancelar' : 'Agregar a lista'}
-                </button>
+                {can('shifts', 'create') && (
+                  <button
+                    onClick={() => { setAddEsperaMode(m => { if (!m) setAddEsperaTipo(esperaTipoTab === 'TODOS' ? 'INTERNA' : esperaTipoTab); return !m }); setAddEsperaClientSearch(''); setAddEsperaClientId(''); setAddExternoNombre(''); setAddExternoApellido(''); setAddExternoWhatsapp('') }}
+                    className="flex items-center gap-1.5 rounded-xl bg-primary/25 px-3 py-1.5 text-xs font-semibold text-amber-700 dark:text-primary hover:bg-primary/40 transition-all"
+                  >
+                    <ListPlus size={13} /> {addEsperaMode ? 'Cancelar' : 'Agregar a lista'}
+                  </button>
+                )}
               </div>
 
               {/* Layout dos columnas cuando el panel está abierto */}
@@ -1983,7 +1993,7 @@ export default function ShiftDetailPage() {
                                       {entry.whatsappExterno}
                                     </a>
                                   )}
-                                  {entry.estado === 'NOTIFICADO' && (<>
+                                  {can('shifts', 'update') && entry.estado === 'NOTIFICADO' && (<>
                                     <button disabled={isActioning} onClick={() => handleEsperaAction(entry.id, 'aceptar')}
                                       className="flex items-center gap-1 rounded-lg bg-green-500/10 px-2 py-1 text-xs font-semibold text-green-400 hover:bg-green-500/20 transition-all disabled:opacity-50">
                                       <Check size={11} /> Aceptó
@@ -1993,24 +2003,28 @@ export default function ShiftDetailPage() {
                                       <X size={11} /> Rechazó
                                     </button>
                                   </>)}
-                                  <div className="ml-auto flex items-center gap-1">
-                                    {entry.estado === 'PENDIENTE' && (
-                                      <button disabled={isActioning} onClick={() => handleEsperaAction(entry.id, 'notificar')}
-                                        className="flex h-6 w-6 items-center justify-center rounded-lg bg-primary/10 text-amber-700 dark:text-primary hover:bg-primary/20 transition-all disabled:opacity-50">
-                                        <Bell size={11} />
-                                      </button>
-                                    )}
-                                    {!entry.clienteId && (
-                                      <button disabled={isActioning} onClick={() => startEditEspera(entry)}
-                                        className="flex h-6 w-6 items-center justify-center rounded-lg bg-gray-100 dark:bg-white/[0.06] text-gray-500 dark:text-[#8A8A9A] hover:bg-gray-200 dark:hover:bg-white/10 transition-all disabled:opacity-50">
-                                        <Pencil size={11} />
-                                      </button>
-                                    )}
-                                    <button disabled={isActioning} onClick={() => handleEsperaAction(entry.id, 'eliminar')}
-                                      className="flex h-6 w-6 items-center justify-center rounded-lg bg-red-500/10 text-red-400 hover:bg-red-500/20 transition-all disabled:opacity-50">
-                                      <Trash2 size={11} />
-                                    </button>
-                                  </div>
+                                  {(can('shifts', 'update') || can('shifts', 'delete')) && (
+                                    <div className="ml-auto flex items-center gap-1">
+                                      {can('shifts', 'update') && entry.estado === 'PENDIENTE' && (
+                                        <button disabled={isActioning} onClick={() => handleEsperaAction(entry.id, 'notificar')}
+                                          className="flex h-6 w-6 items-center justify-center rounded-lg bg-primary/10 text-amber-700 dark:text-primary hover:bg-primary/20 transition-all disabled:opacity-50">
+                                          <Bell size={11} />
+                                        </button>
+                                      )}
+                                      {can('shifts', 'update') && !entry.clienteId && (
+                                        <button disabled={isActioning} onClick={() => startEditEspera(entry)}
+                                          className="flex h-6 w-6 items-center justify-center rounded-lg bg-gray-100 dark:bg-white/[0.06] text-gray-500 dark:text-[#8A8A9A] hover:bg-gray-200 dark:hover:bg-white/10 transition-all disabled:opacity-50">
+                                          <Pencil size={11} />
+                                        </button>
+                                      )}
+                                      {can('shifts', 'delete') && (
+                                        <button disabled={isActioning} onClick={() => handleEsperaAction(entry.id, 'eliminar')}
+                                          className="flex h-6 w-6 items-center justify-center rounded-lg bg-red-500/10 text-red-400 hover:bg-red-500/20 transition-all disabled:opacity-50">
+                                          <Trash2 size={11} />
+                                        </button>
+                                      )}
+                                    </div>
+                                  )}
                                 </div>
                               </>)}
                             </motion.div>
@@ -2290,12 +2304,14 @@ function ConAvisoRowCard({ entry, onUndo }: { entry: AttendanceEntry; onUndo: ()
 }
 
 function DraggableCard({
-  insc, isPending, isDragging, bajandoId, onDarDeBaja, onDragStart,
+  insc, isPending, isDragging, bajandoId, canWrite, canDelete, onDarDeBaja, onDragStart,
 }: {
   insc: InscripcionEntry
   isPending: boolean
   isDragging: boolean
   bajandoId: string | null
+  canWrite: boolean   // can('shifts', 'update') — habilita drag y cambio de sala
+  canDelete: boolean  // can('shifts', 'delete') — habilita dar de baja
   onDarDeBaja: (id: string, sala: 'A' | 'B') => void
   onDragStart: (e: React.DragEvent, id: string) => void
 }) {
@@ -2304,15 +2320,17 @@ function DraggableCard({
       layout
       initial={{ opacity: 0, scale: 0.97 }}
       animate={{ opacity: isDragging ? 0.4 : 1, scale: 1 }}
-      draggable
-      onDragStart={e => onDragStart(e, insc.id)}
-      className={`flex items-center gap-2 rounded-xl border px-3 py-2.5 cursor-grab active:cursor-grabbing select-none backdrop-blur-xl transition-colors ${
+      draggable={canWrite}
+      onDragStart={canWrite ? e => onDragStart(e, insc.id) : undefined}
+      className={`flex items-center gap-2 rounded-xl border px-3 py-2.5 select-none backdrop-blur-xl transition-colors ${
+        canWrite ? 'cursor-grab active:cursor-grabbing' : 'cursor-default'
+      } ${
         isPending
           ? 'border-primary/30 bg-primary/10 dark:bg-primary/[0.08]'
           : 'border-white/50 dark:border-white/[0.08] bg-white/30 dark:bg-white/[0.05] hover:bg-white/50 dark:hover:bg-white/[0.09]'
       }`}
     >
-      <GripVertical size={13} className="text-[#8A8A9A]/60 shrink-0" />
+      {canWrite && <GripVertical size={13} className="text-[#8A8A9A]/60 shrink-0" />}
       <div className="flex-1 min-w-0">
         <div className="flex items-center gap-2">
           <p className="text-sm font-semibold text-gray-900 dark:text-white truncate">{insc.clienteNombre}</p>
@@ -2323,13 +2341,15 @@ function DraggableCard({
           )}
         </div>
       </div>
-      <button
-        disabled={bajandoId === insc.id}
-        onClick={e => { e.stopPropagation(); onDarDeBaja(insc.id, insc.sala) }}
-        className="flex items-center gap-1 rounded-lg bg-red-500/10 px-2 py-1.5 text-xs font-semibold text-red-400 hover:bg-red-500/20 transition-all disabled:opacity-50 shrink-0"
-      >
-        {bajandoId === insc.id ? '…' : <><X size={11} /> Dar de baja</>}
-      </button>
+      {canDelete && (
+        <button
+          disabled={bajandoId === insc.id}
+          onClick={e => { e.stopPropagation(); onDarDeBaja(insc.id, insc.sala) }}
+          className="flex items-center gap-1 rounded-lg bg-red-500/10 px-2 py-1.5 text-xs font-semibold text-red-400 hover:bg-red-500/20 transition-all disabled:opacity-50 shrink-0"
+        >
+          {bajandoId === insc.id ? '…' : <><X size={11} /> Dar de baja</>}
+        </button>
+      )}
     </motion.div>
   )
 }
