@@ -84,18 +84,18 @@ export const backdropVariants = {
 
 /** Modal panel */
 export const modalVariants = {
-  initial: { opacity: 0, scale: 0.96, y: 12 },
+  initial: { opacity: 0, scale: 0.94, y: 20 },
   animate: {
     opacity: 1,
     scale: 1,
     y: 0,
-    transition: { duration: duration.base, ease: ease.spring },
+    transition: { duration: 0.32, ease: [0.22, 1, 0.36, 1] },
   },
   exit: {
     opacity: 0,
     scale: 0.97,
-    y: 8,
-    transition: { duration: duration.fast, ease: ease.inOut },
+    y: 10,
+    transition: { duration: duration.fast, ease: [0.4, 0, 1, 1] },
   },
 }
 

@@ -548,6 +548,9 @@ export default function ClientProfilePage() {
   const [enrollOpen, setEnrollOpen] = useState(false)
   const [allShifts, setAllShifts] = useState<Shift[]>([])
   const [loadingShifts, setLoadingShifts] = useState(false)
+  const [filterDia, setFilterDia] = useState<string | null>(null)
+  const [filterHorario, setFilterHorario] = useState<string | null>(null)
+  const [filterProfesor, setFilterProfesor] = useState<string | null>(null)
   const [enrollingId, setEnrollingId] = useState<string | null>(null)
 
   // Reposiciones
@@ -660,7 +663,12 @@ export default function ClientProfilePage() {
   }, [id, turnosLoaded])
 
   useEffect(() => {
-    if (!enrollOpen) return
+    if (!enrollOpen) {
+      setFilterDia(null)
+      setFilterHorario(null)
+      setFilterProfesor(null)
+      return
+    }
     setLoadingShifts(true)
     shiftsApi.getAll()
       .then(shifts => setAllShifts(shifts))
@@ -3214,7 +3222,7 @@ export default function ClientProfilePage() {
       </Modal>
 
       {/* ── MODAL AÑADIR TURNO ─────────────────────────────────────────────── */}
-      <Modal isOpen={enrollOpen} onClose={() => setEnrollOpen(false)} title="Añadir turno" size="md">
+      <Modal isOpen={enrollOpen} onClose={() => setEnrollOpen(false)} title="Añadir turno" size="3xl" noScroll>
         {(() => {
           const totalDiasUsados = inscripciones.reduce((acc, i) => acc + i.dias.length, 0)
           const planFreq = client.planFrequency ? Number(client.planFrequency) : null
@@ -3230,92 +3238,257 @@ export default function ClientProfilePage() {
               </p>
             </div>
           )
-          return loadingShifts ? (
-            <div className="space-y-2">
-              {[1, 2, 3].map(i => (
-                <div key={i} className="h-16 rounded-2xl animate-pulse bg-gray-200/80 dark:bg-white/[0.07]" />
-              ))}
-            </div>
-          ) : (() => {
-            const enrolledIds = new Set(inscripciones.map(i => i.turnoId))
-            const diasDisponibles = planFreq !== null ? planFreq - totalDiasUsados : Infinity
-            const notEnrolled = allShifts.filter(s => !enrolledIds.has(String(s.id)))
-            const available = notEnrolled.filter(s => s.days.length <= diasDisponibles)
-            const exceden = planFreq !== null ? notEnrolled.filter(s => s.days.length > diasDisponibles) : []
-            return notEnrolled.length === 0 ? (
-              <p className="text-sm text-center text-gray-500 dark:text-[#8A8A9A] py-8">
-                El cliente ya está inscripto en todos los turnos disponibles.
-              </p>
-            ) : (
-              <div className="space-y-2 max-h-80 overflow-y-auto pr-1">
-                {available.map(shift => (
-                  <div key={shift.id} className="rounded-2xl border border-gray-200 dark:border-white/[0.06] bg-white/40 dark:bg-white/[0.02] p-4 space-y-3">
-                    <div className="flex items-center justify-between gap-2">
-                      <div>
-                        <p className="text-sm font-bold text-gray-900 dark:text-white">
-                          {shift.startTime} – {shift.endTime}
-                        </p>
-                        <p className="text-xs text-gray-500 dark:text-[#8A8A9A] mt-0.5">
-                          {shift.days.map(d => WEEKDAY_SHORT[d] ?? d).join(' · ')}
+
+          const enrolledIds = new Set(inscripciones.map(i => i.turnoId))
+          const diasDisponibles = planFreq !== null ? planFreq - totalDiasUsados : Infinity
+          const notEnrolled = allShifts.filter(s => !enrolledIds.has(String(s.id)))
+
+          // Profesores únicos para el filtro
+          const profesores = Array.from(new Set(
+            notEnrolled.map(s => s.profesorNombre).filter((p): p is string => !!p)
+          )).sort()
+
+          // Aplicar filtros
+          const filtered = notEnrolled.filter(s => {
+            if (filterDia && !s.days.includes(filterDia as WeekDay)) return false
+            if (filterProfesor && s.profesorNombre !== filterProfesor) return false
+            if (filterHorario) {
+              const h = parseInt(s.startTime.split(':')[0], 10)
+              if (filterHorario === 'mañana' && h >= 12) return false
+              if (filterHorario === 'tarde' && (h < 12 || h >= 18)) return false
+              if (filterHorario === 'noche' && h < 18) return false
+            }
+            return true
+          })
+
+          const available = filtered.filter(s => s.days.length <= diasDisponibles)
+          const exceden = planFreq !== null ? filtered.filter(s => s.days.length > diasDisponibles) : []
+
+          const DIAS_SEMANA: { key: WeekDay; label: string }[] = [
+            { key: 'monday', label: 'Lun' }, { key: 'tuesday', label: 'Mar' },
+            { key: 'wednesday', label: 'Mié' }, { key: 'thursday', label: 'Jue' },
+            { key: 'friday', label: 'Vie' }, { key: 'saturday', label: 'Sáb' },
+          ]
+          const HORARIOS = [
+            { key: 'mañana', label: 'Mañana', sub: 'antes de 12 h' },
+            { key: 'tarde',  label: 'Tarde',  sub: '12 – 18 h' },
+            { key: 'noche',  label: 'Noche',  sub: 'después de 18 h' },
+          ]
+
+          const filterBtn = (active: boolean) =>
+            `px-2.5 py-1.5 rounded-xl text-[11px] font-semibold transition-all border ${active
+              ? 'bg-primary/15 border-primary/40 text-primary'
+              : 'border-gray-200 dark:border-white/[0.08] text-gray-500 dark:text-white/50 hover:border-gray-300 dark:hover:border-white/20 hover:text-gray-700 dark:hover:text-white/70'}`
+
+          const hayFiltros = filterDia || filterHorario || filterProfesor
+
+          return (
+            <div className="flex gap-0 min-h-0 flex-1 relative h-[680px]">
+              {/* Blobs decorativos — cubren todo el modal */}
+              <div className="pointer-events-none absolute -inset-6 -z-10">
+                <div className="absolute -top-10 -left-10 w-80 h-80 rounded-full bg-primary/25 blur-[100px]" />
+                <div className="absolute -bottom-10 -right-10 w-72 h-72 rounded-full bg-blue-500/20 blur-[100px]" />
+                <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-60 h-60 rounded-full bg-primary/10 blur-[80px]" />
+              </div>
+
+              {/* ── 2/3 Grilla de turnos ── */}
+              <div className="flex-[2] min-w-0 overflow-y-auto pr-4 border-r border-white/10 dark:border-white/[0.06]">
+                {loadingShifts ? (
+                  <div className="space-y-2 p-1">
+                    {[1, 2, 3, 4].map(i => (
+                      <div key={i} className="h-20 rounded-2xl animate-pulse bg-gray-100 dark:bg-white/[0.05]" />
+                    ))}
+                  </div>
+                ) : notEnrolled.length === 0 ? (
+                  <p className="text-sm text-center text-gray-500 dark:text-[#8A8A9A] py-12">
+                    El cliente ya está inscripto en todos los turnos disponibles.
+                  </p>
+                ) : (available.length === 0 && exceden.length === 0) ? (
+                  <div className="flex flex-col items-center gap-2 py-12 text-center">
+                    <p className="text-sm text-gray-500 dark:text-white/40">Sin turnos para los filtros aplicados</p>
+                    <button onClick={() => { setFilterDia(null); setFilterHorario(null); setFilterProfesor(null) }} className="text-xs text-primary hover:underline">
+                      Limpiar filtros
+                    </button>
+                  </div>
+                ) : (
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 p-1">
+                    {available.map((shift, idx) => (
+                      <motion.div
+                        key={shift.id}
+                        initial={{ opacity: 0, y: 10 }}
+                        animate={{ opacity: 1, y: 0 }}
+                        transition={{ duration: 0.2, ease: [0.22, 1, 0.36, 1], delay: Math.min(idx * 0.04, 0.24) }}
+                        className="rounded-2xl border border-white/30 dark:border-white/[0.08] bg-white/20 dark:bg-white/[0.04] backdrop-blur-xl shadow-[0_2px_12px_rgba(0,0,0,0.04)] dark:shadow-[0_2px_12px_rgba(0,0,0,0.15)] p-4 space-y-3 [transition:background-color_150ms_ease-out,border-color_150ms_ease-out] hover:bg-white/30 dark:hover:bg-white/[0.07] hover:border-white/50 dark:hover:border-white/[0.14]"
+                      >
+                        <div>
+                          <p className="text-sm font-bold text-gray-900 dark:text-white">
+                            {shift.startTime} – {shift.endTime}
+                          </p>
+                          <p className="text-xs text-gray-500 dark:text-[#8A8A9A] mt-0.5">
+                            {shift.days.map(d => WEEKDAY_SHORT[d] ?? d).join(' · ')}
+                          </p>
                           {shift.profesorNombre && (
-                            <span className="ml-2 opacity-60">· {shift.profesorNombre}</span>
+                            <p className="text-[11px] text-gray-400 dark:text-white/35 mt-0.5">{shift.profesorNombre}</p>
                           )}
-                        </p>
+                        </div>
+                        <div className="flex gap-2">
+                          {(['A', 'B'] as const).map(sala => {
+                            const insc = sala === 'A' ? shift.inscritosA : shift.inscritosB
+                            const cupo = sala === 'A' ? shift.cupoMaximoSalaA : shift.cupoMaximoSalaB
+                            const lleno = insc >= cupo
+                            const loading = enrollingId === (String(shift.id) + sala)
+                            return (
+                              <button
+                                key={sala}
+                                disabled={lleno || !!enrollingId}
+                                onClick={() => handleEnroll(String(shift.id), sala)}
+                                style={{ transition: 'background-color 150ms ease-out, border-color 150ms ease-out, transform 100ms ease-out' }}
+                                className={`flex-1 py-2 rounded-xl text-xs font-bold flex items-center justify-center gap-1.5 border ${lleno
+                                  ? 'opacity-40 cursor-not-allowed bg-gray-200/50 dark:bg-gray-500/10 text-gray-400 border-gray-300 dark:border-white/10'
+                                  : 'bg-primary/10 text-primary border-primary/30 hover:bg-primary/20 hover:border-primary/50 active:scale-[0.97]'}`}
+                              >
+                                {loading
+                                  ? <span className="inline-block h-3 w-3 border-2 border-primary border-t-transparent rounded-full animate-spin" />
+                                  : <><span>Sala {sala}</span><span className="opacity-60 font-normal">{insc}/{cupo}</span></>}
+                              </button>
+                            )
+                          })}
+                        </div>
+                      </motion.div>
+                    ))}
+                    {exceden.map(shift => (
+                      <div key={shift.id} className="rounded-2xl border border-white/15 dark:border-white/[0.04] bg-white/10 dark:bg-white/[0.02] backdrop-blur-xl p-4 opacity-45">
+                        <div className="flex items-start justify-between gap-2">
+                          <div>
+                            <p className="text-sm font-bold text-gray-900 dark:text-white">{shift.startTime} – {shift.endTime}</p>
+                            <p className="text-xs text-gray-500 dark:text-[#8A8A9A] mt-0.5">{shift.days.map(d => WEEKDAY_SHORT[d] ?? d).join(' · ')}</p>
+                            {shift.profesorNombre && <p className="text-[11px] text-gray-400 dark:text-white/35 mt-0.5">{shift.profesorNombre}</p>}
+                          </div>
+                          <span className="shrink-0 rounded-lg bg-red-500/10 border border-red-500/20 px-2 py-0.5 text-[10px] font-semibold text-red-400">Excede el plan</span>
+                        </div>
                       </div>
-                    </div>
-                    <div className="flex gap-2">
-                      {(['A', 'B'] as const).map(sala => {
-                        const insc = sala === 'A' ? shift.inscritosA : shift.inscritosB
-                        const cupo = sala === 'A' ? shift.cupoMaximoSalaA : shift.cupoMaximoSalaB
-                        const lleno = insc >= cupo
-                        const loading = enrollingId === (String(shift.id) + sala)
+                    ))}
+                  </div>
+                )}
+              </div>
+
+              {/* ── 1/3 Panel de filtros ── */}
+              <div className="flex-[1] min-w-[180px] pl-4 space-y-3 overflow-y-auto">
+
+                {/* Header filtros */}
+                <div className="flex items-center justify-between mb-1">
+                  <p className="text-[10px] font-extrabold uppercase tracking-widest text-gray-400 dark:text-white/25">Filtros</p>
+                  {hayFiltros && (
+                    <button
+                      onClick={() => { setFilterDia(null); setFilterHorario(null); setFilterProfesor(null) }}
+                      className="text-[11px] text-primary font-semibold transition-colors duration-150 hover:text-primary-dark active:scale-[0.97]"
+                      style={{ transition: 'color 150ms ease-out, transform 100ms ease-out' }}
+                    >
+                      Limpiar
+                    </button>
+                  )}
+                </div>
+
+                {/* Card: Día */}
+                <div className="rounded-2xl border border-white/20 dark:border-white/[0.08] bg-white/15 dark:bg-white/[0.04] backdrop-blur-sm p-3 space-y-2.5">
+                  <p className="text-[10px] font-bold text-gray-500 dark:text-white/35 uppercase tracking-widest">Día</p>
+                  <div className="flex flex-wrap gap-1.5">
+                    {DIAS_SEMANA.map(({ key, label }) => {
+                      const active = filterDia === key
+                      return (
+                        <button
+                          key={key}
+                          onClick={() => setFilterDia(active ? null : key)}
+                          style={{ transition: 'color 150ms ease-out, transform 100ms ease-out' }}
+                          className={`relative px-2.5 py-1.5 rounded-full text-[11px] font-bold active:scale-[0.97] ${
+                            active
+                              ? 'text-white dark:text-gray-900'
+                              : 'text-gray-500 dark:text-white/45 hover:text-gray-900 dark:hover:text-white'
+                          }`}
+                        >
+                          {active && (
+                            <motion.div
+                              layoutId="enroll-dia-pill"
+                              className="absolute inset-0 rounded-full bg-gray-900 dark:bg-white shadow-[0_2px_8px_rgba(0,0,0,0.15)]"
+                              style={{ zIndex: 0 }}
+                              transition={{ duration: 0.22, ease: [0.22, 1, 0.36, 1] }}
+                            />
+                          )}
+                          <span className="relative z-10">{label}</span>
+                        </button>
+                      )
+                    })}
+                  </div>
+                </div>
+
+                {/* Card: Horario */}
+                <div className="rounded-2xl border border-white/20 dark:border-white/[0.08] bg-white/15 dark:bg-white/[0.04] backdrop-blur-sm p-3 space-y-2.5">
+                  <p className="text-[10px] font-bold text-gray-500 dark:text-white/35 uppercase tracking-widest">Horario</p>
+                  <div className="space-y-1.5">
+                    {HORARIOS.map(({ key, label, sub }) => {
+                      const active = filterHorario === key
+                      return (
+                        <button
+                          key={key}
+                          onClick={() => setFilterHorario(active ? null : key)}
+                          style={{ transition: 'color 150ms ease-out, transform 100ms ease-out' }}
+                          className={`relative w-full text-left px-3 py-2 rounded-full text-[11px] font-semibold active:scale-[0.97] ${
+                            active
+                              ? 'text-white dark:text-gray-900'
+                              : 'text-gray-500 dark:text-white/45 hover:text-gray-900 dark:hover:text-white'
+                          }`}
+                        >
+                          {active && (
+                            <motion.div
+                              layoutId="enroll-horario-pill"
+                              className="absolute inset-0 rounded-full bg-gray-900 dark:bg-white shadow-[0_2px_8px_rgba(0,0,0,0.15)]"
+                              style={{ zIndex: 0 }}
+                              transition={{ duration: 0.22, ease: [0.22, 1, 0.36, 1] }}
+                            />
+                          )}
+                          <span className="relative z-10">{label}<span className="ml-1.5 font-normal opacity-55 text-[10px]">{sub}</span></span>
+                        </button>
+                      )
+                    })}
+                  </div>
+                </div>
+
+                {/* Card: Profesor */}
+                {profesores.length > 0 && (
+                  <div className="rounded-2xl border border-white/20 dark:border-white/[0.08] bg-white/15 dark:bg-white/[0.04] backdrop-blur-sm p-3 space-y-2.5">
+                    <p className="text-[10px] font-bold text-gray-500 dark:text-white/35 uppercase tracking-widest">Profesor</p>
+                    <div className="space-y-1.5">
+                      {profesores.map(prof => {
+                        const active = filterProfesor === prof
                         return (
                           <button
-                            key={sala}
-                            disabled={lleno || !!enrollingId}
-                            onClick={() => handleEnroll(String(shift.id), sala)}
-                            className={`flex-1 py-2 rounded-xl text-xs font-bold transition-all flex items-center justify-center gap-1.5 ${lleno
-                              ? 'opacity-40 cursor-not-allowed bg-gray-200/50 dark:bg-gray-500/10 text-gray-400'
-                              : 'bg-primary/10 text-primary hover:bg-primary/20 active:scale-95'
-                              }`}
+                            key={prof}
+                            onClick={() => setFilterProfesor(active ? null : prof)}
+                            style={{ transition: 'color 150ms ease-out, border-color 150ms ease-out, transform 100ms ease-out' }}
+                            className={`relative w-full text-left px-3 py-2 rounded-full text-[11px] font-semibold border active:scale-[0.97] ${
+                              active
+                                ? 'text-white dark:text-gray-900 border-transparent'
+                                : 'border-white/20 dark:border-white/[0.08] text-gray-500 dark:text-white/45 hover:border-white/40 dark:hover:border-white/[0.16] hover:text-gray-900 dark:hover:text-white'
+                            }`}
                           >
-                            {loading ? (
-                              <span className="inline-block h-3 w-3 border-2 border-primary border-t-transparent rounded-full animate-spin" />
-                            ) : (
-                              <>
-                                Sala {sala}
-                                <span className="opacity-60 font-normal">{insc}/{cupo}</span>
-                              </>
+                            {active && (
+                              <motion.div
+                                layoutId="enroll-profesor-pill"
+                                className="absolute inset-0 rounded-full bg-gray-900 dark:bg-white shadow-[0_2px_8px_rgba(0,0,0,0.15)]"
+                                style={{ zIndex: 0 }}
+                                transition={{ duration: 0.22, ease: [0.22, 1, 0.36, 1] }}
+                              />
                             )}
+                            <span className="relative z-10 truncate">{prof}</span>
                           </button>
                         )
                       })}
                     </div>
                   </div>
-                ))}
-                {exceden.map(shift => (
-                  <div key={shift.id} className="rounded-2xl border border-white/[0.04] bg-white/[0.01] p-4 opacity-50">
-                    <div className="flex items-start justify-between gap-2">
-                      <div>
-                        <p className="text-sm font-bold text-gray-900 dark:text-white">
-                          {shift.startTime} – {shift.endTime}
-                        </p>
-                        <p className="text-xs text-gray-500 dark:text-[#8A8A9A] mt-0.5">
-                          {shift.days.map(d => WEEKDAY_SHORT[d] ?? d).join(' · ')}
-                          {shift.profesorNombre && (
-                            <span className="ml-2 opacity-60">· {shift.profesorNombre}</span>
-                          )}
-                        </p>
-                      </div>
-                      <span className="shrink-0 rounded-lg bg-red-500/10 border border-red-500/20 px-2 py-0.5 text-[10px] font-semibold text-red-400">
-                        Excede el plan
-                      </span>
-                    </div>
-                  </div>
-                ))}
+                )}
               </div>
-            )
-          })()
+            </div>
+          )
         })()}
       </Modal>
 

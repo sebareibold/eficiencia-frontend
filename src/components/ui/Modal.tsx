@@ -9,7 +9,8 @@ interface ModalProps {
   onClose: () => void
   title?: string
   children: ReactNode
-  size?: 'sm' | 'md' | 'lg' | 'xl' | '2xl'
+  size?: 'sm' | 'md' | 'lg' | 'xl' | '2xl' | '3xl'
+  noScroll?: boolean
 }
 
 const sizeClasses = {
@@ -18,9 +19,10 @@ const sizeClasses = {
   lg: 'max-w-2xl',
   xl: 'max-w-4xl',
   '2xl': 'max-w-6xl',
+  '3xl': 'max-w-7xl',
 }
 
-export default function Modal({ isOpen, onClose, title, children, size = 'md' }: ModalProps) {
+export default function Modal({ isOpen, onClose, title, children, size = 'md', noScroll = false }: ModalProps) {
   useEffect(() => {
     if (isOpen) {
       document.body.style.overflow = 'hidden'
@@ -40,7 +42,7 @@ export default function Modal({ isOpen, onClose, title, children, size = 'md' }:
           <motion.div
             key="panel"
             {...modalVariants}
-            className={`w-full ${sizeClasses[size]} max-h-[90vh] flex flex-col rounded-[2rem] border border-white/50 dark:border-white/10 bg-white/95 dark:bg-[#0a0a0a]/95 backdrop-blur-3xl shadow-[0_24px_60px_rgba(0,0,0,0.1)] dark:shadow-[0_24px_60px_rgba(0,0,0,0.5)] relative overflow-hidden`}
+            className={`w-full ${sizeClasses[size]} max-h-[90vh] flex flex-col rounded-[2rem] border border-white/50 dark:border-white/10 ${noScroll ? 'bg-white/80 dark:bg-[#0a0a0a]/80' : 'bg-white/95 dark:bg-[#0a0a0a]/95'} backdrop-blur-3xl shadow-[0_24px_60px_rgba(0,0,0,0.1)] dark:shadow-[0_24px_60px_rgba(0,0,0,0.5)] relative overflow-hidden`}
             onClick={(e) => e.stopPropagation()}
           >
             {title && (
@@ -54,7 +56,7 @@ export default function Modal({ isOpen, onClose, title, children, size = 'md' }:
                 </button>
               </div>
             )}
-            <div className="px-6 py-5 overflow-y-auto">{children}</div>
+            <div className={noScroll ? 'relative flex flex-1 min-h-0 px-6 py-5' : 'px-6 py-5 overflow-y-auto'}>{children}</div>
           </motion.div>
         </motion.div>
       )}
