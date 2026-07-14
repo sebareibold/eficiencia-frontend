@@ -313,19 +313,19 @@ function EjercicioDraftRow({ ej, catalogo, onUpdate, onDelete }: EjercicioDraftR
           )}
         </div>
         {/* Series */}
-        <div className="flex justify-center pt-0.5">
+        <div className="flex justify-center pt-0.5 cursor-pointer" onClick={() => setIsEditing(true)} title="Click para editar">
           {ej.series != null
             ? <span className="text-sm tabular-nums bg-gray-100 dark:bg-white/[0.06] px-1.5 py-0.5 rounded-md text-gray-600 dark:text-white/60 font-medium">{ej.series}×</span>
             : <span className="text-gray-300 dark:text-white/15 text-xs">—</span>}
         </div>
         {/* Reps */}
-        <div className="flex justify-center pt-0.5">
+        <div className="flex justify-center pt-0.5 cursor-pointer" onClick={() => setIsEditing(true)} title="Click para editar">
           {ej.repeticiones
             ? <span className="text-xs text-gray-500 dark:text-white/50">{ej.repeticiones}</span>
             : <span className="text-gray-200 dark:text-white/15 text-xs">—</span>}
         </div>
         {/* Peso */}
-        <div className="flex justify-center pt-0.5">
+        <div className="flex justify-center pt-0.5 cursor-pointer" onClick={() => setIsEditing(true)} title="Click para editar">
           {ej.peso
             ? <span className="text-xs px-1.5 py-0.5 bg-primary/10 text-primary/80 rounded-md font-medium">{ej.peso}</span>
             : <span className="text-gray-200 dark:text-white/15 text-xs">—</span>}
@@ -705,16 +705,16 @@ function EjInlineCells({ ej, isEditing, onEditStart, onUpdate, onCancelEdit, onD
             : <span className="text-gray-300 dark:text-white/20 text-xs select-none">—</span>
           }
         </td>
-        <td className="px-3 py-2.5 text-center">
+        <td className="px-3 py-2.5 text-center cursor-pointer" onClick={onEditStart} title="Click para editar">
           {ej.series != null ? <span className="text-sm tabular-nums bg-gray-100 dark:bg-white/[0.06] px-1.5 py-0.5 rounded-md text-gray-600 dark:text-white/60 font-medium">{ej.series}×</span> : <span className="text-gray-300 dark:text-white/15 text-xs">—</span>}
         </td>
-        <td className="px-3 py-2.5 text-center">
+        <td className="px-3 py-2.5 text-center cursor-pointer" onClick={onEditStart} title="Click para editar">
           {ej.repeticiones ? <span className="text-xs text-gray-500 dark:text-white/55">{ej.repeticiones}</span> : <span className="text-gray-300 dark:text-white/15 text-xs">—</span>}
         </td>
-        <td className="px-3 py-2.5 text-center">
+        <td className="px-3 py-2.5 text-center cursor-pointer" onClick={onEditStart} title="Click para editar">
           {ej.peso ? <span className="text-xs px-1.5 py-0.5 bg-primary/10 text-primary/80 rounded-md font-medium">{ej.peso}</span> : <span className="text-gray-300 dark:text-white/15 text-xs">—</span>}
         </td>
-        <td className="px-3 py-2.5 text-center">
+        <td className="px-3 py-2.5 text-center cursor-pointer" onClick={onEditStart} title="Click para editar">
           <div className="flex items-center justify-center gap-1 text-[11px]">
             {ej.rir != null && <span className="text-gray-400 dark:text-white/40">RIR <span className="font-semibold text-gray-600 dark:text-white/65">{ej.rir}</span></span>}
             {ej.rpe != null && <span className="text-gray-400 dark:text-white/40">RPE <span className="font-semibold text-gray-600 dark:text-white/65">{ej.rpe}</span></span>}
