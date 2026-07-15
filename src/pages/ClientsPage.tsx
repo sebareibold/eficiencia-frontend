@@ -426,6 +426,7 @@ export default function ClientsPage() {
   ]
 
   return (
+    <>
     <motion.div
       {...pageVariants}
       className="space-y-4 lg:space-y-6"
@@ -924,5 +925,6 @@ export default function ClientsPage() {
       onConfirm={handleInactivarCliente}
       onClose={() => setInactivarTarget(null)}
     />
+    </>
   )
 }
