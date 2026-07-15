@@ -15,6 +15,8 @@ import { es } from 'date-fns/locale'
 import { usuariosApi, type AppUser, type UserRole } from '../api/usuarios.api'
 import { permisosApi, type PermisoEntry } from '../api/permisos.api'
 import { solicitudesApi, type SolicitudEntry } from '../api/solicitudes.api'
+import { listaEsperaApi } from '../api/listaEspera.api'
+import type { PendienteSolicitudEntry } from '../types/listaEspera.types'
 import { authApi } from '../api/auth.api'
 import { useUiStore } from '../store/uiStore'
 import { useAuthStore } from '../store/authStore'
@@ -1073,10 +1075,11 @@ function SolicitudesTab() {
   const addToast        = useUiStore(s => s.addToast)
   const setPendingCount = useSolicitudesStore(s => s.setPendingCount)
 
-  const [solicitudes, setSolicitudes] = useState<SolicitudEntry[]>([])
-  const [resets, setResets]           = useState<ResetRequest[]>([])
-  const [loading, setLoading]         = useState(true)
-  const [actioningId, setActioningId] = useState<string | null>(null)
+  const [solicitudes, setSolicitudes]   = useState<SolicitudEntry[]>([])
+  const [resets, setResets]             = useState<ResetRequest[]>([])
+  const [listaEspera, setListaEspera]   = useState<PendienteSolicitudEntry[]>([])
+  const [loading, setLoading]           = useState(true)
+  const [actioningId, setActioningId]   = useState<string | null>(null)
   const [rechazarTarget, setRechazarTarget] = useState<{ id: string; tipo: 'acceso' | 'reset' } | null>(null)
   const [eliminarTarget, setEliminarTarget] = useState<string | null>(null)
 
@@ -1085,13 +1088,16 @@ function SolicitudesTab() {
     Promise.all([
       solicitudesApi.getAll().catch(() => [] as SolicitudEntry[]),
       authApi.getResetRequests().catch(() => [] as ResetRequest[]),
-    ]).then(([sols, rsts]) => {
+      listaEsperaApi.getPendientes().catch(() => [] as PendienteSolicitudEntry[]),
+    ]).then(([sols, rsts, le]) => {
       const filtered = sols.filter(s => s.email !== 'sebastianreibold2003@gmail.com')
       setSolicitudes(filtered)
       setResets(rsts)
+      setListaEspera(le)
       setPendingCount(
         filtered.filter(s => s.estado === 'PENDIENTE').length +
-        rsts.filter(r => r.estado === 'PENDIENTE').length
+        rsts.filter(r => r.estado === 'PENDIENTE').length +
+        le.length
       )
     }).finally(() => setLoading(false))
   }, [])
@@ -1181,6 +1187,28 @@ function SolicitudesTab() {
     setRechazarTarget(null)
   }
 
+  // ── Acciones lista de espera ──
+  async function aprobarListaEspera(id: string) {
+    setActioningId(id)
+    try {
+      await listaEsperaApi.aprobar(id)
+      addToast('Solicitud aprobada — inscripción creada', 'success')
+      load()
+    } catch (err: unknown) {
+      addToast((err as { response?: { data?: { message?: string } } })?.response?.data?.message ?? 'Error al aprobar', 'error')
+    } finally { setActioningId(null) }
+  }
+
+  async function rechazarListaEspera(id: string) {
+    setActioningId(id)
+    try {
+      await listaEsperaApi.rechazar(id)
+      addToast('Solicitud rechazada', 'success')
+      load()
+    } catch { addToast('Error al rechazar', 'error') }
+    finally { setActioningId(null) }
+  }
+
   // ── Lista unificada ordenada por fecha (más reciente primero) ──
   const allItems: UnifiedItem[] = [
     ...solicitudes.map(s => ({ tipo: 'acceso' as const, data: s })),
@@ -1262,6 +1290,50 @@ function SolicitudesTab() {
           </div>
         )}
       </>)}
+
+      {/* ── Lista de espera NOTIFICADO ── */}
+      {!loading && listaEspera.length > 0 && (
+        <div className="space-y-3">
+          <h3 className="text-xs font-bold uppercase tracking-wider text-[#8A8A9A]">Solicitudes de turno pendientes</h3>
+          <div className="space-y-2">
+            {listaEspera.map(item => (
+              <div key={item.id} className="flex flex-col sm:flex-row sm:items-center gap-3 rounded-2xl border border-white/50 dark:border-white/[0.08] bg-white/30 dark:bg-white/[0.04] backdrop-blur-xl p-4">
+                <div className="flex-1 min-w-0">
+                  <div className="flex items-center gap-2">
+                    <span className="font-semibold text-sm text-gray-900 dark:text-white">{item.clienteNombre}</span>
+                    <span className={`text-[11px] px-2 py-0.5 rounded-full font-semibold ${
+                      item.tipo === 'INTERNA'
+                        ? 'bg-blue-500/10 text-blue-700 dark:text-blue-400'
+                        : 'bg-purple-500/10 text-purple-700 dark:text-purple-400'
+                    }`}>
+                      {item.tipo === 'INTERNA' ? 'Cliente' : 'Externo'}
+                    </span>
+                  </div>
+                  <p className="text-xs text-[#8A8A9A] mt-0.5">
+                    Turno {item.turnoHoraInicio}–{item.turnoHoraFin} · {item.turnoDias.map(d => ({ lunes:'Lun',martes:'Mar',miercoles:'Mié',jueves:'Jue',viernes:'Vie',sabado:'Sáb' }[d] ?? d)).join(', ')}
+                  </p>
+                </div>
+                <div className="flex gap-2 shrink-0">
+                  <button
+                    onClick={() => rechazarListaEspera(item.id)}
+                    disabled={actioningId === item.id}
+                    className="flex items-center gap-1 px-3 py-1.5 rounded-xl text-xs font-semibold dark:bg-red-500/10 bg-red-50 dark:text-red-400 text-red-600 hover:dark:bg-red-500/20 hover:bg-red-100 disabled:opacity-50 transition-colors"
+                  >
+                    <XIcon size={12} /> Rechazar
+                  </button>
+                  <button
+                    onClick={() => aprobarListaEspera(item.id)}
+                    disabled={actioningId === item.id}
+                    className="flex items-center gap-1 px-3 py-1.5 rounded-xl text-xs font-semibold bg-primary text-black hover:bg-primary-dark disabled:opacity-50 transition-colors"
+                  >
+                    <Check size={12} /> Aprobar
+                  </button>
+                </div>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
 
       <ConfirmDialog
         isOpen={rechazarTarget !== null}

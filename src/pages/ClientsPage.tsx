@@ -2,16 +2,18 @@ import { useState, useEffect } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { motion, AnimatePresence } from 'framer-motion'
 import { pageVariants, staggerContainerFast, fadeUpItem } from '../lib/motion'
-import { Plus, Search, RefreshCw, LayoutList, LayoutGrid, ChevronRight, ChevronLeft, ChevronsRight, ChevronsLeft, Phone, Mail, Users, X, ArrowUpDown } from 'lucide-react'
+import { Plus, Search, RefreshCw, LayoutList, LayoutGrid, ChevronRight, ChevronLeft, ChevronsRight, ChevronsLeft, Phone, Mail, Users, X, ArrowUpDown, UserX } from 'lucide-react'
 import { format, startOfMonth, endOfMonth, addMonths, subMonths, differenceInDays } from 'date-fns'
 import { es } from 'date-fns/locale'
 import { usePermissions } from '../hooks/usePermissions'
 import { useClients } from '../hooks/useClients'
 import { useUiStore } from '../store/uiStore'
 import { clientsApi } from '../api/clients.api'
+import { configuracionSistemaApi } from '../api/configuracion-sistema.api'
 import Badge from '../components/ui/Badge'
 import Table, { type Column } from '../components/ui/Table'
 import Skeleton from '../components/ui/Skeleton'
+import ConfirmDialog from '../components/ui/ConfirmDialog'
 import type { Client } from '../types/client.types'
 
 type ActividadFilter = 'all' | 'active' | 'inactive'
@@ -117,6 +119,13 @@ export default function ClientsPage() {
   const [isSelectingAll, setIsSelectingAll] = useState(false)
   const [sortKey, setSortKey]   = useState<SortKey>('createdAt')
   const [sortDir, setSortDir]   = useState<'asc' | 'desc'>('desc')
+  const [inactivarTarget, setInactivarTarget] = useState<Client | null>(null)
+  const [inactivarLoading, setInactivarLoading] = useState(false)
+  const [diasGracia, setDiasGracia] = useState(10)
+
+  useEffect(() => {
+    configuracionSistemaApi.get().then(c => setDiasGracia(c.diasGraciaInactivacion)).catch(() => {})
+  }, [])
 
   // Debounce search para no disparar una query por cada tecla
   useEffect(() => {
@@ -228,6 +237,21 @@ export default function ClientsPage() {
     }
   }
 
+  async function handleInactivarCliente() {
+    if (!inactivarTarget) return
+    setInactivarLoading(true)
+    try {
+      await clientsApi.update(inactivarTarget.id, { estado: 'INACTIVO' })
+      setInactivarTarget(null)
+      addToast('Cliente inactivado y dado de baja de sus turnos', 'success')
+      refetch()
+    } catch {
+      addToast('Error al inactivar el cliente', 'error')
+    } finally {
+      setInactivarLoading(false)
+    }
+  }
+
   async function handleBulkAction(estado: 'ACTIVO' | 'INACTIVO') {
     if (isBulkLoading) return
     const ids = [...selectedIds]
@@ -324,9 +348,29 @@ export default function ClientsPage() {
       key: 'status',
       header: 'Estado membresía',
       sortable: true,
-      render: (c) => c.activityStatus === 'inactive'
-        ? <span className="text-sm text-gray-400 dark:text-gray-600">—</span>
-        : <Badge status={c.status} />,
+      render: (c) => {
+        if (c.activityStatus === 'inactive') return <span className="text-sm text-gray-400 dark:text-gray-600">—</span>
+        if (c.status === 'expiring' && c.membershipExpiresAt) {
+          const exp = new Date(c.membershipExpiresAt)
+          const daysLate = Math.ceil((Date.now() - exp.getTime()) / 86_400_000)
+          if (daysLate > 0) {
+            const inicioMesSig = new Date(exp.getFullYear(), exp.getMonth() + 1, 1)
+            const fechaInac = new Date(inicioMesSig)
+            fechaInac.setDate(fechaInac.getDate() + diasGracia)
+            const yaPaso = new Date() >= fechaInac
+            const hint = yaPaso
+              ? 'Pendiente de inactivación automática'
+              : `Se inactiva el ${format(fechaInac, 'd/MM', { locale: es })} si no renueva`
+            return (
+              <div className="group relative inline-flex flex-col gap-0.5">
+                <Badge status={c.status} />
+                <span className="text-[9px] font-semibold text-orange-500 dark:text-orange-400 leading-tight">{hint}</span>
+              </div>
+            )
+          }
+        }
+        return <Badge status={c.status} />
+      },
     },
     {
       key: 'planName',
@@ -364,8 +408,19 @@ export default function ClientsPage() {
     {
       key: 'actions',
       header: '',
-      render: () => (
-        <ChevronRight size={16} className="text-gray-300 dark:text-gray-600 group-hover:text-gray-500 dark:group-hover:text-gray-400 transition-colors" />
+      render: (c) => (
+        <div className="flex items-center gap-1.5 justify-end">
+          {c.activityStatus === 'active' && can('clients', 'update') && (
+            <button
+              onClick={e => { e.stopPropagation(); setInactivarTarget(c) }}
+              title="Inactivar cliente"
+              className="opacity-0 group-hover:opacity-100 flex items-center gap-1 rounded-lg px-2 py-1 text-[10px] font-bold bg-red-50 dark:bg-red-500/10 text-red-500 dark:text-red-400 border border-red-200 dark:border-red-500/20 hover:bg-red-100 dark:hover:bg-red-500/20 transition-all"
+            >
+              <UserX size={11} /> Inactivar
+            </button>
+          )}
+          <ChevronRight size={16} className="text-gray-300 dark:text-gray-600 group-hover:text-gray-500 dark:group-hover:text-gray-400 transition-colors" />
+        </div>
       ),
     },
   ]
@@ -852,5 +907,22 @@ export default function ClientsPage() {
       )}
       </AnimatePresence>
     </motion.div>
+
+    <ConfirmDialog
+      isOpen={inactivarTarget !== null}
+      title="Inactivar cliente"
+      message={
+        inactivarTarget
+          ? inactivarTarget.turnosActivosCount > 0
+            ? `¿Marcás a ${inactivarTarget.name} ${inactivarTarget.lastName} como inactivo? Se lo dará de baja de ${inactivarTarget.turnosActivosCount} turno${inactivarTarget.turnosActivosCount !== 1 ? 's' : ''} activo${inactivarTarget.turnosActivosCount !== 1 ? 's' : ''} y los cupos quedarán liberados.`
+            : `¿Marcás a ${inactivarTarget.name} ${inactivarTarget.lastName} como inactivo?`
+          : ''
+      }
+      warning={inactivarTarget && inactivarTarget.turnosActivosCount > 0 ? 'El cliente deberá reinscribirse manualmente si se reactiva.' : undefined}
+      confirmLabel="Inactivar"
+      isLoading={inactivarLoading}
+      onConfirm={handleInactivarCliente}
+      onClose={() => setInactivarTarget(null)}
+    />
   )
 }

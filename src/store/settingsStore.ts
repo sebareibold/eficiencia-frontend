@@ -24,6 +24,7 @@ const DEFAULT_SETTINGS = {
     notifNuevosClientes: false,
     notifNuevosUsuarios: false,
     emailAlAprobarSolicitudes: false,
+    notifBajaAutomatica: true,
   },
 }
 
@@ -75,13 +76,14 @@ export const useSettingsStore = create<SettingsState>()(
             ...(config.notifNuevosClientes   !== undefined && { notifNuevosClientes: config.notifNuevosClientes }),
             ...(config.notifNuevosUsuarios          !== undefined && { notifNuevosUsuarios:          config.notifNuevosUsuarios }),
             ...(config.emailAlAprobarSolicitudes    !== undefined && { emailAlAprobarSolicitudes:    config.emailAlAprobarSolicitudes }),
+            ...(config.notifBajaAutomatica          !== undefined && { notifBajaAutomatica:          config.notifBajaAutomatica }),
           },
           hasUnsavedChanges: false,
         })),
     }),
     {
       name: 'eficiencia-settings',
-      version: 4,
+      version: 5,
       migrate: (state: unknown, version: number) => {
         const s = state as Record<string, unknown>
         if (version < 2) {
@@ -100,6 +102,13 @@ export const useSettingsStore = create<SettingsState>()(
           return {
             ...s,
             appearance: { ...appearance, theme: 'light' },
+          }
+        }
+        if (version < 5) {
+          const notif = (s.notifications as Record<string, unknown>) ?? {}
+          return {
+            ...s,
+            notifications: { ...notif, notifBajaAutomatica: true },
           }
         }
         return s

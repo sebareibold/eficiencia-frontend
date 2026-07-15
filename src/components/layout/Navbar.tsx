@@ -2,7 +2,7 @@ import { NavLink, useNavigate, useLocation } from 'react-router-dom'
 import { motion, AnimatePresence } from 'framer-motion'
 import {
   Settings, LogOut, Users, CreditCard, LayoutDashboard,
-  MoreHorizontal, Dumbbell, Tag, Wallet, Menu, X, UserCog, BookOpen,
+  MoreHorizontal, Dumbbell, Tag, Wallet, Menu, X, UserCog, BookOpen, ClipboardList,
 } from 'lucide-react'
 import { useAuthStore } from '../../store/authStore'
 import { useUiStore } from '../../store/uiStore'
@@ -13,14 +13,15 @@ import { solicitudesApi } from '../../api/solicitudes.api'
 import { ROUTES } from '../../constants/routes'
 import { useState, useRef, useLayoutEffect, useEffect, useCallback } from 'react'
 
-const NAV_TABS: { label: string; to: string; module: PermModule | null; icon: React.ComponentType<{ size?: number; className?: string }> }[] = [
-  { label: 'Dashboard',  to: ROUTES.DASHBOARD, module: 'dashboard',  icon: LayoutDashboard },
-  { label: 'Turnos',     to: ROUTES.SHIFTS,    module: 'shifts',     icon: Dumbbell },
-  { label: 'Clientes',   to: ROUTES.CLIENTS,   module: 'clients',    icon: Users },
-  { label: 'Pagos',      to: ROUTES.PAYMENTS,  module: 'payments',   icon: CreditCard },
-  { label: 'Gastos',     to: ROUTES.EXPENSES,  module: 'expenses',   icon: Wallet },
-  { label: 'Biblioteca', to: ROUTES.EXERCISES, module: null,    icon: BookOpen },
-  { label: 'Usuarios',   to: ROUTES.USERS,     module: 'users', icon: UserCog },
+const NAV_TABS: { label: string; to: string; module: PermModule | null; icon: React.ComponentType<{ size?: number; className?: string }>; hideIfAdmin?: boolean }[] = [
+  { label: 'Dashboard',    to: ROUTES.DASHBOARD,    module: 'dashboard',         icon: LayoutDashboard },
+  { label: 'Turnos',       to: ROUTES.SHIFTS,       module: 'shifts',            icon: Dumbbell },
+  { label: 'Clientes',     to: ROUTES.CLIENTS,      module: 'clients',           icon: Users },
+  { label: 'Pagos',        to: ROUTES.PAYMENTS,     module: 'payments',          icon: CreditCard },
+  { label: 'Gastos',       to: ROUTES.EXPENSES,     module: 'expenses',          icon: Wallet },
+  { label: 'Biblioteca',   to: ROUTES.EXERCISES,    module: null,                icon: BookOpen },
+  { label: 'Solicitudes',  to: ROUTES.SOLICITUDES,  module: 'solicitudes-turno', icon: ClipboardList, hideIfAdmin: true },
+  { label: 'Usuarios',     to: ROUTES.USERS,        module: 'users',             icon: UserCog },
 ]
 
 export default function Navbar() {
@@ -43,7 +44,10 @@ export default function Navbar() {
     navigate(ROUTES.LOGIN)
   }, [logout, navigate])
 
-  const visibleTabs = NAV_TABS.filter(t => t.module === null || canUI(t.module, 'read'))
+  const visibleTabs = NAV_TABS.filter(t => {
+    if (t.hideIfAdmin && isAdmin) return false
+    return t.module === null || canUI(t.module, 'read')
+  })
 
   const isAdmin        = user?.role === 'admin'
   const isClienteComun = user?.role === 'cliente_comun'

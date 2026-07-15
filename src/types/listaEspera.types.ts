@@ -11,3 +11,17 @@ export interface ListaEsperaEntry {
   clienteNombre: string
   whatsappExterno: string | null
 }
+
+export interface PendienteSolicitudEntry {
+  id: string
+  clienteId: string | null
+  turnoId: string
+  tipo: TipoEspera
+  estado: EstadoEspera
+  fechaSolicitud: string
+  clienteNombre: string
+  whatsappExterno: string | null
+  turnoHoraInicio: string
+  turnoHoraFin: string
+  turnoDias: string[]
+}

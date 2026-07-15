@@ -45,6 +45,7 @@ const CreateRutinaPage   = lazy(() => import('./pages/CreateRutinaPage'))
 const SecurityPage       = lazy(() => import('./pages/SecurityPage'))
 const ManualPage         = lazy(() => import('./pages/ManualPage'))
 const ResetPasswordPage  = lazy(() => import('./pages/ResetPasswordPage'))
+const SolicitudesPage    = lazy(() => import('./pages/SolicitudesPage'))
 
 function DefaultRedirect() {
   const user = useAuthStore((s) => s.user)
@@ -123,6 +124,10 @@ export default function App() {
                 <Route path={ROUTES.USER_NEW}        element={<UserNewPage />} />
                 <Route path={ROUTES.USER_DETAIL}     element={<UserDetailPage />} />
                 <Route path={ROUTES.PROFESOR_DETAIL} element={<ProfesorDetailPage />} />
+              </Route>
+
+              <Route element={<PermissionGuard module="solicitudes-turno" />}>
+                <Route path={ROUTES.SOLICITUDES} element={<SolicitudesPage />} />
               </Route>
 
               {/* Accesibles a todos los usuarios autenticados */}

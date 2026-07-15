@@ -1,5 +1,5 @@
 import api from './axiosInstance'
-import type { EstadoEspera, TipoEspera, ListaEsperaEntry } from '../types/listaEspera.types'
+import type { EstadoEspera, TipoEspera, ListaEsperaEntry, PendienteSolicitudEntry } from '../types/listaEspera.types'
 
 export type ListaEsperaClienteEntry = {
   id: string
@@ -30,6 +30,30 @@ function mapEntry(e: any): ListaEsperaEntry {
     estado: e.estado,
     clienteNombre,
     whatsappExterno: e.whatsappExterno ?? null,
+  }
+}
+
+function mapPendiente(e: any): PendienteSolicitudEntry {
+  let clienteNombre: string
+  if (e.cliente) {
+    clienteNombre = `${e.cliente.nombre} ${e.cliente.apellido}`
+  } else if (e.nombreExterno) {
+    clienteNombre = `${e.nombreExterno} ${e.apellidoExterno ?? ''}`.trim()
+  } else {
+    clienteNombre = 'Contacto externo'
+  }
+  return {
+    id: String(e.id),
+    clienteId: e.clienteId ? String(e.clienteId) : null,
+    turnoId: String(e.turnoId),
+    tipo: e.tipo,
+    estado: e.estado,
+    fechaSolicitud: e.fechaSolicitud,
+    clienteNombre,
+    whatsappExterno: e.whatsappExterno ?? null,
+    turnoHoraInicio: e.turno?.horaInicio ?? '',
+    turnoHoraFin: e.turno?.horaFin ?? '',
+    turnoDias: Array.isArray(e.turno?.diasSemana) ? e.turno.diasSemana : [],
   }
 }
 
@@ -75,6 +99,17 @@ export const listaEsperaApi = {
 
   updateExterno: (id: string, data: { nombreExterno: string; apellidoExterno: string; whatsappExterno: string }): Promise<ListaEsperaEntry> =>
     api.patch(`/lista-espera/${id}`, data).then(r => mapEntry(r.data)),
+
+  getPendientes: (): Promise<PendienteSolicitudEntry[]> =>
+    api.get('/lista-espera/pendientes').then(r =>
+      (Array.isArray(r.data) ? r.data : []).map(mapPendiente)
+    ),
+
+  aprobar: (id: string): Promise<ListaEsperaEntry> =>
+    api.patch(`/lista-espera/${id}/aprobar`).then(r => mapEntry(r.data)),
+
+  rechazar: (id: string): Promise<ListaEsperaEntry> =>
+    api.patch(`/lista-espera/${id}/rechazar`).then(r => mapEntry(r.data)),
 
   remove: (id: string): Promise<void> =>
     api.delete(`/lista-espera/${id}`),

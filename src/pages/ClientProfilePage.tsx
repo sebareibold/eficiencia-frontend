@@ -36,6 +36,7 @@ import type { InscripcionClienteEntry } from '../api/inscripciones.api'
 import { listaEsperaApi } from '../api/listaEspera.api'
 import type { ListaEsperaClienteEntry } from '../api/listaEspera.api'
 import { shiftsApi } from '../api/shifts.api'
+import { configuracionSistemaApi } from '../api/configuracion-sistema.api'
 import type { Shift } from '../types/shift.types'
 import { useRutinas } from '../hooks/useRutinas'
 import { usePermissions } from '../hooks/usePermissions'
@@ -135,22 +136,32 @@ function calcVencimiento(fechaInicio: string, modalidad: string): string {
 const glassCard = 'rounded-[2rem] border border-gray-200 dark:border-white/10 bg-white/30 dark:bg-black/30 backdrop-blur-3xl shadow-[0_8px_32px_rgba(0,0,0,0.04)] dark:shadow-[0_8px_32px_rgba(0,0,0,0.3)]'
 
 // ─── Tooltip de estado ────────────────────────────────────────────────────────
-function getStatusTooltip(client: Client): string | null {
+function getStatusTooltip(client: Client, diasGracia?: number): string | null {
   if (client.status === 'active') return null
   if (client.status === 'expiring') {
     if (!client.membershipExpiresAt) return 'No tiene ninguna membresía activa registrada.'
     const exp  = new Date(client.membershipExpiresAt)
     const days = Math.ceil((exp.getTime() - Date.now()) / 86_400_000)
     const fecha = format(exp, "d 'de' MMMM 'de' yyyy", { locale: es })
-    if (days < 0)  return `La membresía venció el ${fecha} (hace ${Math.abs(days)} día${Math.abs(days) !== 1 ? 's' : ''}).`
-    if (days === 0) return 'La membresía vence hoy.'
-    return `La membresía vence el ${fecha} — quedan ${days} día${days !== 1 ? 's' : ''}.`
+    let base = ''
+    if (days < 0)  base = `La membresía venció el ${fecha} (hace ${Math.abs(days)} día${Math.abs(days) !== 1 ? 's' : ''}).`
+    else if (days === 0) base = 'La membresía vence hoy.'
+    else base = `La membresía vence el ${fecha} — quedan ${days} día${days !== 1 ? 's' : ''}.`
+
+    if (days < 0 && diasGracia !== undefined) {
+      const inicioMesSig = new Date(exp.getFullYear(), exp.getMonth() + 1, 1)
+      inicioMesSig.setDate(inicioMesSig.getDate() + diasGracia)
+      if (new Date() < inicioMesSig) {
+        base += ` Se inactiva automáticamente el ${format(inicioMesSig, "d/MM")}.`
+      }
+    }
+    return base
   }
   return null
 }
 
-function StatusBadge({ client, size = 'md' }: { client: Client; size?: 'sm' | 'md' }) {
-  const tooltip = getStatusTooltip(client)
+function StatusBadge({ client, size = 'md', diasGracia }: { client: Client; size?: 'sm' | 'md'; diasGracia?: number }) {
+  const tooltip = getStatusTooltip(client, diasGracia)
   const paddingCls = size === 'sm' ? 'px-2 py-0.5 rounded-full font-semibold' : 'px-2.5 py-1.5 rounded-lg font-medium'
 
   // Badge de actividad: ACTIVO / INACTIVO
@@ -516,6 +527,8 @@ export default function ClientProfilePage() {
   const [showDeleteModal, setShowDeleteModal] = useState(false)
   const [isDeleting, setIsDeleting] = useState(false)
   const [isTogglingActivity, setIsTogglingActivity] = useState(false)
+  const [showInactivarDialog, setShowInactivarDialog] = useState(false)
+  const [diasGracia, setDiasGracia] = useState<number | undefined>(undefined)
   const [sedes, setSedes] = useState<{ id: string; nombre: string }[]>([])
   const [eventos, setEventos] = useState<EventoDeportivo[]>([])
   const [eventoForm, setEventoForm] = useState<{ nombre: string; fecha: string; observacion: string } | null>(null)
@@ -608,6 +621,10 @@ export default function ClientProfilePage() {
     const tarifa = plan.tarifas.find(t => t.modalidad === newMembresiaForm.modalidad)
     if (tarifa) setNewMembresiaForm(prev => ({ ...prev, precio: String(tarifa.precio) }))
   }, [newMembresiaForm.planId, newMembresiaForm.modalidad, planes])
+
+  useEffect(() => {
+    configuracionSistemaApi.get().then(c => setDiasGracia(c.diasGraciaInactivacion)).catch(() => {})
+  }, [])
 
   useEffect(() => {
     if (!id) return
@@ -898,14 +915,31 @@ export default function ClientProfilePage() {
     }
   }
 
-  async function handleToggleActividad() {
+  function handleToggleActividad() {
     if (!client) return
-    const newEstado = client.activityStatus === 'inactive' ? 'ACTIVO' : 'INACTIVO'
+    if (client.activityStatus === 'active') {
+      // Pasar a INACTIVO → mostrar diálogo de confirmación
+      setShowInactivarDialog(true)
+    } else {
+      // Reactivar → directo
+      void ejecutarCambioActividad('ACTIVO')
+    }
+  }
+
+  async function ejecutarCambioActividad(newEstado: 'ACTIVO' | 'INACTIVO') {
+    if (!client) return
     setIsTogglingActivity(true)
+    setShowInactivarDialog(false)
     try {
       const updated = await clientsApi.update(client.id, { estado: newEstado })
       setClient(updated)
-      addToast(newEstado === 'INACTIVO' ? 'Cliente marcado como inactivo' : 'Cliente marcado como activo', 'success')
+      if (newEstado === 'INACTIVO') {
+        const n = inscripciones.length
+        setInscripciones([])
+        addToast(`Cliente inactivado${n > 0 ? ` y dado de baja de ${n} turno${n !== 1 ? 's' : ''}` : ''}`, 'success')
+      } else {
+        addToast('Cliente reactivado', 'success')
+      }
     } catch {
       addToast('Error al actualizar estado de actividad', 'error')
     } finally {
@@ -1270,7 +1304,7 @@ export default function ClientProfilePage() {
     : client.status === 'debt'     ? 'bg-amber-500'
     : 'bg-gray-400'
   const paymentLabel      = getStatusLabel(client.status)
-  const membershipTooltip = getStatusTooltip(client)
+  const membershipTooltip = getStatusTooltip(client, diasGracia)
 
   return (
     <>
@@ -3503,6 +3537,21 @@ export default function ClientProfilePage() {
         isLoading={deletingRutina}
         onConfirm={() => void handleDeleteRutina()}
         onClose={() => setDeleteRutinaId(null)}
+      />
+
+      <ConfirmDialog
+        isOpen={showInactivarDialog}
+        title="Inactivar cliente"
+        message={
+          inscripciones.length > 0
+            ? `¿Marcás a ${client?.name} ${client?.lastName} como inactivo? Se lo dará de baja de ${inscripciones.length} turno${inscripciones.length !== 1 ? 's' : ''} activo${inscripciones.length !== 1 ? 's' : ''} y los cupos quedarán liberados.`
+            : `¿Marcás a ${client?.name} ${client?.lastName} como inactivo?`
+        }
+        warning={inscripciones.length > 0 ? 'El cliente deberá reinscribirse manualmente si se reactiva.' : undefined}
+        confirmLabel="Inactivar"
+        isLoading={isTogglingActivity}
+        onConfirm={() => void ejecutarCambioActividad('INACTIVO')}
+        onClose={() => setShowInactivarDialog(false)}
       />
 
       <ConfirmDialog

@@ -12,6 +12,7 @@ export interface ConfiguracionData {
   notifNuevosClientes?: boolean
   notifNuevosUsuarios?: boolean
   emailAlAprobarSolicitudes?: boolean
+  notifBajaAutomatica?: boolean
 }
 
 export const configuracionApi = {

@@ -20,11 +20,15 @@ import {
   BookOpen,
   Lock,
   CheckCircle2,
+  Settings2,
+  Clock,
+  CalendarOff,
 } from 'lucide-react'
 import { useUiStore } from '../store/uiStore'
 import { useSettingsStore } from '../store/settingsStore'
 import { useAuthStore } from '../store/authStore'
 import { configuracionApi } from '../api/configuracion.api'
+import { configuracionSistemaApi, type ConfiguracionSistema } from '../api/configuracion-sistema.api'
 import { notificacionesApi } from '../api/notificaciones.api'
 import { authApi } from '../api/auth.api'
 import { permisosApi, type PermisosMap } from '../api/permisos.api'
@@ -503,13 +507,25 @@ function NotificationsSection() {
         <SectionRow
           label="Email al aprobar solicitudes"
           description="Cuando cualquier admin aprueba una solicitud de acceso, todos los admins con esta opción activa reciben un email con el nombre, email, rol asignado, quién aprobó y la fecha y hora exactas."
-          last
         >
           <div className="flex items-center gap-2.5">
             <ProbarBtn tipo="solicitud-aprobada" />
             <Toggle
               checked={notifications.emailAlAprobarSolicitudes}
               onChange={(v) => updateNotifications({ emailAlAprobarSolicitudes: v })}
+            />
+          </div>
+        </SectionRow>
+        <SectionRow
+          label="Bajas automáticas de turnos"
+          description="Recibís un email cuando un cliente es dado de baja automáticamente de sus turnos al pasar a estado inactivo (manual o por vencimiento). También se notifica al profesor del turno afectado."
+          last
+        >
+          <div className="flex items-center gap-2.5">
+            <CalendarOff size={14} className="text-gray-400 shrink-0" />
+            <Toggle
+              checked={notifications.notifBajaAutomatica}
+              onChange={(v) => updateNotifications({ notifBajaAutomatica: v })}
             />
           </div>
         </SectionRow>
@@ -974,9 +990,120 @@ function PermissionsSection() {
   )
 }
 
+// ─── Sistema Section ──────────────────────────────────────────────────────────
+
+function SistemaSection() {
+  const addToast = useUiStore(s => s.addToast)
+  const [config, setConfig] = useState<ConfiguracionSistema | null>(null)
+  const [saving, setSaving] = useState(false)
+
+  useEffect(() => {
+    configuracionSistemaApi.get().then(setConfig).catch(() => {})
+  }, [])
+
+  async function handleSave() {
+    if (!config) return
+    setSaving(true)
+    try {
+      const updated = await configuracionSistemaApi.update({
+        diasGraciaInactivacion: config.diasGraciaInactivacion,
+        horaEjecucionCron: config.horaEjecucionCron,
+      })
+      setConfig(updated)
+      addToast('Configuración del sistema guardada', 'success')
+    } catch {
+      addToast('Error al guardar', 'error')
+    } finally {
+      setSaving(false)
+    }
+  }
+
+  if (!config) return (
+    <div className="space-y-4 animate-pulse">
+      {[1, 2].map(i => <div key={i} className="h-14 rounded-xl bg-white/10 dark:bg-white/[0.05]" />)}
+    </div>
+  )
+
+  const horaLabel = `${String(config.horaEjecucionCron).padStart(2, '0')}:00`
+
+  return (
+    <div className="space-y-6">
+      <div>
+        <p className="text-xs text-gray-600 dark:text-gray-400 leading-relaxed">
+          Parámetros globales del sistema. Afectan a todos los usuarios y se aplican automáticamente.
+        </p>
+      </div>
+
+      <SectionCard>
+        <SectionRow
+          label="Días de gracia por vencimiento"
+          description={
+            <>
+              Días que se esperan desde el <strong>inicio del mes siguiente</strong> al vencimiento de la membresía antes de pasar al cliente a inactivo.
+              <br />
+              <span className="text-primary font-semibold">Ej: membresía vence en marzo → espera desde el 1° de abril + {config.diasGraciaInactivacion} días.</span>
+            </>
+          }
+        >
+          <div className="flex items-center gap-2">
+            <button
+              type="button"
+              onClick={() => setConfig(c => c ? { ...c, diasGraciaInactivacion: Math.max(1, c.diasGraciaInactivacion - 1) } : c)}
+              className="flex h-7 w-7 items-center justify-center rounded-lg border border-gray-200/50 dark:border-white/10 bg-gray-50/80 dark:bg-black/20 text-gray-500 dark:text-gray-400 hover:text-gray-900 dark:hover:text-white transition-colors font-bold text-sm"
+            >−</button>
+            <span className="w-8 text-center text-sm font-black text-gray-900 dark:text-white tabular-nums">{config.diasGraciaInactivacion}</span>
+            <button
+              type="button"
+              onClick={() => setConfig(c => c ? { ...c, diasGraciaInactivacion: Math.min(60, c.diasGraciaInactivacion + 1) } : c)}
+              className="flex h-7 w-7 items-center justify-center rounded-lg border border-gray-200/50 dark:border-white/10 bg-gray-50/80 dark:bg-black/20 text-gray-500 dark:text-gray-400 hover:text-gray-900 dark:hover:text-white transition-colors font-bold text-sm"
+            >+</button>
+          </div>
+        </SectionRow>
+
+        <SectionRow
+          label="Hora de ejecución automática"
+          description={
+            <>
+              Hora del día en que el sistema revisa y aplica inactivaciones automáticas.
+              <br />
+              <span className="text-gray-500 dark:text-[#8A8A9A]">Actualmente configurado para las <strong className="text-gray-900 dark:text-white">{horaLabel} hs</strong>.</span>
+            </>
+          }
+        >
+          <div className="flex items-center gap-2">
+            <Clock size={14} className="text-gray-400 shrink-0" />
+            <select
+              value={config.horaEjecucionCron}
+              onChange={e => setConfig(c => c ? { ...c, horaEjecucionCron: Number(e.target.value) } : c)}
+              className="rounded-lg border border-gray-200/50 dark:border-white/10 bg-gray-50/80 dark:bg-black/20 text-sm font-bold text-gray-900 dark:text-white px-2 py-1 focus:outline-none focus:ring-2 focus:ring-primary/40"
+            >
+              {Array.from({ length: 24 }, (_, h) => (
+                <option key={h} value={h}>{String(h).padStart(2, '0')}:00</option>
+              ))}
+            </select>
+          </div>
+        </SectionRow>
+      </SectionCard>
+
+      <div className="flex justify-end">
+        <button
+          onClick={handleSave}
+          disabled={saving}
+          className="flex items-center gap-1.5 rounded-xl btn-action px-4 py-2 text-sm font-bold disabled:opacity-60"
+        >
+          {saving
+            ? <span className="h-3.5 w-3.5 animate-spin rounded-full border-2 border-gray-900/30 border-t-gray-900" />
+            : <Save size={13} />}
+          Guardar cambios
+        </button>
+      </div>
+    </div>
+  )
+}
+
 // ─── Category definitions ─────────────────────────────────────────────────────
 
-type CategoryId = 'appearance' | 'notifications' | 'account' | 'manual' | 'permissions'
+type CategoryId = 'appearance' | 'notifications' | 'account' | 'manual' | 'permissions' | 'sistema'
 
 const CATEGORIES: {
   id: CategoryId
@@ -1017,6 +1144,13 @@ const CATEGORIES: {
     nonAdminOnly: true,
     keywords: ['permisos', 'acceso', 'rol', 'qué puedo', 'secciones'],
   },
+  {
+    id: 'sistema',
+    label: 'Sistema',
+    icon: Settings2,
+    adminOnly: true,
+    keywords: ['inactivación', 'automática', 'días', 'gracia', 'cron', 'horario', 'vencimiento'],
+  },
 ]
 
 // ─── Main Drawer ──────────────────────────────────────────────────────────────
@@ -1054,6 +1188,7 @@ export default function SettingsPage() {
         notifNuevosClientes: notifications.notifNuevosClientes,
         notifNuevosUsuarios: notifications.notifNuevosUsuarios,
         emailAlAprobarSolicitudes: notifications.emailAlAprobarSolicitudes,
+        notifBajaAutomatica: notifications.notifBajaAutomatica,
       })
     } catch {
       // La config local ya se guardó; si falla el server no se bloquea el UX
@@ -1072,6 +1207,7 @@ export default function SettingsPage() {
     notifications: <NotificationsSection />,
     manual: <ManualContent />,
     permissions: <PermissionsSection />,
+    sistema: <SistemaSection />,
   }
 
   const currentCategory =

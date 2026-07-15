@@ -36,4 +36,5 @@ export const ROUTES = {
   SECURITY: '/security',
   MANUAL: '/settings/manual',
   RESET_PASSWORD: '/reset-password',
+  SOLICITUDES: '/solicitudes',
 } as const

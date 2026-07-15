@@ -41,6 +41,7 @@ function mapCliente(c: any): Client {
     membershipModalidad: membership?.modalidad ?? null,
     membershipPrecio: membership?.precio != null ? Number(membership.precio) : null,
     diasUsados: c.diasUsados ?? 0,
+    turnosActivosCount: c.turnosActivosCount ?? 0,
     sede: c.sede ?? null,
     createdAt: c.createdAt,
     updatedAt: c.updatedAt ?? c.createdAt,

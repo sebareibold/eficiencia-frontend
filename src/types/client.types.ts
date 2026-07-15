@@ -19,6 +19,7 @@ export interface Client {
   membershipModalidad?: 'MENSUAL' | 'TRES_MESES' | 'SEIS_MESES' | null
   membershipPrecio?: number | null
   diasUsados: number
+  turnosActivosCount: number
   sede?: { id: string; nombre: string; activa: boolean } | null
   createdAt: string
   updatedAt: string
