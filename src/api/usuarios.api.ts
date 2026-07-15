@@ -9,7 +9,32 @@ export interface AppUser {
   rol: UserRole
   activo: boolean
   createdAt: string
-  profesor: { id: string; especialidad: string | null } | null
+  profesor: { id: string; especialidad: string | null; activo: boolean; fechaBaja: string | null } | null
+}
+
+export interface TurnoResumen {
+  id: string
+  horaInicio: string
+  horaFin: string
+  diasSemana: string[]
+  recurrente: boolean
+}
+
+export interface ProfesorDetalle {
+  id: string
+  nombre: string
+  email: string
+  rol: UserRole
+  activo: boolean
+  createdAt: string
+  profesor: {
+    id: string
+    especialidad: string | null
+    activo: boolean
+    fechaBaja: string | null
+    turnosSalaA: TurnoResumen[]
+    turnosSalaB: TurnoResumen[]
+  } | null
 }
 
 export interface CreateUserDto {
@@ -58,4 +83,13 @@ export const usuariosApi = {
 
   unlinkProfesor: (userId: string): Promise<AppUser> =>
     api.delete(`/usuarios/${userId}/profesor`).then(r => r.data),
+
+  getProfesorDetalle: (usuarioId: string): Promise<ProfesorDetalle> =>
+    api.get(`/usuarios/profesores/${usuarioId}`).then(r => r.data),
+
+  bajaProfesor: (usuarioId: string): Promise<{ turnosDespejados: number }> =>
+    api.patch(`/usuarios/profesores/${usuarioId}/baja`).then(r => r.data),
+
+  reactivarProfesor: (usuarioId: string): Promise<AppUser> =>
+    api.patch(`/usuarios/profesores/${usuarioId}/reactivar`).then(r => r.data),
 }

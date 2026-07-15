@@ -33,6 +33,7 @@ const DashboardPage      = lazy(() => import('./pages/DashboardPage'))
 const UsersPage          = lazy(() => import('./pages/UsersPage'))
 const UserNewPage        = lazy(() => import('./pages/UserNewPage'))
 const UserDetailPage     = lazy(() => import('./pages/UserDetailPage'))
+const ProfesorDetailPage = lazy(() => import('./pages/ProfesorDetailPage'))
 const SettingsPage       = lazy(() => import('./pages/SettingsPage'))
 const ExercisesPage      = lazy(() => import('./pages/ExercisesPage'))
 const PlantillasPage     = lazy(() => import('./pages/PlantillasPage'))
@@ -118,9 +119,10 @@ export default function App() {
                 <Route path={ROUTES.DASHBOARD} element={<DashboardPage />} />
               </Route>
               <Route element={<PermissionGuard module="users" />}>
-                <Route path={ROUTES.USERS}       element={<UsersPage />} />
-                <Route path={ROUTES.USER_NEW}    element={<UserNewPage />} />
-                <Route path={ROUTES.USER_DETAIL} element={<UserDetailPage />} />
+                <Route path={ROUTES.USERS}           element={<UsersPage />} />
+                <Route path={ROUTES.USER_NEW}        element={<UserNewPage />} />
+                <Route path={ROUTES.USER_DETAIL}     element={<UserDetailPage />} />
+                <Route path={ROUTES.PROFESOR_DETAIL} element={<ProfesorDetailPage />} />
               </Route>
 
               {/* Accesibles a todos los usuarios autenticados */}

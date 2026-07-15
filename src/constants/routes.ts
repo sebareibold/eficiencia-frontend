@@ -21,6 +21,7 @@ export const ROUTES = {
   USERS: '/usuarios',
   USER_NEW: '/usuarios/new',
   USER_DETAIL: '/usuarios/:id',
+  PROFESOR_DETAIL: '/profesores/:id',
   SETTINGS: '/settings',
   EXERCISES: '/exercises',
   EXERCISE_NEW: '/exercises/new',

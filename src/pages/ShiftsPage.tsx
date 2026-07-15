@@ -1075,13 +1075,11 @@ export default function ShiftsPage() {
                                   <p className="text-[11px] font-bold text-gray-900 dark:text-white leading-tight truncate">
                                     {shift.startTime} – {shift.endTime}
                                   </p>
-                                  {(shift.profesorSalaANombre || shift.profesorSalaBNombre) && (
-                                    <p className="text-[10px] text-gray-500 dark:text-[#8A8A9A] truncate leading-tight mt-0.5">
-                                      {shift.profesorSalaANombre && shift.profesorSalaBNombre && shift.profesorSalaANombre !== shift.profesorSalaBNombre
-                                        ? '2 profesores'
-                                        : shift.profesorSalaANombre || shift.profesorSalaBNombre}
-                                    </p>
-                                  )}
+                                  <p className={`text-[10px] truncate leading-tight mt-0.5 ${shift.profesorSalaANombre || shift.profesorSalaBNombre ? 'text-gray-500 dark:text-[#8A8A9A]' : 'text-amber-500 dark:text-amber-400 font-semibold'}`}>
+                                    {shift.profesorSalaANombre && shift.profesorSalaBNombre && shift.profesorSalaANombre !== shift.profesorSalaBNombre
+                                      ? '2 profesores'
+                                      : shift.profesorSalaANombre || shift.profesorSalaBNombre || 'Sin profesor asignado'}
+                                  </p>
                                   <p className="text-[10px] font-semibold leading-tight mt-1">
                                     <span className="text-blue-500 dark:text-blue-400">A: {shift.inscritosA}/{shift.cupoMaximoSalaA}</span>
                                     <span className="text-gray-400 mx-1">·</span>

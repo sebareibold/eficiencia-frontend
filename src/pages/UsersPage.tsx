@@ -1,10 +1,10 @@
 ﻿import { useState, useEffect, Fragment, useCallback } from 'react'
-import { useNavigate } from 'react-router-dom'
+import { useNavigate, useSearchParams } from 'react-router-dom'
 import { motion, AnimatePresence } from 'framer-motion'
 import { pageVariants } from '../lib/motion'
 import {
   Plus, Search, RefreshCw, Edit2, Trash2, UserCheck, UserX,
-  ShieldCheck, Users, GraduationCap, Check, X as XIcon,
+  ShieldCheck, Users, GraduationCap, Check, X as XIcon, ChevronRight,
   ClipboardList, CheckCircle2, Ban, Save, Lock,
 } from 'lucide-react'
 import { useForm } from 'react-hook-form'
@@ -341,25 +341,44 @@ function UsuariosTab() {
 const espSchema = z.object({ especialidad: z.string().optional() })
 type EspValues  = z.infer<typeof espSchema>
 
+const COL = 'grid-cols-[2fr_2fr_1.5fr_100px_80px_48px]'
+
 function ProfesoresTab() {
   const addToast = useUiStore(s => s.addToast)
+  const navigate = useNavigate()
   const [users, setUsers]       = useState<AppUser[]>([])
   const [loading, setLoading]   = useState(true)
+  const [turnoCounts, setTurnoCounts] = useState<Record<string, number>>({})
   const [linking, setLinking]   = useState<string | null>(null)
   const [linkTarget, setLinkTarget] = useState<AppUser | null>(null)
-  const [editEspTarget, setEditEspTarget] = useState<AppUser | null>(null)
   const [unlinkTarget, setUnlinkTarget] = useState<AppUser | null>(null)
 
   const { register, handleSubmit, reset } = useForm<EspValues>({ resolver: zodResolver(espSchema) })
-  const { register: regEdit, handleSubmit: hsEditEsp, reset: resetEsp } = useForm<EspValues>({ resolver: zodResolver(espSchema) })
 
   const load = useCallback(() => {
     setLoading(true)
     usuariosApi.getAll()
-      .then(data => setUsers(data.filter(u => u.rol === 'PROFESOR')))
+      .then(async data => {
+        const profs = data.filter(u => u.rol === 'PROFESOR')
+        setUsers(profs)
+        // Turno counts en paralelo para todos los vinculados
+        const vinculados = profs.filter(u => u.profesor)
+        const results = await Promise.allSettled(
+          vinculados.map(u => usuariosApi.getProfesorDetalle(u.id))
+        )
+        const counts: Record<string, number> = {}
+        results.forEach((r, i) => {
+          if (r.status === 'fulfilled' && r.value.profesor) {
+            const p = r.value.profesor
+            const ids = new Set([...p.turnosSalaA.map((t: any) => t.id), ...p.turnosSalaB.map((t: any) => t.id)])
+            counts[vinculados[i].id] = ids.size
+          }
+        })
+        setTurnoCounts(counts)
+      })
       .catch(() => addToast('Error al cargar profesores', 'error'))
       .finally(() => setLoading(false))
-  }, [])
+  }, []) // eslint-disable-line
 
   useEffect(() => { load() }, [load])
 
@@ -372,6 +391,7 @@ function ProfesoresTab() {
       addToast('Perfil de profesor vinculado', 'success')
       setLinkTarget(null)
       reset()
+      load()
     } catch (err: any) {
       addToast(err?.response?.data?.message ?? 'Error al vincular', 'error')
     } finally {
@@ -382,26 +402,11 @@ function ProfesoresTab() {
   async function onUnlink(u: AppUser) {
     setLinking(u.id)
     try {
-      const updated = await usuariosApi.unlinkProfesor(u.id)
-      setUsers(prev => prev.map(x => x.id === updated.id ? updated : x))
+      await usuariosApi.unlinkProfesor(u.id)
       addToast('Perfil de profesor desvinculado', 'success')
+      load()
     } catch (err: any) {
       addToast(err?.response?.data?.message ?? 'Error al desvincular', 'error')
-    } finally {
-      setLinking(null)
-    }
-  }
-
-  async function onUpdateEsp(data: EspValues) {
-    if (!editEspTarget) return
-    setLinking(editEspTarget.id)
-    try {
-      const updated = await usuariosApi.updateProfesor(editEspTarget.id, data.especialidad ?? '')
-      setUsers(prev => prev.map(u => u.id === updated.id ? updated : u))
-      addToast('Especialidad actualizada', 'success')
-      setEditEspTarget(null)
-    } catch (err: any) {
-      addToast(err?.response?.data?.message ?? 'Error al actualizar', 'error')
     } finally {
       setLinking(null)
     }
@@ -412,72 +417,92 @@ function ProfesoresTab() {
 
   return (
     <div className="space-y-5">
-      <div className="space-y-3">
-        <h3 className="text-sm font-bold uppercase tracking-wider text-[#8A8A9A]">
-          Con perfil vinculado ({vinculados.length})
-        </h3>
-        <div className={`${glassCard} overflow-hidden`}>
-          {loading ? (
-            <div className="p-5 space-y-3">{Array.from({ length: 3 }).map((_, i) => <Skeleton key={i} className="h-14 rounded-xl" />)}</div>
-          ) : vinculados.length === 0 ? (
-            <div className="py-10 text-center text-sm text-[#8A8A9A]">Ningún profesor vinculado aún</div>
-          ) : (
-            <div className="divide-y divide-gray-100/60 dark:divide-white/[0.04]">
-              {vinculados.map(u => (
-                <div key={u.id} className="flex items-center gap-4 px-5 py-4">
-                  <div className="h-10 w-10 rounded-xl bg-emerald-500/10 flex items-center justify-center shrink-0">
-                    <GraduationCap size={18} className="text-emerald-600 dark:text-emerald-400" />
+
+      {/* ── Tabla principal ── */}
+      <div className={`${glassCard} overflow-hidden`}>
+        {/* Encabezado tabla */}
+        <div className={`hidden md:grid ${COL} gap-4 px-5 py-3 border-b border-white/20 dark:border-white/[0.06]`}>
+          {['Profesor', 'Mail', 'Especialidad', 'Estado', 'Turnos', ''].map(h => (
+            <span key={h} className="text-[10px] font-extrabold uppercase tracking-widest text-gray-400 dark:text-[#6A6A7A]">{h}</span>
+          ))}
+        </div>
+
+        {loading ? (
+          <div className="p-5 space-y-3">
+            {Array.from({ length: 4 }).map((_, i) => <Skeleton key={i} className="h-14 rounded-xl" />)}
+          </div>
+        ) : vinculados.length === 0 ? (
+          <div className="py-12 text-center text-sm text-[#8A8A9A]">Sin profesores vinculados</div>
+        ) : (
+          <div className="divide-y divide-gray-100/60 dark:divide-white/[0.04]">
+            {vinculados.map(u => {
+              const activo = u.profesor?.activo !== false
+              const count  = turnoCounts[u.id]
+              return (
+                <div
+                  key={u.id}
+                  className={`grid grid-cols-1 md:grid-cols-[2fr_2fr_1.5fr_100px_80px_48px] gap-3 md:gap-4 items-center px-5 py-4 cursor-pointer hover:bg-gray-50/60 dark:hover:bg-white/[0.03] transition-colors ${!activo ? 'opacity-60' : ''}`}
+                  onClick={() => navigate(ROUTES.PROFESOR_DETAIL.replace(':id', u.id))}
+                >
+                  {/* Profesor */}
+                  <div className="flex items-center gap-3 min-w-0">
+                    <div className={`h-9 w-9 rounded-xl flex items-center justify-center shrink-0 ${activo ? 'bg-emerald-500/10' : 'bg-white/[0.05]'}`}>
+                      <GraduationCap size={16} className={activo ? 'text-emerald-500' : 'text-gray-400'} />
+                    </div>
+                    <span className="font-semibold text-sm text-gray-900 dark:text-white truncate">{u.nombre}</span>
                   </div>
-                  <div className="flex-1 min-w-0">
-                    <p className="font-semibold text-gray-900 dark:text-white">{u.nombre}</p>
-                    <p className="text-xs text-[#8A8A9A]">
-                      {u.profesor?.especialidad ? u.profesor.especialidad : 'Sin especialidad'} · {u.email}
-                    </p>
+                  {/* Mail */}
+                  <span className="text-sm text-[#8A8A9A] truncate hidden md:block">{u.email}</span>
+                  {/* Especialidad */}
+                  <span className="text-sm text-gray-700 dark:text-gray-300 truncate hidden md:block">
+                    {u.profesor?.especialidad || <span className="text-[#8A8A9A] italic">—</span>}
+                  </span>
+                  {/* Estado */}
+                  <div className="hidden md:flex">
+                    {activo
+                      ? <span className="inline-flex items-center gap-1 rounded-full bg-emerald-500/10 px-2.5 py-1 text-[10px] font-bold text-emerald-700 dark:text-emerald-400 border border-emerald-500/20"><Check size={9} />Activo</span>
+                      : <span className="inline-flex items-center gap-1 rounded-full bg-red-500/10 px-2.5 py-1 text-[10px] font-bold text-red-600 dark:text-red-400 border border-red-500/20"><XIcon size={9} />Inactivo</span>}
                   </div>
-                  <div className="flex items-center gap-2 shrink-0">
-                    <button
-                      onClick={() => { setEditEspTarget(u); resetEsp({ especialidad: u.profesor?.especialidad ?? '' }) }}
-                      className="rounded-lg p-1.5 text-gray-400 hover:bg-gray-100 dark:hover:bg-white/[0.08] hover:text-gray-700 dark:hover:text-white transition-all"
-                    >
-                      <Edit2 size={14} />
-                    </button>
-                    <button
-                      onClick={() => setUnlinkTarget(u)}
-                      disabled={linking === u.id}
-                      className="flex items-center gap-1.5 rounded-lg px-3 py-1.5 text-xs font-semibold text-red-500 hover:bg-red-50 dark:hover:bg-red-500/10 transition-all disabled:opacity-40"
-                    >
-                      <UserX size={13} /> Desvincular
-                    </button>
+                  {/* Turnos */}
+                  <div className="hidden md:flex">
+                    {count !== undefined
+                      ? <span className="inline-flex items-center rounded-xl bg-white/40 dark:bg-white/[0.06] border border-white/30 dark:border-white/[0.08] px-2.5 py-1 text-xs font-bold text-gray-700 dark:text-gray-300">{count}</span>
+                      : <span className="text-xs text-[#8A8A9A]">—</span>}
+                  </div>
+                  {/* Arrow */}
+                  <div className="hidden md:flex justify-end">
+                    <ChevronRight size={15} className="text-gray-400" />
                   </div>
                 </div>
-              ))}
-            </div>
-          )}
-        </div>
+              )
+            })}
+          </div>
+        )}
       </div>
 
+      {/* ── Sin perfil vinculado ── */}
       {noVinculados.length > 0 && (
         <div className="space-y-3">
-          <h3 className="text-sm font-bold uppercase tracking-wider text-[#8A8A9A]">
+          <h3 className="text-xs font-extrabold uppercase tracking-widest text-[#8A8A9A]">
             Sin perfil vinculado ({noVinculados.length})
           </h3>
           <div className={`${glassCard} overflow-hidden`}>
             <div className="divide-y divide-gray-100/60 dark:divide-white/[0.04]">
               {noVinculados.map(u => (
                 <div key={u.id} className="flex items-center gap-4 px-5 py-4">
-                  <div className="h-10 w-10 rounded-xl bg-amber-500/10 flex items-center justify-center shrink-0">
-                    <GraduationCap size={18} className="text-amber-600 dark:text-amber-400" />
+                  <div className="h-9 w-9 rounded-xl bg-amber-500/10 flex items-center justify-center shrink-0">
+                    <GraduationCap size={16} className="text-amber-600 dark:text-amber-400" />
                   </div>
                   <div className="flex-1 min-w-0">
-                    <p className="font-semibold text-gray-900 dark:text-white">{u.nombre}</p>
-                    <p className="text-xs text-[#8A8A9A]">{u.email} · Tiene rol Profesor pero sin perfil vinculado</p>
+                    <p className="font-semibold text-sm text-gray-900 dark:text-white">{u.nombre}</p>
+                    <p className="text-xs text-[#8A8A9A] truncate">{u.email}</p>
                   </div>
                   <button
                     onClick={() => { setLinkTarget(u); reset({ especialidad: '' }) }}
                     disabled={linking === u.id}
                     className="flex items-center gap-1.5 rounded-xl btn-action px-3 py-2 text-xs shrink-0"
                   >
-                    <UserCheck size={13} /> Vincular como profesor
+                    <UserCheck size={13} /> Vincular
                   </button>
                 </div>
               ))}
@@ -486,6 +511,7 @@ function ProfesoresTab() {
         </div>
       )}
 
+      {/* ── Modals ── */}
       <Modal isOpen={!!linkTarget} onClose={() => { setLinkTarget(null); reset() }} title="Vincular como profesor" size="sm">
         <form onSubmit={handleSubmit(onLink)} className="space-y-4">
           <p className="text-sm text-[#8A8A9A]">
@@ -495,16 +521,6 @@ function ProfesoresTab() {
           <div className="flex justify-end gap-2 pt-1">
             <Button variant="ghost" type="button" onClick={() => { setLinkTarget(null); reset() }}>Cancelar</Button>
             <Button type="submit" isLoading={!!linking}>Vincular</Button>
-          </div>
-        </form>
-      </Modal>
-
-      <Modal isOpen={!!editEspTarget} onClose={() => setEditEspTarget(null)} title="Editar especialidad" size="sm">
-        <form onSubmit={hsEditEsp(onUpdateEsp)} className="space-y-4">
-          <Input label="Especialidad" placeholder="Ej. Crossfit, Yoga, Funcional" {...regEdit('especialidad')} />
-          <div className="flex justify-end gap-2 pt-1">
-            <Button variant="ghost" type="button" onClick={() => setEditEspTarget(null)}>Cancelar</Button>
-            <Button type="submit" isLoading={!!linking}>Guardar</Button>
           </div>
         </form>
       </Modal>
@@ -1272,7 +1288,11 @@ function SolicitudesTab() {
 // ─── Página principal ──────────────────────────────────────────────────────────
 
 export default function UsersPage() {
-  const [tab, setTab] = useState<Tab>('usuarios')
+  const [searchParams] = useSearchParams()
+  const [tab, setTab] = useState<Tab>(() => {
+    const t = searchParams.get('tab')
+    return (t === 'profesores' || t === 'permisos' || t === 'solicitudes') ? t : 'usuarios'
+  })
 
   const TABS: { value: Tab; label: string; icon: typeof Users }[] = [
     { value: 'usuarios',    label: 'Usuarios',        icon: Users },

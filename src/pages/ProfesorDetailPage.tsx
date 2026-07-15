@@ -1,0 +1,495 @@
+import { useState, useEffect, useCallback } from 'react'
+import { useParams, useNavigate } from 'react-router-dom'
+import { motion } from 'framer-motion'
+import { pageVariants } from '../lib/motion'
+import {
+  ArrowLeft, GraduationCap, Edit2, Check, X, Save, UserX, UserCheck,
+  CalendarDays, Repeat2, Link2Off, Mail,
+} from 'lucide-react'
+import { useForm } from 'react-hook-form'
+import { usuariosApi, type ProfesorDetalle, type TurnoResumen } from '../api/usuarios.api'
+import { useUiStore } from '../store/uiStore'
+import { ROUTES } from '../constants/routes'
+import Input from '../components/ui/Input'
+import ConfirmDialog from '../components/ui/ConfirmDialog'
+import { format, parseISO } from 'date-fns'
+import { es } from 'date-fns/locale'
+
+// ── Helpers ────────────────────────────────────────────────────────────────────
+
+const glassCard = 'rounded-[2rem] border border-white/50 dark:border-white/10 bg-white/30 dark:bg-black/30 backdrop-blur-3xl shadow-[0_8px_32px_rgba(0,0,0,0.04)] dark:shadow-[0_8px_32px_rgba(0,0,0,0.3)]'
+
+// Un turno puede estar asignado en sala A, sala B, o ambas al mismo profesor
+interface TurnoDisplayItem extends TurnoResumen {
+  salas: ('A' | 'B')[]
+}
+
+function buildTurnosDisplay(
+  salaA: TurnoResumen[],
+  salaB: TurnoResumen[],
+): TurnoDisplayItem[] {
+  const salaAIds = new Set(salaA.map(t => t.id))
+  const salaBIds = new Set(salaB.map(t => t.id))
+  const allIds   = new Set([...salaAIds, ...salaBIds])
+
+  return Array.from(allIds).map(id => {
+    const t = salaA.find(x => x.id === id) ?? salaB.find(x => x.id === id)!
+    const salas: ('A' | 'B')[] = []
+    if (salaAIds.has(id)) salas.push('A')
+    if (salaBIds.has(id)) salas.push('B')
+    return { ...t, salas }
+  })
+}
+
+// ── Grilla semanal de turnos ───────────────────────────────────────────────────
+
+const DIAS_SEMANA = [
+  { key: 'lunes',      label: 'Lunes' },
+  { key: 'martes',     label: 'Martes' },
+  { key: 'miércoles',  label: 'Miércoles' },
+  { key: 'jueves',     label: 'Jueves' },
+  { key: 'viernes',    label: 'Viernes' },
+  { key: 'sábado',     label: 'Sábado' },
+]
+
+function normDia(d: string) {
+  return d.toLowerCase()
+    .replace(/[áä]/g, 'a').replace(/[éë]/g, 'e').replace(/[íï]/g, 'i')
+    .replace(/[óö]/g, 'o').replace(/[úü]/g, 'u')
+}
+
+function turnosParaDia(turnos: TurnoDisplayItem[], diaKey: string): TurnoDisplayItem[] {
+  const norm = normDia(diaKey)
+  return turnos.filter(t =>
+    (Array.isArray(t.diasSemana) ? t.diasSemana : []).some(d => normDia(d) === norm)
+  )
+}
+
+function TurnosGrid({ turnos, onNavigate }: {
+  turnos: TurnoDisplayItem[]
+  onNavigate: (id: string) => void
+}) {
+  // ¿Qué días tienen al menos un turno?
+  const diasConTurnos = DIAS_SEMANA.filter(d => turnosParaDia(turnos, d.key).length > 0)
+
+  return (
+    <div className="p-4 overflow-x-auto">
+      <div
+        className="grid gap-3 min-w-[480px]"
+        style={{ gridTemplateColumns: `repeat(${diasConTurnos.length}, minmax(0, 1fr))` }}
+      >
+        {diasConTurnos.map(({ key, label }) => {
+          const dayTurnos = turnosParaDia(turnos, key)
+          return (
+            <div key={key} className="space-y-2">
+              {/* Encabezado de día */}
+              <div className="pb-1 border-b border-white/20 dark:border-white/[0.06]">
+                <span className="text-[11px] font-extrabold uppercase tracking-widest text-gray-500 dark:text-[#8A8A9A]">
+                  {label}
+                </span>
+              </div>
+              {/* Cards de turnos de ese día */}
+              <div className="space-y-1.5">
+                {dayTurnos.map(t => (
+                  <button
+                    key={t.id}
+                    onClick={() => onNavigate(t.id)}
+                    className="w-full text-left rounded-2xl border border-white/30 dark:border-white/[0.08] bg-white/40 dark:bg-white/[0.04] px-3 py-3 hover:bg-white/70 dark:hover:bg-white/[0.09] active:scale-[0.97] transition-all space-y-2.5"
+                  >
+                    {/* Horario */}
+                    <div>
+                      <span className="text-[9px] font-extrabold uppercase tracking-widest text-gray-400 dark:text-[#6A6A7A]">Horario</span>
+                      <p className="text-sm font-black text-gray-900 dark:text-white leading-tight mt-0.5">
+                        {t.horaInicio} – {t.horaFin}
+                      </p>
+                    </div>
+                    {/* Sala */}
+                    <div>
+                      <span className="text-[9px] font-extrabold uppercase tracking-widest text-gray-400 dark:text-[#6A6A7A]">Sala</span>
+                      <div className="flex flex-wrap gap-1 mt-1">
+                        {t.salas.map(s => <SalaBadge key={s} sala={s} />)}
+                      </div>
+                    </div>
+                    {t.recurrente && (
+                      <div className="flex items-center gap-1">
+                        <Repeat2 size={9} className="text-primary/70 shrink-0" />
+                        <span className="text-[9px] font-bold text-primary/70">Recurrente</span>
+                      </div>
+                    )}
+                  </button>
+                ))}
+              </div>
+            </div>
+          )
+        })}
+      </div>
+    </div>
+  )
+}
+
+// ── Componentes de soporte ─────────────────────────────────────────────────────
+
+function SalaBadge({ sala }: { sala: 'A' | 'B' }) {
+  return sala === 'A'
+    ? <span className="inline-flex items-center rounded-lg bg-primary/15 px-2 py-0.5 text-[10px] font-bold text-amber-700 dark:text-primary">Sala A</span>
+    : <span className="inline-flex items-center rounded-lg bg-blue-500/10 px-2 py-0.5 text-[10px] font-bold text-blue-600 dark:text-blue-400">Sala B</span>
+}
+
+function PageSkeleton() {
+  return (
+    <div className="space-y-6 animate-pulse">
+      <div className="h-10 w-48 rounded-2xl bg-white/20 dark:bg-white/[0.06]" />
+      <div className={`${glassCard} p-6 lg:p-8 space-y-4`}>
+        <div className="flex gap-5">
+          <div className="h-16 w-16 rounded-2xl bg-white/20 dark:bg-white/[0.08] shrink-0" />
+          <div className="flex-1 space-y-2.5">
+            <div className="h-6 w-48 rounded-xl bg-white/20 dark:bg-white/[0.08]" />
+            <div className="h-4 w-64 rounded-xl bg-white/10 dark:bg-white/[0.05]" />
+            <div className="h-4 w-36 rounded-xl bg-white/10 dark:bg-white/[0.05]" />
+          </div>
+        </div>
+      </div>
+      <div className={`${glassCard} p-6 space-y-3`}>
+        {[1, 2, 3].map(i => <div key={i} className="h-14 rounded-xl bg-white/10 dark:bg-white/[0.05]" />)}
+      </div>
+    </div>
+  )
+}
+
+// ── Page ──────────────────────────────────────────────────────────────────────
+
+export default function ProfesorDetailPage() {
+  const { id }    = useParams<{ id: string }>()
+  const navigate  = useNavigate()
+  const addToast  = useUiStore(s => s.addToast)
+
+  const [prof,    setProf]    = useState<ProfesorDetalle | null>(null)
+  const [loading, setLoading] = useState(true)
+  const [editing, setEditing] = useState(false)
+  const [saving,  setSaving]  = useState(false)
+  const [acting,  setActing]  = useState(false)
+  const [showBaja,         setShowBaja]         = useState(false)
+  const [showReactivar,    setShowReactivar]    = useState(false)
+  const [showDesvincular,  setShowDesvincular]  = useState(false)
+
+  type EditForm = { email: string; activo: boolean; especialidad: string }
+  const { register, handleSubmit, reset, watch, setValue } = useForm<EditForm>()
+
+  const load = useCallback(async () => {
+    if (!id) return
+    setLoading(true)
+    try {
+      const data = await usuariosApi.getProfesorDetalle(id)
+      setProf(data)
+    } catch {
+      addToast('Error al cargar el profesor', 'error')
+    } finally {
+      setLoading(false)
+    }
+  }, [id]) // eslint-disable-line
+
+  useEffect(() => { load() }, [load])
+
+  async function onSave(values: EditForm) {
+    if (!id) return
+    setSaving(true)
+    try {
+      await Promise.all([
+        usuariosApi.update(id, { email: values.email, activo: values.activo }),
+        usuariosApi.updateProfesor(id, values.especialidad),
+      ])
+      await load()
+      setEditing(false)
+      addToast('Datos actualizados', 'success')
+    } catch {
+      addToast('Error al actualizar', 'error')
+    } finally {
+      setSaving(false)
+    }
+  }
+
+  async function onBaja() {
+    if (!id) return
+    setActing(true)
+    try {
+      const result = await usuariosApi.bajaProfesor(id)
+      await load()
+      setShowBaja(false)
+      const n = result.turnosDespejados
+      addToast(
+        `Baja registrada. ${n} turno${n !== 1 ? 's' : ''} sin profesor asignado.`,
+        'success',
+      )
+    } catch (err: any) {
+      addToast(err?.response?.data?.message ?? 'Error al dar de baja', 'error')
+    } finally {
+      setActing(false)
+    }
+  }
+
+  async function onReactivar() {
+    if (!id) return
+    setActing(true)
+    try {
+      await usuariosApi.reactivarProfesor(id)
+      await load()
+      setShowReactivar(false)
+      addToast('Profesor reactivado', 'success')
+    } catch {
+      addToast('Error al reactivar', 'error')
+    } finally {
+      setActing(false)
+    }
+  }
+
+  async function onDesvincular() {
+    if (!id) return
+    setActing(true)
+    try {
+      await usuariosApi.unlinkProfesor(id)
+      addToast('Perfil de profesor desvinculado', 'success')
+      navigate(`${ROUTES.USERS}?tab=profesores`)
+    } catch (err: any) {
+      addToast(err?.response?.data?.message ?? 'Error al desvincular', 'error')
+      setActing(false)
+    }
+  }
+
+  if (loading) return (
+    <motion.div {...pageVariants} className="space-y-6 pb-10 relative z-10">
+      <button onClick={() => navigate(`${ROUTES.USERS}?tab=profesores`)}
+        className="flex items-center gap-2 text-sm font-semibold text-gray-500 dark:text-[#8A8A9A] hover:text-gray-900 dark:hover:text-white transition-colors"
+      >
+        <ArrowLeft size={15} /> Volver
+      </button>
+      <PageSkeleton />
+    </motion.div>
+  )
+
+  if (!prof || !prof.profesor) return (
+    <motion.div {...pageVariants} className="space-y-6 pb-10 relative z-10">
+      <button onClick={() => navigate(`${ROUTES.USERS}?tab=profesores`)}
+        className="flex items-center gap-2 text-sm text-gray-500 hover:text-gray-800 dark:hover:text-white transition-colors"
+      >
+        <ArrowLeft size={16} /> Volver a usuarios
+      </button>
+      <div className="py-20 text-center text-sm text-[#8A8A9A]">Profesor no encontrado</div>
+    </motion.div>
+  )
+
+  const p = prof.profesor
+  const turnosDisplay = buildTurnosDisplay(p.turnosSalaA, p.turnosSalaB)
+  const isActivo = p.activo
+
+  return (
+    <motion.div {...pageVariants} className="space-y-6 pb-10 relative z-10">
+
+      {/* Blob */}
+      <div className="pointer-events-none fixed inset-0 -z-10 overflow-hidden">
+        <div className="absolute -top-20 -right-20 w-[400px] h-[400px] rounded-full bg-emerald-500/10 blur-[100px]" />
+      </div>
+
+      {/* Header */}
+      <button onClick={() => navigate(`${ROUTES.USERS}?tab=profesores`)}
+        className="flex items-center gap-2 text-sm font-semibold text-gray-500 dark:text-[#8A8A9A] hover:text-gray-900 dark:hover:text-white transition-colors"
+      >
+        <ArrowLeft size={15} /> Volver
+      </button>
+
+      {/* ── Hero card ─────────────────────────────────────────────────────────── */}
+      <motion.div
+        initial={{ opacity: 0, y: 20 }}
+        animate={{ opacity: 1, y: 0, transition: { duration: 0.35, ease: [0.22, 1, 0.36, 1] } }}
+        className={`${glassCard} p-6 lg:p-8`}
+      >
+        <div className="flex items-start gap-5">
+          {/* Avatar */}
+          <div className={`flex h-16 w-16 shrink-0 items-center justify-center rounded-2xl ${isActivo ? 'bg-emerald-500/10' : 'bg-gray-200/60 dark:bg-white/[0.05]'}`}>
+            <GraduationCap size={28} className={isActivo ? 'text-emerald-500' : 'text-gray-400'} />
+          </div>
+
+          {/* Info */}
+          <div className="flex-1 min-w-0">
+            <h2 className="text-xl font-black text-gray-900 dark:text-white">{prof.nombre}</h2>
+
+            {/* Campos info */}
+            {!editing && (
+              <div className="mt-4 space-y-3">
+                <div className="flex items-center gap-3 min-w-0">
+                  <span className="w-24 shrink-0 text-[10px] font-extrabold uppercase tracking-widest text-gray-400 dark:text-[#6A6A7A]">Mail</span>
+                  <p className="text-sm font-semibold text-gray-900 dark:text-white truncate flex items-center gap-1.5">
+                    <Mail size={12} className="text-gray-400 shrink-0" />
+                    {prof.email}
+                  </p>
+                </div>
+                <div className="flex items-center gap-3">
+                  <span className="w-24 shrink-0 text-[10px] font-extrabold uppercase tracking-widest text-gray-400 dark:text-[#6A6A7A]">Estado</span>
+                  {isActivo
+                    ? <span className="inline-flex items-center gap-1 rounded-full bg-emerald-500/10 px-2.5 py-1 text-xs font-bold text-emerald-700 dark:text-emerald-400 border border-emerald-500/20"><Check size={10} />Activo</span>
+                    : <span className="inline-flex items-center gap-1 rounded-full bg-red-500/10 px-2.5 py-1 text-xs font-bold text-red-600 dark:text-red-400 border border-red-500/20"><X size={10} />Inactivo</span>}
+                </div>
+                <div className="flex items-center gap-3">
+                  <span className="w-24 shrink-0 text-[10px] font-extrabold uppercase tracking-widest text-gray-400 dark:text-[#6A6A7A]">Alta</span>
+                  <p className="text-sm font-semibold text-gray-900 dark:text-white">
+                    {format(parseISO(prof.createdAt), "d MMM yyyy", { locale: es })}
+                  </p>
+                </div>
+                {!isActivo && p.fechaBaja && (
+                  <div className="flex items-center gap-3">
+                    <span className="w-24 shrink-0 text-[10px] font-extrabold uppercase tracking-widest text-red-400">Baja</span>
+                    <p className="text-sm font-semibold text-red-600 dark:text-red-400">
+                      {format(parseISO(p.fechaBaja), "d MMM yyyy", { locale: es })}
+                    </p>
+                  </div>
+                )}
+                <div className="flex items-center gap-3">
+                  <span className="w-24 shrink-0 text-[10px] font-extrabold uppercase tracking-widest text-gray-400 dark:text-[#6A6A7A]">Especialidad</span>
+                  <p className="text-sm font-semibold text-gray-900 dark:text-white">
+                    {p.especialidad || <span className="text-gray-400 italic font-normal">—</span>}
+                  </p>
+                </div>
+              </div>
+            )}
+
+            {/* Editar */}
+            {editing && (
+              <form onSubmit={handleSubmit(onSave)} className="mt-4 space-y-3">
+                <Input
+                  label="Mail"
+                  type="email"
+                  placeholder="correo@ejemplo.com"
+                  {...register('email')}
+                />
+                {/* Estado toggle */}
+                <div>
+                  <span className="block text-xs font-bold text-gray-500 dark:text-[#8A8A9A] mb-1.5">Estado</span>
+                  <button
+                    type="button"
+                    onClick={() => setValue('activo', !watch('activo'))}
+                    className="flex items-center gap-2.5"
+                  >
+                    {/* Switch */}
+                    <span className={`relative inline-flex h-5 w-9 shrink-0 rounded-full transition-colors duration-200 ${watch('activo') ? 'bg-emerald-500' : 'bg-red-400'}`}>
+                      <span className={`absolute top-0.5 left-0.5 h-4 w-4 rounded-full bg-white shadow transition-transform duration-200 ${watch('activo') ? 'translate-x-4' : 'translate-x-0'}`} />
+                    </span>
+                    {/* Label */}
+                    <span className={`text-xs font-bold ${watch('activo') ? 'text-emerald-600 dark:text-emerald-400' : 'text-red-600 dark:text-red-400'}`}>
+                      {watch('activo') ? 'Activo' : 'Inactivo'}
+                    </span>
+                  </button>
+                </div>
+                <Input
+                  label="Especialidad"
+                  placeholder="Ej. Crossfit, Yoga, Funcional"
+                  {...register('especialidad')}
+                />
+                <button
+                  type="submit"
+                  disabled={saving}
+                  className="flex items-center gap-1.5 rounded-2xl btn-action px-4 py-2.5 text-sm font-bold disabled:opacity-60"
+                >
+                  {saving
+                    ? <span className="h-3.5 w-3.5 animate-spin rounded-full border-2 border-gray-900/30 border-t-gray-900" />
+                    : <Save size={13} />}
+                  Guardar
+                </button>
+              </form>
+            )}
+          </div>
+
+          {/* Acciones */}
+          <div className="flex flex-col gap-3 shrink-0 w-36">
+            <button
+              onClick={() => { setEditing(v => !v); reset({ email: prof.email, activo: p.activo, especialidad: p.especialidad ?? '' }) }}
+              className="flex items-center justify-center gap-1.5 w-full rounded-xl border border-white/30 dark:border-white/10 bg-white/40 dark:bg-white/[0.06] px-3 py-2 text-xs font-bold text-gray-600 dark:text-gray-300 hover:bg-white/60 dark:hover:bg-white/10 transition-all"
+            >
+              {editing ? <X size={13} /> : <Edit2 size={13} />}
+              {editing ? 'Cancelar' : 'Editar'}
+            </button>
+            {isActivo ? (
+              <button
+                onClick={() => setShowBaja(true)}
+                className="flex items-center justify-center gap-1.5 w-full rounded-xl bg-red-500/10 border border-red-500/20 hover:bg-red-500/20 text-red-600 dark:text-red-400 px-3 py-2 text-xs font-bold transition-all"
+              >
+                <UserX size={13} /> Dar de baja
+              </button>
+            ) : (
+              <button
+                onClick={() => setShowReactivar(true)}
+                className="flex items-center justify-center gap-1.5 w-full rounded-xl bg-emerald-500/10 border border-emerald-500/20 hover:bg-emerald-500/20 text-emerald-600 dark:text-emerald-400 px-3 py-2 text-xs font-bold transition-all"
+              >
+                <UserCheck size={13} /> Reactivar
+              </button>
+            )}
+            <button
+              onClick={() => setShowDesvincular(true)}
+              className="flex items-center justify-center gap-1.5 w-full rounded-xl bg-orange-500/10 border border-orange-500/20 hover:bg-orange-500/20 text-orange-600 dark:text-orange-400 px-3 py-2 text-xs font-bold transition-all"
+            >
+              <Link2Off size={13} /> Desvincular
+            </button>
+          </div>
+        </div>
+      </motion.div>
+
+      {/* ── Turnos asignados (grilla semanal) ────────────────────────────────── */}
+      <motion.div
+        initial={{ opacity: 0, y: 20 }}
+        animate={{ opacity: 1, y: 0, transition: { duration: 0.35, ease: [0.22, 1, 0.36, 1], delay: 0.08 } }}
+        className={`${glassCard} overflow-hidden`}
+      >
+        <div className="flex items-center justify-between px-6 py-4 border-b border-white/20 dark:border-white/[0.06]">
+          <div className="flex items-center gap-2.5">
+            <CalendarDays size={16} className="text-gray-400" />
+            <h3 className="font-bold text-gray-900 dark:text-white">Turnos asignados</h3>
+          </div>
+          <span className="text-xs font-bold px-2.5 py-1 rounded-xl bg-white/40 dark:bg-white/[0.06] text-gray-500 dark:text-[#8A8A9A]">
+            {turnosDisplay.length}
+          </span>
+        </div>
+
+        {turnosDisplay.length === 0 ? (
+          <div className="py-12 text-center">
+            <CalendarDays size={28} className="mx-auto text-gray-300 dark:text-white/20 mb-3" />
+            <p className="text-sm text-[#8A8A9A]">Sin turnos asignados</p>
+          </div>
+        ) : (
+          <TurnosGrid turnos={turnosDisplay} onNavigate={id => navigate(`/shifts/${id}`)} />
+        )}
+      </motion.div>
+
+      {/* ── Dialogs ───────────────────────────────────────────────────────────── */}
+      <ConfirmDialog
+        isOpen={showBaja}
+        title="Dar de baja al profesor"
+        message={`¿Dar de baja a ${prof.nombre}? Se lo desvinculará de ${turnosDisplay.length} turno${turnosDisplay.length !== 1 ? 's' : ''} activo${turnosDisplay.length !== 1 ? 's' : ''}. Las asistencias y rutinas históricas se conservan intactas.`}
+        warning={turnosDisplay.length > 0 ? `Los ${turnosDisplay.length} turno${turnosDisplay.length !== 1 ? 's' : ''} quedarán sin profesor asignado y deberás reasignarlos manualmente.` : undefined}
+        confirmLabel="Dar de baja"
+        isLoading={acting}
+        onConfirm={onBaja}
+        onClose={() => setShowBaja(false)}
+      />
+
+      <ConfirmDialog
+        isOpen={showReactivar}
+        title="Reactivar al profesor"
+        message={`¿Reactivar a ${prof.nombre}? Volverá a aparecer disponible para asignar en turnos y rutinas.`}
+        confirmLabel="Reactivar"
+        isLoading={acting}
+        onConfirm={onReactivar}
+        onClose={() => setShowReactivar(false)}
+      />
+
+      <ConfirmDialog
+        isOpen={showDesvincular}
+        title="Desvincular perfil de profesor"
+        message={`¿Desvincular el perfil de profesor de ${prof.nombre}? Su cuenta de usuario seguirá existiendo con rol PROFESOR, pero sin perfil vinculado.`}
+        warning="Las asistencias y rutinas históricas se conservan. Los turnos asignados quedarán sin profesor."
+        confirmLabel="Desvincular"
+        isLoading={acting}
+        onConfirm={onDesvincular}
+        onClose={() => setShowDesvincular(false)}
+      />
+
+    </motion.div>
+  )
+}
