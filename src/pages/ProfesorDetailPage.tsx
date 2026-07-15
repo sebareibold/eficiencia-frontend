@@ -4,7 +4,7 @@ import { motion } from 'framer-motion'
 import { pageVariants } from '../lib/motion'
 import {
   ArrowLeft, GraduationCap, Edit2, Check, X, Save, UserX, UserCheck,
-  CalendarDays, Repeat2, Link2Off, Mail,
+  CalendarDays, Repeat2, Link2Off, Link2, Mail,
 } from 'lucide-react'
 import { useForm } from 'react-hook-form'
 import { usuariosApi, type ProfesorDetalle, type TurnoResumen } from '../api/usuarios.api'
@@ -171,6 +171,8 @@ export default function ProfesorDetailPage() {
   const [showBaja,         setShowBaja]         = useState(false)
   const [showReactivar,    setShowReactivar]    = useState(false)
   const [showDesvincular,  setShowDesvincular]  = useState(false)
+  const [vinculando,       setVinculando]       = useState(false)
+  const [espVincular,      setEspVincular]      = useState('')
 
   type EditForm = { email: string; activo: boolean; especialidad: string }
   const { register, handleSubmit, reset, watch, setValue } = useForm<EditForm>()
@@ -255,6 +257,20 @@ export default function ProfesorDetailPage() {
     }
   }
 
+  async function onVincular() {
+    if (!id) return
+    setVinculando(true)
+    try {
+      await usuariosApi.linkProfesor(id, espVincular.trim() || undefined)
+      addToast('Perfil de profesor vinculado', 'success')
+      await load()
+    } catch (err: any) {
+      addToast(err?.response?.data?.message ?? 'Error al vincular', 'error')
+    } finally {
+      setVinculando(false)
+    }
+  }
+
   if (loading) return (
     <motion.div {...pageVariants} className="space-y-6 pb-10 relative z-10">
       <button onClick={() => navigate(`${ROUTES.USERS}?tab=profesores`)}
@@ -266,7 +282,7 @@ export default function ProfesorDetailPage() {
     </motion.div>
   )
 
-  if (!prof || !prof.profesor) return (
+  if (!prof) return (
     <motion.div {...pageVariants} className="space-y-6 pb-10 relative z-10">
       <button onClick={() => navigate(`${ROUTES.USERS}?tab=profesores`)}
         className="flex items-center gap-2 text-sm text-gray-500 hover:text-gray-800 dark:hover:text-white transition-colors"
@@ -274,6 +290,85 @@ export default function ProfesorDetailPage() {
         <ArrowLeft size={16} /> Volver a usuarios
       </button>
       <div className="py-20 text-center text-sm text-[#8A8A9A]">Profesor no encontrado</div>
+    </motion.div>
+  )
+
+  if (!prof.profesor) return (
+    <motion.div {...pageVariants} className="space-y-6 pb-10 relative z-10">
+
+      {/* Blob */}
+      <div className="pointer-events-none fixed inset-0 -z-10 overflow-hidden">
+        <div className="absolute -top-20 -right-20 w-[400px] h-[400px] rounded-full bg-blue-500/10 blur-[100px]" />
+      </div>
+
+      <button onClick={() => navigate(`${ROUTES.USERS}?tab=profesores`)}
+        className="flex items-center gap-2 text-sm font-semibold text-gray-500 dark:text-[#8A8A9A] hover:text-gray-900 dark:hover:text-white transition-colors"
+      >
+        <ArrowLeft size={15} /> Volver
+      </button>
+
+      {/* Card usuario */}
+      <motion.div
+        initial={{ opacity: 0, y: 20 }}
+        animate={{ opacity: 1, y: 0, transition: { duration: 0.35, ease: [0.22, 1, 0.36, 1] } }}
+        className={`${glassCard} p-6 lg:p-8`}
+      >
+        <div className="flex items-start gap-5">
+          <div className="flex h-16 w-16 shrink-0 items-center justify-center rounded-2xl bg-gray-200/60 dark:bg-white/[0.05]">
+            <GraduationCap size={28} className="text-gray-400" />
+          </div>
+          <div className="flex-1 min-w-0">
+            <h2 className="text-xl font-black text-gray-900 dark:text-white">{prof.nombre}</h2>
+            <div className="mt-3 flex items-center gap-3">
+              <span className="w-24 shrink-0 text-[10px] font-extrabold uppercase tracking-widest text-gray-400 dark:text-[#6A6A7A]">Mail</span>
+              <p className="text-sm font-semibold text-gray-900 dark:text-white truncate flex items-center gap-1.5">
+                <Mail size={12} className="text-gray-400 shrink-0" />
+                {prof.email}
+              </p>
+            </div>
+          </div>
+        </div>
+      </motion.div>
+
+      {/* Card vincular */}
+      <motion.div
+        initial={{ opacity: 0, y: 20 }}
+        animate={{ opacity: 1, y: 0, transition: { duration: 0.35, ease: [0.22, 1, 0.36, 1], delay: 0.08 } }}
+        className={`${glassCard} p-6 lg:p-8`}
+      >
+        <div className="flex items-center gap-2.5 mb-1">
+          <Link2 size={16} className="text-gray-400" />
+          <h3 className="font-bold text-gray-900 dark:text-white">Vincular perfil de profesor</h3>
+        </div>
+        <p className="text-sm text-[#8A8A9A] mb-5">
+          Este usuario tiene rol <span className="font-bold text-gray-600 dark:text-gray-300">PROFESOR</span> pero no tiene un perfil vinculado.
+        </p>
+        <div className="space-y-4">
+          <div>
+            <label className="block text-xs font-bold text-gray-500 dark:text-[#8A8A9A] mb-1.5">
+              Especialidad <span className="font-normal">(opcional)</span>
+            </label>
+            <input
+              type="text"
+              placeholder="Ej. Crossfit, Yoga, Funcional"
+              value={espVincular}
+              onChange={e => setEspVincular(e.target.value)}
+              className="w-full rounded-xl border border-white/30 dark:border-white/10 bg-white/40 dark:bg-white/[0.06] px-3.5 py-2.5 text-sm text-gray-900 dark:text-white placeholder-gray-400 dark:placeholder-[#6A6A7A] focus:outline-none focus:ring-2 focus:ring-primary/40 transition-all"
+            />
+          </div>
+          <button
+            onClick={onVincular}
+            disabled={vinculando}
+            className="flex items-center gap-2 rounded-2xl btn-action px-5 py-2.5 text-sm font-bold disabled:opacity-60"
+          >
+            {vinculando
+              ? <span className="h-3.5 w-3.5 animate-spin rounded-full border-2 border-gray-900/30 border-t-gray-900" />
+              : <Link2 size={14} />}
+            Vincular perfil
+          </button>
+        </div>
+      </motion.div>
+
     </motion.div>
   )
 
