@@ -48,8 +48,10 @@ function mapTurno(t: any): Shift {
     inscritosB,
     capacity: cupoMaximoSalaA + cupoMaximoSalaB,
     enrolled: inscritosA + inscritosB,
-    profesorId: String(t.profesorId ?? ''),
-    profesorNombre: t.profesor?.usuario?.nombre ?? t.profesor?.nombre ?? '',
+    profesorSalaAId: String(t.profesorSalaAId ?? ''),
+    profesorSalaANombre: t.profesorSalaA?.usuario?.nombre ?? '',
+    profesorSalaBId: String(t.profesorSalaBId ?? ''),
+    profesorSalaBNombre: t.profesorSalaB?.usuario?.nombre ?? '',
     createdAt: t.createdAt ?? '',
   }
 }
@@ -78,7 +80,8 @@ export const shiftsApi = {
       recurrente: dto.recurrente,
       cupoMaximoSalaA: dto.cupoMaximoSalaA,
       cupoMaximoSalaB: dto.cupoMaximoSalaB,
-      profesorId: dto.profesorId,
+      profesorSalaAId: dto.profesorSalaAId || undefined,
+      profesorSalaBId: dto.profesorSalaBId || undefined,
     }).then((r) => mapTurno(r.data)),
 
   update: (id: string | number, dto: UpdateShiftDto): Promise<Shift> =>
@@ -89,7 +92,8 @@ export const shiftsApi = {
       ...(dto.recurrente !== undefined && { recurrente: dto.recurrente }),
       ...(dto.cupoMaximoSalaA !== undefined && { cupoMaximoSalaA: dto.cupoMaximoSalaA }),
       ...(dto.cupoMaximoSalaB !== undefined && { cupoMaximoSalaB: dto.cupoMaximoSalaB }),
-      ...(dto.profesorId !== undefined && { profesorId: dto.profesorId }),
+      ...(dto.profesorSalaAId !== undefined && { profesorSalaAId: dto.profesorSalaAId || null }),
+      ...(dto.profesorSalaBId !== undefined && { profesorSalaBId: dto.profesorSalaBId || null }),
     }).then((r) => mapTurno(r.data)),
 
   remove: (id: string | number) => api.delete(`/turnos/${id}`),

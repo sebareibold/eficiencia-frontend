@@ -15,8 +15,10 @@ export interface Shift {
   capacity: number
   /** inscritosA + inscritosB */
   enrolled: number
-  profesorId: string
-  profesorNombre: string
+  profesorSalaAId: string
+  profesorSalaANombre: string
+  profesorSalaBId: string
+  profesorSalaBNombre: string
   createdAt: string
 }
 
@@ -27,7 +29,8 @@ export interface CreateShiftDto {
   endTime: string
   cupoMaximoSalaA: number
   cupoMaximoSalaB: number
-  profesorId?: string
+  profesorSalaAId?: string
+  profesorSalaBId?: string
   clientIds?: string[]
 }
 

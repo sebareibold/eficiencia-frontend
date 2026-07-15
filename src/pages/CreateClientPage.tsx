@@ -229,8 +229,8 @@ export default function CreateClientPage() {
   const [newTurnoForm, setNewTurnoForm] = useState<{
     days: WeekDay[]; startTime: string; endTime: string
     cupoMaximoSalaA: string; cupoMaximoSalaB: string
-    profesorId: string; recurrente: boolean
-  }>({ days: [], startTime: '', endTime: '', cupoMaximoSalaA: '', cupoMaximoSalaB: '', profesorId: '', recurrente: true })
+    profesorSalaAId: string; recurrente: boolean
+  }>({ days: [], startTime: '', endTime: '', cupoMaximoSalaA: '', cupoMaximoSalaB: '', profesorSalaAId: '', recurrente: true })
   const [newTurnoErrors, setNewTurnoErrors] = useState<Record<string, string>>({})
   const [savingNewTurno, setSavingNewTurno] = useState(false)
 
@@ -243,7 +243,6 @@ export default function CreateClientPage() {
     if (!newTurnoForm.endTime) errs.endTime = 'Requerida'
     if (!newTurnoForm.cupoMaximoSalaA || isNaN(Number(newTurnoForm.cupoMaximoSalaA))) errs.cupoMaximoSalaA = 'Inválido'
     if (!newTurnoForm.cupoMaximoSalaB || isNaN(Number(newTurnoForm.cupoMaximoSalaB))) errs.cupoMaximoSalaB = 'Inválido'
-    if (!newTurnoForm.profesorId) errs.profesorId = 'Requerido'
     if (Object.keys(errs).length) { setNewTurnoErrors(errs); return }
     setSavingNewTurno(true)
     try {
@@ -254,12 +253,12 @@ export default function CreateClientPage() {
         endTime: newTurnoForm.endTime,
         cupoMaximoSalaA: Number(newTurnoForm.cupoMaximoSalaA),
         cupoMaximoSalaB: Number(newTurnoForm.cupoMaximoSalaB),
-        profesorId: newTurnoForm.profesorId,
+        profesorSalaAId: newTurnoForm.profesorSalaAId || undefined,
       })
       setTurnos(prev => [...prev, turno])
       setSelectedTurnoId(String(turno.id))
       setCreatingNewTurno(false)
-      setNewTurnoForm({ days: [], startTime: '', endTime: '', cupoMaximoSalaA: '', cupoMaximoSalaB: '', profesorId: '', recurrente: true })
+      setNewTurnoForm({ days: [], startTime: '', endTime: '', cupoMaximoSalaA: '', cupoMaximoSalaB: '', profesorSalaAId: '', recurrente: true })
       setNewTurnoErrors({})
     } catch {
       setNewTurnoErrors({ general: 'Error al crear el turno. Intentá de nuevo.' })
@@ -353,9 +352,9 @@ export default function CreateClientPage() {
       }
       if (rutinaData.nombre && selectedTurnoId) {
         const turno = turnos.find(t => String(t.id) === selectedTurnoId)
-        if (turno?.profesorId) {
+        if (turno?.profesorSalaAId) {
           await rutinasApi.create({
-            clienteId: String(client.id), profesorId: turno.profesorId,
+            clienteId: String(client.id), profesorId: turno.profesorSalaAId,
             nombre: rutinaData.nombre, descripcion: rutinaData.descripcion || undefined,
           })
         }
@@ -956,16 +955,15 @@ export default function CreateClientPage() {
                       </div>
                     </div>
 
-                    {/* Profesor */}
+                    {/* Profesor Sala A */}
                     <div className="space-y-1">
-                      <label className="text-[10px] font-bold uppercase tracking-widest text-gray-500 dark:text-[#6A6A7A]">Profesor *</label>
-                      <select value={newTurnoForm.profesorId}
-                        onChange={e => { setNewTurnoErrors(p => ({ ...p, profesorId: '' })); setNewTurnoForm(p => ({ ...p, profesorId: e.target.value })) }}
+                      <label className="text-[10px] font-bold uppercase tracking-widest text-gray-500 dark:text-[#6A6A7A]">Profesor Sala A</label>
+                      <select value={newTurnoForm.profesorSalaAId}
+                        onChange={e => setNewTurnoForm(p => ({ ...p, profesorSalaAId: e.target.value }))}
                         className={ic()}>
-                        <option value="">{professors.length === 0 ? 'Sin profesores disponibles' : 'Seleccionar…'}</option>
+                        <option value="">{professors.length === 0 ? 'Sin profesores disponibles' : 'Ninguno'}</option>
                         {professors.map(p => <option key={p.id} value={p.id}>{p.name}</option>)}
                       </select>
-                      {newTurnoErrors.profesorId && <p className="text-[10px] text-red-500">{newTurnoErrors.profesorId}</p>}
                     </div>
 
                     {/* Recurrente */}
@@ -1025,7 +1023,7 @@ export default function CreateClientPage() {
   // ── Step 5 — Rutina ───────────────────────────────────────────────────────
   function Step5() {
     const turno = turnos.find(t => String(t.id) === selectedTurnoId)
-    const canCreate = !!turno?.profesorId
+    const canCreate = !!turno?.profesorSalaAId
 
     return (
       <div className="space-y-5">

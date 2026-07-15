@@ -77,7 +77,8 @@ const schema = z.object({
   endTime:         z.string().min(1, 'La hora de fin es requerida'),
   cupoMaximoSalaA: z.string().refine(v => v !== '' && !isNaN(Number(v)) && Number(v) >= 0, 'Cupo inválido'),
   cupoMaximoSalaB: z.string().refine(v => v !== '' && !isNaN(Number(v)) && Number(v) >= 0, 'Cupo inválido'),
-  profesorId:      z.string().min(1, 'El profesor es requerido'),
+  profesorSalaAId: z.string().optional(),
+  profesorSalaBId: z.string().optional(),
   clientIds:       z.array(z.string()),
 })
 type FormValues = z.infer<typeof schema>
@@ -246,7 +247,7 @@ export default function ShiftsPage() {
 
   const { register, handleSubmit, formState: { errors }, reset, watch, setValue } = useForm<FormValues>({
     resolver: zodResolver(schema),
-    defaultValues: { days: [], recurrente: true, clientIds: [], cupoMaximoSalaA: '', cupoMaximoSalaB: '' },
+    defaultValues: { days: [], recurrente: true, clientIds: [], cupoMaximoSalaA: '', cupoMaximoSalaB: '', profesorSalaAId: '', profesorSalaBId: '' },
   })
 
   const formClientIds  = watch('clientIds') || []
@@ -447,7 +448,8 @@ export default function ShiftsPage() {
         startTime: data.startTime, endTime: data.endTime,
         cupoMaximoSalaA: Number(data.cupoMaximoSalaA),
         cupoMaximoSalaB: Number(data.cupoMaximoSalaB),
-        profesorId: data.profesorId,
+        profesorSalaAId: data.profesorSalaAId || undefined,
+        profesorSalaBId: data.profesorSalaBId || undefined,
       })
 
       if (data.clientIds.length > 0) {
@@ -458,7 +460,7 @@ export default function ShiftsPage() {
 
       addToast('Turno creado exitosamente', 'success')
       setCreateOpen(false)
-      reset({ days: [], recurrente: true, cupoMaximoSalaA: '', cupoMaximoSalaB: '', profesorId: '', clientIds: [] })
+      reset({ days: [], recurrente: true, cupoMaximoSalaA: '', cupoMaximoSalaB: '', profesorSalaAId: '', profesorSalaBId: '', clientIds: [] })
       refetch()
     } catch {
       addToast('Error al crear el turno', 'error')
@@ -1073,9 +1075,11 @@ export default function ShiftsPage() {
                                   <p className="text-[11px] font-bold text-gray-900 dark:text-white leading-tight truncate">
                                     {shift.startTime} – {shift.endTime}
                                   </p>
-                                  {shift.profesorNombre && (
+                                  {(shift.profesorSalaANombre || shift.profesorSalaBNombre) && (
                                     <p className="text-[10px] text-gray-500 dark:text-[#8A8A9A] truncate leading-tight mt-0.5">
-                                      {shift.profesorNombre}
+                                      {shift.profesorSalaANombre && shift.profesorSalaBNombre && shift.profesorSalaANombre !== shift.profesorSalaBNombre
+                                        ? '2 profesores'
+                                        : shift.profesorSalaANombre || shift.profesorSalaBNombre}
                                     </p>
                                   )}
                                   <p className="text-[10px] font-semibold leading-tight mt-1">

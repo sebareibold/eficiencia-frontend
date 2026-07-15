@@ -13,7 +13,7 @@ const cardAnim = (delay: number) => ({
 import { createPortal } from 'react-dom'
 import {
   ArrowLeft, Calendar, Users, ChevronRight, X, Check,
-  CheckCircle2, ExternalLink, Clock, Repeat2, UserRound,
+  CheckCircle2, ExternalLink, Clock, Repeat2,
 } from 'lucide-react'
 import { useForm } from 'react-hook-form'
 import { zodResolver } from '@hookform/resolvers/zod'
@@ -39,7 +39,8 @@ const schema = z.object({
   endTime:         z.string().min(1, 'La hora de fin es requerida'),
   cupoMaximoSalaA: z.string().refine(v => v !== '' && !isNaN(Number(v)) && Number(v) >= 0, 'Cupo inválido'),
   cupoMaximoSalaB: z.string().refine(v => v !== '' && !isNaN(Number(v)) && Number(v) >= 0, 'Cupo inválido'),
-  profesorId:      z.string().min(1, 'El profesor es requerido'),
+  profesorSalaAId: z.string().optional(),
+  profesorSalaBId: z.string().optional(),
   clientIdsA:      z.array(z.string()),
   clientIdsB:      z.array(z.string()),
 })
@@ -59,7 +60,8 @@ interface CreatedShiftInfo {
   days: WeekDay[]
   startTime: string
   endTime: string
-  profesorNombre: string
+  profesorSalaANombre: string
+  profesorSalaBNombre: string
   cupoSalaA: number
   cupoSalaB: number
   recurrente: boolean
@@ -260,21 +262,17 @@ function SuccessModal({ shifts, onGoToShifts, onViewShift }: {
 
                 {/* Fila inferior: detalles */}
                 <div className="flex flex-wrap items-center gap-2 pt-2.5 border-t border-gray-100 dark:border-white/[0.06]">
-                  {s.profesorNombre && (
-                    <span className="flex items-center gap-1.5 text-[11px] font-semibold text-gray-600 dark:text-gray-300 bg-gray-100 dark:bg-white/[0.06] px-2.5 py-1 rounded-lg">
-                      <UserRound size={11} className="text-gray-400" />
-                      {s.profesorNombre}
-                    </span>
-                  )}
                   <span className="flex items-center gap-1.5 text-[11px] font-semibold text-amber-700 dark:text-primary bg-primary/10 px-2.5 py-1 rounded-lg">
-                    <Users size={11} />
-                    {`Sala A: ${s.cupoSalaA ?? 0} cupos`}
-                    {s.clientCountA > 0 && <span className="text-gray-500 dark:text-gray-400">{` · ${s.clientCountA} inscriptos`}</span>}
+                    <span className="h-1.5 w-1.5 rounded-full bg-primary shrink-0" />
+                    {`A: ${s.cupoSalaA ?? 0} cupos`}
+                    {s.profesorSalaANombre && <span className="text-gray-500 dark:text-gray-400"> · {s.profesorSalaANombre}</span>}
+                    {s.clientCountA > 0 && <span className="text-gray-500 dark:text-gray-400"> · {s.clientCountA} inscriptos</span>}
                   </span>
                   <span className="flex items-center gap-1.5 text-[11px] font-semibold text-blue-600 dark:text-blue-400 bg-blue-500/10 px-2.5 py-1 rounded-lg">
-                    <Users size={11} />
-                    {`Sala B: ${s.cupoSalaB ?? 0} cupos`}
-                    {s.clientCountB > 0 && <span className="text-gray-500 dark:text-gray-400">{` · ${s.clientCountB} inscriptos`}</span>}
+                    <span className="h-1.5 w-1.5 rounded-full bg-blue-400 shrink-0" />
+                    {`B: ${s.cupoSalaB ?? 0} cupos`}
+                    {s.profesorSalaBNombre && <span className="text-gray-500 dark:text-gray-400"> · {s.profesorSalaBNombre}</span>}
+                    {s.clientCountB > 0 && <span className="text-gray-500 dark:text-gray-400"> · {s.clientCountB} inscriptos</span>}
                   </span>
                 </div>
               </motion.div>
@@ -314,6 +312,10 @@ export default function ShiftNewPage() {
   // false (default) = un turno separado por cada día
   const [mismoTurno, setMismoTurno] = useState(false)
 
+  const [salaAActiva,   setSalaAActiva]   = useState(true)
+  const [salaBActiva,   setSalaBActiva]   = useState(true)
+  const [profesorUnico, setProfesorUnico] = useState(true)
+
   const prefillDay   = params.get('day') as WeekDay | null
   const prefillStart = params.get('start') ?? ''
   const prefillEnd   = params.get('end')   ?? ''
@@ -327,18 +329,35 @@ export default function ShiftNewPage() {
       clientIdsB:      [],
       cupoMaximoSalaA: '',
       cupoMaximoSalaB: '',
+      profesorSalaAId: '',
+      profesorSalaBId: '',
       startTime:       prefillStart,
       endTime:         prefillEnd,
     },
   })
 
-  const formDays       = (watch('days') || []) as WeekDay[]
-  const formRecurrente = watch('recurrente') ?? true
-  const clientIdsA     = watch('clientIdsA') || []
-  const clientIdsB     = watch('clientIdsB') || []
-  const startTimeValue = watch('startTime')
-  const watchedCupoA   = watch('cupoMaximoSalaA')
-  const watchedCupoB   = watch('cupoMaximoSalaB')
+  const formDays            = (watch('days') || []) as WeekDay[]
+  const formRecurrente      = watch('recurrente') ?? true
+  const clientIdsA          = watch('clientIdsA') || []
+  const clientIdsB          = watch('clientIdsB') || []
+  const startTimeValue      = watch('startTime')
+  const watchedCupoA        = watch('cupoMaximoSalaA')
+  const watchedCupoB        = watch('cupoMaximoSalaB')
+  const watchedProfesorAId  = watch('profesorSalaAId')
+  const watchedProfesorBId  = watch('profesorSalaBId')
+
+  // Exclusión mutua: solo aplica cuando hay 2 profesores distintos
+  const professorsForSalaA = profesorUnico
+    ? professors
+    : professors.filter(p => !watchedProfesorBId || p.id !== watchedProfesorBId)
+  const professorsForSalaB = profesorUnico
+    ? professors
+    : professors.filter(p => !watchedProfesorAId || p.id !== watchedProfesorAId)
+
+  // Cuando profesor único está activo, sincronizar B con A
+  useEffect(() => {
+    if (profesorUnico) setValue('profesorSalaBId', watchedProfesorAId ?? '')
+  }, [profesorUnico, watchedProfesorAId]) // eslint-disable-line
 
   // Si baja a 1 día, resetear toggle
   useEffect(() => {
@@ -363,17 +382,19 @@ export default function ShiftNewPage() {
     try {
       const created: CreatedShiftInfo[] = []
 
+      const shiftPayload = {
+        recurrente:      data.recurrente,
+        startTime:       data.startTime,
+        endTime:         data.endTime,
+        cupoMaximoSalaA: Number(data.cupoMaximoSalaA),
+        cupoMaximoSalaB: Number(data.cupoMaximoSalaB),
+        profesorSalaAId: data.profesorSalaAId || undefined,
+        profesorSalaBId: data.profesorSalaBId || undefined,
+      }
+
       if (mismoTurno || data.days.length === 1) {
         // Un solo turno con todos los días
-        const turno = await shiftsApi.create({
-          days:            data.days,
-          recurrente:      data.recurrente,
-          startTime:       data.startTime,
-          endTime:         data.endTime,
-          cupoMaximoSalaA: Number(data.cupoMaximoSalaA),
-          cupoMaximoSalaB: Number(data.cupoMaximoSalaB),
-          profesorId:      data.profesorId,
-        })
+        const turno = await shiftsApi.create({ ...shiftPayload, days: data.days })
         await Promise.allSettled([
           ...data.clientIdsA.map(id => inscripcionesApi.enroll(id, String(turno.id), 'A')),
           ...data.clientIdsB.map(id => inscripcionesApi.enroll(id, String(turno.id), 'B')),
@@ -384,7 +405,8 @@ export default function ShiftNewPage() {
           days: data.days,
           startTime: data.startTime,
           endTime: data.endTime,
-          profesorNombre: professors.find(p => p.id === data.profesorId)?.name ?? '',
+          profesorSalaANombre: professors.find(p => p.id === data.profesorSalaAId)?.name ?? '',
+          profesorSalaBNombre: professors.find(p => p.id === data.profesorSalaBId)?.name ?? '',
           cupoSalaA: Number(watchedCupoA),
           cupoSalaB: Number(watchedCupoB),
           recurrente: data.recurrente,
@@ -395,15 +417,7 @@ export default function ShiftNewPage() {
         // Un turno separado por cada día
         const results = await Promise.allSettled(
           data.days.map(async day => {
-            const turno = await shiftsApi.create({
-              days:            [day],
-              recurrente:      data.recurrente,
-              startTime:       data.startTime,
-              endTime:         data.endTime,
-              cupoMaximoSalaA: Number(data.cupoMaximoSalaA),
-              cupoMaximoSalaB: Number(data.cupoMaximoSalaB),
-              profesorId:      data.profesorId,
-            })
+            const turno = await shiftsApi.create({ ...shiftPayload, days: [day] })
             await Promise.allSettled([
               ...data.clientIdsA.map(id => inscripcionesApi.enroll(id, String(turno.id), 'A')),
               ...data.clientIdsB.map(id => inscripcionesApi.enroll(id, String(turno.id), 'B')),
@@ -414,7 +428,8 @@ export default function ShiftNewPage() {
               days: [day] as WeekDay[],
               startTime: data.startTime,
               endTime: data.endTime,
-              profesorNombre: professors.find(p => p.id === data.profesorId)?.name ?? '',
+              profesorSalaANombre: professors.find(p => p.id === data.profesorSalaAId)?.name ?? '',
+              profesorSalaBNombre: professors.find(p => p.id === data.profesorSalaBId)?.name ?? '',
               cupoSalaA: Number(watchedCupoA),
               cupoSalaB: Number(watchedCupoB),
               recurrente: data.recurrente,
@@ -470,17 +485,17 @@ export default function ShiftNewPage() {
 
       {/* Form */}
       <form onSubmit={handleSubmit(onSubmit)}>
-        <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+        <div className="grid grid-cols-1 lg:grid-cols-[0.75fr_1fr_1fr] gap-6">
 
           {/* ── Col 1: Datos del turno ── */}
-          <motion.div {...cardAnim(0)} className={`${cardCls} p-6 lg:p-8 space-y-6`}>
-            <div className="flex items-center gap-3">
-              <div className="flex h-10 w-10 items-center justify-center rounded-2xl bg-primary/10">
-                <Calendar size={18} className="text-amber-700 dark:text-primary" />
+          <motion.div {...cardAnim(0)} className={`${cardCls} p-5 lg:p-6 space-y-4`}>
+            <div className="flex items-center gap-2.5">
+              <div className="flex h-9 w-9 items-center justify-center rounded-xl bg-primary/10">
+                <Calendar size={16} className="text-amber-700 dark:text-primary" />
               </div>
               <div>
-                <p className="font-bold text-gray-900 dark:text-white">Datos del turno</p>
-                <p className="text-xs text-gray-500 dark:text-[#8A8A9A]">Días, horario, cupos y profesor</p>
+                <p className="font-bold text-sm text-gray-900 dark:text-white">Datos del turno</p>
+                <p className="text-xs text-gray-500 dark:text-[#8A8A9A]">Días, horario y opciones</p>
               </div>
             </div>
             <div className="border-t border-white/20 dark:border-white/10" />
@@ -523,13 +538,13 @@ export default function ShiftNewPage() {
                   initial={{ opacity: 0, y: -6 }}
                   animate={{ opacity: 1, y: 0, transition: { duration: 0.2, ease: [0.22, 1, 0.36, 1] } }}
                   exit={{ opacity: 0, y: -4, transition: { duration: 0.15 } }}
-                  className="flex items-center justify-between gap-4 p-4 rounded-2xl border border-white/30 dark:border-white/10 bg-white/40 dark:bg-white/[0.04]"
+                  className="flex items-center justify-between gap-3 p-3 rounded-xl border border-white/30 dark:border-white/10 bg-white/40 dark:bg-white/[0.04]"
                 >
                   <div>
-                    <p className="text-sm font-bold text-gray-900 dark:text-white">
+                    <p className="text-xs font-bold text-gray-900 dark:text-white">
                       {mismoTurno ? 'Un turno que se repite' : 'Turnos separados por día'}
                     </p>
-                    <p className="text-xs text-gray-500 dark:text-[#8A8A9A] mt-0.5">
+                    <p className="text-[11px] text-gray-500 dark:text-[#8A8A9A] mt-0.5">
                       {mismoTurno
                         ? `Un solo turno en ${formDays.map(d => DAY_LABELS[d]).join(' y ')}`
                         : `Se crearán ${formDays.length} turnos independientes`}
@@ -552,29 +567,90 @@ export default function ShiftNewPage() {
               <Input label="Hora fin *"    type="time" lang="es" error={errors.endTime?.message}   {...register('endTime')} />
             </div>
 
-            {/* Cupos */}
-            <div className="grid grid-cols-2 gap-4">
-              <Input label="Cupo Sala A *" type="number" placeholder="Ej. 10" error={errors.cupoMaximoSalaA?.message} {...register('cupoMaximoSalaA')} />
-              <Input label="Cupo Sala B *" type="number" placeholder="Ej. 10" error={errors.cupoMaximoSalaB?.message} {...register('cupoMaximoSalaB')} />
+            {/* Cupos — movidos a los cards de sala */}
+
+            {/* Salas activas */}
+            <div className="space-y-2">
+              <p className="text-xs font-extrabold uppercase tracking-widest text-gray-500 dark:text-gray-400">Salas</p>
+              {/* Toggle Sala A */}
+              <div className="flex items-center justify-between gap-3 px-3 py-2.5 rounded-xl border border-white/30 dark:border-white/10 bg-white/40 dark:bg-white/[0.04]">
+                <div className="flex items-center gap-2 min-w-0">
+                  <span className="h-2 w-2 rounded-full bg-primary shrink-0" />
+                  <div className="min-w-0">
+                    <p className="text-xs font-bold text-gray-900 dark:text-white">Sala A</p>
+                    <p className="text-[11px] text-gray-500 dark:text-[#8A8A9A]">
+                      {salaAActiva ? 'Habilitada para este turno' : 'No se usa en este turno'}
+                    </p>
+                  </div>
+                </div>
+                <button type="button" role="switch" aria-checked={salaAActiva}
+                  onClick={() => {
+                    setSalaAActiva(v => {
+                      if (v) { setValue('cupoMaximoSalaA', '0'); setValue('clientIdsA', []); setValue('profesorSalaAId', '') }
+                      return !v
+                    })
+                  }}
+                  className="relative shrink-0"
+                >
+                  <div className={`w-11 h-6 rounded-full transition-colors ${salaAActiva ? 'bg-primary' : 'bg-gray-200 dark:bg-white/10'}`} />
+                  <div className={`absolute top-1 w-4 h-4 bg-white rounded-full shadow transition-transform ${salaAActiva ? 'translate-x-6' : 'translate-x-1'}`} />
+                </button>
+              </div>
+              {/* Toggle Sala B */}
+              <div className="flex items-center justify-between gap-3 px-3 py-2.5 rounded-xl border border-white/30 dark:border-white/10 bg-white/40 dark:bg-white/[0.04]">
+                <div className="flex items-center gap-2 min-w-0">
+                  <span className="h-2 w-2 rounded-full bg-blue-400 shrink-0" />
+                  <div className="min-w-0">
+                    <p className="text-xs font-bold text-gray-900 dark:text-white">Sala B</p>
+                    <p className="text-[11px] text-gray-500 dark:text-[#8A8A9A]">
+                      {salaBActiva ? 'Habilitada para este turno' : 'No se usa en este turno'}
+                    </p>
+                  </div>
+                </div>
+                <button type="button" role="switch" aria-checked={salaBActiva}
+                  onClick={() => {
+                    setSalaBActiva(v => {
+                      if (v) { setValue('cupoMaximoSalaB', '0'); setValue('clientIdsB', []); setValue('profesorSalaBId', '') }
+                      return !v
+                    })
+                  }}
+                  className="relative shrink-0"
+                >
+                  <div className={`w-11 h-6 rounded-full transition-colors ${salaBActiva ? 'bg-blue-500' : 'bg-gray-200 dark:bg-white/10'}`} />
+                  <div className={`absolute top-1 w-4 h-4 bg-white rounded-full shadow transition-transform ${salaBActiva ? 'translate-x-6' : 'translate-x-1'}`} />
+                </button>
+              </div>
             </div>
 
-            {/* Profesor */}
-            <Select
-              label="Profesor *"
-              options={[
-                { value: '', label: profsLoading ? 'Cargando...' : professors.length === 0 ? 'Sin profesores' : 'Seleccionar...' },
-                ...professors.map(p => ({ value: p.id, label: p.name })),
-              ]}
-              error={errors.profesorId?.message}
-              {...register('profesorId')}
-            />
-            {professors.length === 0 && !profsLoading && (
-              <p className="text-xs text-amber-600 dark:text-amber-400 bg-amber-500/10 border border-amber-500/20 rounded-xl px-3 py-2">
-                No hay profesores. Creá un usuario con rol Profesor primero.
-              </p>
-            )}
+            {/* Profesor único */}
+            <div className="space-y-2">
+              <p className="text-xs font-extrabold uppercase tracking-widest text-gray-500 dark:text-gray-400">Profesores</p>
+              <div className="flex items-center justify-between gap-3 px-3 py-2.5 rounded-xl border border-white/30 dark:border-white/10 bg-white/40 dark:bg-white/[0.04]">
+                <div className="flex items-center gap-2 min-w-0">
+                  <span className="h-2 w-2 rounded-full bg-gray-400 shrink-0" />
+                  <div className="min-w-0">
+                    <p className="text-xs font-bold text-gray-900 dark:text-white">Profesor único</p>
+                    <p className="text-[11px] text-gray-500 dark:text-[#8A8A9A]">
+                      {profesorUnico ? 'Un profe para ambas salas' : 'Profe distinto por sala'}
+                    </p>
+                  </div>
+                </div>
+                <button type="button" role="switch" aria-checked={profesorUnico}
+                  onClick={() => setProfesorUnico(v => {
+                    if (v) setValue('profesorSalaBId', '')
+                    return !v
+                  })}
+                  className="relative shrink-0"
+                >
+                  <div className={`w-11 h-6 rounded-full transition-colors ${profesorUnico ? 'bg-gray-500 dark:bg-white/30' : 'bg-gray-200 dark:bg-white/10'}`} />
+                  <div className={`absolute top-1 w-4 h-4 bg-white rounded-full shadow transition-transform ${profesorUnico ? 'translate-x-6' : 'translate-x-1'}`} />
+                </button>
+              </div>
+            </div>
 
             {/* Recurrente */}
+            <div className="space-y-2">
+              <p className="text-xs font-extrabold uppercase tracking-widest text-gray-500 dark:text-gray-400">Recurrencia</p>
             <label className="flex items-center justify-between gap-4 p-4 rounded-2xl border border-white/30 dark:border-white/10 bg-white/40 dark:bg-white/[0.04] cursor-pointer select-none">
               <div>
                 <p className="text-sm font-bold text-gray-900 dark:text-white">Recurrente semanal</p>
@@ -586,10 +662,11 @@ export default function ShiftNewPage() {
                 <div className={`absolute top-1 w-4 h-4 bg-white rounded-full shadow transition-transform ${formRecurrente ? 'translate-x-6' : 'translate-x-1'}`} />
               </div>
             </label>
+            </div>
           </motion.div>
 
           {/* ── Col 2: Sala A ── */}
-          <motion.div {...cardAnim(0.08)} className={`${cardCls} p-6 lg:p-8 flex flex-col gap-4`}>
+          <motion.div {...cardAnim(0.08)} className={`${cardCls} p-6 lg:p-8 flex flex-col gap-4 transition-all duration-300 ${!salaAActiva ? 'opacity-40 blur-[2px] pointer-events-none' : ''}`}>
             <div className="flex items-center justify-between">
               <div className="flex items-center gap-3">
                 <div className="flex h-10 w-10 items-center justify-center rounded-2xl bg-primary/10">
@@ -606,6 +683,17 @@ export default function ShiftNewPage() {
                 </span>
               )}
             </div>
+            <div className="grid grid-cols-2 gap-3">
+              <Input label="Cupo máximo *" type="number" placeholder="Ej. 10" error={errors.cupoMaximoSalaA?.message} {...register('cupoMaximoSalaA')} />
+              <Select
+                label="Profesor"
+                options={[
+                  { value: '', label: profsLoading ? 'Cargando...' : 'Ninguno' },
+                  ...professorsForSalaA.map(p => ({ value: p.id, label: p.name })),
+                ]}
+                {...register('profesorSalaAId')}
+              />
+            </div>
             <div className="border-t border-white/20 dark:border-white/10" />
             {clientsLoading ? <ClientListSkeleton /> : (
               <ClientList
@@ -621,7 +709,7 @@ export default function ShiftNewPage() {
           </motion.div>
 
           {/* ── Col 3: Sala B ── */}
-          <motion.div {...cardAnim(0.16)} className={`${cardCls} p-6 lg:p-8 flex flex-col gap-4`}>
+          <motion.div {...cardAnim(0.16)} className={`${cardCls} p-6 lg:p-8 flex flex-col gap-4 transition-all duration-300 ${!salaBActiva ? 'opacity-40 blur-[2px] pointer-events-none' : ''}`}>
             <div className="flex items-center justify-between">
               <div className="flex items-center gap-3">
                 <div className="flex h-10 w-10 items-center justify-center rounded-2xl bg-blue-500/10">
@@ -636,6 +724,27 @@ export default function ShiftNewPage() {
                 <span className="text-xs font-bold px-2.5 py-1 rounded-xl bg-blue-500/10 text-blue-500">
                   {clientIdsB.length} sel.
                 </span>
+              )}
+            </div>
+            <div className={`grid gap-3 ${profesorUnico ? 'grid-cols-1' : 'grid-cols-2'}`}>
+              <Input label="Cupo máximo *" type="number" placeholder="Ej. 10" error={errors.cupoMaximoSalaB?.message} {...register('cupoMaximoSalaB')} />
+              {profesorUnico ? (
+                <div className="flex items-center gap-1.5 mt-1">
+                  <span className="text-[11px] text-gray-400 dark:text-[#6A6A7A]">
+                    {watchedProfesorAId
+                      ? `Prof. ${professors.find(p => p.id === watchedProfesorAId)?.name ?? '—'}`
+                      : 'Sin profesor asignado'}
+                  </span>
+                </div>
+              ) : (
+                <Select
+                  label="Profesor"
+                  options={[
+                    { value: '', label: profsLoading ? 'Cargando...' : 'Ninguno' },
+                    ...professorsForSalaB.map(p => ({ value: p.id, label: p.name })),
+                  ]}
+                  {...register('profesorSalaBId')}
+                />
               )}
             </div>
             <div className="border-t border-white/20 dark:border-white/10" />

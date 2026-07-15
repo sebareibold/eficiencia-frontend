@@ -76,7 +76,8 @@ const editSchema = z.object({
   endTime:         z.string().min(1, 'Requerido'),
   cupoMaximoSalaA: z.string().refine(v => v !== '' && !isNaN(Number(v)) && Number(v) >= 0, 'Inválido'),
   cupoMaximoSalaB: z.string().refine(v => v !== '' && !isNaN(Number(v)) && Number(v) >= 0, 'Inválido'),
-  profesorId:      z.string().min(1, 'Requerido'),
+  profesorSalaAId: z.string().optional(),
+  profesorSalaBId: z.string().optional(),
 })
 type EditValues = z.infer<typeof editSchema>
 
@@ -234,7 +235,7 @@ export default function ShiftDetailPage() {
     watch: editWatch, setValue: editSetValue,
   } = useForm<EditValues>({
     resolver: zodResolver(editSchema),
-    defaultValues: { days: [], recurrente: true, startTime: '', endTime: '', cupoMaximoSalaA: '', cupoMaximoSalaB: '', profesorId: '' },
+    defaultValues: { days: [], recurrente: true, startTime: '', endTime: '', cupoMaximoSalaA: '', cupoMaximoSalaB: '', profesorSalaAId: '', profesorSalaBId: '' },
   })
   const editDays = (editWatch('days') || []) as WeekDay[]
   const editRecurrente = editWatch('recurrente') ?? true
@@ -262,7 +263,8 @@ export default function ShiftDetailPage() {
         startTime: fromCache.startTime, endTime: fromCache.endTime,
         cupoMaximoSalaA: String(fromCache.cupoMaximoSalaA),
         cupoMaximoSalaB: String(fromCache.cupoMaximoSalaB),
-        profesorId: fromCache.profesorId,
+        profesorSalaAId: fromCache.profesorSalaAId,
+        profesorSalaBId: fromCache.profesorSalaBId,
       })
       setLoading(false)
       return
@@ -279,7 +281,8 @@ export default function ShiftDetailPage() {
             startTime: s.startTime, endTime: s.endTime,
             cupoMaximoSalaA: String(s.cupoMaximoSalaA),
             cupoMaximoSalaB: String(s.cupoMaximoSalaB),
-            profesorId: s.profesorId,
+            profesorSalaAId: s.profesorSalaAId,
+            profesorSalaBId: s.profesorSalaBId,
           })
         })
         .catch(() => addToast('Error al cargar el turno', 'error'))
@@ -373,7 +376,8 @@ export default function ShiftDetailPage() {
         startTime: data.startTime, endTime: data.endTime,
         cupoMaximoSalaA: Number(data.cupoMaximoSalaA),
         cupoMaximoSalaB: Number(data.cupoMaximoSalaB),
-        profesorId: data.profesorId,
+        profesorSalaAId: data.profesorSalaAId,
+        profesorSalaBId: data.profesorSalaBId,
       })
       setShift(updated)
       setIsEditingShift(false)
@@ -702,7 +706,7 @@ export default function ShiftDetailPage() {
     if (!shift) return
     setExcepcionHoraInicio(shift.startTime)
     setExcepcionHoraFin(shift.endTime)
-    setExcepcionProfesorId(shift.profesorId ?? '')
+    setExcepcionProfesorId(shift.profesorSalaAId ?? '')
     setExcepcionMotivo('')
     setExcepcionFecha('')
     setExcepcionFormOpen(true)
@@ -935,7 +939,11 @@ export default function ShiftDetailPage() {
                         )
                       })()}
                       <p className="text-sm text-[#8A8A9A] mt-1">
-                        Prof. {shift.profesorNombre || '—'}
+                        {shift.profesorSalaANombre && shift.profesorSalaBNombre && shift.profesorSalaANombre !== shift.profesorSalaBNombre
+                          ? `A: ${shift.profesorSalaANombre} · B: ${shift.profesorSalaBNombre}`
+                          : shift.profesorSalaANombre || shift.profesorSalaBNombre
+                          ? `Prof. ${shift.profesorSalaANombre || shift.profesorSalaBNombre}`
+                          : '—'}
                       </p>
                     </div>
                     {can('shifts', 'update') && (
@@ -949,42 +957,54 @@ export default function ShiftDetailPage() {
                   </div>
 
                   {/* Dual occupancy bars */}
-                  <div className="mt-4 pt-4 border-t border-gray-200/40 dark:border-white/[0.06] space-y-2.5">
-                    <div className="flex items-center gap-3">
-                      <div className="flex items-center gap-1.5 w-20 shrink-0">
-                        <span className="h-2 w-2 rounded-full bg-blue-400" />
-                        <span className="text-xs font-bold text-gray-500 dark:text-[#8A8A9A]">Sala A</span>
+                  <div className="mt-4 pt-4 border-t border-gray-200/40 dark:border-white/[0.06] space-y-3">
+                    {/* Sala A */}
+                    <div className="space-y-1">
+                      <div className="flex items-center justify-between">
+                        <div className="flex items-center gap-1.5">
+                          <span className="h-2 w-2 rounded-full bg-blue-400 shrink-0" />
+                          <span className="text-xs font-bold text-gray-500 dark:text-[#8A8A9A]">Sala A</span>
+                          {shift.profesorSalaANombre && (
+                            <span className="text-xs text-gray-400 dark:text-[#6A6A7A]">· {shift.profesorSalaANombre}</span>
+                          )}
+                        </div>
+                        <span className="text-xs font-bold tabular-nums text-gray-900 dark:text-white">
+                          {realInscritosA}/{shift.cupoMaximoSalaA}
+                        </span>
                       </div>
-                      <div className="flex-1 h-1.5 rounded-full bg-black/[0.06] dark:bg-white/[0.08] overflow-hidden">
+                      <div className="h-1.5 rounded-full bg-black/[0.06] dark:bg-white/[0.08] overflow-hidden">
                         <motion.div
-                          className={`h-full w-full rounded-full ${getOccupancyColor(realInscritosA, shift.cupoMaximoSalaA)}`}
+                          className={`h-full rounded-full ${getOccupancyColor(realInscritosA, shift.cupoMaximoSalaA)}`}
                           style={{ transformOrigin: 'left' }}
                           initial={{ scaleX: 0 }}
                           animate={{ scaleX: pctA / 100 }}
                           transition={{ duration: 0.7, ease: [0.22, 1, 0.36, 1], delay: 0.2 }}
                         />
                       </div>
-                      <span className="text-xs font-bold tabular-nums text-gray-900 dark:text-white w-14 text-right">
-                        {realInscritosA}/{shift.cupoMaximoSalaA}
-                      </span>
                     </div>
-                    <div className="flex items-center gap-3">
-                      <div className="flex items-center gap-1.5 w-20 shrink-0">
-                        <span className="h-2 w-2 rounded-full bg-purple-400" />
-                        <span className="text-xs font-bold text-gray-500 dark:text-[#8A8A9A]">Sala B</span>
+                    {/* Sala B */}
+                    <div className="space-y-1">
+                      <div className="flex items-center justify-between">
+                        <div className="flex items-center gap-1.5">
+                          <span className="h-2 w-2 rounded-full bg-purple-400 shrink-0" />
+                          <span className="text-xs font-bold text-gray-500 dark:text-[#8A8A9A]">Sala B</span>
+                          {shift.profesorSalaBNombre && (
+                            <span className="text-xs text-gray-400 dark:text-[#6A6A7A]">· {shift.profesorSalaBNombre}</span>
+                          )}
+                        </div>
+                        <span className="text-xs font-bold tabular-nums text-gray-900 dark:text-white">
+                          {shift.inscritosB}/{shift.cupoMaximoSalaB}
+                        </span>
                       </div>
-                      <div className="flex-1 h-1.5 rounded-full bg-black/[0.06] dark:bg-white/[0.08] overflow-hidden">
+                      <div className="h-1.5 rounded-full bg-black/[0.06] dark:bg-white/[0.08] overflow-hidden">
                         <motion.div
-                          className={`h-full w-full rounded-full ${getOccupancyColor(shift.inscritosB, shift.cupoMaximoSalaB)}`}
+                          className={`h-full rounded-full ${getOccupancyColor(shift.inscritosB, shift.cupoMaximoSalaB)}`}
                           style={{ transformOrigin: 'left' }}
                           initial={{ scaleX: 0 }}
                           animate={{ scaleX: pctB / 100 }}
                           transition={{ duration: 0.7, ease: [0.22, 1, 0.36, 1], delay: 0.3 }}
                         />
                       </div>
-                      <span className="text-xs font-bold tabular-nums text-gray-900 dark:text-white w-14 text-right">
-                        {shift.inscritosB}/{shift.cupoMaximoSalaB}
-                      </span>
                     </div>
                   </div>
                 </div>
@@ -1019,7 +1039,8 @@ export default function ShiftDetailPage() {
                       startTime: shift.startTime, endTime: shift.endTime,
                       cupoMaximoSalaA: String(shift.cupoMaximoSalaA),
                       cupoMaximoSalaB: String(shift.cupoMaximoSalaB),
-                      profesorId: shift.profesorId,
+                      profesorSalaAId: shift.profesorSalaAId,
+                      profesorSalaBId: shift.profesorSalaBId,
                     })
                   }}
                   className="flex items-center gap-1 rounded-xl px-3 py-1.5 text-xs font-semibold text-gray-500 dark:text-[#8A8A9A] border border-gray-200 dark:border-white/[0.08] hover:bg-gray-50 dark:hover:bg-white/[0.04] transition-all"
@@ -1065,7 +1086,7 @@ export default function ShiftDetailPage() {
                       <div>
                         <label className="text-[11px] font-semibold text-gray-500 dark:text-[#8A8A9A] mb-1 block">Profesor</label>
                         <select
-                          value={excepcionProfesorId || excepExistente?.profesorId || shift.profesorId || ''}
+                          value={excepcionProfesorId || excepExistente?.profesorId || shift.profesorSalaAId || ''}
                           onChange={e => setExcepcionProfesorId(e.target.value)}
                           className="w-full rounded-lg border border-gray-200 dark:border-white/[0.08] bg-white dark:bg-white/[0.04] px-2.5 py-1.5 text-xs text-gray-900 dark:text-white focus:outline-none focus:ring-1 focus:ring-primary">
                           {professors.map(p => <option key={p.id} value={p.id}>{p.name}</option>)}
@@ -1165,33 +1186,55 @@ export default function ShiftDetailPage() {
                       <Input label="Hora inicio *" type="time" error={editErrors.startTime?.message} {...editRegister('startTime')} />
                       <Input label="Hora fin *" type="time" error={editErrors.endTime?.message} {...editRegister('endTime')} />
                     </div>
-                    <div className="grid grid-cols-2 gap-3">
-                      <Input
-                        label="Cupo Sala A *" type="number" placeholder="Ej. 10"
-                        error={editErrors.cupoMaximoSalaA?.message}
-                        {...editRegister('cupoMaximoSalaA')}
-                      />
-                      <Input
-                        label="Cupo Sala B *" type="number" placeholder="Ej. 10"
-                        error={editErrors.cupoMaximoSalaB?.message}
-                        {...editRegister('cupoMaximoSalaB')}
-                      />
+                    {/* Sala A: cupo + profesor */}
+                    <div className="rounded-xl border border-blue-500/20 bg-blue-500/[0.03] p-3 space-y-2">
+                      <div className="flex items-center gap-1.5 mb-1">
+                        <span className="h-1.5 w-1.5 rounded-full bg-blue-400 shrink-0" />
+                        <span className="text-[11px] font-bold uppercase tracking-wider text-blue-500 dark:text-blue-400">Sala A</span>
+                      </div>
+                      <div className="grid grid-cols-2 gap-2">
+                        <Input
+                          label="Cupo *" type="number" placeholder="Ej. 10"
+                          error={editErrors.cupoMaximoSalaA?.message}
+                          {...editRegister('cupoMaximoSalaA')}
+                        />
+                        <Select
+                          label="Profesor"
+                          options={[
+                            { value: '', label: professors.length === 0 ? 'Sin profesores' : 'Ninguno' },
+                            ...professors.map(p => ({ value: p.id, label: p.name })),
+                          ]}
+                          {...editRegister('profesorSalaAId')}
+                        />
+                      </div>
                     </div>
-                    <Select
-                      label="Profesor *"
-                      options={[
-                        { value: '', label: professors.length === 0 ? 'Sin profesores' : 'Seleccionar...' },
-                        ...professors.map(p => ({ value: p.id, label: p.name })),
-                      ]}
-                      error={editErrors.profesorId?.message}
-                      {...editRegister('profesorId')}
-                    />
+                    {/* Sala B: cupo + profesor */}
+                    <div className="rounded-xl border border-purple-500/20 bg-purple-500/[0.03] p-3 space-y-2">
+                      <div className="flex items-center gap-1.5 mb-1">
+                        <span className="h-1.5 w-1.5 rounded-full bg-purple-400 shrink-0" />
+                        <span className="text-[11px] font-bold uppercase tracking-wider text-purple-500 dark:text-purple-400">Sala B</span>
+                      </div>
+                      <div className="grid grid-cols-2 gap-2">
+                        <Input
+                          label="Cupo *" type="number" placeholder="Ej. 10"
+                          error={editErrors.cupoMaximoSalaB?.message}
+                          {...editRegister('cupoMaximoSalaB')}
+                        />
+                        <Select
+                          label="Profesor"
+                          options={[
+                            { value: '', label: professors.length === 0 ? 'Sin profesores' : 'Ninguno' },
+                            ...professors.map(p => ({ value: p.id, label: p.name })),
+                          ]}
+                          {...editRegister('profesorSalaBId')}
+                        />
+                      </div>
+                    </div>
                     {/* Ocupación actual (solo lectura) */}
                     <div className="rounded-xl border border-white/[0.08] bg-white/[0.04] p-3 space-y-2">
                       <p className="text-xs text-[#8A8A9A] mb-1">Ocupación actual</p>
                       <div className="flex items-center gap-2">
                         <span className="h-1.5 w-1.5 rounded-full bg-blue-400 shrink-0" />
-                        <span className="text-xs text-[#8A8A9A] w-12">Sala A</span>
                         <div className="flex-1 h-1.5 rounded-full bg-white/10 overflow-hidden">
                           <div className={`h-full rounded-full ${getOccupancyColor(shift.inscritosA, shift.cupoMaximoSalaA)}`}
                             style={{ width: `${pctA}%` }} />
@@ -1200,7 +1243,6 @@ export default function ShiftDetailPage() {
                       </div>
                       <div className="flex items-center gap-2">
                         <span className="h-1.5 w-1.5 rounded-full bg-purple-400 shrink-0" />
-                        <span className="text-xs text-[#8A8A9A] w-12">Sala B</span>
                         <div className="flex-1 h-1.5 rounded-full bg-white/10 overflow-hidden">
                           <div className={`h-full rounded-full ${getOccupancyColor(shift.inscritosB, shift.cupoMaximoSalaB)}`}
                             style={{ width: `${pctB}%` }} />

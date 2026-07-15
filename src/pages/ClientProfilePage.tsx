@@ -3241,13 +3241,13 @@ export default function ClientProfilePage() {
 
           // Profesores únicos para el filtro
           const profesores = Array.from(new Set(
-            notEnrolled.map(s => s.profesorNombre).filter((p): p is string => !!p)
+            notEnrolled.map(s => s.profesorSalaANombre || s.profesorSalaBNombre).filter((p): p is string => !!p)
           )).sort()
 
           // Aplicar filtros
           const filtered = notEnrolled.filter(s => {
             if (filterDia && !s.days.includes(filterDia as WeekDay)) return false
-            if (filterProfesor && s.profesorNombre !== filterProfesor) return false
+            if (filterProfesor && (s.profesorSalaANombre || s.profesorSalaBNombre) !== filterProfesor) return false
             if (filterHorario) {
               const h = parseInt(s.startTime.split(':')[0], 10)
               if (filterHorario === 'mañana' && h >= 12) return false
@@ -3323,8 +3323,12 @@ export default function ClientProfilePage() {
                           <p className="text-xs text-gray-500 dark:text-[#8A8A9A] mt-0.5">
                             {shift.days.map(d => WEEKDAY_SHORT[d] ?? d).join(' · ')}
                           </p>
-                          {shift.profesorNombre && (
-                            <p className="text-[11px] text-gray-400 dark:text-white/35 mt-0.5">{shift.profesorNombre}</p>
+                          {(shift.profesorSalaANombre || shift.profesorSalaBNombre) && (
+                            <p className="text-[11px] text-gray-400 dark:text-white/35 mt-0.5">
+                              {shift.profesorSalaANombre && shift.profesorSalaBNombre && shift.profesorSalaANombre !== shift.profesorSalaBNombre
+                                ? '2 profesores'
+                                : shift.profesorSalaANombre || shift.profesorSalaBNombre}
+                            </p>
                           )}
                         </div>
                         <div className="flex gap-2">
@@ -3358,7 +3362,7 @@ export default function ClientProfilePage() {
                           <div>
                             <p className="text-sm font-bold text-gray-900 dark:text-white">{shift.startTime} – {shift.endTime}</p>
                             <p className="text-xs text-gray-500 dark:text-[#8A8A9A] mt-0.5">{shift.days.map(d => WEEKDAY_SHORT[d] ?? d).join(' · ')}</p>
-                            {shift.profesorNombre && <p className="text-[11px] text-gray-400 dark:text-white/35 mt-0.5">{shift.profesorNombre}</p>}
+                            {(shift.profesorSalaANombre || shift.profesorSalaBNombre) && <p className="text-[11px] text-gray-400 dark:text-white/35 mt-0.5">{shift.profesorSalaANombre || shift.profesorSalaBNombre}</p>}
                           </div>
                           <span className="shrink-0 rounded-lg bg-red-500/10 border border-red-500/20 px-2 py-0.5 text-[10px] font-semibold text-red-400">Excede el plan</span>
                         </div>
