@@ -1,7 +1,7 @@
 import { create } from 'zustand'
 import { persist } from 'zustand/middleware'
 import type { User } from '../types/auth.types'
-import type { PermisosMap } from '../api/permisos.api'
+import type { PermisosMap } from '../types/permisos.types'
 
 interface AuthState {
   user: User | null

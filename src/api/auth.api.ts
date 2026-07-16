@@ -1,7 +1,7 @@
 import axios from 'axios'
 import api from './axiosInstance'
 import type { LoginCredentials, LoginResponse } from '../types/auth.types'
-import type { PermisosMap } from './permisos.api'
+import type { PermisosMap } from '../types/permisos.types'
 import type { ConfiguracionData } from './configuracion.api'
 
 export interface ExtendedLoginResponse extends LoginResponse {

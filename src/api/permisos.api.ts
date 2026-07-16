@@ -1,6 +1,7 @@
 import api from './axiosInstance'
+import type { PermisosMap } from '../types/permisos.types'
 
-export type PermisosMap = Record<string, Record<string, boolean>>
+export type { PermisosMap }
 
 export interface PermisoEntry {
   id: string
