@@ -214,6 +214,9 @@ export default function ShiftsPage() {
   const [calendarSelectedDays, setCalendarSelectedDays] = useState<WeekDay[]>(DAYS)
   const [calendarViewMode, setCalendarViewMode] = useState<'extended' | 'optimized'>('optimized')
   const [showCalendarFilters, setShowCalendarFilters] = useState(false)
+  const [gridTimeFrom,   setGridTimeFrom]   = useState(TIMELINE_START_H)
+  const [gridTimeTo,     setGridTimeTo]     = useState(TIMELINE_END_H)
+  const [gridCupoFilter, setGridCupoFilter] = useState<'all' | 'available'>('all')
 
   // ── Timeline state
   const [timelineDay, setTimelineDay] = useState<WeekDay>(
@@ -289,12 +292,18 @@ export default function ShiftsPage() {
   }, [diasEspeciales, anioFiltroEsp, mesFiltroEsp, sortOrderEsp])
 
   // ── Derived: grid
-  const filtered = useMemo(() =>
-    shifts.filter(s =>
-      dayFilter === 'all' || s.days.includes(dayFilter as WeekDay)
-    ),
-    [shifts, dayFilter]
-  )
+  const filtered = useMemo(() => {
+    const fromStr = `${String(gridTimeFrom).padStart(2, '0')}:00`
+    const toStr   = `${String(gridTimeTo).padStart(2, '0')}:00`
+    return shifts.filter(s => {
+      if (dayFilter !== 'all' && !s.days.includes(dayFilter as WeekDay)) return false
+      if (s.startTime >= toStr || s.endTime <= fromStr) return false
+      if (gridCupoFilter === 'available') {
+        return s.inscritosA < s.cupoMaximoSalaA || s.inscritosB < s.cupoMaximoSalaB
+      }
+      return true
+    })
+  }, [shifts, dayFilter, gridTimeFrom, gridTimeTo, gridCupoFilter])
 
   // ── Derived: calendar nav limits
   const todayMidnight = useMemo(() => {
@@ -402,7 +411,7 @@ export default function ShiftsPage() {
           : (wday ? shiftsByDay[wday] : []);
         dayShifts.forEach(s => {
           const startH = parseInt(s.startTime.split(':')[0], 10);
-          const endH = parseInt(s.endTime.split(':')[0], 10);
+          const endH   = parseInt(s.endTime.split(':')[0],   10);
           for(let h = startH; h <= endH; h++) { active.add(h); }
         });
       });
@@ -598,6 +607,64 @@ export default function ShiftsPage() {
               )
             })}
           </div>
+
+          {/* Separador */}
+          <span className="h-5 w-px bg-gray-200 dark:bg-white/10 shrink-0" />
+
+          {/* Horario */}
+          <span className="text-[10px] font-bold uppercase tracking-wider text-gray-400 dark:text-[#8A8A9A] shrink-0">Horario</span>
+          <div className="flex items-center gap-1.5 shrink-0">
+            <select
+              value={gridTimeFrom}
+              onChange={e => {
+                const v = Number(e.target.value)
+                setGridTimeFrom(v)
+                if (v >= gridTimeTo) setGridTimeTo(Math.min(TIMELINE_END_H, v + 1))
+              }}
+              className="rounded-lg border border-white/50 dark:border-white/10 bg-white/30 dark:bg-black/30 text-xs font-semibold text-gray-700 dark:text-gray-200 py-1.5 px-2.5 focus:outline-none cursor-pointer"
+            >
+              {Array.from({ length: TIMELINE_END_H - TIMELINE_START_H }, (_, i) => TIMELINE_START_H + i).map(h => (
+                <option key={h} value={h}>{String(h).padStart(2, '0')}:00</option>
+              ))}
+            </select>
+            <span className="text-xs font-bold text-gray-400">—</span>
+            <select
+              value={gridTimeTo}
+              onChange={e => {
+                const v = Number(e.target.value)
+                setGridTimeTo(v)
+                if (v <= gridTimeFrom) setGridTimeFrom(Math.max(TIMELINE_START_H, v - 1))
+              }}
+              className="rounded-lg border border-white/50 dark:border-white/10 bg-white/30 dark:bg-black/30 text-xs font-semibold text-gray-700 dark:text-gray-200 py-1.5 px-2.5 focus:outline-none cursor-pointer"
+            >
+              {Array.from({ length: TIMELINE_END_H - TIMELINE_START_H }, (_, i) => TIMELINE_START_H + 1 + i).map(h => (
+                <option key={h} value={h}>{String(h).padStart(2, '0')}:00</option>
+              ))}
+            </select>
+          </div>
+
+          {/* Separador */}
+          <span className="h-5 w-px bg-gray-200 dark:bg-white/10 shrink-0" />
+
+          {/* Cupo */}
+          <span className="text-[10px] font-bold uppercase tracking-wider text-gray-400 dark:text-[#8A8A9A] shrink-0">Cupo</span>
+          <div className="flex items-center rounded-full border border-white/50 dark:border-white/10 bg-white/30 dark:bg-black/30 backdrop-blur-xl p-1 shadow-sm gap-1 flex-nowrap">
+            {([['all', 'Todos'], ['available', 'Con cupo']] as const).map(([val, lbl]) => {
+              const isActive = gridCupoFilter === val
+              return (
+                <button
+                  key={val}
+                  onClick={() => setGridCupoFilter(val)}
+                  className={`relative inline-flex items-center justify-center rounded-full px-3.5 py-1.5 text-xs font-bold transition-all duration-300 cursor-pointer ${
+                    isActive ? 'text-white dark:text-gray-900' : 'text-gray-500 dark:text-[#8A8A9A] hover:text-gray-900 dark:hover:text-white'
+                  }`}
+                >
+                  {isActive && <div className="absolute inset-0 rounded-full bg-gray-900 dark:bg-white shadow-[0_2px_8px_rgba(0,0,0,0.15)]" style={{ zIndex: 0 }} />}
+                  <span className="relative z-10">{lbl}</span>
+                </button>
+              )
+            })}
+          </div>
         </div>
       )}
 
@@ -721,6 +788,7 @@ export default function ShiftsPage() {
                           </div>
                         </div>
                       )}
+
                     </div>
                   </motion.div>
                 )}
