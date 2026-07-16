@@ -805,10 +805,17 @@ export default function ShiftsPage() {
                       onClick={() => navigate(`/shifts/${shift.id}`)}
                       className="group relative cursor-pointer overflow-hidden rounded-2xl lg:rounded-[2rem] border border-white/50 dark:border-white/10 bg-white/30 dark:bg-black/30 backdrop-blur-3xl p-6 shadow-[0_8px_32px_rgba(0,0,0,0.04)] dark:shadow-[0_8px_32px_rgba(0,0,0,0.3)] transition-all duration-500 hover:-translate-y-1 hover:bg-white/50 dark:hover:bg-black/50 hover:shadow-[0_20px_40px_rgba(0,0,0,0.08)] dark:hover:shadow-[0_20px_40px_rgba(0,0,0,0.4)]"
                     >
+                      {!shift.recurrente && <div className="absolute inset-y-0 left-0 w-1 bg-amber-400 pointer-events-none" />}
+                      {!shift.recurrente && <div className="absolute inset-0 bg-amber-400/[0.04] pointer-events-none" />}
+                      {!shift.recurrente && (
+                        <span className="absolute top-4 right-4 flex items-center gap-1 rounded-full border border-amber-400/25 bg-amber-400/15 px-2 py-0.5 text-[10px] font-bold text-amber-600 dark:text-amber-400">
+                          ⚡ Excepcional
+                        </span>
+                      )}
                       <h3 className="font-semibold text-gray-900 dark:text-white">{shift.name}</h3>
                       <p className="mt-0.5 text-xs text-gray-500 dark:text-gray-400">
                         {shift.days.map(d => DAY_LABELS[d].slice(0, 3)).join(' · ')}
-                        {!shift.recurrente && <span className="ml-1 text-amber-500"> · puntual</span>}
+                        {!shift.recurrente && shift.fechaPuntual && <span className="ml-1 text-amber-500/80">· {shift.fechaPuntual}</span>}
                       </p>
                       <div className="mt-3 flex items-center gap-1 text-sm text-[#8A8A9A]">
                         <Clock size={13} />
@@ -935,11 +942,12 @@ export default function ShiftsPage() {
                                 <button
                                   key={shift.id}
                                   onClick={(e) => { e.stopPropagation(); if (!useOverlay) navigate(`/shifts/${shift.id}`); }}
-                                  className="w-full flex items-center gap-1.5 px-1 py-[3px] rounded text-left"
+                                  className={`w-full relative overflow-hidden flex items-center gap-1.5 px-1 py-[3px] rounded text-left ${!shift.recurrente ? 'bg-amber-400/10' : ''}`}
                                   tabIndex={useOverlay ? -1 : 0}
                                 >
-                                  <span className={`h-1.5 w-1.5 flex-shrink-0 rounded-full ${getOccupancyDot(shift.enrolled, shift.capacity)}`} />
-                                  <span className="text-[9px] font-bold text-gray-500 dark:text-[#8A8A9A] flex-shrink-0 tabular-nums leading-none">{shift.startTime}</span>
+                                  {!shift.recurrente && <div className="absolute inset-y-0 left-0 w-0.5 bg-amber-400 pointer-events-none" />}
+                                  <span className={`h-1.5 w-1.5 flex-shrink-0 rounded-full ${!shift.recurrente ? 'bg-amber-400' : getOccupancyDot(shift.enrolled, shift.capacity)}`} />
+                                  <span className={`text-[9px] font-bold flex-shrink-0 tabular-nums leading-none ${!shift.recurrente ? 'text-amber-600 dark:text-amber-400' : 'text-gray-500 dark:text-[#8A8A9A]'}`}>{shift.startTime}</span>
                                   <span className="text-[9px] font-medium text-gray-700 dark:text-gray-200 truncate flex-1 leading-none">{shift.name}</span>
                                 </button>
                               ))}
@@ -1107,8 +1115,11 @@ export default function ShiftsPage() {
                                   }}
                                   className={`absolute rounded-xl border p-2 text-left overflow-hidden transition-[filter,box-shadow] ${!isBlocked ? 'hover:z-10 hover:shadow-md' : 'blur-[1.5px] pointer-events-none'} ${getOccupancyStyle(shift.enrolled, shift.capacity)}`}
                                 >
+                                  {!shift.recurrente && <div className="absolute inset-y-0 left-0 w-[3px] bg-amber-400 pointer-events-none" />}
+                                  {!shift.recurrente && <div className="absolute inset-0 bg-amber-400/[0.06] pointer-events-none" />}
                                   <p className="text-[11px] font-bold text-gray-900 dark:text-white leading-tight truncate">
                                     {shift.startTime} – {shift.endTime}
+                                    {!shift.recurrente && <span className="ml-1 text-amber-500 dark:text-amber-400">⚡</span>}
                                   </p>
                                   <p className={`text-[10px] truncate leading-tight mt-0.5 ${shift.profesorSalaANombre || shift.profesorSalaBNombre ? 'text-gray-500 dark:text-[#8A8A9A]' : 'text-amber-500 dark:text-amber-400 font-semibold'}`}>
                                     {shift.profesorSalaANombre && shift.profesorSalaBNombre && shift.profesorSalaANombre !== shift.profesorSalaBNombre

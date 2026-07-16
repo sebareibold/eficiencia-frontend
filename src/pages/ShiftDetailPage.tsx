@@ -938,13 +938,6 @@ export default function ShiftDetailPage() {
                           </p>
                         )
                       })()}
-                      <p className="text-sm text-[#8A8A9A] mt-1">
-                        {shift.profesorSalaANombre && shift.profesorSalaBNombre && shift.profesorSalaANombre !== shift.profesorSalaBNombre
-                          ? `A: ${shift.profesorSalaANombre} · B: ${shift.profesorSalaBNombre}`
-                          : shift.profesorSalaANombre || shift.profesorSalaBNombre
-                          ? `Prof. ${shift.profesorSalaANombre || shift.profesorSalaBNombre}`
-                          : <span className="text-amber-500 dark:text-amber-400 font-semibold">Sin profesor asignado</span>}
-                      </p>
                     </div>
                     {can('shifts', 'update') && (
                       <button
