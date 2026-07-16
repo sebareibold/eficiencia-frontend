@@ -1,4 +1,5 @@
-import { useState, useMemo, useEffect } from 'react'
+import { useState, useMemo, useEffect, useRef } from 'react'
+import { createPortal } from 'react-dom'
 import { useQuery, useQueryClient } from '@tanstack/react-query'
 import { QK } from '../lib/queryKeys'
 import { motion, AnimatePresence } from 'framer-motion'
@@ -8,7 +9,7 @@ import {
   Plus, CreditCard, Banknote, ArrowLeftRight, Building2, RefreshCw,
   Trash2, Search, ChevronLeft, ChevronRight,
   Layers, LayoutList, LayoutGrid, Edit2, X, Save, Pencil,
-  ArrowUp, ArrowDown, ArrowUpDown,
+  ArrowUp, ArrowDown, ArrowUpDown, SlidersHorizontal,
 } from 'lucide-react'
 import { useForm } from 'react-hook-form'
 import { zodResolver } from '@hookform/resolvers/zod'
@@ -473,6 +474,12 @@ export default function PaymentsPage() {
   const [invoicedFilter, setInvoicedFilter] = useState<'all' | 'yes' | 'no'>('all')
   const [searchFilter, setSearchFilter] = useState('')
 
+  // ── Popover filtros overflow ──
+  const [payPopoverOpen, setPayPopoverOpen] = useState(false)
+  const [payPopoverTop, setPayPopoverTop]   = useState(200)
+  const payPopoverBtnRef = useRef<HTMLButtonElement>(null)
+  const payOverflowActiveCount = [methodFilter !== 'all', invoicedFilter !== 'all'].filter(Boolean).length
+
   // ── Estado planes ──
   const [planModalOpen, setPlanModalOpen] = useState(false)
   const [planSubmitting, setPlanSubmitting] = useState(false)
@@ -520,6 +527,15 @@ export default function PaymentsPage() {
 
   // Resetear página al cambiar período
   useEffect(() => { goToPage(1) }, [periodMode, navDate.getFullYear(), navDate.getMonth()]) // eslint-disable-line react-hooks/exhaustive-deps
+
+  // Posicionar popover bajo el botón trigger
+  useEffect(() => {
+    if (payPopoverOpen && payPopoverBtnRef.current) {
+      const rect = payPopoverBtnRef.current.getBoundingClientRect()
+      setPayPopoverTop(rect.bottom + 10)
+    }
+  }, [payPopoverOpen])
+
   const { can } = usePermissions()
   const addToast = useUiStore(s => s.addToast)
   const user = useAuthStore(s => s.user)
@@ -668,7 +684,84 @@ export default function PaymentsPage() {
     { label: 'Débito',          value: totals.byCard,     icon: Building2,     color: 'text-purple-400',   bgColor: 'bg-purple-500/10' },
   ]
 
+  // ── Portal: popover filtros overflow ──
+  const payPopover = createPortal(
+    <AnimatePresence>
+      {payPopoverOpen && (
+        <>
+          <div className="fixed inset-0 z-[99]" onClick={() => setPayPopoverOpen(false)} />
+          <motion.div
+            initial={{ opacity: 0, scale: 0.94 }}
+            animate={{ opacity: 1, scale: 1 }}
+            exit={{ opacity: 0, scale: 0.94 }}
+            transition={{ duration: 0.22, ease: [0.23, 1, 0.32, 1] }}
+            style={{ top: payPopoverTop, transformOrigin: 'top right', backgroundImage: 'radial-gradient(circle, rgba(255,255,255,0.03) 1px, transparent 1px)', backgroundSize: '18px 18px' }}
+            className="fixed right-4 z-[100] w-80 rounded-2xl border border-white/20 dark:border-white/10 bg-[#111]/95 dark:bg-[#0F0F0F]/95 backdrop-blur-3xl shadow-[0_8px_40px_rgba(0,0,0,0.35)]"
+          >
+            {/* Header */}
+            <div className="flex items-center justify-between px-5 pt-4 pb-3 border-b border-white/10">
+              <span className="text-xs font-black uppercase tracking-wider text-gray-300">Más filtros</span>
+              <button onClick={() => setPayPopoverOpen(false)} className="flex h-6 w-6 items-center justify-center rounded-full hover:bg-white/10 text-gray-400 hover:text-white transition-all cursor-pointer">
+                <X size={13} />
+              </button>
+            </div>
+            {/* Content */}
+            <div className="px-5 py-4 space-y-5">
+              {/* Método */}
+              <div className="flex flex-col gap-2">
+                <span className="text-[10px] font-bold uppercase tracking-wider text-gray-400">Método</span>
+                <div className="flex items-center rounded-full border border-white/10 bg-black/30 p-1 gap-1">
+                  {([['all', 'Todos'], ['cash', 'Efectivo'], ['transfer', 'Transf.'], ['card', 'Débito']] as [MethodFilter, string][]).map(([val, lbl]) => {
+                    const isActive = methodFilter === val
+                    return (
+                      <motion.button key={val} onClick={() => setMethodFilter(val)} whileTap={{ scale: 0.94 }}
+                        className={`relative inline-flex items-center justify-center rounded-full px-2.5 py-1.5 text-xs font-bold transition-colors duration-150 cursor-pointer flex-1 ${isActive ? 'text-gray-900' : 'text-gray-400 hover:text-white'}`}
+                      >
+                        {isActive && <motion.div layoutId="pay-pop-method-pill" className="absolute inset-0 rounded-full bg-white shadow-sm" style={{ zIndex: 0 }} transition={{ type: 'spring', stiffness: 400, damping: 35 }} />}
+                        <span className="relative z-10">{lbl}</span>
+                      </motion.button>
+                    )
+                  })}
+                </div>
+              </div>
+              {/* Facturación */}
+              <div className="flex flex-col gap-2">
+                <span className="text-[10px] font-bold uppercase tracking-wider text-gray-400">Facturación</span>
+                <div className="flex items-center rounded-full border border-white/10 bg-black/30 p-1 gap-1">
+                  {([['all', 'Todos'], ['yes', 'Facturado'], ['no', 'Sin factura']] as ['all' | 'yes' | 'no', string][]).map(([val, lbl]) => {
+                    const isActive = invoicedFilter === val
+                    return (
+                      <motion.button key={val} onClick={() => setInvoicedFilter(val)} whileTap={{ scale: 0.94 }}
+                        className={`relative inline-flex items-center justify-center rounded-full px-2.5 py-1.5 text-xs font-bold transition-colors duration-150 cursor-pointer flex-1 ${isActive ? 'text-gray-900' : 'text-gray-400 hover:text-white'}`}
+                      >
+                        {isActive && <motion.div layoutId="pay-pop-invoiced-pill" className="absolute inset-0 rounded-full bg-white shadow-sm" style={{ zIndex: 0 }} transition={{ type: 'spring', stiffness: 400, damping: 35 }} />}
+                        <span className="relative z-10">{lbl}</span>
+                      </motion.button>
+                    )
+                  })}
+                </div>
+              </div>
+            </div>
+            {/* Footer limpiar */}
+            {payOverflowActiveCount > 0 && (
+              <div className="px-5 pb-4 pt-1 border-t border-white/10">
+                <button
+                  onClick={() => { setMethodFilter('all'); setInvoicedFilter('all'); setPayPopoverOpen(false) }}
+                  className="w-full text-xs font-bold text-gray-400 hover:text-white transition-colors py-2 rounded-xl hover:bg-white/5 cursor-pointer"
+                >
+                  Limpiar filtros ({payOverflowActiveCount})
+                </button>
+              </div>
+            )}
+          </motion.div>
+        </>
+      )}
+    </AnimatePresence>,
+    document.body
+  )
+
   return (
+    <>
     <motion.div {...pageVariants} className="space-y-4 lg:space-y-6 xl:space-y-8 pb-6 lg:pb-10 relative z-10">
 
       {/* ── Header ── */}
@@ -734,9 +827,9 @@ export default function PaymentsPage() {
         </div>
 
         {/* Filtros derecha */}
-        <div className="flex flex-wrap items-end gap-3">
+        <div className="flex items-end gap-3">
 
-        {/* Período */}
+        {/* Período — siempre visible */}
         <div className="flex items-end gap-2">
           {periodMode !== 'all' && (
             <div className="flex items-center rounded-full border border-white/50 dark:border-white/10 bg-white/30 dark:bg-black/30 backdrop-blur-xl p-1 shadow-sm gap-1 shrink-0">
@@ -767,43 +860,65 @@ export default function PaymentsPage() {
           </div>
         </div>
 
-        {/* Método */}
-        <div className="flex flex-col gap-1.5">
-          <span className="text-[10px] font-bold uppercase tracking-wider text-gray-400 dark:text-gray-500 px-1">Método</span>
-          <div className="flex items-center rounded-full border border-white/50 dark:border-white/10 bg-white/30 dark:bg-black/30 backdrop-blur-xl p-1 shadow-sm gap-1 shrink-0">
-            {([['all', 'Todos'], ['cash', 'Efectivo'], ['transfer', 'Transf.'], ['card', 'Débito']] as [MethodFilter, string][]).map(([val, lbl]) => {
-              const isActive = methodFilter === val
-              return (
-                <motion.button key={val} onClick={() => setMethodFilter(val)} whileTap={{ scale: 0.94 }}
-                  className={`relative inline-flex items-center justify-center rounded-full px-3.5 py-1.5 text-xs font-bold transition-colors duration-150 cursor-pointer ${isActive ? 'text-white dark:text-gray-900' : 'text-gray-500 dark:text-[#8A8A9A] hover:text-gray-900 dark:hover:text-white'}`}
-                >
-                  {isActive && <motion.div layoutId="payments-method-pill" className="absolute inset-0 rounded-full bg-gray-900 dark:bg-white shadow-[0_2px_8px_rgba(0,0,0,0.15)]" style={{ zIndex: 0 }} transition={{ type: 'spring', stiffness: 400, damping: 35 }} />}
-                  <span className="relative z-10">{lbl}</span>
-                </motion.button>
-              )
-            })}
+        {/* Método + Facturación — visibles en xl */}
+        <div className="hidden xl:flex xl:items-end xl:gap-3">
+
+          {/* Método */}
+          <div className="flex flex-col gap-1.5">
+            <span className="text-[10px] font-bold uppercase tracking-wider text-gray-400 dark:text-gray-500 px-1">Método</span>
+            <div className="flex items-center rounded-full border border-white/50 dark:border-white/10 bg-white/30 dark:bg-black/30 backdrop-blur-xl p-1 shadow-sm gap-1 shrink-0">
+              {([['all', 'Todos'], ['cash', 'Efectivo'], ['transfer', 'Transf.'], ['card', 'Débito']] as [MethodFilter, string][]).map(([val, lbl]) => {
+                const isActive = methodFilter === val
+                return (
+                  <motion.button key={val} onClick={() => setMethodFilter(val)} whileTap={{ scale: 0.94 }}
+                    className={`relative inline-flex items-center justify-center rounded-full px-3.5 py-1.5 text-xs font-bold transition-colors duration-150 cursor-pointer ${isActive ? 'text-white dark:text-gray-900' : 'text-gray-500 dark:text-[#8A8A9A] hover:text-gray-900 dark:hover:text-white'}`}
+                  >
+                    {isActive && <motion.div layoutId="payments-method-pill" className="absolute inset-0 rounded-full bg-gray-900 dark:bg-white shadow-[0_2px_8px_rgba(0,0,0,0.15)]" style={{ zIndex: 0 }} transition={{ type: 'spring', stiffness: 400, damping: 35 }} />}
+                    <span className="relative z-10">{lbl}</span>
+                  </motion.button>
+                )
+              })}
+            </div>
           </div>
+
+          {/* Facturación */}
+          <div className="flex flex-col gap-1.5">
+            <span className="text-[10px] font-bold uppercase tracking-wider text-gray-400 dark:text-gray-500 px-1">Facturación</span>
+            <div className="flex items-center rounded-full border border-white/50 dark:border-white/10 bg-white/30 dark:bg-black/30 backdrop-blur-xl p-1 shadow-sm gap-1 shrink-0">
+              {([['all', 'Todos'], ['yes', 'Facturado'], ['no', 'Sin factura']] as ['all' | 'yes' | 'no', string][]).map(([val, lbl]) => {
+                const isActive = invoicedFilter === val
+                return (
+                  <motion.button key={val} onClick={() => setInvoicedFilter(val)} whileTap={{ scale: 0.94 }}
+                    className={`relative inline-flex items-center justify-center rounded-full px-3.5 py-1.5 text-xs font-bold transition-colors duration-150 cursor-pointer ${isActive ? 'text-white dark:text-gray-900' : 'text-gray-500 dark:text-[#8A8A9A] hover:text-gray-900 dark:hover:text-white'}`}
+                  >
+                    {isActive && <motion.div layoutId="payments-invoiced-pill" className="absolute inset-0 rounded-full bg-gray-900 dark:bg-white shadow-[0_2px_8px_rgba(0,0,0,0.15)]" style={{ zIndex: 0 }} transition={{ type: 'spring', stiffness: 400, damping: 35 }} />}
+                    <span className="relative z-10">{lbl}</span>
+                  </motion.button>
+                )
+              })}
+            </div>
+          </div>
+
         </div>
 
-        {/* Facturación */}
-        <div className="flex flex-col gap-1.5">
-          <span className="text-[10px] font-bold uppercase tracking-wider text-gray-400 dark:text-gray-500 px-1">Facturación</span>
-          <div className="flex items-center rounded-full border border-white/50 dark:border-white/10 bg-white/30 dark:bg-black/30 backdrop-blur-xl p-1 shadow-sm gap-1 shrink-0">
-            {([['all', 'Todos'], ['yes', 'Facturado'], ['no', 'Sin factura']] as ['all' | 'yes' | 'no', string][]).map(([val, lbl]) => {
-              const isActive = invoicedFilter === val
-              return (
-                <motion.button key={val} onClick={() => setInvoicedFilter(val)} whileTap={{ scale: 0.94 }}
-                  className={`relative inline-flex items-center justify-center rounded-full px-3.5 py-1.5 text-xs font-bold transition-colors duration-150 cursor-pointer ${isActive ? 'text-white dark:text-gray-900' : 'text-gray-500 dark:text-[#8A8A9A] hover:text-gray-900 dark:hover:text-white'}`}
-                >
-                  {isActive && <motion.div layoutId="payments-invoiced-pill" className="absolute inset-0 rounded-full bg-gray-900 dark:bg-white shadow-[0_2px_8px_rgba(0,0,0,0.15)]" style={{ zIndex: 0 }} transition={{ type: 'spring', stiffness: 400, damping: 35 }} />}
-                  <span className="relative z-10">{lbl}</span>
-                </motion.button>
-              )
-            })}
-          </div>
-        </div>
+        {/* Overflow trigger — oculto en xl */}
+        <button
+          ref={payPopoverBtnRef}
+          onClick={() => setPayPopoverOpen(v => !v)}
+          className={`xl:hidden relative flex h-9 w-9 items-center justify-center rounded-full border transition-all cursor-pointer shrink-0 ${
+            payPopoverOpen || payOverflowActiveCount > 0
+              ? 'border-primary/50 bg-primary/10 text-primary'
+              : 'border-dashed border-gray-300 dark:border-gray-600 text-gray-400 hover:text-gray-700 dark:hover:text-gray-200'
+          }`}
+        >
+          <SlidersHorizontal size={14} strokeWidth={2.5} />
+          {payOverflowActiveCount > 0 && (
+            <span className="absolute -top-1.5 -right-1.5 flex h-4 w-4 items-center justify-center rounded-full bg-primary text-[9px] font-black text-gray-900">
+              {payOverflowActiveCount}
+            </span>
+          )}
+        </button>
 
-        {/* Contador */}
         </div>{/* fin filtros derecha */}
       </div>
 
@@ -1160,5 +1275,7 @@ export default function PaymentsPage() {
         onClose={() => setDeletePlanTarget(null)}
       />
     </motion.div>
+    {payPopover}
+    </>
   )
 }

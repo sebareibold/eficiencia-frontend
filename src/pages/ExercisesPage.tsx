@@ -1,8 +1,9 @@
 import { useState, useEffect, useCallback, useMemo, useRef } from 'react'
+import { createPortal } from 'react-dom'
 import { motion, AnimatePresence } from 'framer-motion'
 import { staggerContainerFast, fadeUpItem } from '../lib/motion'
 import { useNavigate } from 'react-router-dom'
-import { Dumbbell, Plus, Edit2, Trash2, ExternalLink, Search, ChevronLeft, ChevronRight, Check, X, ArrowUp, ArrowDown, ArrowUpDown, LayoutGrid, List } from 'lucide-react'
+import { Dumbbell, Plus, Edit2, Trash2, ExternalLink, Search, ChevronLeft, ChevronRight, Check, X, ArrowUp, ArrowDown, ArrowUpDown, LayoutGrid, List, SlidersHorizontal } from 'lucide-react'
 import { ejerciciosApi } from '../api/ejercicios.api'
 import { patronesApi, type PatronMovimientoConfig } from '../api/patrones.api'
 import { categoriasEjercicioApi, type CategoriaEjercicio } from '../api/categorias-ejercicio.api'
@@ -46,6 +47,10 @@ export default function ExercisesPage() {
   const [search, setSearch]             = useState('')
   const [filterCategoria, setFilterCategoria] = useState<string>('')
   const [filterPatron, setFilterPatron]   = useState<string>('')
+  const [catPopoverOpen, setCatPopoverOpen] = useState(false)
+  const [catPopoverTop, setCatPopoverTop]   = useState(200)
+  const catPopoverBtnRef = useRef<HTMLButtonElement>(null)
+  const catOverflowActive = filterPatron !== ''
   const [page, setPage]                 = useState(1)
   const [deleteTarget, setDeleteTarget] = useState<string | null>(null)
 
@@ -150,6 +155,13 @@ export default function ExercisesPage() {
   }, [addToast])
 
   useEffect(() => { fetchCategorias() }, [fetchCategorias])
+
+  useEffect(() => {
+    if (catPopoverOpen && catPopoverBtnRef.current) {
+      const rect = catPopoverBtnRef.current.getBoundingClientRect()
+      setCatPopoverTop(rect.bottom + 10)
+    }
+  }, [catPopoverOpen])
 
   async function handleSaveCategoria(id: string) {
     if (!editCatNombre.trim()) return
@@ -274,6 +286,7 @@ export default function ExercisesPage() {
   }
 
   return (
+    <>
     <motion.div
       initial={{ opacity: 0, y: 8 }}
       animate={{ opacity: 1, y: 0 }}
@@ -318,8 +331,8 @@ export default function ExercisesPage() {
           </div>
 
           {/* Filtros */}
-          <div className="flex flex-col sm:flex-row gap-3 flex-wrap items-end">
-            {/* Categoría */}
+          <div className="flex items-end gap-3">
+            {/* Categoría — siempre inline */}
             <div className="flex flex-col gap-1.5">
               <span className="text-[10px] font-bold uppercase tracking-wider text-gray-400 dark:text-gray-500 px-1">Categoría</span>
               <div className="flex items-center rounded-full border border-white/50 dark:border-white/10 bg-white/30 dark:bg-black/30 backdrop-blur-xl p-1 shadow-sm gap-1">
@@ -337,8 +350,8 @@ export default function ExercisesPage() {
               </div>
             </div>
 
-            {/* Patrón de movimiento */}
-            <div className="flex flex-col gap-1.5">
+            {/* Patrón — inline en lg+ */}
+            <div className="hidden lg:flex flex-col gap-1.5">
               <span className="text-[10px] font-bold uppercase tracking-wider text-gray-400 dark:text-gray-500 px-1">Patrón</span>
               <select
                 value={filterPatron}
@@ -350,6 +363,27 @@ export default function ExercisesPage() {
                   <option key={p.clave} value={p.clave} className="bg-white dark:bg-[#1a1a24] text-gray-900 dark:text-white">{p.label}</option>
                 ))}
               </select>
+            </div>
+
+            {/* Overflow button — visible en <lg */}
+            <div className="lg:hidden flex items-end">
+              <button
+                ref={catPopoverBtnRef}
+                onClick={() => setCatPopoverOpen(o => !o)}
+                title="Más filtros"
+                className={`relative flex h-9 w-9 items-center justify-center rounded-full transition-all duration-200 cursor-pointer ${
+                  catPopoverOpen || catOverflowActive
+                    ? 'bg-gray-900 dark:bg-white text-white dark:text-gray-900 shadow-[0_2px_8px_rgba(0,0,0,0.18)]'
+                    : 'border border-dashed border-gray-300 dark:border-gray-700 bg-white/30 dark:bg-black/30 backdrop-blur-xl text-gray-500 dark:text-[#8A8A9A] hover:text-gray-900 dark:hover:text-white hover:border-gray-400 dark:hover:border-gray-500'
+                }`}
+              >
+                <SlidersHorizontal size={14} />
+                {catOverflowActive && (
+                  <span className="absolute -top-1 -right-1 flex h-4 w-4 items-center justify-center rounded-full bg-primary text-[9px] font-black text-gray-900 shadow-sm">
+                    1
+                  </span>
+                )}
+              </button>
             </div>
           </div>
         </div>
@@ -1039,5 +1073,62 @@ export default function ExercisesPage() {
         onClose={() => setDeletePatronTarget(null)}
       />
     </motion.div>
+
+    {createPortal(
+      <AnimatePresence>
+        {catPopoverOpen && (
+          <motion.div
+            initial={{ opacity: 0, scale: 0.94, y: -6 }}
+            animate={{ opacity: 1, scale: 1, y: 0 }}
+            exit={{ opacity: 0, scale: 0.94, y: -6, transition: { duration: 0.15, ease: [0.4, 0, 1, 1] } }}
+            transition={{ duration: 0.22, ease: [0.23, 1, 0.32, 1] }}
+            style={{ top: catPopoverTop, transformOrigin: 'top right' }}
+            className="fixed right-4 z-[100] w-60 flex flex-col rounded-2xl border border-saas-border dark:border-white/[0.08] bg-saas-bg/90 dark:bg-[#111111]/95 backdrop-blur-2xl shadow-[0_8px_32px_rgba(0,0,0,0.08),0_32px_80px_rgba(0,0,0,0.1)] dark:shadow-[0_8px_32px_rgba(0,0,0,0.4),0_32px_80px_rgba(0,0,0,0.55)] overflow-hidden"
+          >
+            <div aria-hidden="true" className="pointer-events-none absolute inset-0" style={{ backgroundImage: 'radial-gradient(circle, rgba(0,0,0,0.045) 1px, transparent 1px)', backgroundSize: '24px 24px' }} />
+            <div className="flex items-center justify-between border-b border-black/[0.06] dark:border-white/[0.07] px-4 py-3 shrink-0">
+              <div className="flex items-center gap-2">
+                <SlidersHorizontal size={13} className="text-gray-400 dark:text-gray-500" />
+                <span className="text-xs font-bold tracking-tight text-gray-900 dark:text-white">Más filtros</span>
+                {catOverflowActive && (
+                  <span className="flex h-4 w-4 items-center justify-center rounded-full bg-primary text-[9px] font-black text-gray-900">1</span>
+                )}
+              </div>
+              <button
+                onClick={() => setCatPopoverOpen(false)}
+                className="flex h-6 w-6 items-center justify-center rounded-full text-gray-400 dark:text-gray-500 hover:text-gray-700 dark:hover:text-gray-200 hover:bg-black/[0.06] dark:hover:bg-white/[0.08] transition-colors"
+              >
+                <X size={12} />
+              </button>
+            </div>
+            <div className="px-4 py-4">
+              <h3 className="text-[10px] font-bold uppercase tracking-wider text-gray-400 dark:text-gray-500 mb-2.5">Patrón de movimiento</h3>
+              <select
+                value={filterPatron}
+                onChange={e => setFilterPatron(e.target.value)}
+                className="w-full rounded-xl border border-white/50 dark:border-white/10 bg-white/30 dark:bg-black/30 backdrop-blur-xl px-3 py-2 text-xs font-semibold text-gray-800 dark:text-gray-200 focus:outline-none cursor-pointer"
+              >
+                <option value="" className="bg-white dark:bg-[#1a1a24] text-gray-900 dark:text-white">Todos</option>
+                {patrones.filter(p => p.activo).map(p => (
+                  <option key={p.clave} value={p.clave} className="bg-white dark:bg-[#1a1a24] text-gray-900 dark:text-white">{p.label}</option>
+                ))}
+              </select>
+            </div>
+            {catOverflowActive && (
+              <div className="shrink-0 border-t border-black/[0.06] dark:border-white/[0.07] px-4 py-3">
+                <button
+                  onClick={() => { setFilterPatron(''); setCatPopoverOpen(false) }}
+                  className="w-full rounded-xl border border-dashed border-gray-200 dark:border-gray-700/70 py-2 text-[11px] font-bold text-gray-400 dark:text-gray-500 hover:text-gray-700 dark:hover:text-gray-200 hover:border-gray-300 dark:hover:border-gray-600 transition-all duration-150 cursor-pointer active:scale-[0.98]"
+                >
+                  Limpiar
+                </button>
+              </div>
+            )}
+          </motion.div>
+        )}
+      </AnimatePresence>,
+      document.body,
+    )}
+    </>
   )
 }

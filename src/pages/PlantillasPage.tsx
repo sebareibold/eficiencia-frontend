@@ -1,8 +1,8 @@
-import { useState, useEffect, useCallback } from 'react'
+import { useState, useEffect, useCallback, useRef } from 'react'
 import { createPortal } from 'react-dom'
 import { motion, AnimatePresence } from 'framer-motion'
 import { useNavigate } from 'react-router-dom'
-import { Layers, Plus, Edit2, Trash2, Power, X, ChevronLeft, ChevronRight, Search } from 'lucide-react'
+import { Layers, Plus, Edit2, Trash2, Power, X, ChevronLeft, ChevronRight, Search, SlidersHorizontal } from 'lucide-react'
 import { plantillasApi } from '../api/plantillas.api'
 import { useAuthStore } from '../store/authStore'
 import { useUiStore } from '../store/uiStore'
@@ -159,6 +159,11 @@ export default function PlantillasPage({ embedded = false }: PlantillasPageProps
   const [loadingDelete, setLoadingDelete] = useState<string | null>(null)
   const [plantillaToDelete, setPlantillaToDelete] = useState<PlantillaRutinaData | null>(null)
 
+  const [popoverOpen, setPopoverOpen] = useState(false)
+  const [popoverTop, setPopoverTop] = useState(200)
+  const popoverBtnRef = useRef<HTMLButtonElement>(null)
+  const overflowActiveCount = [filtroSesiones !== '', filtroActivas !== undefined].filter(Boolean).length
+
   const filtered   = plantillas.filter(p => {
     if (search && !p.nombre.toLowerCase().startsWith(search.toLowerCase())) return false
     if (filtroEspecializada !== undefined && p.especializada !== filtroEspecializada) return false
@@ -185,6 +190,13 @@ export default function PlantillasPage({ embedded = false }: PlantillasPageProps
   }, [filtroTipo, filtroSesiones, filtroActivas, addToast])
 
   useEffect(() => { fetchPlantillas() }, [fetchPlantillas])
+
+  useEffect(() => {
+    if (popoverOpen && popoverBtnRef.current) {
+      const rect = popoverBtnRef.current.getBoundingClientRect()
+      setPopoverTop(rect.bottom + 10)
+    }
+  }, [popoverOpen])
 
   async function handleToggle(p: PlantillaRutinaData) {
     setLoadingToggle(p.id)
@@ -267,9 +279,8 @@ export default function PlantillasPage({ embedded = false }: PlantillasPageProps
           </div>
 
           {/* Filtros */}
-          <div className="flex flex-col sm:flex-row gap-3 flex-wrap items-end">
-          <div className="flex flex-col sm:flex-row gap-3 flex-wrap items-end">
-            {/* Especialidad */}
+          <div className="flex items-end gap-3">
+            {/* Especialidad — siempre inline */}
             <div className="flex flex-col gap-1.5">
               <span className="text-[10px] font-bold uppercase tracking-wider text-gray-400 dark:text-gray-500 px-1">Especialidad</span>
               <div className="flex items-center rounded-full border border-white/50 dark:border-white/10 bg-white/30 dark:bg-black/30 backdrop-blur-xl p-1 shadow-sm gap-1">
@@ -291,7 +302,7 @@ export default function PlantillasPage({ embedded = false }: PlantillasPageProps
               </div>
             </div>
 
-            {/* Tipo */}
+            {/* Tipo — siempre inline */}
             <div className="flex flex-col gap-1.5">
               <span className="text-[10px] font-bold uppercase tracking-wider text-gray-400 dark:text-gray-500 px-1">Tipo</span>
               <div className="flex items-center rounded-full border border-white/50 dark:border-white/10 bg-white/30 dark:bg-black/30 backdrop-blur-xl p-1 shadow-sm gap-1">
@@ -309,8 +320,8 @@ export default function PlantillasPage({ embedded = false }: PlantillasPageProps
               </div>
             </div>
 
-            {/* Sesiones */}
-            <div className="flex flex-col gap-1.5">
+            {/* Sesiones — inline en xl+ */}
+            <div className="hidden xl:flex flex-col gap-1.5">
               <span className="text-[10px] font-bold uppercase tracking-wider text-gray-400 dark:text-gray-500 px-1">Sesiones</span>
               <div className="flex items-center rounded-full border border-white/50 dark:border-white/10 bg-white/30 dark:bg-black/30 backdrop-blur-xl p-1 shadow-sm gap-1">
                 {SESIONES_OPTIONS.map(opt => {
@@ -327,8 +338,8 @@ export default function PlantillasPage({ embedded = false }: PlantillasPageProps
               </div>
             </div>
 
-            {/* Estado */}
-            <div className="flex flex-col gap-1.5">
+            {/* Estado — inline en xl+ */}
+            <div className="hidden xl:flex flex-col gap-1.5">
               <span className="text-[10px] font-bold uppercase tracking-wider text-gray-400 dark:text-gray-500 px-1">Estado</span>
               <div className="flex items-center rounded-full border border-white/50 dark:border-white/10 bg-white/30 dark:bg-black/30 backdrop-blur-xl p-1 shadow-sm gap-1">
                 {ESTADO_OPTIONS.map(opt => {
@@ -345,15 +356,36 @@ export default function PlantillasPage({ embedded = false }: PlantillasPageProps
               </div>
             </div>
 
+            {/* Limpiar — inline en xl+ */}
             {(filtroTipo || filtroSesiones || filtroActivas !== undefined || filtroEspecializada !== undefined) && (
               <button
                 onClick={() => { setFiltroTipo(''); setFiltroSesiones(''); setFiltroActivas(undefined); setFiltroEspecializada(undefined) }}
-                className="flex items-center gap-1 h-9 text-xs text-gray-400 dark:text-white/30 hover:text-gray-900 dark:hover:text-white transition-colors"
+                className="hidden xl:flex items-center gap-1 h-9 text-xs text-gray-400 dark:text-white/30 hover:text-gray-900 dark:hover:text-white transition-colors"
               >
                 <X size={11} /> Limpiar
               </button>
             )}
-          </div>
+
+            {/* Overflow button — visible en <xl */}
+            <div className="xl:hidden flex items-end">
+              <button
+                ref={popoverBtnRef}
+                onClick={() => setPopoverOpen(o => !o)}
+                title="Más filtros"
+                className={`relative flex h-9 w-9 items-center justify-center rounded-full transition-all duration-200 cursor-pointer ${
+                  popoverOpen || overflowActiveCount > 0
+                    ? 'bg-gray-900 dark:bg-white text-white dark:text-gray-900 shadow-[0_2px_8px_rgba(0,0,0,0.18)]'
+                    : 'border border-dashed border-gray-300 dark:border-gray-700 bg-white/30 dark:bg-black/30 backdrop-blur-xl text-gray-500 dark:text-[#8A8A9A] hover:text-gray-900 dark:hover:text-white hover:border-gray-400 dark:hover:border-gray-500'
+                }`}
+              >
+                <SlidersHorizontal size={14} />
+                {overflowActiveCount > 0 && (
+                  <span className="absolute -top-1 -right-1 flex h-4 w-4 items-center justify-center rounded-full bg-primary text-[9px] font-black text-gray-900 shadow-sm">
+                    {overflowActiveCount}
+                  </span>
+                )}
+              </button>
+            </div>
           </div>
 
         </div>
@@ -565,7 +597,90 @@ export default function PlantillasPage({ embedded = false }: PlantillasPageProps
     document.body,
   )
 
-  if (embedded) return <>{contenido}{modal}</>
+  const popover = createPortal(
+    <AnimatePresence>
+      {popoverOpen && (
+        <motion.div
+          initial={{ opacity: 0, scale: 0.94, y: -6 }}
+          animate={{ opacity: 1, scale: 1, y: 0 }}
+          exit={{ opacity: 0, scale: 0.94, y: -6, transition: { duration: 0.15, ease: [0.4, 0, 1, 1] } }}
+          transition={{ duration: 0.22, ease: [0.23, 1, 0.32, 1] }}
+          style={{ top: popoverTop, transformOrigin: 'top right' }}
+          className="fixed right-4 z-[100] w-64 flex flex-col rounded-2xl border border-saas-border dark:border-white/[0.08] bg-saas-bg/90 dark:bg-[#111111]/95 backdrop-blur-2xl shadow-[0_8px_32px_rgba(0,0,0,0.08),0_32px_80px_rgba(0,0,0,0.1)] dark:shadow-[0_8px_32px_rgba(0,0,0,0.4),0_32px_80px_rgba(0,0,0,0.55)] overflow-hidden max-h-[calc(100vh-12rem)]"
+        >
+          <div aria-hidden="true" className="pointer-events-none absolute inset-0" style={{ backgroundImage: 'radial-gradient(circle, rgba(0,0,0,0.045) 1px, transparent 1px)', backgroundSize: '24px 24px' }} />
+          <div className="flex items-center justify-between border-b border-black/[0.06] dark:border-white/[0.07] px-4 py-3 shrink-0">
+            <div className="flex items-center gap-2">
+              <SlidersHorizontal size={13} className="text-gray-400 dark:text-gray-500" />
+              <span className="text-xs font-bold tracking-tight text-gray-900 dark:text-white">Más filtros</span>
+              {overflowActiveCount > 0 && (
+                <span className="flex h-4 min-w-4 px-1 items-center justify-center rounded-full bg-primary text-[9px] font-black text-gray-900">
+                  {overflowActiveCount}
+                </span>
+              )}
+            </div>
+            <button
+              onClick={() => setPopoverOpen(false)}
+              className="flex h-6 w-6 items-center justify-center rounded-full text-gray-400 dark:text-gray-500 hover:text-gray-700 dark:hover:text-gray-200 hover:bg-black/[0.06] dark:hover:bg-white/[0.08] transition-colors"
+            >
+              <X size={12} />
+            </button>
+          </div>
+          <div className="flex-1 overflow-y-auto px-4 py-4 space-y-5">
+            <section>
+              <h3 className="text-[10px] font-bold uppercase tracking-wider text-gray-400 dark:text-gray-500 mb-2.5">Sesiones</h3>
+              <div className="flex flex-wrap gap-2">
+                {SESIONES_OPTIONS.map(opt => (
+                  <button
+                    key={String(opt.value)}
+                    onClick={() => setFiltroSesiones(opt.value as number | '')}
+                    className={`rounded-full px-3 py-1.5 text-xs font-bold transition-all cursor-pointer ${
+                      filtroSesiones === opt.value
+                        ? 'bg-gray-900 dark:bg-white text-white dark:text-gray-900 shadow-sm'
+                        : 'border border-dashed border-gray-300 dark:border-gray-700 text-gray-500 dark:text-gray-400 hover:text-gray-900 dark:hover:text-white hover:border-gray-400 dark:hover:border-gray-500'
+                    }`}
+                  >
+                    {opt.label}
+                  </button>
+                ))}
+              </div>
+            </section>
+            <section>
+              <h3 className="text-[10px] font-bold uppercase tracking-wider text-gray-400 dark:text-gray-500 mb-2.5">Estado</h3>
+              <div className="flex flex-wrap gap-2">
+                {ESTADO_OPTIONS.map(opt => (
+                  <button
+                    key={String(opt.value)}
+                    onClick={() => setFiltroActivas(opt.value)}
+                    className={`rounded-full px-3 py-1.5 text-xs font-bold transition-all cursor-pointer ${
+                      filtroActivas === opt.value
+                        ? 'bg-gray-900 dark:bg-white text-white dark:text-gray-900 shadow-sm'
+                        : 'border border-dashed border-gray-300 dark:border-gray-700 text-gray-500 dark:text-gray-400 hover:text-gray-900 dark:hover:text-white hover:border-gray-400 dark:hover:border-gray-500'
+                    }`}
+                  >
+                    {opt.label}
+                  </button>
+                ))}
+              </div>
+            </section>
+          </div>
+          {overflowActiveCount > 0 && (
+            <div className="shrink-0 border-t border-black/[0.06] dark:border-white/[0.07] px-4 py-3">
+              <button
+                onClick={() => { setFiltroSesiones(''); setFiltroActivas(undefined) }}
+                className="w-full rounded-xl border border-dashed border-gray-200 dark:border-gray-700/70 py-2 text-[11px] font-bold text-gray-400 dark:text-gray-500 hover:text-gray-700 dark:hover:text-gray-200 hover:border-gray-300 dark:hover:border-gray-600 transition-all duration-150 cursor-pointer active:scale-[0.98]"
+              >
+                Limpiar filtros
+              </button>
+            </div>
+          )}
+        </motion.div>
+      )}
+    </AnimatePresence>,
+    document.body,
+  )
+
+  if (embedded) return <>{contenido}{modal}{popover}</>
 
   return (
     <motion.div
@@ -575,6 +690,7 @@ export default function PlantillasPage({ embedded = false }: PlantillasPageProps
     >
       {contenido}
       {modal}
+      {popover}
     </motion.div>
   )
 }
