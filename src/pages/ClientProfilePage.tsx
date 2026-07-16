@@ -11,7 +11,7 @@ import {
   MessageCircle, Tag, Dumbbell, BookOpen, Plus, ChevronDown, ChevronRight, ChevronLeft,
   BarChart2, PieChart as PieIcon, LineChart as LineChartIcon,
   Receipt, AlertTriangle, MapPin, User, Trophy, Trash2, Save,
-  CalendarX2, CalendarCheck2, RefreshCw, Check,
+  CalendarX2, CalendarCheck2, RefreshCw, Check, ExternalLink,
 } from 'lucide-react'
 import { format, parseISO, addDays, isValid, type Locale } from 'date-fns'
 import { es } from 'date-fns/locale'
@@ -577,7 +577,7 @@ export default function ClientProfilePage() {
   const [drawerInscripcionId, setDrawerInscripcionId] = useState<string | null>(null)
   const [drawerMode, setDrawerMode] = useState<'ausencia' | 'recuperar'>('ausencia')
   const [chartView, setChartView] = useState<'mensual' | 'diasSemana'>('mensual')
-  const [leftTab, setLeftTab] = useState<'historial' | 'ausencias' | 'recuperos'>('historial')
+  const [leftTab, setLeftTab] = useState<'historial' | 'presentes' | 'ausencias' | 'recuperos'>('historial')
   const [deletingAttendanceId, setDeletingAttendanceId] = useState<string | null>(null)
   const [cancelingRecupId, setCancelingRecupId] = useState<string | null>(null)
   const [expandedHistorialGroups, setExpandedHistorialGroups] = useState<Set<string>>(new Set())
@@ -2068,6 +2068,13 @@ export default function ClientProfilePage() {
                               {insc.dias.map(d => DIA_SHORT[d.toLowerCase()] ?? d).join(' · ')}
                             </p>
                           </div>
+                          <button
+                            onClick={() => navigate(`/shifts/${insc.turnoId}`)}
+                            className="flex items-center gap-1.5 text-xs font-semibold text-amber-800 dark:text-amber-300 hover:text-amber-900 dark:hover:text-amber-200 shrink-0 px-3 py-1.5 rounded-xl hover:bg-amber-500/10 transition-all border border-transparent hover:border-amber-500/10"
+                          >
+                            <ExternalLink size={13} />
+                            Ver turno
+                          </button>
                           {(isAdmin || user?.role === 'staff') && (
                             <button
                               onClick={() => handleDarDeBaja(insc.id)}
@@ -2196,6 +2203,7 @@ export default function ClientProfilePage() {
                     <div className="flex gap-1 px-3 py-2 border-b border-gray-100 dark:border-white/[0.06]">
                       {([
                         ['historial',  'Historial'],
+                        ['presentes',  `Presentes${presentDays > 0 ? ` (${presentDays})` : ''}`],
                         ['ausencias',  `Ausencias${ausencias.length > 0 ? ` (${ausencias.length})` : ''}`],
                         ['recuperos',  `Recuperos${recuperosPendientesCount > 0 ? ` (${recuperosPendientesCount})` : ''}`],
                       ] as const).map(([v, l]) => (
@@ -2309,6 +2317,38 @@ export default function ClientProfilePage() {
                           </div>
                           )
                         })
+                      ) : leftTab === 'presentes' ? (
+                        (() => {
+                          const presentes = mergedTimeline.filter(r => r.state === 'presente')
+                          if (presentes.length === 0) return (
+                            <div className="flex flex-col items-center justify-center py-8 text-center px-4">
+                              <CalendarCheck2 size={20} className="text-gray-300 dark:text-[#444] mb-2" />
+                              <p className="text-xs text-gray-400 dark:text-[#666]">Sin presentes registrados</p>
+                            </div>
+                          )
+                          return presentes.map(r => (
+                            <div key={r.id} className="flex items-center gap-2.5 px-4 py-2.5 hover:bg-black/[0.02] dark:hover:bg-white/[0.02] transition-colors">
+                              <div className="h-2 w-2 rounded-full shrink-0 bg-emerald-500" />
+                              <div className="flex-1 min-w-0">
+                                <p className="text-xs font-semibold text-gray-900 dark:text-white capitalize truncate">
+                                  {safeFormatDate(r.dateKey + 'T12:00:00', "EEEE d 'de' MMMM yyyy", es)}
+                                </p>
+                                {'shiftLabel' in r && r.shiftLabel && (
+                                  <p className="text-[10px] text-gray-400 dark:text-[#666]">{r.shiftLabel}</p>
+                                )}
+                              </div>
+                              {r.shiftId && (
+                                <button
+                                  onClick={() => navigate(`/shifts/${r.shiftId}?date=${r.dateKey}`)}
+                                  className="text-gray-300 dark:text-[#555] hover:text-primary dark:hover:text-primary transition-colors shrink-0"
+                                  title="Ver turno"
+                                >
+                                  <ExternalLink size={12} />
+                                </button>
+                              )}
+                            </div>
+                          ))
+                        })()
                       ) : leftTab === 'ausencias' && ausencias.length === 0 ? (
                         <div className="flex flex-col items-center justify-center py-8 text-center px-4">
                           <CalendarCheck2 size={20} className="text-gray-300 dark:text-[#444] mb-2" />
@@ -2355,6 +2395,15 @@ export default function ClientProfilePage() {
                                 </div>
                                 {avisoBadge}
                                 <div className="flex items-center gap-1 shrink-0">
+                                  {grupo[0].inscripcion?.turno?.id && (
+                                    <button
+                                      onClick={e => { e.stopPropagation(); navigate(`/shifts/${grupo[0].inscripcion.turno.id}`) }}
+                                      className="p-1.5 rounded-lg text-gray-300 dark:text-[#444] hover:text-primary hover:bg-primary/10 transition-all"
+                                      title="Ver turno"
+                                    >
+                                      <ExternalLink size={12} />
+                                    </button>
+                                  )}
                                   <button
                                     onClick={e => { e.stopPropagation(); navigate(`/clients/${id}/ausencia?editGroupIds=${grupoIds.join(',')}`) }}
                                     className="p-1.5 rounded-lg text-gray-400 dark:text-[#666] hover:text-primary hover:bg-primary/10 transition-all"
@@ -2406,6 +2455,15 @@ export default function ClientProfilePage() {
                                   )}
                                 </div>
                                 <div className="flex items-center gap-1 shrink-0">
+                                  {a.inscripcion?.turno?.id && (
+                                    <button
+                                      onClick={e => { e.stopPropagation(); navigate(`/shifts/${a.inscripcion.turno.id}?date=${a.fecha.slice(0, 10)}`) }}
+                                      className="p-1.5 rounded-lg text-gray-300 dark:text-[#444] hover:text-primary hover:bg-primary/10 transition-all"
+                                      title="Ver turno"
+                                    >
+                                      <ExternalLink size={12} />
+                                    </button>
+                                  )}
                                   <button
                                     onClick={e => { e.stopPropagation(); navigate(`/clients/${id}/ausencia?ausenciaId=${a.id}`) }}
                                     className="p-1.5 rounded-lg text-gray-400 dark:text-[#666] hover:text-primary hover:bg-primary/10 transition-all"
