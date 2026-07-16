@@ -13,6 +13,18 @@ interface UseClientsParams {
   sortBy?: string
   sortDir?: 'asc' | 'desc'
   proporcionalPendiente?: boolean
+  // filtros avanzados
+  conTurnos?: boolean
+  frecuenciaSemanal?: '2' | '3' | 'full'
+  sexo?: 'MASCULINO' | 'FEMENINO' | 'OTRO'
+  edadMin?: number
+  edadMax?: number
+  sedeId?: string
+  conCalendario?: boolean
+  alturaMin?: number
+  alturaMax?: number
+  pesoMin?: number
+  pesoMax?: number
 }
 
 export function useClients(params?: UseClientsParams) {
@@ -29,6 +41,18 @@ export function useClients(params?: UseClientsParams) {
     ...(params?.sortBy                && { sortBy:     params.sortBy }),
     ...(params?.sortDir               && { sortDir:    params.sortDir }),
     ...(params?.proporcionalPendiente !== undefined && { proporcionalPendiente: params.proporcionalPendiente }),
+    // filtros avanzados
+    ...(params?.conTurnos !== undefined          && { conTurnos:         params.conTurnos }),
+    ...(params?.frecuenciaSemanal                && { frecuenciaSemanal: params.frecuenciaSemanal }),
+    ...(params?.sexo                             && { sexo:              params.sexo }),
+    ...(params?.edadMin !== undefined            && { edadMin:           params.edadMin }),
+    ...(params?.edadMax !== undefined            && { edadMax:           params.edadMax }),
+    ...(params?.sedeId                           && { sedeId:            params.sedeId }),
+    ...(params?.conCalendario !== undefined      && { conCalendario:     params.conCalendario }),
+    ...(params?.alturaMin !== undefined          && { alturaMin:         params.alturaMin }),
+    ...(params?.alturaMax !== undefined          && { alturaMax:         params.alturaMax }),
+    ...(params?.pesoMin !== undefined            && { pesoMin:           params.pesoMin }),
+    ...(params?.pesoMax !== undefined            && { pesoMax:           params.pesoMax }),
   }
 
   const { data, isPending, error, refetch } = useQuery({

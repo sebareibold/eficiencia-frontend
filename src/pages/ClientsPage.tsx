@@ -1,8 +1,8 @@
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useRef } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { motion, AnimatePresence } from 'framer-motion'
 import { pageVariants, staggerContainerFast, fadeUpItem } from '../lib/motion'
-import { Plus, Search, RefreshCw, LayoutList, LayoutGrid, ChevronRight, ChevronLeft, ChevronsRight, ChevronsLeft, Phone, Mail, Users, X, ArrowUpDown, UserX } from 'lucide-react'
+import { Plus, Search, RefreshCw, LayoutList, LayoutGrid, ChevronRight, ChevronLeft, ChevronsRight, ChevronsLeft, Phone, Mail, Users, X, ArrowUpDown, UserX, SlidersHorizontal } from 'lucide-react'
 import { format, startOfMonth, endOfMonth, addMonths, subMonths, differenceInDays } from 'date-fns'
 import { es } from 'date-fns/locale'
 import { usePermissions } from '../hooks/usePermissions'
@@ -19,6 +19,20 @@ import type { Client } from '../types/client.types'
 type ActividadFilter = 'all' | 'active' | 'inactive'
 type MembresiaFilter = 'all' | 'active' | 'expiring'
 type ProporcionalFilter = 'all' | 'si' | 'no'
+
+type AdvancedFilters = {
+  conTurnos?: boolean
+  frecuenciaSemanal?: '2' | '3' | 'full'
+  sexo?: 'MASCULINO' | 'FEMENINO' | 'OTRO'
+  edadMin?: number
+  edadMax?: number
+  sedeId?: string
+  conCalendario?: boolean
+  alturaMin?: number
+  alturaMax?: number
+  pesoMin?: number
+  pesoMax?: number
+}
 
 const ACTIVIDAD_FILTERS: { value: ActividadFilter; label: string }[] = [
   { value: 'all',      label: 'Todos' },
@@ -124,10 +138,34 @@ export default function ClientsPage() {
   const [inactivarTarget, setInactivarTarget] = useState<Client | null>(null)
   const [inactivarLoading, setInactivarLoading] = useState(false)
   const [diasGracia, setDiasGracia] = useState(10)
+  const [drawerOpen, setDrawerOpen] = useState(false)
+  const [advFilters, setAdvFilters] = useState<AdvancedFilters>({})
+  const [sedes, setSedes] = useState<{ id: string; nombre: string }[]>([])
+  const [drawerTop, setDrawerTop] = useState(200)
+  const filterBtnRef = useRef<HTMLButtonElement>(null)
 
   useEffect(() => {
     configuracionSistemaApi.get().then(c => setDiasGracia(c.diasGraciaInactivacion)).catch(() => {})
+    clientsApi.getSedes().then(setSedes).catch(() => {})
   }, [])
+
+  useEffect(() => {
+    if (drawerOpen && filterBtnRef.current) {
+      const rect = filterBtnRef.current.getBoundingClientRect()
+      setDrawerTop(rect.bottom + 10)
+    }
+  }, [drawerOpen])
+
+  const activeAdvFiltersCount = [
+    advFilters.conTurnos !== undefined,
+    advFilters.frecuenciaSemanal !== undefined,
+    advFilters.sexo !== undefined,
+    advFilters.edadMin !== undefined || advFilters.edadMax !== undefined,
+    advFilters.sedeId !== undefined,
+    advFilters.conCalendario !== undefined,
+    advFilters.alturaMin !== undefined || advFilters.alturaMax !== undefined,
+    advFilters.pesoMin !== undefined || advFilters.pesoMax !== undefined,
+  ].filter(Boolean).length
 
   // Debounce search para no disparar una query por cada tecla
   useEffect(() => {
@@ -173,6 +211,7 @@ export default function ClientsPage() {
     sortBy:  sortKey,
     sortDir: sortDir,
     proporcionalPendiente: proporcionalFilter === 'si' ? true : proporcionalFilter === 'no' ? false : undefined,
+    ...advFilters,
   })
 
   function handleSort(colKey: string) {
@@ -188,10 +227,12 @@ export default function ClientsPage() {
   }
 
   // Resetear página al cambiar filtros
-  useEffect(() => { goToPage(1) }, [debouncedSearch, actividadFilter, membresiaFilter, periodMode, proporcionalFilter]) // eslint-disable-line react-hooks/exhaustive-deps
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  useEffect(() => { goToPage(1) }, [debouncedSearch, actividadFilter, membresiaFilter, periodMode, proporcionalFilter, JSON.stringify(advFilters)])
 
   // Limpiar selección al cambiar filtros o página
-  useEffect(() => { setSelectedIds(new Set()) }, [debouncedSearch, actividadFilter, membresiaFilter, periodMode, currentPage, proporcionalFilter])
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  useEffect(() => { setSelectedIds(new Set()) }, [debouncedSearch, actividadFilter, membresiaFilter, periodMode, currentPage, proporcionalFilter, JSON.stringify(advFilters)])
 
   const isAllSelected = clients.length > 0 && clients.every(c => selectedIds.has(c.id))
   const isIndeterminate = !isAllSelected && clients.some(c => selectedIds.has(c.id))
@@ -231,6 +272,7 @@ export default function ClientsPage() {
         hasta,
         limit: total,
         page: 1,
+        ...advFilters,
       })
       setSelectedIds(new Set(result.data.map(c => c.id)))
     } catch {
@@ -604,6 +646,27 @@ export default function ClientsPage() {
               })}
             </div>
           </div>
+
+          {/* Botón filtros avanzados */}
+          <div className="flex items-end">
+            <button
+              ref={filterBtnRef}
+              onClick={() => setDrawerOpen(o => !o)}
+              title="Filtros avanzados"
+              className={`relative flex h-9 w-9 items-center justify-center rounded-full transition-all duration-200 cursor-pointer ${
+                drawerOpen || activeAdvFiltersCount > 0
+                  ? 'bg-gray-900 dark:bg-white text-white dark:text-gray-900 shadow-[0_2px_8px_rgba(0,0,0,0.18)]'
+                  : 'border border-dashed border-gray-300 dark:border-gray-700 bg-white/30 dark:bg-black/30 backdrop-blur-xl text-gray-500 dark:text-[#8A8A9A] hover:text-gray-900 dark:hover:text-white hover:border-gray-400 dark:hover:border-gray-500'
+              }`}
+            >
+              <SlidersHorizontal size={14} />
+              {activeAdvFiltersCount > 0 && (
+                <span className="absolute -top-1 -right-1 flex h-4 w-4 items-center justify-center rounded-full bg-primary text-[9px] font-black text-gray-900 shadow-sm">
+                  {activeAdvFiltersCount}
+                </span>
+              )}
+            </button>
+          </div>
         </div>
       </div>
 
@@ -945,6 +1008,227 @@ export default function ClientsPage() {
       )}
       </AnimatePresence>
     </motion.div>
+
+    {/* Panel de filtros avanzados — flotante, emerge del botón trigger */}
+    <AnimatePresence>
+      {drawerOpen && (
+        <motion.div
+          initial={{ opacity: 0, scale: 0.94, y: -6 }}
+          animate={{ opacity: 1, scale: 1, y: 0 }}
+          exit={{ opacity: 0, scale: 0.94, y: -6, transition: { duration: 0.15, ease: [0.4, 0, 1, 1] } }}
+          transition={{ duration: 0.22, ease: [0.23, 1, 0.32, 1] }}
+          style={{ top: drawerTop, transformOrigin: 'top right' }}
+          className="fixed right-4 z-[100] w-72 flex flex-col rounded-2xl border border-saas-border dark:border-white/[0.08] bg-saas-bg/90 dark:bg-[#111111]/95 backdrop-blur-2xl shadow-[0_8px_32px_rgba(0,0,0,0.08),0_32px_80px_rgba(0,0,0,0.1)] dark:shadow-[0_8px_32px_rgba(0,0,0,0.4),0_32px_80px_rgba(0,0,0,0.55)] overflow-hidden max-h-[calc(100vh-12rem)]"
+        >
+          {/* Grilla de puntos — idéntica al fondo de la página */}
+          <div
+            aria-hidden="true"
+            className="pointer-events-none absolute inset-0"
+            style={{
+              backgroundImage: 'radial-gradient(circle, rgba(0,0,0,0.045) 1px, transparent 1px)',
+              backgroundSize: '24px 24px',
+            }}
+          />
+          {/* Header */}
+          <div className="flex items-center justify-between border-b border-black/[0.06] dark:border-white/[0.07] px-4 py-3 shrink-0">
+            <div className="flex items-center gap-2">
+              <SlidersHorizontal size={13} className="text-gray-400 dark:text-gray-500" />
+              <span className="text-xs font-bold tracking-tight text-gray-900 dark:text-white">Filtros avanzados</span>
+              {activeAdvFiltersCount > 0 && (
+                <span className="flex h-4 min-w-4 px-1 items-center justify-center rounded-full bg-primary text-[9px] font-black text-gray-900">
+                  {activeAdvFiltersCount}
+                </span>
+              )}
+            </div>
+            <button
+              onClick={() => setDrawerOpen(false)}
+              className="flex h-6 w-6 items-center justify-center rounded-full text-gray-400 dark:text-gray-500 hover:text-gray-700 dark:hover:text-gray-200 hover:bg-black/[0.06] dark:hover:bg-white/[0.08] transition-colors"
+            >
+              <X size={12} />
+            </button>
+          </div>
+
+          {/* Contenido */}
+          <div className="flex-1 overflow-y-auto px-4 py-4 space-y-5">
+
+            {/* Turnos activos */}
+            <section>
+              <h3 className="text-[10px] font-bold uppercase tracking-wider text-gray-400 dark:text-gray-500 mb-2.5">Turnos</h3>
+              <div
+                className="flex items-center gap-3 cursor-pointer"
+                onClick={() => setAdvFilters(f => ({ ...f, conTurnos: f.conTurnos ? undefined : true }))}
+              >
+                <div className={`relative h-5 w-9 rounded-full transition-colors ${advFilters.conTurnos ? 'bg-gray-900 dark:bg-white' : 'bg-gray-200 dark:bg-gray-700'}`}>
+                  <div className={`absolute top-0.5 h-4 w-4 rounded-full bg-white dark:bg-gray-900 shadow transition-transform duration-200 ${advFilters.conTurnos ? 'translate-x-4' : 'translate-x-0.5'}`} />
+                </div>
+                <span className="text-sm font-semibold text-gray-700 dark:text-gray-300">Con turnos activos</span>
+              </div>
+            </section>
+
+            {/* Frecuencia semanal */}
+            <section>
+              <h3 className="text-[10px] font-bold uppercase tracking-wider text-gray-400 dark:text-gray-500 mb-2.5">Frecuencia semanal</h3>
+              <div className="flex flex-wrap gap-2">
+                {([['2', '2× / sem'], ['3', '3× / sem'], ['full', 'Full (4-5×)']] as ['2' | '3' | 'full', string][]).map(([val, label]) => (
+                  <button
+                    key={val}
+                    onClick={() => setAdvFilters(f => ({ ...f, frecuenciaSemanal: f.frecuenciaSemanal === val ? undefined : val }))}
+                    className={`rounded-full px-3 py-1.5 text-xs font-bold transition-all cursor-pointer ${
+                      advFilters.frecuenciaSemanal === val
+                        ? 'bg-gray-900 dark:bg-white text-white dark:text-gray-900 shadow-sm'
+                        : 'border border-dashed border-gray-300 dark:border-gray-700 text-gray-500 dark:text-gray-400 hover:text-gray-900 dark:hover:text-white hover:border-gray-400 dark:hover:border-gray-500'
+                    }`}
+                  >
+                    {label}
+                  </button>
+                ))}
+              </div>
+            </section>
+
+            {/* Sexo */}
+            <section>
+              <h3 className="text-[10px] font-bold uppercase tracking-wider text-gray-400 dark:text-gray-500 mb-2.5">Sexo</h3>
+              <div className="flex flex-wrap gap-2">
+                {([['MASCULINO', 'Masculino'], ['FEMENINO', 'Femenino'], ['OTRO', 'Otro']] as ['MASCULINO' | 'FEMENINO' | 'OTRO', string][]).map(([val, label]) => (
+                  <button
+                    key={val}
+                    onClick={() => setAdvFilters(f => ({ ...f, sexo: f.sexo === val ? undefined : val }))}
+                    className={`rounded-full px-3 py-1.5 text-xs font-bold transition-all cursor-pointer ${
+                      advFilters.sexo === val
+                        ? 'bg-gray-900 dark:bg-white text-white dark:text-gray-900 shadow-sm'
+                        : 'border border-dashed border-gray-300 dark:border-gray-700 text-gray-500 dark:text-gray-400 hover:text-gray-900 dark:hover:text-white hover:border-gray-400 dark:hover:border-gray-500'
+                    }`}
+                  >
+                    {label}
+                  </button>
+                ))}
+              </div>
+            </section>
+
+            {/* Edad */}
+            <section>
+              <h3 className="text-[10px] font-bold uppercase tracking-wider text-gray-400 dark:text-gray-500 mb-2.5">Edad</h3>
+              <div className="flex items-center gap-2">
+                <input
+                  type="number"
+                  placeholder="Mín"
+                  min={0}
+                  max={120}
+                  value={advFilters.edadMin ?? ''}
+                  onChange={e => setAdvFilters(f => ({ ...f, edadMin: e.target.value ? Number(e.target.value) : undefined }))}
+                  className="w-20 rounded-xl border border-white/50 dark:border-white/10 bg-white/30 dark:bg-black/30 backdrop-blur-xl px-3 py-1.5 text-xs font-semibold text-gray-900 dark:text-white placeholder-gray-400 focus:outline-none focus:ring-1 focus:ring-gray-300 dark:focus:ring-white/20"
+                />
+                <span className="text-xs text-gray-400">—</span>
+                <input
+                  type="number"
+                  placeholder="Máx"
+                  min={0}
+                  max={120}
+                  value={advFilters.edadMax ?? ''}
+                  onChange={e => setAdvFilters(f => ({ ...f, edadMax: e.target.value ? Number(e.target.value) : undefined }))}
+                  className="w-20 rounded-xl border border-white/50 dark:border-white/10 bg-white/30 dark:bg-black/30 backdrop-blur-xl px-3 py-1.5 text-xs font-semibold text-gray-900 dark:text-white placeholder-gray-400 focus:outline-none focus:ring-1 focus:ring-gray-300 dark:focus:ring-white/20"
+                />
+                <span className="text-xs text-gray-400 shrink-0">años</span>
+              </div>
+            </section>
+
+            {/* Sede */}
+            {sedes.length > 0 && (
+              <section>
+                <h3 className="text-[10px] font-bold uppercase tracking-wider text-gray-400 dark:text-gray-500 mb-2.5">Sede</h3>
+                <div className="flex flex-wrap gap-2">
+                  {sedes.map(sede => (
+                    <button
+                      key={sede.id}
+                      onClick={() => setAdvFilters(f => ({ ...f, sedeId: f.sedeId === sede.id ? undefined : sede.id }))}
+                      className={`rounded-full px-3 py-1.5 text-xs font-bold transition-all cursor-pointer ${
+                        advFilters.sedeId === sede.id
+                          ? 'bg-gray-900 dark:bg-white text-white dark:text-gray-900 shadow-sm'
+                          : 'border border-dashed border-gray-300 dark:border-gray-700 text-gray-500 dark:text-gray-400 hover:text-gray-900 dark:hover:text-white hover:border-gray-400 dark:hover:border-gray-500'
+                      }`}
+                    >
+                      {sede.nombre}
+                    </button>
+                  ))}
+                </div>
+              </section>
+            )}
+
+            {/* Calendario deportivo */}
+            <section>
+              <h3 className="text-[10px] font-bold uppercase tracking-wider text-gray-400 dark:text-gray-500 mb-2.5">Calendario deportivo</h3>
+              <div
+                className="flex items-center gap-3 cursor-pointer"
+                onClick={() => setAdvFilters(f => ({ ...f, conCalendario: f.conCalendario ? undefined : true }))}
+              >
+                <div className={`relative h-5 w-9 rounded-full transition-colors ${advFilters.conCalendario ? 'bg-gray-900 dark:bg-white' : 'bg-gray-200 dark:bg-gray-700'}`}>
+                  <div className={`absolute top-0.5 h-4 w-4 rounded-full bg-white dark:bg-gray-900 shadow transition-transform duration-200 ${advFilters.conCalendario ? 'translate-x-4' : 'translate-x-0.5'}`} />
+                </div>
+                <span className="text-sm font-semibold text-gray-700 dark:text-gray-300">Con eventos cargados</span>
+              </div>
+            </section>
+
+            {/* Altura */}
+            <section>
+              <h3 className="text-[10px] font-bold uppercase tracking-wider text-gray-400 dark:text-gray-500 mb-2.5">Altura</h3>
+              <div className="flex items-center gap-2">
+                <input
+                  type="number"
+                  placeholder="Mín"
+                  value={advFilters.alturaMin ?? ''}
+                  onChange={e => setAdvFilters(f => ({ ...f, alturaMin: e.target.value ? Number(e.target.value) : undefined }))}
+                  className="w-20 rounded-xl border border-white/50 dark:border-white/10 bg-white/30 dark:bg-black/30 backdrop-blur-xl px-3 py-1.5 text-xs font-semibold text-gray-900 dark:text-white placeholder-gray-400 focus:outline-none focus:ring-1 focus:ring-gray-300 dark:focus:ring-white/20"
+                />
+                <span className="text-xs text-gray-400">—</span>
+                <input
+                  type="number"
+                  placeholder="Máx"
+                  value={advFilters.alturaMax ?? ''}
+                  onChange={e => setAdvFilters(f => ({ ...f, alturaMax: e.target.value ? Number(e.target.value) : undefined }))}
+                  className="w-20 rounded-xl border border-white/50 dark:border-white/10 bg-white/30 dark:bg-black/30 backdrop-blur-xl px-3 py-1.5 text-xs font-semibold text-gray-900 dark:text-white placeholder-gray-400 focus:outline-none focus:ring-1 focus:ring-gray-300 dark:focus:ring-white/20"
+                />
+                <span className="text-xs text-gray-400 shrink-0">cm</span>
+              </div>
+            </section>
+
+            {/* Peso */}
+            <section>
+              <h3 className="text-[10px] font-bold uppercase tracking-wider text-gray-400 dark:text-gray-500 mb-2.5">Peso</h3>
+              <div className="flex items-center gap-2">
+                <input
+                  type="number"
+                  placeholder="Mín"
+                  value={advFilters.pesoMin ?? ''}
+                  onChange={e => setAdvFilters(f => ({ ...f, pesoMin: e.target.value ? Number(e.target.value) : undefined }))}
+                  className="w-20 rounded-xl border border-white/50 dark:border-white/10 bg-white/30 dark:bg-black/30 backdrop-blur-xl px-3 py-1.5 text-xs font-semibold text-gray-900 dark:text-white placeholder-gray-400 focus:outline-none focus:ring-1 focus:ring-gray-300 dark:focus:ring-white/20"
+                />
+                <span className="text-xs text-gray-400">—</span>
+                <input
+                  type="number"
+                  placeholder="Máx"
+                  value={advFilters.pesoMax ?? ''}
+                  onChange={e => setAdvFilters(f => ({ ...f, pesoMax: e.target.value ? Number(e.target.value) : undefined }))}
+                  className="w-20 rounded-xl border border-white/50 dark:border-white/10 bg-white/30 dark:bg-black/30 backdrop-blur-xl px-3 py-1.5 text-xs font-semibold text-gray-900 dark:text-white placeholder-gray-400 focus:outline-none focus:ring-1 focus:ring-gray-300 dark:focus:ring-white/20"
+                />
+                <span className="text-xs text-gray-400 shrink-0">kg</span>
+              </div>
+            </section>
+          </div>
+
+          {/* Footer — limpiar filtros */}
+          {activeAdvFiltersCount > 0 && (
+            <div className="shrink-0 border-t border-black/[0.06] dark:border-white/[0.07] px-4 py-3">
+              <button
+                onClick={() => setAdvFilters({})}
+                className="w-full rounded-xl border border-dashed border-gray-200 dark:border-gray-700/70 py-2 text-[11px] font-bold text-gray-400 dark:text-gray-500 hover:text-gray-700 dark:hover:text-gray-200 hover:border-gray-300 dark:hover:border-gray-600 transition-all duration-150 cursor-pointer active:scale-[0.98]"
+              >
+                Limpiar filtros avanzados
+              </button>
+            </div>
+          )}
+        </motion.div>
+      )}
+    </AnimatePresence>
 
     <ConfirmDialog
       isOpen={inactivarTarget !== null}
