@@ -38,6 +38,9 @@ export default function Navbar() {
   const [profileCardOffset, setProfileCardOffset] = useState(0)
   const profileCardRef = useRef<HTMLDivElement>(null)
 
+  const isAdmin        = user?.role === 'admin'
+  const isClienteComun = user?.role === 'cliente_comun'
+
   const handleLogout = useCallback(async () => {
     try { await authApi.logout() } catch { /* ignorar errores de red */ }
     logout()
@@ -48,9 +51,6 @@ export default function Navbar() {
     if (t.hideIfAdmin && isAdmin) return false
     return t.module === null || canUI(t.module, 'read')
   })
-
-  const isAdmin        = user?.role === 'admin'
-  const isClienteComun = user?.role === 'cliente_comun'
 
   useEffect(() => {
     if (!isAdmin) return
