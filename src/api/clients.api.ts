@@ -45,6 +45,8 @@ function mapCliente(c: any): Client {
     sede: c.sede ?? null,
     createdAt: c.createdAt,
     updatedAt: c.updatedAt ?? c.createdAt,
+    proporcionalPendiente: membership?.proporcionalPendiente ?? false,
+    descuentoProporcional: membership?.descuentoProporcional != null ? Number(membership.descuentoProporcional) : 0,
   }
 }
 
@@ -69,18 +71,19 @@ function mapFicha(f: any): FichaEntrenamiento {
 }
 
 export const clientsApi = {
-  getAll: (params?: { page?: number; limit?: number; search?: string; estado?: string; estadoPago?: string; desde?: string; hasta?: string; sortBy?: string; sortDir?: 'asc' | 'desc' }): Promise<PaginatedClients> =>
+  getAll: (params?: { page?: number; limit?: number; search?: string; estado?: string; estadoPago?: string; desde?: string; hasta?: string; sortBy?: string; sortDir?: 'asc' | 'desc'; proporcionalPendiente?: boolean }): Promise<PaginatedClients> =>
     api.get('/clientes', {
       params: {
         page:  params?.page  ?? 1,
         limit: params?.limit ?? 20,
-        ...(params?.search     && { search:     params.search }),
-        ...(params?.estado     && { estado: params.estado === 'active' ? 'ACTIVO' : params.estado === 'inactive' ? 'INACTIVO' : params.estado }),
-        ...(params?.estadoPago && { estadoPago: params.estadoPago }),
-        ...(params?.desde      && { desde:      params.desde }),
-        ...(params?.hasta      && { hasta:      params.hasta }),
-        ...(params?.sortBy     && { sortBy:     params.sortBy }),
-        ...(params?.sortDir    && { sortDir:    params.sortDir }),
+        ...(params?.search                && { search:     params.search }),
+        ...(params?.estado                && { estado: params.estado === 'active' ? 'ACTIVO' : params.estado === 'inactive' ? 'INACTIVO' : params.estado }),
+        ...(params?.estadoPago            && { estadoPago: params.estadoPago }),
+        ...(params?.desde                 && { desde:      params.desde }),
+        ...(params?.hasta                 && { hasta:      params.hasta }),
+        ...(params?.sortBy                && { sortBy:     params.sortBy }),
+        ...(params?.sortDir               && { sortDir:    params.sortDir }),
+        ...(params?.proporcionalPendiente !== undefined && { proporcionalPendiente: params.proporcionalPendiente }),
       },
     }).then((r) => {
       const raw = r.data

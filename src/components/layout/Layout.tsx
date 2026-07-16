@@ -194,7 +194,7 @@ export default function Layout() {
         <Navbar />
       )}
       <main className="flex-1 min-h-[calc(100vh-5rem)] px-4 py-4 sm:px-5 sm:py-5 md:px-8 md:py-6 lg:px-12 lg:py-7 xl:px-16 xl:py-8 overflow-x-hidden text-gray-800 dark:text-gray-100 relative z-10 w-full max-w-[1600px] mx-auto">
-        {isInitializing ? <DotsLoader className="flex items-center justify-center h-[calc(100vh-9rem)]" /> : (
+        {isInitializing ? <DotsLoader className="flex items-center justify-center h-[calc(100vh-12rem)]" /> : (
           <AnimatePresence initial={false}>
             <motion.div
               key={'/' + location.pathname.split('/').filter(Boolean)[0]}
@@ -203,7 +203,7 @@ export default function Layout() {
               exit={{ opacity: 0, position: 'absolute', inset: 0, pointerEvents: 'none' }}
               transition={{ duration: 0.15, ease: 'easeOut' }}
             >
-              <Suspense fallback={<DotsLoader className="flex items-center justify-center h-[calc(100vh-9rem)]" />}>
+              <Suspense fallback={<DotsLoader className="flex items-center justify-center h-[calc(100vh-12rem)]" />}>
                 <Outlet />
               </Suspense>
             </motion.div>

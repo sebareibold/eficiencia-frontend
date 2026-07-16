@@ -23,6 +23,8 @@ export interface Client {
   sede?: { id: string; nombre: string; activa: boolean } | null
   createdAt: string
   updatedAt: string
+  proporcionalPendiente?: boolean
+  descuentoProporcional?: number
 }
 
 export interface CreateClientDto {

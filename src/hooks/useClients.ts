@@ -12,6 +12,7 @@ interface UseClientsParams {
   hasta?: string
   sortBy?: string
   sortDir?: 'asc' | 'desc'
+  proporcionalPendiente?: boolean
 }
 
 export function useClients(params?: UseClientsParams) {
@@ -20,13 +21,14 @@ export function useClients(params?: UseClientsParams) {
   const queryParams = {
     page:   currentPage,
     limit:  params?.limit ?? 10,
-    ...(params?.search     && { search:     params.search }),
-    ...(params?.estado     && { estado:     params.estado }),
-    ...(params?.estadoPago && { estadoPago: params.estadoPago }),
-    ...(params?.desde      && { desde:      params.desde }),
-    ...(params?.hasta      && { hasta:      params.hasta }),
-    ...(params?.sortBy     && { sortBy:     params.sortBy }),
-    ...(params?.sortDir    && { sortDir:    params.sortDir }),
+    ...(params?.search                && { search:     params.search }),
+    ...(params?.estado                && { estado:     params.estado }),
+    ...(params?.estadoPago            && { estadoPago: params.estadoPago }),
+    ...(params?.desde                 && { desde:      params.desde }),
+    ...(params?.hasta                 && { hasta:      params.hasta }),
+    ...(params?.sortBy                && { sortBy:     params.sortBy }),
+    ...(params?.sortDir               && { sortDir:    params.sortDir }),
+    ...(params?.proporcionalPendiente !== undefined && { proporcionalPendiente: params.proporcionalPendiente }),
   }
 
   const { data, isPending, error, refetch } = useQuery({

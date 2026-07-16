@@ -18,6 +18,7 @@ import type { Client } from '../types/client.types'
 
 type ActividadFilter = 'all' | 'active' | 'inactive'
 type MembresiaFilter = 'all' | 'active' | 'expiring'
+type ProporcionalFilter = 'all' | 'si' | 'no'
 
 const ACTIVIDAD_FILTERS: { value: ActividadFilter; label: string }[] = [
   { value: 'all',      label: 'Todos' },
@@ -110,6 +111,7 @@ export default function ClientsPage() {
   const [debouncedSearch, setDebouncedSearch] = useState('')
   const [actividadFilter, setActividadFilter] = useState<ActividadFilter>('active')
   const [membresiaFilter, setMembresiaFilter] = useState<MembresiaFilter>('all')
+  const [proporcionalFilter, setProporcionalFilter] = useState<ProporcionalFilter>('all')
   const [periodMode, setPeriodMode] = useState<PeriodMode>('historic')
   const [navDate, setNavDate] = useState(today)
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set())
@@ -170,6 +172,7 @@ export default function ClientsPage() {
     hasta,
     sortBy:  sortKey,
     sortDir: sortDir,
+    proporcionalPendiente: proporcionalFilter === 'si' ? true : proporcionalFilter === 'no' ? false : undefined,
   })
 
   function handleSort(colKey: string) {
@@ -185,10 +188,10 @@ export default function ClientsPage() {
   }
 
   // Resetear página al cambiar filtros
-  useEffect(() => { goToPage(1) }, [debouncedSearch, actividadFilter, membresiaFilter, periodMode]) // eslint-disable-line react-hooks/exhaustive-deps
+  useEffect(() => { goToPage(1) }, [debouncedSearch, actividadFilter, membresiaFilter, periodMode, proporcionalFilter]) // eslint-disable-line react-hooks/exhaustive-deps
 
   // Limpiar selección al cambiar filtros o página
-  useEffect(() => { setSelectedIds(new Set()) }, [debouncedSearch, actividadFilter, membresiaFilter, periodMode, currentPage])
+  useEffect(() => { setSelectedIds(new Set()) }, [debouncedSearch, actividadFilter, membresiaFilter, periodMode, currentPage, proporcionalFilter])
 
   const isAllSelected = clients.length > 0 && clients.every(c => selectedIds.has(c.id))
   const isIndeterminate = !isAllSelected && clients.some(c => selectedIds.has(c.id))
@@ -388,6 +391,17 @@ export default function ClientsPage() {
       ),
     },
     {
+      key: 'proporcional',
+      header: 'Proporcional',
+      render: (c) => (
+        c.proporcionalPendiente
+          ? <span className="inline-flex items-center gap-1 rounded-full border border-amber-400/25 bg-amber-400/15 px-2 py-0.5 text-[10px] font-bold text-amber-600 dark:text-amber-400">
+              % {c.descuentoProporcional ? `$${c.descuentoProporcional.toLocaleString('es-AR')} off` : 'Sí'}
+            </span>
+          : <span className="text-sm text-gray-400 dark:text-gray-600">—</span>
+      ),
+    },
+    {
       key: 'membershipStartDate',
       header: 'Inicio',
       sortable: true,
@@ -572,6 +586,24 @@ export default function ClientsPage() {
               })}
             </div>
           </div>
+
+          {/* Con proporcional */}
+          <div className="flex flex-col gap-1.5">
+            <span className="text-[10px] font-bold uppercase tracking-wider text-gray-400 dark:text-gray-500 px-1">Con proporcional</span>
+            <div className="flex items-center rounded-full border border-white/50 dark:border-white/10 bg-white/30 dark:bg-black/30 backdrop-blur-xl p-1 shadow-sm gap-1">
+              {([['all', 'Todos'], ['si', 'Sí'], ['no', 'No']] as [ProporcionalFilter, string][]).map(([val, label]) => {
+                const isActive = proporcionalFilter === val
+                return (
+                  <button key={val} onClick={() => setProporcionalFilter(val)}
+                    className={`relative inline-flex items-center justify-center rounded-full px-4 py-1.5 text-xs font-bold transition-all duration-300 cursor-pointer ${isActive ? 'text-white dark:text-gray-900' : 'text-gray-500 dark:text-[#8A8A9A] hover:text-gray-900 dark:hover:text-white'}`}
+                  >
+                    {isActive && <div className="absolute inset-0 rounded-full bg-gray-900 dark:bg-white shadow-[0_2px_8px_rgba(0,0,0,0.15)]" style={{ zIndex: 0 }} />}
+                    <span className="relative z-10">{label}</span>
+                  </button>
+                )
+              })}
+            </div>
+          </div>
         </div>
       </div>
 
@@ -747,6 +779,11 @@ export default function ClientsPage() {
                         </span>
                       ) : (
                         <Badge status={c.status} />
+                      )}
+                      {c.proporcionalPendiente && (
+                        <span className="inline-flex items-center gap-1 rounded-full border border-amber-400/25 bg-amber-400/15 px-2 py-0.5 text-[10px] font-bold text-amber-600 dark:text-amber-400">
+                          % {c.descuentoProporcional ? `$${c.descuentoProporcional.toLocaleString('es-AR')} off` : 'Proporcional'}
+                        </span>
                       )}
                     </div>
                     <div className="text-right shrink-0 min-w-0">
