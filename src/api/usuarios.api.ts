@@ -18,6 +18,7 @@ export interface TurnoResumen {
   horaFin: string
   diasSemana: string[]
   recurrente: boolean
+  fechaPuntual?: string | null
 }
 
 export interface ProfesorDetalle {
