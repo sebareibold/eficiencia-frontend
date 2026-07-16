@@ -353,6 +353,43 @@ export default function ShiftsPage() {
     return eachDayOfInterval({ start, end });
   }, [calendarRange, weekStart]);
 
+  // Solo recurrentes organizados por día de semana
+  const shiftsByDay = useMemo(() => {
+    const map: Record<WeekDay, Shift[]> = {
+      monday: [], tuesday: [], wednesday: [], thursday: [], friday: [], saturday: [], sunday: [],
+    }
+    shifts.filter(s => s.recurrente).forEach(s => { s.days.forEach(d => { if (map[d]) map[d].push(s) }) })
+    Object.values(map).forEach(arr => arr.sort((a, b) => a.startTime.localeCompare(b.startTime)))
+    return map
+  }, [shifts])
+
+  const layoutsByDay = useMemo(() => {
+    const map = {} as Record<WeekDay, ShiftLayout[]>
+    ;(Object.keys(shiftsByDay) as WeekDay[]).forEach(day => {
+      map[day] = computeColumnLayout(shiftsByDay[day])
+    })
+    return map
+  }, [shiftsByDay])
+
+  // Turnos puntuales (no recurrentes) organizados por fechaPuntual (YYYY-MM-DD)
+  const shiftsByDate = useMemo(() => {
+    const map: Record<string, Shift[]> = {}
+    shifts.filter(s => !s.recurrente && s.fechaPuntual).forEach(s => {
+      if (!map[s.fechaPuntual!]) map[s.fechaPuntual!] = []
+      map[s.fechaPuntual!].push(s)
+    })
+    Object.values(map).forEach(arr => arr.sort((a, b) => a.startTime.localeCompare(b.startTime)))
+    return map
+  }, [shifts])
+
+  const layoutsByDate = useMemo(() => {
+    const map: Record<string, ShiftLayout[]> = {}
+    Object.entries(shiftsByDate).forEach(([date, dayShifts]) => {
+      map[date] = computeColumnLayout(dayShifts)
+    })
+    return map
+  }, [shiftsByDate])
+
   const activeHourInts = useMemo(() => {
     const active = new Set<number>();
     if (calendarViewMode === 'optimized') {
@@ -397,43 +434,6 @@ export default function ShiftsPage() {
       return baseY;
     }
   }
-
-  // Solo recurrentes organizados por día de semana
-  const shiftsByDay = useMemo(() => {
-    const map: Record<WeekDay, Shift[]> = {
-      monday: [], tuesday: [], wednesday: [], thursday: [], friday: [], saturday: [], sunday: [],
-    }
-    shifts.filter(s => s.recurrente).forEach(s => { s.days.forEach(d => { if (map[d]) map[d].push(s) }) })
-    Object.values(map).forEach(arr => arr.sort((a, b) => a.startTime.localeCompare(b.startTime)))
-    return map
-  }, [shifts])
-
-  const layoutsByDay = useMemo(() => {
-    const map = {} as Record<WeekDay, ShiftLayout[]>
-    ;(Object.keys(shiftsByDay) as WeekDay[]).forEach(day => {
-      map[day] = computeColumnLayout(shiftsByDay[day])
-    })
-    return map
-  }, [shiftsByDay])
-
-  // Turnos puntuales (no recurrentes) organizados por fechaPuntual (YYYY-MM-DD)
-  const shiftsByDate = useMemo(() => {
-    const map: Record<string, Shift[]> = {}
-    shifts.filter(s => !s.recurrente && s.fechaPuntual).forEach(s => {
-      if (!map[s.fechaPuntual!]) map[s.fechaPuntual!] = []
-      map[s.fechaPuntual!].push(s)
-    })
-    Object.values(map).forEach(arr => arr.sort((a, b) => a.startTime.localeCompare(b.startTime)))
-    return map
-  }, [shifts])
-
-  const layoutsByDate = useMemo(() => {
-    const map: Record<string, ShiftLayout[]> = {}
-    Object.entries(shiftsByDate).forEach(([date, dayShifts]) => {
-      map[date] = computeColumnLayout(dayShifts)
-    })
-    return map
-  }, [shiftsByDate])
 
   // ── Derived: timeline
   const timelineShifts = useMemo(() =>
