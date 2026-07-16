@@ -45,7 +45,8 @@ const CreateRutinaPage   = lazy(() => import('./pages/CreateRutinaPage'))
 const SecurityPage       = lazy(() => import('./pages/SecurityPage'))
 const ManualPage         = lazy(() => import('./pages/ManualPage'))
 const ResetPasswordPage  = lazy(() => import('./pages/ResetPasswordPage'))
-const SolicitudesPage    = lazy(() => import('./pages/SolicitudesPage'))
+const SolicitudesPage        = lazy(() => import('./pages/SolicitudesPage'))
+const DiaEspecialWizardPage  = lazy(() => import('./pages/DiaEspecialWizardPage'))
 
 function DefaultRedirect() {
   const user = useAuthStore((s) => s.user)
@@ -86,10 +87,12 @@ export default function App() {
               </Route>
 
               <Route element={<PermissionGuard module="shifts" />}>
-                <Route path={ROUTES.SHIFTS}       element={<ShiftsPage />} />
-                <Route path={ROUTES.SHIFT_NEW}    element={<ShiftNewPage />} />
-                <Route path={ROUTES.SHIFT_DETAIL} element={<ShiftDetailPage />} />
-                <Route path={ROUTES.CALENDAR}     element={<CalendarPage />} />
+                <Route path={ROUTES.SHIFTS}           element={<ShiftsPage />} />
+                <Route path={ROUTES.SHIFT_NEW}        element={<ShiftNewPage />} />
+                <Route path={ROUTES.SHIFT_DETAIL}     element={<ShiftDetailPage />} />
+                <Route path={ROUTES.CALENDAR}         element={<CalendarPage />} />
+                <Route path={ROUTES.DIA_ESPECIAL_NEW}  element={<DiaEspecialWizardPage />} />
+                <Route path={ROUTES.DIA_ESPECIAL_EDIT} element={<DiaEspecialWizardPage />} />
               </Route>
 
               <Route element={<PermissionGuard module="attendance" />}>

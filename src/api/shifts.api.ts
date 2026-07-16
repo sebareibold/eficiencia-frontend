@@ -40,6 +40,7 @@ function mapTurno(t: any): Shift {
     name: `${t.horaInicio} – ${t.horaFin}`,
     days: days.length > 0 ? days : ['monday'],
     recurrente: t.recurrente ?? true,
+    fechaPuntual: t.fechaPuntual ?? undefined,
     startTime: t.horaInicio,
     endTime: t.horaFin,
     cupoMaximoSalaA,

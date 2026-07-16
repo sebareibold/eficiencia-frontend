@@ -5,6 +5,7 @@ export interface Shift {
   name: string
   days: WeekDay[]
   recurrente: boolean
+  fechaPuntual?: string
   startTime: string
   endTime: string
   cupoMaximoSalaA: number

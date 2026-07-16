@@ -358,8 +358,11 @@ export default function ShiftsPage() {
     if (calendarViewMode === 'optimized') {
       visibleDates.forEach(date => {
         const wday = JS_TO_WEEKDAY[date.getDay()];
-        if (!wday) return;
-        shifts.filter(s => s.days.includes(wday)).forEach(s => {
+        const dateStr = format(date, 'yyyy-MM-dd');
+        const dayShifts = shiftsByDate[dateStr]?.length
+          ? shiftsByDate[dateStr]
+          : (wday ? shiftsByDay[wday] : []);
+        dayShifts.forEach(s => {
           const startH = parseInt(s.startTime.split(':')[0], 10);
           const endH = parseInt(s.endTime.split(':')[0], 10);
           for(let h = startH; h <= endH; h++) { active.add(h); }
@@ -367,7 +370,7 @@ export default function ShiftsPage() {
       });
     }
     return active;
-  }, [calendarViewMode, visibleDates, shifts])
+  }, [calendarViewMode, visibleDates, shiftsByDay, shiftsByDate])
 
   const { offsets, totalHeight } = useMemo(() => {
     let currentOffset = 0;
@@ -395,11 +398,12 @@ export default function ShiftsPage() {
     }
   }
 
+  // Solo recurrentes organizados por día de semana
   const shiftsByDay = useMemo(() => {
     const map: Record<WeekDay, Shift[]> = {
       monday: [], tuesday: [], wednesday: [], thursday: [], friday: [], saturday: [], sunday: [],
     }
-    shifts.forEach(s => { s.days.forEach(d => { if (map[d]) map[d].push(s) }) })
+    shifts.filter(s => s.recurrente).forEach(s => { s.days.forEach(d => { if (map[d]) map[d].push(s) }) })
     Object.values(map).forEach(arr => arr.sort((a, b) => a.startTime.localeCompare(b.startTime)))
     return map
   }, [shifts])
@@ -412,10 +416,29 @@ export default function ShiftsPage() {
     return map
   }, [shiftsByDay])
 
+  // Turnos puntuales (no recurrentes) organizados por fechaPuntual (YYYY-MM-DD)
+  const shiftsByDate = useMemo(() => {
+    const map: Record<string, Shift[]> = {}
+    shifts.filter(s => !s.recurrente && s.fechaPuntual).forEach(s => {
+      if (!map[s.fechaPuntual!]) map[s.fechaPuntual!] = []
+      map[s.fechaPuntual!].push(s)
+    })
+    Object.values(map).forEach(arr => arr.sort((a, b) => a.startTime.localeCompare(b.startTime)))
+    return map
+  }, [shifts])
+
+  const layoutsByDate = useMemo(() => {
+    const map: Record<string, ShiftLayout[]> = {}
+    Object.entries(shiftsByDate).forEach(([date, dayShifts]) => {
+      map[date] = computeColumnLayout(dayShifts)
+    })
+    return map
+  }, [shiftsByDate])
+
   // ── Derived: timeline
   const timelineShifts = useMemo(() =>
     [...shifts]
-      .filter(s => s.days.includes(timelineDay))
+      .filter(s => s.recurrente && s.days.includes(timelineDay))
       .sort((a, b) => a.startTime.localeCompare(b.startTime)),
     [shifts, timelineDay]
   )
@@ -861,7 +884,10 @@ export default function ShiftsPage() {
                   <div className="grid grid-cols-7 flex-1 auto-rows-fr">
                     {monthGridDays.map((date, i) => {
                       const wday = JS_TO_WEEKDAY[date.getDay()];
-                      const dayShifts = wday ? shiftsByDay[wday] ?? [] : [];
+                      const dateStr = format(date, 'yyyy-MM-dd');
+                      const dayShifts = shiftsByDate[dateStr]?.length
+                        ? shiftsByDate[dateStr]
+                        : (wday ? shiftsByDay[wday] ?? [] : []);
                       const isCurrentMonth = date.getMonth() === weekStart.getMonth();
                       const isToday = isSameDay(date, new Date());
                       const diaEsp = diasEspeciales.find(d => isSameDay(parseFechaLocal(d.fecha), date))
@@ -1009,6 +1035,10 @@ export default function ShiftsPage() {
                         const wday = JS_TO_WEEKDAY[date.getDay()]
                         const isToday = isSameDay(date, new Date())
                         const diaEspCol = diasEspeciales.find(d => isSameDay(parseFechaLocal(d.fecha), date))
+                        const dateStr = format(date, 'yyyy-MM-dd')
+                        const colLayouts = shiftsByDate[dateStr]?.length
+                          ? layoutsByDate[dateStr]
+                          : (wday ? layoutsByDay[wday] : [])
 
                         return (
                           <div key={i} className={`flex-1 min-w-[140px] relative border-r last:border-r-0 border-gray-200 dark:border-white/[0.06] ${isToday && !diaEspCol ? 'bg-primary/[0.02]' : ''} ${diaEspCol?.tipo === 'CIERRE_TOTAL' ? 'bg-red-500/[0.04] dark:bg-red-500/[0.07]' : diaEspCol ? 'bg-amber-500/[0.03] dark:bg-amber-500/[0.05]' : ''}`}>
@@ -1036,7 +1066,7 @@ export default function ShiftsPage() {
                               )
                             })}
 
-                            {(wday ? layoutsByDay[wday] : []).map(({ shift, colIndex, numCols }) => {
+                            {colLayouts.map(({ shift, colIndex, numCols }) => {
                               const marginY = 6
                               const top    = getTimeY(shift.startTime) + marginY
                               const bottom = getTimeY(shift.endTime) - marginY
@@ -1336,7 +1366,7 @@ export default function ShiftsPage() {
           </div>
           {canCreate && (
             <button
-              onClick={() => setDiaEspModalOpen(true)}
+              onClick={() => navigate(ROUTES.DIA_ESPECIAL_NEW)}
               className="ml-auto flex items-center gap-2 rounded-xl bg-red-500/10 px-4 py-2 text-sm font-semibold text-red-400 hover:bg-red-500/20 transition-all"
             >
               <Plus size={14} /> Agregar día
@@ -1447,15 +1477,10 @@ export default function ShiftsPage() {
                     {canDelete && (
                       <div className="shrink-0 flex items-center gap-1">
                         <button
-                          onClick={() => {
-                            setEditingDiaEspId(dia.id)
-                            setDiaEspFecha(dia.fecha.split('T')[0])
-                            setDiaEspTipo(dia.tipo)
-                            setDiaEspMotivo(dia.motivo ?? '')
-                            setDiaEspHoraDesde(dia.horaDesde ?? '')
-                            setDiaEspHoraHasta(dia.horaHasta ?? '')
-                            setDiaEspModalOpen(true)
-                          }}
+                          onClick={() => navigate(
+                            ROUTES.DIA_ESPECIAL_EDIT.replace(':id', dia.id),
+                            { state: { dia } }
+                          )}
                           className="flex h-8 w-8 items-center justify-center rounded-xl bg-white/[0.06] text-gray-400 hover:bg-white/10 hover:text-white transition-all"
                         >
                           <Pencil size={13} />
