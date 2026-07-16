@@ -205,10 +205,11 @@ export default function ShiftsPage() {
     typeof window !== 'undefined' && window.innerWidth < 768 ? '1day' : 'week'
   )
 
-  // En vista 1-día pasar la fecha exacta; en el resto, pasar hoy para incluir recuperandos del día
+  // En vista 1-día pasar la fecha exacta para incluir recuperaciones del día.
+  // En semana/mes pasar undefined → backend devuelve todos los turnos (recurrentes + puntuales).
   const calendarFecha = viewMode === 'calendar' && calendarRange === '1day'
     ? format(weekStart, 'yyyy-MM-dd')
-    : format(new Date(), 'yyyy-MM-dd')
+    : undefined
   const { shifts, isLoading, error, refetch } = useShifts({ fecha: calendarFecha })
   const [calendarSelectedDays, setCalendarSelectedDays] = useState<WeekDay[]>(DAYS)
   const [calendarViewMode, setCalendarViewMode] = useState<'extended' | 'optimized'>('optimized')
@@ -891,13 +892,17 @@ export default function ShiftsPage() {
                       const isCurrentMonth = date.getMonth() === weekStart.getMonth();
                       const isToday = isSameDay(date, new Date());
                       const diaEsp = diasEspeciales.find(d => isSameDay(parseFechaLocal(d.fecha), date))
+                      // Si hay turnos puntuales para esta fecha, son los turnos del horario reducido:
+                      // mostrarlos normalmente sin blur ni overlay bloqueante.
+                      const hasPuntuales = (shiftsByDate[dateStr]?.length ?? 0) > 0
+                      const useOverlay = diaEsp && (diaEsp.tipo === 'CIERRE_TOTAL' || !hasPuntuales)
 
                       return (
                         <div
                           key={i}
-                          onClick={() => { if (wday && canCreate && !diaEsp) handleEmptySlotClick(wday, '08:00'); }}
+                          onClick={() => { if (wday && canCreate && !useOverlay) handleEmptySlotClick(wday, '08:00'); }}
                           className={`relative border-b border-r border-gray-200 dark:border-white/[0.06] p-1.5 sm:p-2 flex flex-col min-h-[72px] lg:min-h-[96px] xl:min-h-[120px] transition-colors
-                            ${!diaEsp && canCreate ? 'cursor-pointer hover:bg-black/5 dark:hover:bg-white/5' : ''}
+                            ${!useOverlay && canCreate ? 'cursor-pointer hover:bg-black/5 dark:hover:bg-white/5' : ''}
                             ${!isCurrentMonth ? 'bg-gray-50/50 dark:bg-black/40 opacity-60' : 'bg-transparent'}
                             ${isToday && !diaEsp ? 'bg-primary/[0.03]' : ''}
                             ${diaEsp?.tipo === 'CIERRE_TOTAL' ? 'bg-red-500/[0.06] dark:bg-red-500/[0.10]' : ''}
@@ -917,10 +922,10 @@ export default function ShiftsPage() {
                             )}
                           </div>
 
-                          {/* Turnos (blurred si hay día especial) */}
-                          <div className={`flex-1 overflow-hidden min-h-0 relative ${diaEsp ? 'pointer-events-none' : ''}`}>
+                          {/* Turnos: blurred solo si hay overlay bloqueante */}
+                          <div className={`flex-1 overflow-hidden min-h-0 relative ${useOverlay ? 'pointer-events-none' : ''}`}>
                             <div
-                              className={`space-y-px transition-all ${diaEsp ? 'blur-[2px] opacity-40' : ''}`}
+                              className={`space-y-px transition-all ${useOverlay ? 'blur-[2px] opacity-40' : ''}`}
                               style={dayShifts.length > MAX_MONTH_SHIFTS ? {
                                 maskImage: 'linear-gradient(to bottom, black 60%, transparent 100%)',
                                 WebkitMaskImage: 'linear-gradient(to bottom, black 60%, transparent 100%)',
@@ -929,9 +934,9 @@ export default function ShiftsPage() {
                               {dayShifts.slice(0, MAX_MONTH_SHIFTS).map(shift => (
                                 <button
                                   key={shift.id}
-                                  onClick={(e) => { e.stopPropagation(); if (!diaEsp) navigate(`/shifts/${shift.id}`); }}
+                                  onClick={(e) => { e.stopPropagation(); if (!useOverlay) navigate(`/shifts/${shift.id}`); }}
                                   className="w-full flex items-center gap-1.5 px-1 py-[3px] rounded text-left"
-                                  tabIndex={diaEsp ? -1 : 0}
+                                  tabIndex={useOverlay ? -1 : 0}
                                 >
                                   <span className={`h-1.5 w-1.5 flex-shrink-0 rounded-full ${getOccupancyDot(shift.enrolled, shift.capacity)}`} />
                                   <span className="text-[9px] font-bold text-gray-500 dark:text-[#8A8A9A] flex-shrink-0 tabular-nums leading-none">{shift.startTime}</span>
@@ -940,18 +945,18 @@ export default function ShiftsPage() {
                               ))}
                             </div>
 
-                            {/* Overlay bloqueante sobre los turnos */}
-                            {diaEsp && (
-                              <div className={`absolute inset-0 flex flex-col items-center justify-center gap-0.5 rounded-lg ${diaEsp.tipo === 'CIERRE_TOTAL' ? 'bg-red-500/10 border border-red-500/20' : 'bg-amber-500/10 border border-amber-400/20'}`}>
-                                <CalendarX size={12} className={diaEsp.tipo === 'CIERRE_TOTAL' ? 'text-red-400' : 'text-amber-400'} />
-                                {diaEsp.tipo === 'CIERRE_TOTAL' && (
+                            {/* Overlay bloqueante: solo CIERRE_TOTAL o HORARIO_REDUCIDO sin turnos puntuales */}
+                            {useOverlay && (
+                              <div className={`absolute inset-0 flex flex-col items-center justify-center gap-0.5 rounded-lg ${diaEsp!.tipo === 'CIERRE_TOTAL' ? 'bg-red-500/10 border border-red-500/20' : 'bg-amber-500/10 border border-amber-400/20'}`}>
+                                <CalendarX size={12} className={diaEsp!.tipo === 'CIERRE_TOTAL' ? 'text-red-400' : 'text-amber-400'} />
+                                {diaEsp!.tipo === 'CIERRE_TOTAL' && (
                                   <p className="text-[7px] font-bold text-red-400 text-center leading-tight px-0.5">
-                                    {diaEsp.motivo ?? 'Sin clases'}
+                                    {diaEsp!.motivo ?? 'Sin clases'}
                                   </p>
                                 )}
-                                {diaEsp.tipo === 'HORARIO_REDUCIDO' && diaEsp.horaDesde && (
+                                {diaEsp!.tipo === 'HORARIO_REDUCIDO' && diaEsp!.horaDesde && (
                                   <p className="text-[7px] font-bold text-amber-400 text-center leading-tight">
-                                    {diaEsp.horaDesde}–{diaEsp.horaHasta}
+                                    {diaEsp!.horaDesde}–{diaEsp!.horaHasta}
                                   </p>
                                 )}
                               </div>
