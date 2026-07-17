@@ -83,7 +83,6 @@ const schema = z.object({
 })
 type FormValues = z.infer<typeof schema>
 
-type DayFilter   = 'all' | WeekDay
 type ShiftLayout = { shift: Shift; colIndex: number; numCols: number }
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
@@ -214,7 +213,7 @@ export default function ShiftsPage() {
   const [viewMode, setViewMode] = useState<'grid' | 'calendar' | 'timeline'>('calendar')
 
   // ── Grid state
-  const [dayFilter, setDayFilter] = useState<DayFilter>('all')
+  const [dayFilter, setDayFilter] = useState<WeekDay[]>([])
 
   // ── Calendar state
   const [weekStart, setWeekStart] = useState(() => {
@@ -316,7 +315,7 @@ export default function ShiftsPage() {
     const fromStr = `${String(gridTimeFrom).padStart(2, '0')}:00`
     const toStr   = `${String(gridTimeTo).padStart(2, '0')}:00`
     return shifts.filter(s => {
-      if (dayFilter !== 'all' && !s.days.includes(dayFilter as WeekDay)) return false
+      if (dayFilter.length > 0 && !s.days.some(d => dayFilter.includes(d))) return false
       if (s.startTime >= toStr || s.endTime <= fromStr) return false
       if (gridCupoFilter === 'available') {
         return s.inscritosA < s.cupoMaximoSalaA || s.inscritosB < s.cupoMaximoSalaB
@@ -607,12 +606,23 @@ export default function ShiftsPage() {
         <div className="rounded-2xl lg:rounded-[2rem] border border-white/50 dark:border-white/10 bg-white/30 dark:bg-black/30 backdrop-blur-3xl shadow-[0_8px_32px_rgba(0,0,0,0.04)] dark:shadow-[0_8px_32px_rgba(0,0,0,0.3)] px-6 py-4 flex items-center gap-4 overflow-x-auto">
           <span className="text-[10px] font-bold uppercase tracking-wider text-gray-400 dark:text-[#8A8A9A] ml-1 shrink-0">Día</span>
           <div className="flex items-center rounded-full border border-white/50 dark:border-white/10 bg-white/30 dark:bg-black/30 backdrop-blur-xl p-1 shadow-sm gap-1 flex-nowrap">
-            {(['all', ...DAYS] as DayFilter[]).map(d => {
-              const isActive = dayFilter === d
+            {(['all', ...DAYS] as ('all' | WeekDay)[]).map(d => {
+              const isActive = d === 'all' ? dayFilter.length === 0 : dayFilter.includes(d as WeekDay)
               return (
                 <button
                   key={d}
-                  onClick={() => setDayFilter(d)}
+                  onClick={() => {
+                    if (d === 'all') {
+                      setDayFilter([])
+                    } else {
+                      const day = d as WeekDay
+                      setDayFilter(prev =>
+                        prev.includes(day)
+                          ? prev.filter(x => x !== day)
+                          : [...prev, day]
+                      )
+                    }
+                  }}
                   className={`relative inline-flex items-center justify-center rounded-full px-3.5 py-1.5 text-xs font-bold transition-all duration-300 cursor-pointer ${
                     isActive
                       ? 'text-white dark:text-gray-900'
