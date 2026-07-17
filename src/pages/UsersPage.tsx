@@ -5,7 +5,7 @@ import { pageVariants } from '../lib/motion'
 import {
   Plus, Search, RefreshCw, Edit2, Trash2, UserCheck, UserX,
   ShieldCheck, Users, GraduationCap, Check, X as XIcon, ChevronRight,
-  ClipboardList, CheckCircle2, Ban, Save, Lock,
+  ClipboardList, CheckCircle2, Ban, Save, Lock, CalendarDays,
 } from 'lucide-react'
 import { useForm } from 'react-hook-form'
 import { zodResolver } from '@hookform/resolvers/zod'
@@ -876,8 +876,9 @@ type ResetRequest = {
 }
 
 type UnifiedItem =
-  | { tipo: 'acceso'; data: SolicitudEntry }
-  | { tipo: 'reset';  data: ResetRequest }
+  | { tipo: 'acceso';      data: SolicitudEntry }
+  | { tipo: 'reset';       data: ResetRequest }
+  | { tipo: 'inscripcion'; data: PendienteSolicitudEntry }
 
 // ─── Unified Solicitud Card ────────────────────────────────────────────────────
 
@@ -889,15 +890,35 @@ interface UnifiedCardProps {
   onEliminar: (id: string) => void
 }
 
+const INSCRIPCION_DAY_MAP: Record<string, string> = {
+  monday:'Lun', tuesday:'Mar', wednesday:'Mié', thursday:'Jue', friday:'Vie', saturday:'Sáb', sunday:'Dom',
+  lunes:'Lun', martes:'Mar', miercoles:'Mié', jueves:'Jue', viernes:'Vie', sabado:'Sáb', domingo:'Dom',
+}
+
 function UnifiedSolicitudCard({ item, actioningId, onAprobar, onRechazar, onEliminar }: UnifiedCardProps) {
-  const isReset   = item.tipo === 'reset'
-  const id        = item.data.id
-  const nombre    = isReset ? (item.data as ResetRequest).usuario.nombre : (item.data as SolicitudEntry).nombre
-  const email     = isReset ? (item.data as ResetRequest).usuario.email  : (item.data as SolicitudEntry).email
-  const createdAt = item.data.createdAt
-  const estado    = isReset ? (item.data as ResetRequest).estado : (item.data as SolicitudEntry).estado
-  const isPending = estado === 'PENDIENTE'
-  const isActioning = actioningId === id
+  const isReset       = item.tipo === 'reset'
+  const isInscripcion = item.tipo === 'inscripcion'
+  const id            = item.data.id
+  const nombre        = isInscripcion
+    ? (item.data as PendienteSolicitudEntry).clienteNombre
+    : isReset
+      ? (item.data as ResetRequest).usuario.nombre
+      : (item.data as SolicitudEntry).nombre
+  const email         = isInscripcion
+    ? null
+    : isReset
+      ? (item.data as ResetRequest).usuario.email
+      : (item.data as SolicitudEntry).email
+  const createdAt     = isInscripcion
+    ? (item.data as PendienteSolicitudEntry).fechaSolicitud
+    : item.data.createdAt
+  const estado        = isInscripcion
+    ? 'PENDIENTE'
+    : isReset
+      ? (item.data as ResetRequest).estado
+      : (item.data as SolicitudEntry).estado
+  const isPending     = estado === 'PENDIENTE'
+  const isActioning   = actioningId === id
 
   const strip = isPending
     ? 'bg-amber-400'
@@ -924,7 +945,7 @@ function UnifiedSolicitudCard({ item, actioningId, onAprobar, onRechazar, onElim
             </div>
             <div className="min-w-0">
               <p className="font-bold text-sm text-gray-900 dark:text-white leading-tight truncate">{nombre}</p>
-              <p className="text-xs text-[#8A8A9A] mt-0.5 truncate">{email}</p>
+              {email && <p className="text-xs text-[#8A8A9A] mt-0.5 truncate">{email}</p>}
             </div>
           </div>
           {!isPending && (
@@ -943,7 +964,11 @@ function UnifiedSolicitudCard({ item, actioningId, onAprobar, onRechazar, onElim
           {/* Tag de tipo — siempre visible */}
           <div className="flex items-center gap-2">
             <span className="text-[11px] text-[#8A8A9A] w-16 shrink-0">Tipo</span>
-            {isReset ? (
+            {isInscripcion ? (
+              <span className="inline-flex items-center gap-1 rounded-full px-2.5 py-0.5 text-[11px] font-bold bg-emerald-500/10 text-emerald-700 dark:text-emerald-400 border border-emerald-500/20">
+                <CalendarDays size={9} /> Solicitud de inscripción
+              </span>
+            ) : isReset ? (
               <span className="inline-flex items-center gap-1 rounded-full px-2.5 py-0.5 text-[11px] font-bold bg-blue-500/10 text-blue-700 dark:text-blue-400 border border-blue-500/20">
                 <Lock size={9} /> Cambio de contraseña
               </span>
@@ -954,8 +979,21 @@ function UnifiedSolicitudCard({ item, actioningId, onAprobar, onRechazar, onElim
             )}
           </div>
 
+          {/* Turno — solo para solicitudes de inscripción */}
+          {isInscripcion && (() => {
+            const le = item.data as PendienteSolicitudEntry
+            return (
+              <div className="flex items-center gap-2">
+                <span className="text-[11px] text-[#8A8A9A] w-16 shrink-0">Turno</span>
+                <span className="text-[11px] text-gray-600 dark:text-gray-400">
+                  {le.turnoHoraInicio}–{le.turnoHoraFin} · {le.turnoDias.map(d => INSCRIPCION_DAY_MAP[d] ?? d).join(', ')}
+                </span>
+              </div>
+            )
+          })()}
+
           {/* Rol — solo para solicitudes de acceso */}
-          {!isReset && (
+          {!isReset && !isInscripcion && (
             <div className="flex items-center gap-2">
               <span className="text-[11px] text-[#8A8A9A] w-16 shrink-0">Rol</span>
               <span className={`inline-flex items-center rounded-full px-2.5 py-0.5 text-[11px] font-bold ${ROL_COLORS[(item.data as SolicitudEntry).rolSolicitado] ?? 'bg-gray-100 text-gray-600'}`}>
@@ -1041,7 +1079,7 @@ function UnifiedSolicitudCard({ item, actioningId, onAprobar, onRechazar, onElim
               <Ban size={13} /> Rechazar
             </button>
             {/* Solo las solicitudes de acceso se pueden eliminar */}
-            {!isReset && (
+            {!isReset && !isInscripcion && (
               <button
                 onClick={() => onEliminar(id)}
                 disabled={isActioning}
@@ -1080,7 +1118,7 @@ function SolicitudesTab() {
   const [listaEspera, setListaEspera]   = useState<PendienteSolicitudEntry[]>([])
   const [loading, setLoading]           = useState(true)
   const [actioningId, setActioningId]   = useState<string | null>(null)
-  const [rechazarTarget, setRechazarTarget] = useState<{ id: string; tipo: 'acceso' | 'reset' } | null>(null)
+  const [rechazarTarget, setRechazarTarget] = useState<{ id: string; tipo: 'acceso' | 'reset' | 'inscripcion' } | null>(null)
   const [eliminarTarget, setEliminarTarget] = useState<string | null>(null)
 
   const load = useCallback(() => {
@@ -1171,19 +1209,21 @@ function SolicitudesTab() {
   }
 
   // ── Dispatch por tipo ──
-  function handleAprobar(id: string, tipo: 'acceso' | 'reset') {
+  function handleAprobar(id: string, tipo: 'acceso' | 'reset' | 'inscripcion') {
     if (tipo === 'acceso') aprobarAcceso(id)
-    else aprobarReset(id)
+    else if (tipo === 'reset') aprobarReset(id)
+    else aprobarListaEspera(id)
   }
 
-  function handleRechazar(id: string, tipo: 'acceso' | 'reset') {
+  function handleRechazar(id: string, tipo: 'acceso' | 'reset' | 'inscripcion') {
     setRechazarTarget({ id, tipo })
   }
 
   function confirmarRechazar() {
     if (!rechazarTarget) return
     if (rechazarTarget.tipo === 'acceso') rechazarAcceso(rechazarTarget.id)
-    else rechazarReset(rechazarTarget.id)
+    else if (rechazarTarget.tipo === 'reset') rechazarReset(rechazarTarget.id)
+    else rechazarListaEspera(rechazarTarget.id)
     setRechazarTarget(null)
   }
 
@@ -1211,17 +1251,24 @@ function SolicitudesTab() {
 
   // ── Lista unificada ordenada por fecha (más reciente primero) ──
   const allItems: UnifiedItem[] = [
-    ...solicitudes.map(s => ({ tipo: 'acceso' as const, data: s })),
-    ...resets.map(r    => ({ tipo: 'reset'  as const, data: r })),
-  ].sort((a, b) => new Date(b.data.createdAt).getTime() - new Date(a.data.createdAt).getTime())
+    ...solicitudes.map(s  => ({ tipo: 'acceso'      as const, data: s  })),
+    ...resets.map(r       => ({ tipo: 'reset'       as const, data: r  })),
+    ...listaEspera.map(le => ({ tipo: 'inscripcion' as const, data: le })),
+  ].sort((a, b) => {
+    const dateA = a.tipo === 'inscripcion' ? (a.data as PendienteSolicitudEntry).fechaSolicitud : a.data.createdAt
+    const dateB = b.tipo === 'inscripcion' ? (b.data as PendienteSolicitudEntry).fechaSolicitud : b.data.createdAt
+    return new Date(dateB).getTime() - new Date(dateA).getTime()
+  })
 
   const pendientes = allItems.filter(i => {
+    if (i.tipo === 'inscripcion') return true // siempre pendiente de aprobación
     const estado = i.tipo === 'reset'
       ? (i.data as ResetRequest).estado
       : (i.data as SolicitudEntry).estado
     return estado === 'PENDIENTE'
   })
   const procesadas = allItems.filter(i => {
+    if (i.tipo === 'inscripcion') return false
     const estado = i.tipo === 'reset'
       ? (i.data as ResetRequest).estado
       : (i.data as SolicitudEntry).estado
@@ -1290,50 +1337,6 @@ function SolicitudesTab() {
           </div>
         )}
       </>)}
-
-      {/* ── Lista de espera NOTIFICADO ── */}
-      {!loading && listaEspera.length > 0 && (
-        <div className="space-y-3">
-          <h3 className="text-xs font-bold uppercase tracking-wider text-[#8A8A9A]">Solicitudes de turno pendientes</h3>
-          <div className="space-y-2">
-            {listaEspera.map(item => (
-              <div key={item.id} className="flex flex-col sm:flex-row sm:items-center gap-3 rounded-2xl border border-white/50 dark:border-white/[0.08] bg-white/30 dark:bg-white/[0.04] backdrop-blur-xl p-4">
-                <div className="flex-1 min-w-0">
-                  <div className="flex items-center gap-2">
-                    <span className="font-semibold text-sm text-gray-900 dark:text-white">{item.clienteNombre}</span>
-                    <span className={`text-[11px] px-2 py-0.5 rounded-full font-semibold ${
-                      item.tipo === 'INTERNA'
-                        ? 'bg-blue-500/10 text-blue-700 dark:text-blue-400'
-                        : 'bg-purple-500/10 text-purple-700 dark:text-purple-400'
-                    }`}>
-                      {item.tipo === 'INTERNA' ? 'Cliente' : 'Externo'}
-                    </span>
-                  </div>
-                  <p className="text-xs text-[#8A8A9A] mt-0.5">
-                    Turno {item.turnoHoraInicio}–{item.turnoHoraFin} · {item.turnoDias.map(d => ({ lunes:'Lun',martes:'Mar',miercoles:'Mié',jueves:'Jue',viernes:'Vie',sabado:'Sáb' }[d] ?? d)).join(', ')}
-                  </p>
-                </div>
-                <div className="flex gap-2 shrink-0">
-                  <button
-                    onClick={() => rechazarListaEspera(item.id)}
-                    disabled={actioningId === item.id}
-                    className="flex items-center gap-1 px-3 py-1.5 rounded-xl text-xs font-semibold dark:bg-red-500/10 bg-red-50 dark:text-red-400 text-red-600 hover:dark:bg-red-500/20 hover:bg-red-100 disabled:opacity-50 transition-colors"
-                  >
-                    <XIcon size={12} /> Rechazar
-                  </button>
-                  <button
-                    onClick={() => aprobarListaEspera(item.id)}
-                    disabled={actioningId === item.id}
-                    className="flex items-center gap-1 px-3 py-1.5 rounded-xl text-xs font-semibold bg-primary text-black hover:bg-primary-dark disabled:opacity-50 transition-colors"
-                  >
-                    <Check size={12} /> Aprobar
-                  </button>
-                </div>
-              </div>
-            ))}
-          </div>
-        </div>
-      )}
 
       <ConfirmDialog
         isOpen={rechazarTarget !== null}

@@ -2129,8 +2129,9 @@ export default function ShiftDetailPage() {
                         .map(e => e.clienteId)
                         .filter(Boolean)
                     )
+                    const inscriptosIds = new Set(activeInscrip.map(i => i.clienteId))
                     const filteredForEspera = clients
-                      .filter(c => !waitlistedIds.has(String(c.id)))
+                      .filter(c => !waitlistedIds.has(String(c.id)) && !inscriptosIds.has(String(c.id)))
                       .filter(c => !addEsperaClientSearch || `${c.name} ${c.lastName}`.toLowerCase().includes(addEsperaClientSearch.toLowerCase()))
                       .slice(0, 8)
                     const canSubmit = addEsperaTipo === 'INTERNA'
