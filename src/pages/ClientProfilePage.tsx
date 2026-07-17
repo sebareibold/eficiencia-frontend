@@ -2985,10 +2985,15 @@ export default function ClientProfilePage() {
                                 <p className="text-[10px] text-gray-400 dark:text-[#6A6A7A] mt-0.5">{formatDate(p.paidAt)}</p>
                               </div>
                             </div>
-                            <div className="text-right shrink-0">
-                              <span className="text-sm font-black text-gray-900 dark:text-white tabular-nums">
-                                {formatCurrency(p.amount)}
-                              </span>
+                            <div className="flex items-center gap-3 shrink-0">
+                              <div className="text-right">
+                                <p className="text-sm font-black text-gray-900 dark:text-white tabular-nums leading-none">
+                                  {formatCurrency(p.amount)}
+                                </p>
+                                <span className="text-[10px] font-bold text-primary flex items-center gap-0.5 justify-end mt-1 opacity-80 group-hover:opacity-100 transition-opacity">
+                                  Ver pago <ChevronRight size={10} className="stroke-[3]" />
+                                </span>
+                              </div>
                             </div>
                           </div>
                         )
