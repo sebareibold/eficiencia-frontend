@@ -1790,8 +1790,8 @@ export default function ClientProfilePage() {
                 {[
                   { id: 'perfil',      label: 'Perfil',      icon: User,       show: true },
                   { id: 'rutinas',      label: 'Rutinas',      icon: BookOpen,      show: can('clients', 'view_rutinas') },
-                  { id: 'clases',       label: 'Clases',       icon: Dumbbell,      show: true },
-                  { id: 'asistencia',   label: 'Asistencia',   icon: Activity,      show: true },
+                  { id: 'clases',       label: 'Clases',       icon: Dumbbell,      show: can('clients', 'view_turnos') },
+                  { id: 'asistencia',   label: 'Asistencia',   icon: Activity,      show: can('clients', 'view_asistencia') },
                   { id: 'membresias',   label: 'Membresías',   icon: Tag,           show: can('clients', 'view_membresias') },
                   { id: 'pagos',        label: 'Pagos',        icon: CreditCard,    show: can('clients', 'view_pagos') },
                 ].filter(item => item.show).map(item => {
@@ -1980,7 +1980,7 @@ export default function ClientProfilePage() {
           </motion.div>}
 
           {/* ─── SECCIÓN 2: CLASES ─────────────────────────────────────────── */}
-          <motion.div variants={fadeUpItem} id="clases" className={`${glassCard} p-6 space-y-5 scroll-mt-24`}>
+          {can('clients', 'view_turnos') && <motion.div variants={fadeUpItem} id="clases" className={`${glassCard} p-6 space-y-5 scroll-mt-24`}>
             <div className="flex items-center justify-between border-b border-gray-200 dark:border-white/[0.06] pb-3">
               <div className="flex items-center gap-3">
                 <div className="h-10 w-10 rounded-xl bg-primary/10 flex items-center justify-center shrink-0">
@@ -2007,7 +2007,7 @@ export default function ClientProfilePage() {
                         <span className="ml-1.5 tabular-nums text-gray-400 dark:text-white/40">{inscripciones.length}{planFreq ? `/${planFreq}` : ''}</span>
                       )}
                     </span>
-                    {can('shifts', 'create') && (
+                    {can('clients', 'manage_turnos') && (
                       <button
                         onClick={() => { if (!limiteAlcanzado) setEnrollOpen(true) }}
                         disabled={limiteAlcanzado}
@@ -2147,10 +2147,10 @@ export default function ClientProfilePage() {
                 </div>
               )
             })()}
-          </motion.div>
+          </motion.div>}
 
           {/* ─── SECCIÓN 3: ASISTENCIA ───────────────────────────────────────── */}
-          <motion.div variants={fadeUpItem} id="asistencia" className={`${glassCard} overflow-hidden scroll-mt-24`}>
+          {can('clients', 'view_asistencia') && <motion.div variants={fadeUpItem} id="asistencia" className={`${glassCard} overflow-hidden scroll-mt-24`}>
             {/* Header */}
             <div className="flex items-center justify-between px-6 pt-6 pb-4 border-b border-gray-200 dark:border-white/[0.06]">
               <div className="flex items-center gap-3">
@@ -2677,7 +2677,7 @@ export default function ClientProfilePage() {
                 </div>
               )
             })()}
-          </motion.div>
+          </motion.div>}
 
           {/* ─── SECCIÓN 4: MEMBRESÍAS ──────────────────────────────────────────── */}
           {can('clients', 'view_membresias') && <motion.div variants={fadeUpItem} id="membresias" className={`${glassCard} p-6 space-y-5 scroll-mt-24`}>

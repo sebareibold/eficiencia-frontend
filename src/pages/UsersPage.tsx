@@ -559,6 +559,9 @@ const MODULES_MATRIX = [
       { id: 'view_pagos',       name: 'Ver pagos en perfil del cliente' },
       { id: 'view_membresias',  name: 'Ver membresías en perfil del cliente' },
       { id: 'view_rutinas',     name: 'Gestionar rutinas del cliente' },
+      { id: 'view_turnos',      name: 'Ver clases del cliente' },
+      { id: 'view_asistencia',  name: 'Ver asistencia del cliente' },
+      { id: 'manage_turnos',    name: 'Inscribir/desinscribir de turnos' },
     ],
   },
   {
@@ -644,6 +647,22 @@ const MODULES_MATRIX = [
       { id: 'create', name: 'Crear plantillas' },
       { id: 'update', name: 'Editar plantillas' },
       { id: 'delete', name: 'Eliminar plantillas' },
+    ],
+  },
+  {
+    id: 'reposiciones', name: 'Reposiciones de Clases',
+    actions: [
+      { id: 'read',   name: 'Ver ausencias y recuperaciones' },
+      { id: 'create', name: 'Registrar ausencias y agendar recuperaciones' },
+      { id: 'update', name: 'Editar registros de reposición' },
+      { id: 'delete', name: 'Eliminar registros de reposición' },
+    ],
+  },
+  {
+    id: 'solicitudes-turno', name: 'Solicitudes de Turno',
+    actions: [
+      { id: 'read',   name: 'Ver solicitudes pendientes' },
+      { id: 'update', name: 'Aprobar o rechazar solicitudes' },
     ],
   },
 ]

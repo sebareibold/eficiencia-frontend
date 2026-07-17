@@ -649,6 +649,7 @@ const MODULO_LABELS: Record<string, string> = {
   exercises:    'Ejercicios',
   plantillas:   'Plantillas',
   reposiciones: 'Reposiciones',
+  'solicitudes-turno': 'Solicitudes',
 }
 
 const ACCION_LABELS: Record<string, string> = {
@@ -660,7 +661,7 @@ const ACCION_LABELS: Record<string, string> = {
 }
 
 // Módulos excluidos de la vista principal (aparecen como sub-filas de otro módulo o no aplican)
-const EXCLUDE_MODULES = ['dashboard', 'attendance', 'reposiciones']
+const EXCLUDE_MODULES = ['dashboard', 'attendance', 'reposiciones', 'solicitudes-turno']
 
 // Acciones principales por módulo (columnas de la matriz)
 const MODULE_ACTIONS: Record<string, string[]> = {
@@ -675,6 +676,7 @@ const MODULE_ACTIONS: Record<string, string[]> = {
   exercises:    ['read', 'create', 'update', 'delete'],
   plantillas:   ['read', 'create', 'update', 'delete'],
   reposiciones: ['read', 'create', 'update', 'delete'],
+  'solicitudes-turno': ['read', 'update'],
 }
 
 // Sub-acciones anidadas debajo de su módulo padre.
@@ -684,6 +686,9 @@ const MODULE_SUBACTIONS: Record<string, { key: string; label: string; fromModule
     { key: 'view_pagos',      label: 'Ver pagos del cliente' },
     { key: 'view_membresias', label: 'Ver membresías del cliente' },
     { key: 'view_rutinas',    label: 'Ver rutinas del cliente' },
+    { key: 'view_turnos',     label: 'Ver clases del cliente' },
+    { key: 'view_asistencia', label: 'Ver asistencia del cliente' },
+    { key: 'manage_turnos',   label: 'Inscribir/desinscribir de turnos' },
     { key: 'read',   label: 'Ver reposiciones y ausencias del cliente',  fromModule: 'reposiciones' },
     { key: 'create', label: 'Registrar ausencias y agendar recuperaciones', fromModule: 'reposiciones' },
   ],
@@ -691,6 +696,8 @@ const MODULE_SUBACTIONS: Record<string, { key: string; label: string; fromModule
     { key: 'mark',   label: 'Marcar asistencia a clases',          fromModule: 'attendance' },
     { key: 'read',   label: 'Ver historial de asistencia',          fromModule: 'attendance' },
     { key: 'delete', label: 'Eliminar registros de asistencia',     fromModule: 'attendance' },
+    { key: 'read',   label: 'Ver solicitudes de turno',             fromModule: 'solicitudes-turno' },
+    { key: 'update', label: 'Aprobar o rechazar solicitudes',       fromModule: 'solicitudes-turno' },
   ],
 }
 
@@ -707,6 +714,7 @@ const MODULE_DESCRIPTIONS: Record<string, string> = {
   exercises:    'Acceder al catálogo de ejercicios con videos, patrones de movimiento y categorías.',
   plantillas:   'Ver y usar plantillas de rutina predefinidas para crear rutinas rápidamente.',
   reposiciones: 'Gestionar ausencias de clientes y agendar clases de recuperación en otro horario.',
+  'solicitudes-turno': 'Ver y gestionar solicitudes de turno pendientes de aprobación.',
 }
 
 const ACCION_ORDER = ['read', 'create', 'update', 'delete', 'mark']
