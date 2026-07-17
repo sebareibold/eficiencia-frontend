@@ -1779,7 +1779,7 @@ export default function ShiftsPage() {
             addToast(`Día especial eliminado${extras}`, 'success')
 
             // Refrescar turnos del calendario para reflejar los cambios
-            void refetch()
+            await queryClient.invalidateQueries({ queryKey: ['shifts'] })
           } catch {
             addToast('Error al eliminar el día especial', 'error')
           } finally {
