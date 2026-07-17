@@ -263,6 +263,7 @@ export default function ShiftsPage() {
   const [diaEspHoraHasta, setDiaEspHoraHasta]           = useState('')
   const [savingDiaEsp, setSavingDiaEsp]                 = useState(false)
   const [deletingDiaEspId, setDeletingDiaEspId]         = useState<string | null>(null)
+  const [deleteConfirmDia, setDeleteConfirmDia]         = useState<DiaEspecial | null>(null)
   const [editingDiaEspId, setEditingDiaEspId]           = useState<string | null>(null)
   const [anioFiltroEsp, setAnioFiltroEsp]               = useState(() => new Date().getFullYear())
   const [mesFiltroEsp, setMesFiltroEsp]                 = useState<number | null>(() => new Date().getMonth() + 1)
@@ -1593,18 +1594,7 @@ export default function ShiftsPage() {
                         </button>
                         <button
                           disabled={deletingDiaEspId === dia.id}
-                          onClick={async () => {
-                            setDeletingDiaEspId(dia.id)
-                            try {
-                              await diasEspecialesApi.remove(dia.id)
-                              setDiasEspeciales(prev => prev.filter(d => d.id !== dia.id))
-                              addToast('Día especial eliminado', 'success')
-                            } catch {
-                              addToast('Error al eliminar', 'error')
-                            } finally {
-                              setDeletingDiaEspId(null)
-                            }
-                          }}
+                          onClick={() => setDeleteConfirmDia(dia)}
                           className="flex h-8 w-8 items-center justify-center rounded-xl bg-red-500/10 text-red-400 hover:bg-red-500/20 transition-all disabled:opacity-50"
                         >
                           {deletingDiaEspId === dia.id ? '…' : <Trash2 size={13} />}
@@ -1754,6 +1744,50 @@ export default function ShiftsPage() {
         isLoading={isDeleting !== null}
         onConfirm={() => deleteTarget !== null && deleteShift(deleteTarget)}
         onClose={() => setDeleteTarget(null)}
+      />
+
+      <ConfirmDialog
+        isOpen={deleteConfirmDia !== null}
+        title="Eliminar día especial"
+        message={
+          deleteConfirmDia?.tipo === 'CIERRE_TOTAL'
+            ? 'Al eliminar este cierre total, se revertirán todas las cancelaciones y los turnos recurrentes volverán a estar activos para esa fecha.'
+            : 'Al eliminar este horario reducido, se eliminarán los turnos excepcionales creados para ese día y se revertirán las cancelaciones de turnos recurrentes.'
+        }
+        details={deleteConfirmDia ? [
+          `Fecha: ${(() => { const f = parseFechaLocal(deleteConfirmDia.fecha); return f.toLocaleDateString('es-AR', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' }); })()}`,
+          `Tipo: ${deleteConfirmDia.tipo === 'CIERRE_TOTAL' ? 'Cierre total' : `Horario reducido${deleteConfirmDia.horaDesde ? ` (${deleteConfirmDia.horaDesde} – ${deleteConfirmDia.horaHasta})` : ''}`}`,
+          ...(deleteConfirmDia.motivo ? [`Motivo: ${deleteConfirmDia.motivo}`] : []),
+        ] : []}
+        warning="Esta acción no se puede deshacer."
+        confirmLabel="Confirmo, eliminar"
+        isLoading={deletingDiaEspId !== null}
+        onConfirm={async () => {
+          if (!deleteConfirmDia) return
+          setDeletingDiaEspId(deleteConfirmDia.id)
+          try {
+            const result = await diasEspecialesApi.remove(deleteConfirmDia.id)
+            setDiasEspeciales(prev => prev.filter(d => d.id !== deleteConfirmDia.id))
+
+            const t = result.turnosEliminados ?? 0
+            const c = result.cancelacionesRevertidas ?? 0
+            const e = result.excepcionesEliminadas ?? 0
+            let extras = ''
+            if (t > 0) extras += ` · ${t} turno${t !== 1 ? 's' : ''} eliminado${t !== 1 ? 's' : ''}`
+            if (c > 0) extras += ` · ${c} cancelaci${c !== 1 ? 'ones revertidas' : 'ón revertida'}`
+            if (e > 0) extras += ` · ${e} excepci${e !== 1 ? 'ones eliminadas' : 'ón eliminada'}`
+            addToast(`Día especial eliminado${extras}`, 'success')
+
+            // Refrescar turnos del calendario para reflejar los cambios
+            void refetch()
+          } catch {
+            addToast('Error al eliminar el día especial', 'error')
+          } finally {
+            setDeletingDiaEspId(null)
+            setDeleteConfirmDia(null)
+          }
+        }}
+        onClose={() => setDeleteConfirmDia(null)}
       />
     </motion.div>
   )

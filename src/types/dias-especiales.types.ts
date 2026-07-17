@@ -29,3 +29,9 @@ export interface WizardResult {
   cancelacionesCreadas: number
   turnosAfectados: { id: string; horaInicio: string; horaFin: string }[]
 }
+
+export interface DeleteDiaEspecialResult {
+  turnosEliminados: number
+  cancelacionesRevertidas: number
+  excepcionesEliminadas: number
+}

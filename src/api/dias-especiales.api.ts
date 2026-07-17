@@ -1,5 +1,5 @@
 import api from './axiosInstance'
-import type { DiaEspecial, TipoDiaEspecial, TurnoPreviewWizard, WizardResult } from '../types/dias-especiales.types'
+import type { DiaEspecial, TipoDiaEspecial, TurnoPreviewWizard, WizardResult, DeleteDiaEspecialResult } from '../types/dias-especiales.types'
 
 export const diasEspecialesApi = {
   getAll: (mes?: string): Promise<DiaEspecial[]> =>
@@ -24,8 +24,8 @@ export const diasEspecialesApi = {
   }): Promise<DiaEspecial> =>
     api.patch(`/dias-especiales/${id}`, data).then((r) => r.data),
 
-  remove: (id: string): Promise<void> =>
-    api.delete(`/dias-especiales/${id}`).then(() => undefined),
+  remove: (id: string): Promise<DeleteDiaEspecialResult> =>
+    api.delete(`/dias-especiales/${id}`).then((r) => r.data ?? { turnosEliminados: 0, cancelacionesRevertidas: 0, excepcionesEliminadas: 0 }),
 
   preview: (fecha: string, horaDesde?: string, horaHasta?: string): Promise<TurnoPreviewWizard[]> =>
     api.get('/dias-especiales/preview', { params: { fecha, horaDesde, horaHasta } })
