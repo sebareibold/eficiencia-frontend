@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef } from 'react'
-import { useNavigate } from 'react-router-dom'
+import { useNavigate, useSearchParams } from 'react-router-dom'
 import { motion, AnimatePresence } from 'framer-motion'
 import { pageVariants, staggerContainerFast, fadeUpItem } from '../lib/motion'
 import { Plus, Search, RefreshCw, LayoutList, LayoutGrid, ChevronRight, ChevronLeft, ChevronsRight, ChevronsLeft, Phone, Mail, Users, X, ArrowUpDown, UserX, SlidersHorizontal } from 'lucide-react'
@@ -17,7 +17,7 @@ import ConfirmDialog from '../components/ui/ConfirmDialog'
 import type { Client } from '../types/client.types'
 
 type ActividadFilter = 'all' | 'active' | 'inactive'
-type MembresiaFilter = 'all' | 'active' | 'expiring'
+type MembresiaFilter = 'all' | 'active' | 'expiring' | 'pendiente' | 'sin_membresia'
 type ProporcionalFilter = 'all' | 'si' | 'no'
 
 type AdvancedFilters = {
@@ -41,15 +41,27 @@ const ACTIVIDAD_FILTERS: { value: ActividadFilter; label: string }[] = [
 ]
 
 const MEMBRESIA_FILTERS: { value: MembresiaFilter; label: string }[] = [
-  { value: 'all',      label: 'Todos' },
-  { value: 'active',   label: 'Al día' },
-  { value: 'expiring', label: 'Vencida' },
+  { value: 'all',          label: 'Todos' },
+  { value: 'active',       label: 'Activa' },
+  { value: 'expiring',     label: 'Vencida' },
+  { value: 'pendiente',    label: 'Programada' },
+  { value: 'sin_membresia', label: 'Sin membresía' },
 ]
 
 function mapMembresiaToEstadoPago(s: MembresiaFilter): string | undefined {
-  if (s === 'active')   return 'AL_DIA'
-  if (s === 'expiring') return 'VENCIDO'
+  if (s === 'active')        return 'AL_DIA'
+  if (s === 'expiring')      return 'VENCIDO'
+  if (s === 'pendiente')     return 'PENDIENTE'
+  if (s === 'sin_membresia') return 'SIN_MEMBRESIA'
   return undefined
+}
+
+function estadoPagoToFilter(v: string | null): MembresiaFilter {
+  if (v === 'AL_DIA')       return 'active'
+  if (v === 'VENCIDO')      return 'expiring'
+  if (v === 'PENDIENTE')    return 'pendiente'
+  if (v === 'SIN_MEMBRESIA') return 'sin_membresia'
+  return 'all'
 }
 
 type PeriodMode = 'month' | 'year' | 'historic'
@@ -121,10 +133,14 @@ export default function ClientsPage() {
   const [viewMode, setViewMode] = useState<'table' | 'grid'>(() =>
     typeof window !== 'undefined' && window.innerWidth < 768 ? 'grid' : 'table'
   )
+  const [searchParams] = useSearchParams()
+
   const [search, setSearch] = useState('')
   const [debouncedSearch, setDebouncedSearch] = useState('')
   const [actividadFilter, setActividadFilter] = useState<ActividadFilter>('active')
-  const [membresiaFilter, setMembresiaFilter] = useState<MembresiaFilter>('all')
+  const [membresiaFilter, setMembresiaFilter] = useState<MembresiaFilter>(
+    () => estadoPagoToFilter(searchParams.get('estadoPago'))
+  )
   const [proporcionalFilter, setProporcionalFilter] = useState<ProporcionalFilter>('all')
   const [periodMode, setPeriodMode] = useState<PeriodMode>('historic')
   const [navDate, setNavDate] = useState(today)
@@ -142,6 +158,7 @@ export default function ClientsPage() {
   const [advFilters, setAdvFilters] = useState<AdvancedFilters>({})
   const [sedes, setSedes] = useState<{ id: string; nombre: string }[]>([])
   const [drawerTop, setDrawerTop] = useState(200)
+  const [drawerRight, setDrawerRight] = useState(16)
   const filterBtnRef = useRef<HTMLButtonElement>(null)
 
   useEffect(() => {
@@ -153,6 +170,7 @@ export default function ClientsPage() {
     if (drawerOpen && filterBtnRef.current) {
       const rect = filterBtnRef.current.getBoundingClientRect()
       setDrawerTop(rect.bottom + 10)
+      setDrawerRight(window.innerWidth - rect.right)
     }
   }, [drawerOpen])
 
@@ -165,6 +183,7 @@ export default function ClientsPage() {
     advFilters.conCalendario !== undefined,
     advFilters.alturaMin !== undefined || advFilters.alturaMax !== undefined,
     advFilters.pesoMin !== undefined || advFilters.pesoMax !== undefined,
+    proporcionalFilter !== 'all',
   ].filter(Boolean).length
 
   // Debounce search para no disparar una query por cada tecla
@@ -548,7 +567,7 @@ export default function ClientsPage() {
       {/* Search + Filtros — misma fila */}
       <div className="mb-6 flex flex-col lg:flex-row lg:items-end lg:justify-between gap-4">
         {/* Búsqueda */}
-        <div className="relative w-full max-w-md shrink-0">
+        <div className="relative w-full max-w-xs shrink-0">
           <Search size={14} className="pointer-events-none absolute left-3.5 top-1/2 -translate-y-1/2 z-10 text-gray-400 dark:text-[#8A8A9A]" />
           <input
             value={search}
@@ -623,24 +642,6 @@ export default function ClientsPage() {
                   >
                     {isActive && <div className="absolute inset-0 rounded-full bg-gray-900 dark:bg-white shadow-[0_2px_8px_rgba(0,0,0,0.15)]" style={{ zIndex: 0 }} />}
                     <span className="relative z-10">{f.label}</span>
-                  </button>
-                )
-              })}
-            </div>
-          </div>
-
-          {/* Con proporcional */}
-          <div className="flex flex-col gap-1.5">
-            <span className="text-[10px] font-bold uppercase tracking-wider text-gray-400 dark:text-gray-500 px-1">Con proporcional</span>
-            <div className="flex items-center rounded-full border border-white/50 dark:border-white/10 bg-white/30 dark:bg-black/30 backdrop-blur-xl p-1 shadow-sm gap-1">
-              {([['all', 'Todos'], ['si', 'Sí'], ['no', 'No']] as [ProporcionalFilter, string][]).map(([val, label]) => {
-                const isActive = proporcionalFilter === val
-                return (
-                  <button key={val} onClick={() => setProporcionalFilter(val)}
-                    className={`relative inline-flex items-center justify-center rounded-full px-4 py-1.5 text-xs font-bold transition-all duration-300 cursor-pointer ${isActive ? 'text-white dark:text-gray-900' : 'text-gray-500 dark:text-[#8A8A9A] hover:text-gray-900 dark:hover:text-white'}`}
-                  >
-                    {isActive && <div className="absolute inset-0 rounded-full bg-gray-900 dark:bg-white shadow-[0_2px_8px_rgba(0,0,0,0.15)]" style={{ zIndex: 0 }} />}
-                    <span className="relative z-10">{label}</span>
                   </button>
                 )
               })}
@@ -1017,8 +1018,8 @@ export default function ClientsPage() {
           animate={{ opacity: 1, scale: 1, y: 0 }}
           exit={{ opacity: 0, scale: 0.94, y: -6, transition: { duration: 0.15, ease: [0.4, 0, 1, 1] } }}
           transition={{ duration: 0.22, ease: [0.23, 1, 0.32, 1] }}
-          style={{ top: drawerTop, transformOrigin: 'top right' }}
-          className="fixed right-4 z-[100] w-72 flex flex-col rounded-2xl border border-saas-border dark:border-white/[0.08] bg-saas-bg/90 dark:bg-[#111111]/95 backdrop-blur-2xl shadow-[0_8px_32px_rgba(0,0,0,0.08),0_32px_80px_rgba(0,0,0,0.1)] dark:shadow-[0_8px_32px_rgba(0,0,0,0.4),0_32px_80px_rgba(0,0,0,0.55)] overflow-hidden max-h-[calc(100vh-12rem)]"
+          style={{ top: drawerTop, right: drawerRight, transformOrigin: 'top right' }}
+          className="fixed z-[100] w-[44rem] flex flex-col rounded-2xl border border-saas-border dark:border-white/[0.08] bg-saas-bg/90 dark:bg-[#111111]/95 backdrop-blur-2xl shadow-[0_8px_32px_rgba(0,0,0,0.08),0_32px_80px_rgba(0,0,0,0.1)] dark:shadow-[0_8px_32px_rgba(0,0,0,0.4),0_32px_80px_rgba(0,0,0,0.55)] overflow-hidden max-h-[calc(100vh-12rem)]"
         >
           {/* Grilla de puntos — idéntica al fondo de la página */}
           <div
@@ -1049,177 +1050,200 @@ export default function ClientsPage() {
           </div>
 
           {/* Contenido */}
-          <div className="flex-1 overflow-y-auto px-4 py-4 space-y-5">
+          <div className="flex-1 overflow-y-auto px-4 py-4">
+            <div className="grid grid-cols-2 gap-x-5 gap-y-4">
 
-            {/* Turnos activos */}
-            <section>
-              <h3 className="text-[10px] font-bold uppercase tracking-wider text-gray-400 dark:text-gray-500 mb-2.5">Turnos</h3>
-              <div
-                className="flex items-center gap-3 cursor-pointer"
-                onClick={() => setAdvFilters(f => ({ ...f, conTurnos: f.conTurnos ? undefined : true }))}
-              >
-                <div className={`relative h-5 w-9 rounded-full transition-colors ${advFilters.conTurnos ? 'bg-gray-900 dark:bg-white' : 'bg-gray-200 dark:bg-gray-700'}`}>
-                  <div className={`absolute top-0.5 h-4 w-4 rounded-full bg-white dark:bg-gray-900 shadow transition-transform duration-200 ${advFilters.conTurnos ? 'translate-x-4' : 'translate-x-0.5'}`} />
-                </div>
-                <span className="text-sm font-semibold text-gray-700 dark:text-gray-300">Con turnos activos</span>
-              </div>
-            </section>
-
-            {/* Frecuencia semanal */}
-            <section>
-              <h3 className="text-[10px] font-bold uppercase tracking-wider text-gray-400 dark:text-gray-500 mb-2.5">Frecuencia semanal</h3>
-              <div className="flex flex-wrap gap-2">
-                {([['2', '2× / sem'], ['3', '3× / sem'], ['full', 'Full (4-5×)']] as ['2' | '3' | 'full', string][]).map(([val, label]) => (
-                  <button
-                    key={val}
-                    onClick={() => setAdvFilters(f => ({ ...f, frecuenciaSemanal: f.frecuenciaSemanal === val ? undefined : val }))}
-                    className={`rounded-full px-3 py-1.5 text-xs font-bold transition-all cursor-pointer ${
-                      advFilters.frecuenciaSemanal === val
-                        ? 'bg-gray-900 dark:bg-white text-white dark:text-gray-900 shadow-sm'
-                        : 'border border-dashed border-gray-300 dark:border-gray-700 text-gray-500 dark:text-gray-400 hover:text-gray-900 dark:hover:text-white hover:border-gray-400 dark:hover:border-gray-500'
-                    }`}
-                  >
-                    {label}
-                  </button>
-                ))}
-              </div>
-            </section>
-
-            {/* Sexo */}
-            <section>
-              <h3 className="text-[10px] font-bold uppercase tracking-wider text-gray-400 dark:text-gray-500 mb-2.5">Sexo</h3>
-              <div className="flex flex-wrap gap-2">
-                {([['MASCULINO', 'Masculino'], ['FEMENINO', 'Femenino'], ['OTRO', 'Otro']] as ['MASCULINO' | 'FEMENINO' | 'OTRO', string][]).map(([val, label]) => (
-                  <button
-                    key={val}
-                    onClick={() => setAdvFilters(f => ({ ...f, sexo: f.sexo === val ? undefined : val }))}
-                    className={`rounded-full px-3 py-1.5 text-xs font-bold transition-all cursor-pointer ${
-                      advFilters.sexo === val
-                        ? 'bg-gray-900 dark:bg-white text-white dark:text-gray-900 shadow-sm'
-                        : 'border border-dashed border-gray-300 dark:border-gray-700 text-gray-500 dark:text-gray-400 hover:text-gray-900 dark:hover:text-white hover:border-gray-400 dark:hover:border-gray-500'
-                    }`}
-                  >
-                    {label}
-                  </button>
-                ))}
-              </div>
-            </section>
-
-            {/* Edad */}
-            <section>
-              <h3 className="text-[10px] font-bold uppercase tracking-wider text-gray-400 dark:text-gray-500 mb-2.5">Edad</h3>
-              <div className="flex items-center gap-2">
-                <input
-                  type="number"
-                  placeholder="Mín"
-                  min={0}
-                  max={120}
-                  value={advFilters.edadMin ?? ''}
-                  onChange={e => setAdvFilters(f => ({ ...f, edadMin: e.target.value ? Number(e.target.value) : undefined }))}
-                  className="w-20 rounded-xl border border-white/50 dark:border-white/10 bg-white/30 dark:bg-black/30 backdrop-blur-xl px-3 py-1.5 text-xs font-semibold text-gray-900 dark:text-white placeholder-gray-400 focus:outline-none focus:ring-1 focus:ring-gray-300 dark:focus:ring-white/20"
-                />
-                <span className="text-xs text-gray-400">—</span>
-                <input
-                  type="number"
-                  placeholder="Máx"
-                  min={0}
-                  max={120}
-                  value={advFilters.edadMax ?? ''}
-                  onChange={e => setAdvFilters(f => ({ ...f, edadMax: e.target.value ? Number(e.target.value) : undefined }))}
-                  className="w-20 rounded-xl border border-white/50 dark:border-white/10 bg-white/30 dark:bg-black/30 backdrop-blur-xl px-3 py-1.5 text-xs font-semibold text-gray-900 dark:text-white placeholder-gray-400 focus:outline-none focus:ring-1 focus:ring-gray-300 dark:focus:ring-white/20"
-                />
-                <span className="text-xs text-gray-400 shrink-0">años</span>
-              </div>
-            </section>
-
-            {/* Sede */}
-            {sedes.length > 0 && (
+              {/* Turnos activos */}
               <section>
-                <h3 className="text-[10px] font-bold uppercase tracking-wider text-gray-400 dark:text-gray-500 mb-2.5">Sede</h3>
-                <div className="flex flex-wrap gap-2">
-                  {sedes.map(sede => (
+                <h3 className="text-[10px] font-bold uppercase tracking-wider text-gray-400 dark:text-gray-500 mb-2.5">Turnos</h3>
+                <div
+                  className="flex items-center gap-3 cursor-pointer"
+                  onClick={() => setAdvFilters(f => ({ ...f, conTurnos: f.conTurnos ? undefined : true }))}
+                >
+                  <div className={`relative h-5 w-9 rounded-full transition-colors ${advFilters.conTurnos ? 'bg-gray-900 dark:bg-white' : 'bg-gray-200 dark:bg-gray-700'}`}>
+                    <div className={`absolute top-0.5 h-4 w-4 rounded-full bg-white dark:bg-gray-900 shadow transition-transform duration-200 ${advFilters.conTurnos ? 'translate-x-4' : 'translate-x-0.5'}`} />
+                  </div>
+                  <span className="text-sm font-semibold text-gray-700 dark:text-gray-300">Con turnos</span>
+                </div>
+              </section>
+
+              {/* Calendario deportivo */}
+              <section>
+                <h3 className="text-[10px] font-bold uppercase tracking-wider text-gray-400 dark:text-gray-500 mb-2.5">Calendario</h3>
+                <div
+                  className="flex items-center gap-3 cursor-pointer"
+                  onClick={() => setAdvFilters(f => ({ ...f, conCalendario: f.conCalendario ? undefined : true }))}
+                >
+                  <div className={`relative h-5 w-9 rounded-full transition-colors ${advFilters.conCalendario ? 'bg-gray-900 dark:bg-white' : 'bg-gray-200 dark:bg-gray-700'}`}>
+                    <div className={`absolute top-0.5 h-4 w-4 rounded-full bg-white dark:bg-gray-900 shadow transition-transform duration-200 ${advFilters.conCalendario ? 'translate-x-4' : 'translate-x-0.5'}`} />
+                  </div>
+                  <span className="text-sm font-semibold text-gray-700 dark:text-gray-300">Con eventos</span>
+                </div>
+              </section>
+
+              {/* Frecuencia semanal */}
+              <section>
+                <h3 className="text-[10px] font-bold uppercase tracking-wider text-gray-400 dark:text-gray-500 mb-2.5">Frecuencia semanal</h3>
+                <div className="flex flex-wrap gap-1.5">
+                  {([['2', '2× / sem'], ['3', '3× / sem'], ['full', 'Full (4-5×)']] as ['2' | '3' | 'full', string][]).map(([val, label]) => (
                     <button
-                      key={sede.id}
-                      onClick={() => setAdvFilters(f => ({ ...f, sedeId: f.sedeId === sede.id ? undefined : sede.id }))}
+                      key={val}
+                      onClick={() => setAdvFilters(f => ({ ...f, frecuenciaSemanal: f.frecuenciaSemanal === val ? undefined : val }))}
                       className={`rounded-full px-3 py-1.5 text-xs font-bold transition-all cursor-pointer ${
-                        advFilters.sedeId === sede.id
+                        advFilters.frecuenciaSemanal === val
                           ? 'bg-gray-900 dark:bg-white text-white dark:text-gray-900 shadow-sm'
                           : 'border border-dashed border-gray-300 dark:border-gray-700 text-gray-500 dark:text-gray-400 hover:text-gray-900 dark:hover:text-white hover:border-gray-400 dark:hover:border-gray-500'
                       }`}
                     >
-                      {sede.nombre}
+                      {label}
                     </button>
                   ))}
                 </div>
               </section>
-            )}
 
-            {/* Calendario deportivo */}
-            <section>
-              <h3 className="text-[10px] font-bold uppercase tracking-wider text-gray-400 dark:text-gray-500 mb-2.5">Calendario deportivo</h3>
-              <div
-                className="flex items-center gap-3 cursor-pointer"
-                onClick={() => setAdvFilters(f => ({ ...f, conCalendario: f.conCalendario ? undefined : true }))}
-              >
-                <div className={`relative h-5 w-9 rounded-full transition-colors ${advFilters.conCalendario ? 'bg-gray-900 dark:bg-white' : 'bg-gray-200 dark:bg-gray-700'}`}>
-                  <div className={`absolute top-0.5 h-4 w-4 rounded-full bg-white dark:bg-gray-900 shadow transition-transform duration-200 ${advFilters.conCalendario ? 'translate-x-4' : 'translate-x-0.5'}`} />
+              {/* Sexo */}
+              <section>
+                <h3 className="text-[10px] font-bold uppercase tracking-wider text-gray-400 dark:text-gray-500 mb-2.5">Sexo</h3>
+                <div className="flex flex-wrap gap-1.5">
+                  {([['MASCULINO', 'Masculino'], ['FEMENINO', 'Femenino'], ['OTRO', 'Otro']] as ['MASCULINO' | 'FEMENINO' | 'OTRO', string][]).map(([val, label]) => (
+                    <button
+                      key={val}
+                      onClick={() => setAdvFilters(f => ({ ...f, sexo: f.sexo === val ? undefined : val }))}
+                      className={`rounded-full px-3 py-1.5 text-xs font-bold transition-all cursor-pointer ${
+                        advFilters.sexo === val
+                          ? 'bg-gray-900 dark:bg-white text-white dark:text-gray-900 shadow-sm'
+                          : 'border border-dashed border-gray-300 dark:border-gray-700 text-gray-500 dark:text-gray-400 hover:text-gray-900 dark:hover:text-white hover:border-gray-400 dark:hover:border-gray-500'
+                      }`}
+                    >
+                      {label}
+                    </button>
+                  ))}
                 </div>
-                <span className="text-sm font-semibold text-gray-700 dark:text-gray-300">Con eventos cargados</span>
-              </div>
-            </section>
+              </section>
 
-            {/* Altura */}
-            <section>
-              <h3 className="text-[10px] font-bold uppercase tracking-wider text-gray-400 dark:text-gray-500 mb-2.5">Altura</h3>
-              <div className="flex items-center gap-2">
-                <input
-                  type="number"
-                  placeholder="Mín"
-                  value={advFilters.alturaMin ?? ''}
-                  onChange={e => setAdvFilters(f => ({ ...f, alturaMin: e.target.value ? Number(e.target.value) : undefined }))}
-                  className="w-20 rounded-xl border border-white/50 dark:border-white/10 bg-white/30 dark:bg-black/30 backdrop-blur-xl px-3 py-1.5 text-xs font-semibold text-gray-900 dark:text-white placeholder-gray-400 focus:outline-none focus:ring-1 focus:ring-gray-300 dark:focus:ring-white/20"
-                />
-                <span className="text-xs text-gray-400">—</span>
-                <input
-                  type="number"
-                  placeholder="Máx"
-                  value={advFilters.alturaMax ?? ''}
-                  onChange={e => setAdvFilters(f => ({ ...f, alturaMax: e.target.value ? Number(e.target.value) : undefined }))}
-                  className="w-20 rounded-xl border border-white/50 dark:border-white/10 bg-white/30 dark:bg-black/30 backdrop-blur-xl px-3 py-1.5 text-xs font-semibold text-gray-900 dark:text-white placeholder-gray-400 focus:outline-none focus:ring-1 focus:ring-gray-300 dark:focus:ring-white/20"
-                />
-                <span className="text-xs text-gray-400 shrink-0">cm</span>
-              </div>
-            </section>
+              {/* Proporcional */}
+              <section>
+                <h3 className="text-[10px] font-bold uppercase tracking-wider text-gray-400 dark:text-gray-500 mb-2.5">Con proporcional</h3>
+                <div className="flex flex-wrap gap-1.5">
+                  {([['all', 'Todos'], ['si', 'Sí'], ['no', 'No']] as [ProporcionalFilter, string][]).map(([val, label]) => (
+                    <button
+                      key={val}
+                      onClick={() => setProporcionalFilter(val)}
+                      className={`rounded-full px-3 py-1.5 text-xs font-bold transition-all cursor-pointer ${
+                        proporcionalFilter === val
+                          ? 'bg-gray-900 dark:bg-white text-white dark:text-gray-900 shadow-sm'
+                          : 'border border-dashed border-gray-300 dark:border-gray-700 text-gray-500 dark:text-gray-400 hover:text-gray-900 dark:hover:text-white hover:border-gray-400 dark:hover:border-gray-500'
+                      }`}
+                    >
+                      {label}
+                    </button>
+                  ))}
+                </div>
+              </section>
 
-            {/* Peso */}
-            <section>
-              <h3 className="text-[10px] font-bold uppercase tracking-wider text-gray-400 dark:text-gray-500 mb-2.5">Peso</h3>
-              <div className="flex items-center gap-2">
-                <input
-                  type="number"
-                  placeholder="Mín"
-                  value={advFilters.pesoMin ?? ''}
-                  onChange={e => setAdvFilters(f => ({ ...f, pesoMin: e.target.value ? Number(e.target.value) : undefined }))}
-                  className="w-20 rounded-xl border border-white/50 dark:border-white/10 bg-white/30 dark:bg-black/30 backdrop-blur-xl px-3 py-1.5 text-xs font-semibold text-gray-900 dark:text-white placeholder-gray-400 focus:outline-none focus:ring-1 focus:ring-gray-300 dark:focus:ring-white/20"
-                />
-                <span className="text-xs text-gray-400">—</span>
-                <input
-                  type="number"
-                  placeholder="Máx"
-                  value={advFilters.pesoMax ?? ''}
-                  onChange={e => setAdvFilters(f => ({ ...f, pesoMax: e.target.value ? Number(e.target.value) : undefined }))}
-                  className="w-20 rounded-xl border border-white/50 dark:border-white/10 bg-white/30 dark:bg-black/30 backdrop-blur-xl px-3 py-1.5 text-xs font-semibold text-gray-900 dark:text-white placeholder-gray-400 focus:outline-none focus:ring-1 focus:ring-gray-300 dark:focus:ring-white/20"
-                />
-                <span className="text-xs text-gray-400 shrink-0">kg</span>
-              </div>
-            </section>
+              {/* Edad */}
+              <section>
+                <h3 className="text-[10px] font-bold uppercase tracking-wider text-gray-400 dark:text-gray-500 mb-2.5">Edad</h3>
+                <div className="flex items-center gap-2">
+                  <input
+                    type="number"
+                    placeholder="Mín"
+                    min={0}
+                    max={120}
+                    value={advFilters.edadMin ?? ''}
+                    onChange={e => setAdvFilters(f => ({ ...f, edadMin: e.target.value ? Number(e.target.value) : undefined }))}
+                    className="w-16 rounded-xl border border-white/50 dark:border-white/10 bg-white/30 dark:bg-black/30 backdrop-blur-xl px-2 py-1.5 text-xs font-semibold text-gray-900 dark:text-white placeholder-gray-400 focus:outline-none focus:ring-1 focus:ring-gray-300 dark:focus:ring-white/20"
+                  />
+                  <span className="text-xs text-gray-400">—</span>
+                  <input
+                    type="number"
+                    placeholder="Máx"
+                    min={0}
+                    max={120}
+                    value={advFilters.edadMax ?? ''}
+                    onChange={e => setAdvFilters(f => ({ ...f, edadMax: e.target.value ? Number(e.target.value) : undefined }))}
+                    className="w-16 rounded-xl border border-white/50 dark:border-white/10 bg-white/30 dark:bg-black/30 backdrop-blur-xl px-2 py-1.5 text-xs font-semibold text-gray-900 dark:text-white placeholder-gray-400 focus:outline-none focus:ring-1 focus:ring-gray-300 dark:focus:ring-white/20"
+                  />
+                  <span className="text-xs text-gray-400 shrink-0">años</span>
+                </div>
+              </section>
+
+              {/* Altura */}
+              <section>
+                <h3 className="text-[10px] font-bold uppercase tracking-wider text-gray-400 dark:text-gray-500 mb-2.5">Altura</h3>
+                <div className="flex items-center gap-2">
+                  <input
+                    type="number"
+                    placeholder="Mín"
+                    value={advFilters.alturaMin ?? ''}
+                    onChange={e => setAdvFilters(f => ({ ...f, alturaMin: e.target.value ? Number(e.target.value) : undefined }))}
+                    className="w-16 rounded-xl border border-white/50 dark:border-white/10 bg-white/30 dark:bg-black/30 backdrop-blur-xl px-2 py-1.5 text-xs font-semibold text-gray-900 dark:text-white placeholder-gray-400 focus:outline-none focus:ring-1 focus:ring-gray-300 dark:focus:ring-white/20"
+                  />
+                  <span className="text-xs text-gray-400">—</span>
+                  <input
+                    type="number"
+                    placeholder="Máx"
+                    value={advFilters.alturaMax ?? ''}
+                    onChange={e => setAdvFilters(f => ({ ...f, alturaMax: e.target.value ? Number(e.target.value) : undefined }))}
+                    className="w-16 rounded-xl border border-white/50 dark:border-white/10 bg-white/30 dark:bg-black/30 backdrop-blur-xl px-2 py-1.5 text-xs font-semibold text-gray-900 dark:text-white placeholder-gray-400 focus:outline-none focus:ring-1 focus:ring-gray-300 dark:focus:ring-white/20"
+                  />
+                  <span className="text-xs text-gray-400 shrink-0">cm</span>
+                </div>
+              </section>
+
+              {/* Peso */}
+              <section>
+                <h3 className="text-[10px] font-bold uppercase tracking-wider text-gray-400 dark:text-gray-500 mb-2.5">Peso</h3>
+                <div className="flex items-center gap-2">
+                  <input
+                    type="number"
+                    placeholder="Mín"
+                    value={advFilters.pesoMin ?? ''}
+                    onChange={e => setAdvFilters(f => ({ ...f, pesoMin: e.target.value ? Number(e.target.value) : undefined }))}
+                    className="w-16 rounded-xl border border-white/50 dark:border-white/10 bg-white/30 dark:bg-black/30 backdrop-blur-xl px-2 py-1.5 text-xs font-semibold text-gray-900 dark:text-white placeholder-gray-400 focus:outline-none focus:ring-1 focus:ring-gray-300 dark:focus:ring-white/20"
+                  />
+                  <span className="text-xs text-gray-400">—</span>
+                  <input
+                    type="number"
+                    placeholder="Máx"
+                    value={advFilters.pesoMax ?? ''}
+                    onChange={e => setAdvFilters(f => ({ ...f, pesoMax: e.target.value ? Number(e.target.value) : undefined }))}
+                    className="w-16 rounded-xl border border-white/50 dark:border-white/10 bg-white/30 dark:bg-black/30 backdrop-blur-xl px-2 py-1.5 text-xs font-semibold text-gray-900 dark:text-white placeholder-gray-400 focus:outline-none focus:ring-1 focus:ring-gray-300 dark:focus:ring-white/20"
+                  />
+                  <span className="text-xs text-gray-400 shrink-0">kg</span>
+                </div>
+              </section>
+
+              {/* Sede */}
+              {sedes.length > 0 && (
+                <section className="col-span-2">
+                  <h3 className="text-[10px] font-bold uppercase tracking-wider text-gray-400 dark:text-gray-500 mb-2.5">Sede</h3>
+                  <div className="flex flex-wrap gap-2">
+                    {sedes.map(sede => (
+                      <button
+                        key={sede.id}
+                        onClick={() => setAdvFilters(f => ({ ...f, sedeId: f.sedeId === sede.id ? undefined : sede.id }))}
+                        className={`rounded-full px-3 py-1.5 text-xs font-bold transition-all cursor-pointer ${
+                          advFilters.sedeId === sede.id
+                            ? 'bg-gray-900 dark:bg-white text-white dark:text-gray-900 shadow-sm'
+                            : 'border border-dashed border-gray-300 dark:border-gray-700 text-gray-500 dark:text-gray-400 hover:text-gray-900 dark:hover:text-white hover:border-gray-400 dark:hover:border-gray-500'
+                        }`}
+                      >
+                        {sede.nombre}
+                      </button>
+                    ))}
+                  </div>
+                </section>
+              )}
+
+            </div>
           </div>
 
           {/* Footer — limpiar filtros */}
           {activeAdvFiltersCount > 0 && (
             <div className="shrink-0 border-t border-black/[0.06] dark:border-white/[0.07] px-4 py-3">
               <button
-                onClick={() => setAdvFilters({})}
+                onClick={() => { setAdvFilters({}); setProporcionalFilter('all') }}
                 className="w-full rounded-xl border border-dashed border-gray-200 dark:border-gray-700/70 py-2 text-[11px] font-bold text-gray-400 dark:text-gray-500 hover:text-gray-700 dark:hover:text-gray-200 hover:border-gray-300 dark:hover:border-gray-600 transition-all duration-150 cursor-pointer active:scale-[0.98]"
               >
                 Limpiar filtros avanzados

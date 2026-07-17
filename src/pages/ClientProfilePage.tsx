@@ -11,7 +11,7 @@ import {
   MessageCircle, Tag, Dumbbell, BookOpen, Plus, ChevronDown, ChevronRight, ChevronLeft,
   BarChart2, PieChart as PieIcon, LineChart as LineChartIcon,
   Receipt, AlertTriangle, MapPin, User, Trophy, Trash2, Save,
-  CalendarX2, CalendarCheck2, RefreshCw, Check, ExternalLink,
+  CalendarX2, CalendarCheck2, RefreshCw, Check, ExternalLink, UserX, UserCheck,
 } from 'lucide-react'
 import { format, parseISO, addDays, isValid, type Locale } from 'date-fns'
 import { es } from 'date-fns/locale'
@@ -91,7 +91,6 @@ const editSchema = z.object({
   experiencia:     z.string().optional(),
   lesiones:        z.string().optional(),
   patologiasBase:  z.string().optional(),
-  estado:          z.enum(['ACTIVO', 'INACTIVO']).optional(),
 })
 type EditValues = z.infer<typeof editSchema>
 
@@ -528,6 +527,7 @@ export default function ClientProfilePage() {
   const [isDeleting, setIsDeleting] = useState(false)
   const [isTogglingActivity, setIsTogglingActivity] = useState(false)
   const [showInactivarDialog, setShowInactivarDialog] = useState(false)
+  const [showReactivarDialog, setShowReactivarDialog] = useState(false)
   const [diasGracia, setDiasGracia] = useState<number | undefined>(undefined)
   const [sedes, setSedes] = useState<{ id: string; nombre: string }[]>([])
   const [eventos, setEventos] = useState<EventoDeportivo[]>([])
@@ -646,7 +646,6 @@ export default function ClientProfilePage() {
         reset({
           name: c.name, lastName: c.lastName, email: c.email ?? '', phone: c.phone ?? '', cuil: c.cuil ?? '',
           sedeId: c.sede?.id ?? '',
-          estado: c.activityStatus === 'inactive' ? 'INACTIVO' : 'ACTIVO',
           peso:            f?.peso    != null ? String(f.peso)   : '',
           altura:          f?.altura  != null ? String(f.altura) : '',
           actividadDiaria: f?.actividadDiaria  ?? '',
@@ -739,7 +738,6 @@ export default function ClientProfilePage() {
           name: data.name, lastName: data.lastName,
           email: data.email ?? '', phone: data.phone ?? '', cuil: data.cuil,
           sedeId: data.sedeId || null,
-          ...(data.estado !== undefined && { estado: data.estado }),
         }),
         clientsApi.updateFicha(client.id, {
           peso:            toNum(data.peso),
@@ -931,11 +929,9 @@ export default function ClientProfilePage() {
   function handleToggleActividad() {
     if (!client) return
     if (client.activityStatus === 'active') {
-      // Pasar a INACTIVO → mostrar diálogo de confirmación
       setShowInactivarDialog(true)
     } else {
-      // Reactivar → directo
-      void ejecutarCambioActividad('ACTIVO')
+      setShowReactivarDialog(true)
     }
   }
 
@@ -943,6 +939,7 @@ export default function ClientProfilePage() {
     if (!client) return
     setIsTogglingActivity(true)
     setShowInactivarDialog(false)
+    setShowReactivarDialog(false)
     try {
       const updated = await clientsApi.update(client.id, { estado: newEstado })
       setClient(updated)
@@ -1389,14 +1386,19 @@ export default function ClientProfilePage() {
                   <div className="flex items-center gap-5 mt-4">
                     <div className="flex flex-col gap-1.5 items-start">
                       <span className="text-[10px] font-bold uppercase tracking-wider text-gray-400 dark:text-[#8A8A9A]">Actividad</span>
-                      {isEditing ? (
-                        <select
-                          className="bg-white/60 dark:bg-white/[0.06] border border-gray-200 dark:border-white/[0.15] rounded-lg px-2 py-1 text-xs text-gray-900 dark:text-white focus:outline-none focus:ring-1 focus:ring-primary/60 transition-all"
-                          {...register('estado')}
+                      {isAdmin && isEditing ? (
+                        <div
+                          role="button"
+                          onClick={handleToggleActividad}
+                          className="flex items-center gap-2 cursor-pointer group"
                         >
-                          <option value="ACTIVO">Activo</option>
-                          <option value="INACTIVO">Inactivo</option>
-                        </select>
+                          <div className={`relative h-5 w-9 rounded-full transition-colors duration-200 ${client.activityStatus === 'active' ? 'bg-emerald-500' : 'bg-gray-300 dark:bg-gray-600'}`}>
+                            <div className={`absolute top-0.5 h-4 w-4 rounded-full bg-white shadow transition-transform duration-200 ${client.activityStatus === 'active' ? 'translate-x-4' : 'translate-x-0.5'}`} />
+                          </div>
+                          <span className="text-xs font-semibold text-gray-500 dark:text-gray-400 group-hover:text-gray-700 dark:group-hover:text-gray-200 transition-colors">
+                            {client.activityStatus === 'active' ? 'Activo' : 'Inactivo'}
+                          </span>
+                        </div>
                       ) : (
                         <span className={`inline-flex items-center gap-1.5 text-xs px-2.5 py-1 rounded-lg font-semibold ${activityCls}`}>
                           <span className={`h-1.5 w-1.5 rounded-full shrink-0 ${activityDot}`} />
@@ -2691,7 +2693,7 @@ export default function ClientProfilePage() {
               </div>
               {can('memberships', 'create') && (
                 <button
-                  onClick={() => setNewMembresiaOpen(true)}
+                  onClick={() => navigate(`${ROUTES.PAYMENT_NEW}?clienteId=${client.id}`)}
                   className="flex items-center gap-2 rounded-xl btn-action px-4 py-2.5 text-sm"
                 >
                   <Plus size={13} /> Nueva membresía
@@ -3715,17 +3717,38 @@ export default function ClientProfilePage() {
 
       <ConfirmDialog
         isOpen={showInactivarDialog}
-        title="Inactivar cliente"
-        message={
-          inscripciones.length > 0
-            ? `¿Marcás a ${client?.name} ${client?.lastName} como inactivo? Se lo dará de baja de ${inscripciones.length} turno${inscripciones.length !== 1 ? 's' : ''} activo${inscripciones.length !== 1 ? 's' : ''} y los cupos quedarán liberados.`
-            : `¿Marcás a ${client?.name} ${client?.lastName} como inactivo?`
-        }
-        warning={inscripciones.length > 0 ? 'El cliente deberá reinscribirse manualmente si se reactiva.' : undefined}
-        confirmLabel="Inactivar"
+        title={`Inactivar a ${client?.name} ${client?.lastName}`}
+        message="El cliente pasará a estado inactivo. Esto desencadenará los siguientes efectos:"
+        details={[
+          ...(inscripciones.length > 0
+            ? [`Se dará de baja de ${inscripciones.length} turno${inscripciones.length !== 1 ? 's' : ''} activo${inscripciones.length !== 1 ? 's' : ''}, liberando los cupos.`]
+            : ['No tiene turnos activos, por lo que no se afectarán inscripciones.']),
+          'Sus membresías quedan registradas pero el cliente deja de figurar en el listado de activos.',
+          'No recibirá notificaciones automáticas del sistema mientras esté inactivo.',
+          'Se puede reactivar manualmente desde este perfil, o automáticamente al registrar un pago desde la sección de pagos (el formulario pregunta si reactivar al detectar que está inactivo).',
+        ]}
+        warning={inscripciones.length > 0 ? 'El cliente deberá reinscribirse manualmente en los turnos si se reactiva.' : undefined}
+        confirmLabel="Inactivar cliente"
         isLoading={isTogglingActivity}
         onConfirm={() => void ejecutarCambioActividad('INACTIVO')}
         onClose={() => setShowInactivarDialog(false)}
+      />
+
+      <ConfirmDialog
+        isOpen={showReactivarDialog}
+        title={`Reactivar a ${client?.name} ${client?.lastName}`}
+        message="El cliente volverá al estado activo. Esto desencadenará los siguientes efectos:"
+        details={[
+          'Volverá a figurar en el listado de clientes activos.',
+          'Sus membresías vigentes quedarán disponibles nuevamente.',
+          'Deberá inscribirse manualmente a los turnos que desee asistir.',
+          'Comenzará a recibir notificaciones automáticas del sistema.',
+        ]}
+        confirmLabel="Reactivar cliente"
+        confirmVariant="primary"
+        isLoading={isTogglingActivity}
+        onConfirm={() => void ejecutarCambioActividad('ACTIVO')}
+        onClose={() => setShowReactivarDialog(false)}
       />
 
       <ConfirmDialog

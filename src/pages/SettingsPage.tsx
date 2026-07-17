@@ -23,12 +23,15 @@ import {
   Settings2,
   Clock,
   CalendarOff,
+  Play,
+  RefreshCw,
 } from 'lucide-react'
 import { useUiStore } from '../store/uiStore'
 import { useSettingsStore } from '../store/settingsStore'
 import { useAuthStore } from '../store/authStore'
 import { configuracionApi } from '../api/configuracion.api'
 import { configuracionSistemaApi, type ConfiguracionSistema } from '../api/configuracion-sistema.api'
+import { mantenimientoApi, type ConsistenciaReport } from '../api/mantenimiento.api'
 import { notificacionesApi } from '../api/notificaciones.api'
 import { authApi } from '../api/auth.api'
 import { permisosApi, type PermisosMap } from '../api/permisos.api'
@@ -743,28 +746,6 @@ function AccountSection() {
         </AnimatePresence>
       </SectionCard>
 
-      {isAdmin && (
-        <>
-          <SectionHeader title="Seguridad" />
-          <SectionCard>
-            <SectionRow
-              label="Registro de actividad"
-              description="Revisá intentos de acceso, cambios de permisos, pagos eliminados y otras acciones críticas del sistema."
-              last
-            >
-              <button
-                type="button"
-                onClick={() => navigate(ROUTES.SECURITY)}
-                className="flex items-center gap-2 px-4 py-2 rounded-xl bg-white/50 dark:bg-white/[0.06] border border-gray-200/60 dark:border-white/10 text-sm font-semibold text-gray-700 dark:text-gray-300 hover:bg-white dark:hover:bg-white/[0.10] hover:text-gray-900 dark:hover:text-white transition-all"
-              >
-                <Shield size={14} className="text-amber-500 dark:text-amber-400" />
-                Abrir
-                <ArrowRight size={13} className="text-gray-400 dark:text-white/30" />
-              </button>
-            </SectionRow>
-          </SectionCard>
-        </>
-      )}
     </div>
   )
 }
@@ -993,9 +974,14 @@ function PermissionsSection() {
 // ─── Sistema Section ──────────────────────────────────────────────────────────
 
 function SistemaSection() {
-  const addToast = useUiStore(s => s.addToast)
+  const navigate  = useNavigate()
+  const addToast  = useUiStore(s => s.addToast)
   const [config, setConfig] = useState<ConfiguracionSistema | null>(null)
-  const [saving, setSaving] = useState(false)
+  const [saving,  setSaving]  = useState(false)
+
+  // Mantenimiento
+  const [running,  setRunning]  = useState(false)
+  const [report,   setReport]   = useState<ConsistenciaReport | null>(null)
 
   useEffect(() => {
     configuracionSistemaApi.get().then(setConfig).catch(() => {})
@@ -1018,9 +1004,24 @@ function SistemaSection() {
     }
   }
 
+  async function handleConsistencia() {
+    setRunning(true)
+    setReport(null)
+    try {
+      const r = await mantenimientoApi.consistencia()
+      setReport(r)
+      const total = r.membresias.marcadasVencidas + r.membresias.activadasDesdePendiente + r.clientes.reactivados
+      addToast(total > 0 ? `Consistencia aplicada — ${total} correcciones` : 'Sistema consistente, sin cambios', 'success')
+    } catch {
+      addToast('Error al ejecutar verificación', 'error')
+    } finally {
+      setRunning(false)
+    }
+  }
+
   if (!config) return (
     <div className="space-y-4 animate-pulse">
-      {[1, 2].map(i => <div key={i} className="h-14 rounded-xl bg-white/10 dark:bg-white/[0.05]" />)}
+      {[1, 2, 3].map(i => <div key={i} className="h-14 rounded-xl bg-white/10 dark:bg-white/[0.05]" />)}
     </div>
   )
 
@@ -1028,32 +1029,27 @@ function SistemaSection() {
 
   return (
     <div className="space-y-6">
-      <div>
-        <p className="text-xs text-gray-600 dark:text-gray-400 leading-relaxed">
-          Parámetros globales del sistema. Afectan a todos los usuarios y se aplican automáticamente.
-        </p>
-      </div>
 
+      {/* ── Parámetros del sistema ───────────────────────────────────────────── */}
+      <SectionHeader title="Parámetros del sistema" />
       <SectionCard>
         <SectionRow
           label="Días de gracia por vencimiento"
           description={
             <>
-              Días que se esperan desde el <strong>inicio del mes siguiente</strong> al vencimiento de la membresía antes de pasar al cliente a inactivo.
+              Días que se esperan desde el <strong>inicio del mes siguiente</strong> al vencimiento antes de pasar al cliente a inactivo.
               <br />
-              <span className="text-primary font-semibold">Ej: membresía vence en marzo → espera desde el 1° de abril + {config.diasGraciaInactivacion} días.</span>
+              <span className="text-primary font-semibold">Ej: vence en marzo → espera desde el 1° de abril + {config.diasGraciaInactivacion} días.</span>
             </>
           }
         >
           <div className="flex items-center gap-2">
-            <button
-              type="button"
+            <button type="button"
               onClick={() => setConfig(c => c ? { ...c, diasGraciaInactivacion: Math.max(1, c.diasGraciaInactivacion - 1) } : c)}
               className="flex h-7 w-7 items-center justify-center rounded-lg border border-gray-200/50 dark:border-white/10 bg-gray-50/80 dark:bg-black/20 text-gray-500 dark:text-gray-400 hover:text-gray-900 dark:hover:text-white transition-colors font-bold text-sm"
             >−</button>
             <span className="w-8 text-center text-sm font-black text-gray-900 dark:text-white tabular-nums">{config.diasGraciaInactivacion}</span>
-            <button
-              type="button"
+            <button type="button"
               onClick={() => setConfig(c => c ? { ...c, diasGraciaInactivacion: Math.min(60, c.diasGraciaInactivacion + 1) } : c)}
               className="flex h-7 w-7 items-center justify-center rounded-lg border border-gray-200/50 dark:border-white/10 bg-gray-50/80 dark:bg-black/20 text-gray-500 dark:text-gray-400 hover:text-gray-900 dark:hover:text-white transition-colors font-bold text-sm"
             >+</button>
@@ -1061,14 +1057,15 @@ function SistemaSection() {
         </SectionRow>
 
         <SectionRow
-          label="Hora de ejecución automática"
+          label="Hora de ejecución"
           description={
             <>
-              Hora del día en que el sistema revisa y aplica inactivaciones automáticas.
+              Hora a la que el sistema revisa y aplica inactivaciones automáticamente.
               <br />
-              <span className="text-gray-500 dark:text-[#8A8A9A]">Actualmente configurado para las <strong className="text-gray-900 dark:text-white">{horaLabel} hs</strong>.</span>
+              <span className="text-gray-500 dark:text-[#8A8A9A]">Configurado para las <strong className="text-gray-900 dark:text-white">{horaLabel} hs</strong>.</span>
             </>
           }
+          last
         >
           <div className="flex items-center gap-2">
             <Clock size={14} className="text-gray-400 shrink-0" />
@@ -1086,17 +1083,127 @@ function SistemaSection() {
       </SectionCard>
 
       <div className="flex justify-end">
-        <button
-          onClick={handleSave}
-          disabled={saving}
+        <button onClick={handleSave} disabled={saving}
           className="flex items-center gap-1.5 rounded-xl btn-action px-4 py-2 text-sm font-bold disabled:opacity-60"
         >
-          {saving
-            ? <span className="h-3.5 w-3.5 animate-spin rounded-full border-2 border-gray-900/30 border-t-gray-900" />
-            : <Save size={13} />}
+          {saving ? <span className="h-3.5 w-3.5 animate-spin rounded-full border-2 border-gray-900/30 border-t-gray-900" /> : <Save size={13} />}
           Guardar cambios
         </button>
       </div>
+
+      {/* ── Herramientas ─────────────────────────────────────────────────────── */}
+      <SectionHeader title="Herramientas" />
+      <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+
+        {/* Consistencia — izquierda */}
+        <button type="button" onClick={handleConsistencia} disabled={running}
+          className="group text-left rounded-2xl border border-white/50 dark:border-white/10 bg-white/30 dark:bg-white/[0.03] hover:bg-white/60 dark:hover:bg-white/[0.06] p-5 transition-all disabled:opacity-60 disabled:pointer-events-none"
+        >
+          <div className="flex items-start justify-between mb-3">
+            <div className="flex h-9 w-9 items-center justify-center rounded-xl bg-primary/10">
+              <RefreshCw size={16} className={`text-primary ${running ? 'animate-spin' : ''}`} />
+            </div>
+            <span className="mt-0.5 text-[10px] font-bold uppercase tracking-widest text-gray-400 dark:text-white/30">
+              {running ? 'Corriendo' : 'Cron diario'}
+            </span>
+          </div>
+          <p className="text-sm font-bold text-gray-900 dark:text-white mb-1.5">
+            {running ? 'Verificando...' : 'Verificar consistencia'}
+          </p>
+          <ul className="text-xs text-gray-500 dark:text-gray-400 leading-relaxed space-y-0.5 list-none">
+            <li>· Marca como <strong className="text-gray-700 dark:text-gray-300">VENCIDA</strong> toda membresía cuya fecha ya pasó</li>
+            <li>· Activa membresías <strong className="text-gray-700 dark:text-gray-300">PENDIENTES</strong> cuya fecha de inicio llegó</li>
+            <li>· Reactiva clientes con membresía vigente marcados como vencidos</li>
+            <li>· Detecta clientes con más de una membresía activa simultánea</li>
+          </ul>
+          <p className="text-[10px] text-gray-400 dark:text-white/30 mt-2">También corre automáticamente a medianoche.</p>
+        </button>
+
+        {/* Seguridad — derecha */}
+        <button type="button" onClick={() => navigate(ROUTES.SECURITY)}
+          className="group text-left rounded-2xl border border-white/50 dark:border-white/10 bg-white/30 dark:bg-white/[0.03] hover:bg-white/60 dark:hover:bg-white/[0.06] p-5 transition-all"
+        >
+          <div className="flex items-start justify-between mb-3">
+            <div className="flex h-9 w-9 items-center justify-center rounded-xl bg-amber-500/10 dark:bg-amber-400/10">
+              <Shield size={16} className="text-amber-500 dark:text-amber-400" />
+            </div>
+            <ArrowRight size={14} className="text-gray-300 dark:text-white/20 group-hover:text-gray-400 dark:group-hover:text-white/40 mt-1 transition-colors" />
+          </div>
+          <p className="text-sm font-bold text-gray-900 dark:text-white mb-1.5">Registro de actividad</p>
+          <ul className="text-xs text-gray-500 dark:text-gray-400 leading-relaxed space-y-0.5 list-none">
+            <li>· Intentos de acceso al sistema (logins y fallos)</li>
+            <li>· Cambios en permisos y roles de usuarios</li>
+            <li>· Pagos eliminados y operaciones sensibles</li>
+            <li>· Acciones críticas registradas con usuario y fecha</li>
+          </ul>
+        </button>
+      </div>
+
+      {/* ── Resultado del último chequeo ─────────────────────────────────────── */}
+      <AnimatePresence>
+        {report && (
+          <motion.div
+            initial={{ opacity: 0, y: 6 }}
+            animate={{ opacity: 1, y: 0 }}
+            exit={{ opacity: 0, y: 6 }}
+            transition={{ duration: 0.2, ease: [0.23, 1, 0.32, 1] }}
+            className="rounded-2xl border border-white/50 dark:border-white/10 bg-white/30 dark:bg-white/[0.03] p-5 space-y-3"
+          >
+            <div className="flex items-center justify-between">
+              <p className="text-xs font-bold text-gray-500 dark:text-gray-400 uppercase tracking-widest">
+                Último chequeo
+              </p>
+              <p className="text-xs text-gray-400 dark:text-white/30 tabular-nums">
+                {new Date(report.ejecutadoEn).toLocaleString('es-AR')}
+              </p>
+            </div>
+            <div className="grid grid-cols-2 gap-2 sm:grid-cols-5">
+              {[
+                { label: 'Membresías vencidas',    value: report.membresias.marcadasVencidas,        warn: report.membresias.marcadasVencidas > 0 },
+                { label: 'Activadas',              value: report.membresias.activadasDesdePendiente,  warn: false },
+                { label: 'Doble activa',           value: report.membresias.clientesConDobleActiva,   warn: report.membresias.clientesConDobleActiva > 0 },
+                { label: 'Clientes reactivados',   value: report.clientes.reactivados,                warn: false },
+                { label: 'Sin membresía',          value: report.clientes.sinMembresia,               warn: report.clientes.sinMembresia > 0 },
+              ].map(({ label, value, warn }) => (
+                <div key={label} className="rounded-xl bg-white/50 dark:bg-white/[0.04] border border-white/60 dark:border-white/[0.06] px-3 py-2.5 text-center">
+                  <p className={`text-xl font-black tabular-nums ${warn ? 'text-amber-500 dark:text-amber-400' : 'text-gray-900 dark:text-white'}`}>{value}</p>
+                  <p className="text-[10px] text-gray-400 dark:text-white/30 mt-0.5 leading-tight">{label}</p>
+                </div>
+              ))}
+            </div>
+
+            {/* Alertas accionables */}
+            <div className="space-y-2 pt-1">
+              {report.clientes.sinMembresia > 0 && (
+                <div className="flex items-center justify-between gap-3 rounded-xl bg-amber-500/[0.06] dark:bg-amber-400/[0.06] border border-amber-500/20 dark:border-amber-400/15 px-3.5 py-2.5">
+                  <p className="text-xs text-amber-700 dark:text-amber-400 flex items-center gap-1.5">
+                    <AlertCircle size={12} className="shrink-0" />
+                    <span>
+                      <strong>{report.clientes.sinMembresia}</strong> cliente{report.clientes.sinMembresia !== 1 ? 's' : ''} activo{report.clientes.sinMembresia !== 1 ? 's' : ''} sin membresía vigente.
+                    </span>
+                  </p>
+                  <button
+                    type="button"
+                    onClick={() => navigate(`${ROUTES.CLIENTS}?estadoPago=VENCIDO`)}
+                    className="shrink-0 flex items-center gap-1.5 text-xs font-semibold text-amber-700 dark:text-amber-400 hover:text-amber-900 dark:hover:text-amber-300 transition-colors"
+                  >
+                    Ver clientes
+                    <ArrowRight size={11} />
+                  </button>
+                </div>
+              )}
+              {report.membresias.clientesConDobleActiva > 0 && (
+                <div className="flex items-center gap-1.5 rounded-xl bg-amber-500/[0.06] dark:bg-amber-400/[0.06] border border-amber-500/20 dark:border-amber-400/15 px-3.5 py-2.5">
+                  <AlertCircle size={12} className="shrink-0 text-amber-600 dark:text-amber-400" />
+                  <p className="text-xs text-amber-700 dark:text-amber-400">
+                    <strong>{report.membresias.clientesConDobleActiva}</strong> cliente{report.membresias.clientesConDobleActiva !== 1 ? 's' : ''} con más de una membresía activa simultánea. Revisá el perfil de cada uno para corregirlo.
+                  </p>
+                </div>
+              )}
+            </div>
+          </motion.div>
+        )}
+      </AnimatePresence>
     </div>
   )
 }
@@ -1149,7 +1256,7 @@ const CATEGORIES: {
     label: 'Sistema',
     icon: Settings2,
     adminOnly: true,
-    keywords: ['inactivación', 'automática', 'días', 'gracia', 'cron', 'horario', 'vencimiento'],
+    keywords: ['inactivación', 'automática', 'días', 'gracia', 'cron', 'horario', 'vencimiento', 'seguridad', 'actividad', 'mantenimiento', 'consistencia', 'membresías'],
   },
 ]
 

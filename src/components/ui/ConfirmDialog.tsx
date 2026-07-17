@@ -6,8 +6,10 @@ interface ConfirmDialogProps {
   isOpen: boolean
   title: string
   message: string
+  details?: string[]
   warning?: string
   confirmLabel?: string
+  confirmVariant?: 'danger' | 'primary'
   isLoading?: boolean
   onConfirm: () => void
   onClose: () => void
@@ -17,8 +19,10 @@ export default function ConfirmDialog({
   isOpen,
   title,
   message,
+  details,
   warning,
   confirmLabel = 'Eliminar',
+  confirmVariant = 'danger',
   isLoading,
   onConfirm,
   onClose,
@@ -36,6 +40,17 @@ export default function ConfirmDialog({
           </div>
         </div>
 
+        {details && details.length > 0 && (
+          <ul className="space-y-1.5 rounded-xl bg-black/[0.03] dark:bg-white/[0.04] border border-black/[0.06] dark:border-white/[0.07] px-4 py-3">
+            {details.map((d, i) => (
+              <li key={i} className="flex items-start gap-2 text-xs text-gray-600 dark:text-gray-400 leading-relaxed">
+                <span className="mt-1.5 h-1 w-1 rounded-full bg-gray-400 dark:bg-gray-500 shrink-0" />
+                {d}
+              </li>
+            ))}
+          </ul>
+        )}
+
         {warning && (
           <div className="flex items-start gap-2.5 rounded-xl bg-amber-500/10 border border-amber-500/20 px-4 py-3">
             <AlertTriangle size={15} className="text-amber-500 shrink-0 mt-0.5" />
@@ -47,7 +62,7 @@ export default function ConfirmDialog({
           <Button variant="ghost" className="flex-1" onClick={onClose} disabled={isLoading}>
             Cancelar
           </Button>
-          <Button variant="danger" className="flex-1" onClick={onConfirm} isLoading={isLoading}>
+          <Button variant={confirmVariant} className="flex-1" onClick={onConfirm} isLoading={isLoading}>
             {confirmLabel}
           </Button>
         </div>
