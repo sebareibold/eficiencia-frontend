@@ -22,6 +22,7 @@ import { excepcionesApi } from '../api/excepciones.api'
 import type { ExcepcionTurno } from '../types/excepcion.types'
 import { inscripcionesApi } from '../api/inscripciones.api'
 import { attendanceApi } from '../api/attendance.api'
+import type { VerificacionFecha } from '../api/attendance.api'
 import { listaEsperaApi } from '../api/listaEspera.api'
 import { reposicionesApi } from '../api/reposiciones.api'
 import type { AusenciaTurno, RecuperacionClase } from '../types/reposicion.types'
@@ -181,6 +182,8 @@ export default function ShiftDetailPage() {
   const [isSavingAttendance, setIsSavingAttendance] = useState(false)
   const [dragOverAttendCol, setDragOverAttendCol] = useState<'presente' | 'ausente' | 'con_aviso' | null>(null)
   const [draggingAttendId, setDraggingAttendId] = useState<string | null>(null)
+  const [verificacion, setVerificacion] = useState<VerificacionFecha | null>(null)
+  const [loadingVerificacion, setLoadingVerificacion] = useState(false)
 
   // Ausencias con aviso (para Resumen)
   const [ausenciasHoy, setAusenciasHoy] = useState<AusenciaTurno[]>([])
@@ -318,6 +321,19 @@ export default function ShiftDetailPage() {
       fetchByShiftAndDate(id, selectedDate)
     }
   }, [tab, id, selectedDate])
+
+  // Verificar disponibilidad de fecha para asistencia (días especiales/cancelaciones)
+  useEffect(() => {
+    if (!id || !selectedDate || tab !== 'asistencia') {
+      setVerificacion(null)
+      return
+    }
+    setLoadingVerificacion(true)
+    attendanceApi.verificar(id, selectedDate)
+      .then(setVerificacion)
+      .catch(() => setVerificacion(null))
+      .finally(() => setLoadingVerificacion(false))
+  }, [id, selectedDate, tab])
 
   // Cargar ausencias con aviso para el Resumen
   useEffect(() => {
@@ -713,8 +729,10 @@ export default function ShiftDetailPage() {
         ? `Asistencia guardada · ${conAvisoIds.length} crédito${conAvisoIds.length > 1 ? 's' : ''} generado${conAvisoIds.length > 1 ? 's' : ''}`
         : 'Asistencia guardada'
       addToast(msg, 'success')
-    } catch {
-      addToast('Error al guardar asistencia', 'error')
+    } catch (err) {
+      const axiosData = (err as { response?: { data?: { message?: string } } })?.response?.data
+      const msg = axiosData?.message ?? 'Error al guardar asistencia'
+      addToast(msg, 'error')
     } finally {
       setIsSavingAttendance(false)
     }
@@ -1832,7 +1850,7 @@ export default function ShiftDetailPage() {
                 <div className="flex items-center gap-2">
                   <button
                     onClick={handleMarkAllPresent}
-                    disabled={!!dateError}
+                    disabled={!!dateError || loadingVerificacion || (verificacion?.bloqueado ?? false)}
                     className="flex items-center gap-1.5 rounded-2xl border border-green-500/30 bg-green-500/10 px-3 py-2 text-xs font-semibold text-green-600 dark:text-green-400 hover:bg-green-500/20 transition-all disabled:opacity-40 disabled:cursor-not-allowed"
                   >
                     <UserCheck size={14} />
@@ -1841,7 +1859,7 @@ export default function ShiftDetailPage() {
                   <Button
                     onClick={saveAttendance}
                     isLoading={isSavingAttendance}
-                    disabled={!!dateError}
+                    disabled={!!dateError || loadingVerificacion || (verificacion?.bloqueado ?? false)}
                     className="rounded-2xl shadow-md hover:shadow-lg transition-all"
                   >
                     <CheckCircle2 size={16} className="mr-1.5" />
@@ -1850,6 +1868,59 @@ export default function ShiftDetailPage() {
                 </div>
               </div>
 
+              {/* Banners de alerta */}
+              <AnimatePresence mode="wait">
+                {loadingVerificacion && (
+                  <motion.div
+                    key="loading-verif"
+                    initial={{ opacity: 0 }}
+                    animate={{ opacity: 1 }}
+                    exit={{ opacity: 0 }}
+                    className="text-xs text-[#8A8A9A] flex items-center gap-2"
+                  >
+                    <RefreshCw size={12} className="animate-spin" />
+                    Verificando disponibilidad de la fecha...
+                  </motion.div>
+                )}
+
+                {!loadingVerificacion && verificacion && verificacion.tipo && (
+                  <motion.div
+                    key="verif-banner"
+                    initial={{ opacity: 0, y: -6 }}
+                    animate={{ opacity: 1, y: 0 }}
+                    exit={{ opacity: 0, y: -6 }}
+                    className={`flex items-start gap-2.5 rounded-xl border px-4 py-3 text-sm ${
+                      verificacion.tipo === 'HORARIO_REDUCIDO'
+                        ? 'bg-amber-500/10 border-amber-500/20 text-amber-400'
+                        : 'bg-red-500/10 border-red-500/20 text-red-400'
+                    }`}
+                  >
+                    {verificacion.tipo === 'HORARIO_REDUCIDO' ? (
+                      <Clock size={16} className="shrink-0 mt-0.5" />
+                    ) : (
+                      <Ban size={16} className="shrink-0 mt-0.5" />
+                    )}
+                    <div>
+                      <span className="font-bold">
+                        {verificacion.tipo === 'CIERRE_TOTAL'
+                          ? 'Gimnasio cerrado'
+                          : verificacion.tipo === 'CANCELACION_TURNO'
+                          ? 'Turno cancelado'
+                          : 'Horario reducido'}
+                        :
+                      </span>{' '}
+                      {verificacion.motivo}
+                      {verificacion.tipo === 'HORARIO_REDUCIDO' && verificacion.horaDesde && verificacion.horaHasta && (
+                        <span className="ml-1 opacity-80">({verificacion.horaDesde}–{verificacion.horaHasta})</span>
+                      )}
+                      {verificacion.bloqueado && (
+                        <p className="mt-0.5 opacity-75 font-semibold">No se puede registrar asistencia en este día.</p>
+                      )}
+                    </div>
+                  </motion.div>
+                )}
+              </AnimatePresence>
+
               {dateError && (
                 <div className="flex items-center gap-2.5 rounded-xl bg-amber-500/10 border border-amber-500/20 px-4 py-3 text-sm text-amber-400">
                   <AlertTriangle size={16} className="shrink-0" />
@@ -1857,14 +1928,23 @@ export default function ShiftDetailPage() {
                 </div>
               )}
 
-              {!dateError && !loadingAttendance && attendanceRecords.length === 0 && (
+              {!dateError && !loadingVerificacion && !verificacion?.bloqueado && !loadingAttendance && attendanceRecords.length === 0 && (
                 <div className="flex items-center gap-2.5 rounded-xl bg-blue-500/10 border border-blue-500/20 px-4 py-3 text-sm text-blue-400">
                   <AlertTriangle size={16} className="shrink-0" />
                   <span>Asistencia no registrada para esta fecha. Todos aparecen como ausentes por defecto — marcá los presentes y guardá.</span>
                 </div>
               )}
 
-              {!dateError && (loadingAttendance || loadingInscrip || loadingRecuperaciones ? (
+              {!dateError && verificacion?.bloqueado && (
+                <div className="flex flex-col items-center justify-center gap-3 py-16 text-[#8A8A9A]">
+                  <Ban size={36} className="text-red-500/50" />
+                  <p className="text-sm text-center max-w-md">
+                    No es posible registrar asistencia para este turno en esta fecha.
+                  </p>
+                </div>
+              )}
+
+              {!dateError && !verificacion?.bloqueado && (loadingAttendance || loadingInscrip || loadingRecuperaciones ? (
                 <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
                   {Array.from({ length: 2 }).map((_, i) => (
                     <div key={i} className="space-y-2">
