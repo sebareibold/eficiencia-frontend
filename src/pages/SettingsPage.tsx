@@ -25,6 +25,7 @@ import {
   CalendarOff,
   Play,
   RefreshCw,
+  Cog,
 } from 'lucide-react'
 import { useUiStore } from '../store/uiStore'
 import { useSettingsStore } from '../store/settingsStore'
@@ -101,39 +102,6 @@ function SegmentedControl<T extends string>({
         )
       })}
     </div>
-  )
-}
-
-function ProbarBtn({ tipo }: { tipo: string }) {
-  const [loading, setLoading] = useState(false)
-  const { addToast } = useUiStore()
-
-  async function handle() {
-    setLoading(true)
-    try {
-      const res = await notificacionesApi.probar(tipo)
-      addToast(`Prueba enviada a ${res.destino}`, 'success')
-    } catch {
-      addToast('Error al enviar email de prueba', 'error')
-    } finally {
-      setLoading(false)
-    }
-  }
-
-  return (
-    <button
-      type="button"
-      onClick={handle}
-      disabled={loading}
-      title="Enviar email de prueba"
-      className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold rounded-lg border border-gray-200/70 dark:border-white/10 bg-white/50 dark:bg-white/[0.04] text-gray-500 dark:text-gray-400 hover:text-gray-800 dark:hover:text-gray-200 hover:border-gray-300 dark:hover:border-white/20 transition-all disabled:opacity-40 disabled:cursor-not-allowed whitespace-nowrap"
-    >
-      {loading
-        ? <span className="h-3 w-3 rounded-full border-[1.5px] border-current border-t-transparent animate-spin" />
-        : <Send size={11} />
-      }
-      {!loading && 'Probar'}
-    </button>
   )
 }
 
@@ -296,6 +264,153 @@ function AppearanceSection() {
 }
 
 
+function NotifRow({
+  label,
+  description,
+  tipo,
+  checked,
+  onChange,
+  last,
+}: {
+  label: string
+  description: string
+  tipo: string
+  checked: boolean
+  onChange: (v: boolean) => void
+  last?: boolean
+}) {
+  const navigate = useNavigate()
+  return (
+    <SectionRow label={label} description={description} last={last}>
+      <div className="flex items-center gap-2.5">
+        <button
+          type="button"
+          onClick={() => navigate(`/settings/notificaciones/${tipo}`)}
+          title="Configurar template"
+          className="flex items-center justify-center h-8 w-8 rounded-lg border border-gray-200/70 dark:border-white/10 bg-white/50 dark:bg-white/[0.04] text-gray-400 hover:text-gray-700 dark:hover:text-gray-200 hover:border-gray-300 dark:hover:border-white/20 transition-all"
+        >
+          <Cog size={14} />
+        </button>
+        <Toggle checked={checked} onChange={onChange} />
+      </div>
+    </SectionRow>
+  )
+}
+
+function ResumenPeriodicidadCard() {
+  const [config, setConfig] = useState<ConfiguracionSistema | null>(null)
+  const [loading, setLoading] = useState(true)
+  const addToast = useUiStore(s => s.addToast)
+
+  useEffect(() => {
+    configuracionSistemaApi.get()
+      .then(setConfig)
+      .catch(() => {})
+      .finally(() => setLoading(false))
+  }, [])
+
+  async function updateField(field: Partial<ConfiguracionSistema>) {
+    if (!config) return
+    const optimistic = { ...config, ...field }
+    setConfig(optimistic)
+    try {
+      const updated = await configuracionSistemaApi.update(field)
+      setConfig(updated)
+    } catch {
+      setConfig(config)
+      addToast('Error al guardar configuración', 'error')
+    }
+  }
+
+  if (loading || !config) return null
+
+  const DIAS_SEMANA = ['Domingo', 'Lunes', 'Martes', 'Miércoles', 'Jueves', 'Viernes', 'Sábado']
+  const FRECUENCIAS = [
+    { value: 'DAILY', label: 'Diario' },
+    { value: 'WEEKLY', label: 'Semanal' },
+    { value: 'MONTHLY', label: 'Mensual' },
+  ]
+
+  return (
+    <>
+      <SectionHeader title="Resumen automático" />
+      <SectionCard>
+        <SectionRow
+          label="Envío automático"
+          description="Si está activado, el resumen de membresías y deudas se envía automáticamente según la periodicidad configurada."
+        >
+          <Toggle
+            checked={config.resumenAutomatico}
+            onChange={(v) => updateField({ resumenAutomatico: v })}
+          />
+        </SectionRow>
+
+        {config.resumenAutomatico && (
+          <>
+            <SectionRow label="Frecuencia" description="Con qué frecuencia se envía el resumen.">
+              <div className="flex gap-1.5">
+                {FRECUENCIAS.map(f => (
+                  <button
+                    key={f.value}
+                    onClick={() => updateField({ resumenFrecuencia: f.value as ConfiguracionSistema['resumenFrecuencia'] })}
+                    className={`px-3 py-1.5 rounded-lg text-xs font-semibold transition-all ${
+                      config.resumenFrecuencia === f.value
+                        ? 'bg-primary text-black'
+                        : 'bg-gray-100/60 dark:bg-white/[0.06] text-gray-500 dark:text-gray-400 hover:bg-gray-200/60 dark:hover:bg-white/[0.1]'
+                    }`}
+                  >
+                    {f.label}
+                  </button>
+                ))}
+              </div>
+            </SectionRow>
+
+            {config.resumenFrecuencia === 'WEEKLY' && (
+              <SectionRow label="Día de la semana" description="En qué día se envía el resumen semanal.">
+                <select
+                  value={config.resumenDiaSemana ?? 1}
+                  onChange={e => updateField({ resumenDiaSemana: Number(e.target.value) })}
+                  className="rounded-lg border border-gray-200 dark:border-white/10 bg-white/60 dark:bg-white/[0.04] px-3 py-1.5 text-xs text-gray-700 dark:text-gray-300 focus:outline-none focus:ring-2 focus:ring-primary/40"
+                >
+                  {DIAS_SEMANA.map((d, i) => (
+                    <option key={i} value={i}>{d}</option>
+                  ))}
+                </select>
+              </SectionRow>
+            )}
+
+            {config.resumenFrecuencia === 'MONTHLY' && (
+              <SectionRow label="Día del mes" description="En qué día del mes se envía el resumen.">
+                <select
+                  value={config.resumenDiaMes ?? 1}
+                  onChange={e => updateField({ resumenDiaMes: Number(e.target.value) })}
+                  className="rounded-lg border border-gray-200 dark:border-white/10 bg-white/60 dark:bg-white/[0.04] px-3 py-1.5 text-xs text-gray-700 dark:text-gray-300 focus:outline-none focus:ring-2 focus:ring-primary/40"
+                >
+                  {Array.from({ length: 28 }, (_, i) => (
+                    <option key={i + 1} value={i + 1}>{i + 1}</option>
+                  ))}
+                </select>
+              </SectionRow>
+            )}
+
+            <SectionRow label="Hora de envío" description="A qué hora se envía el resumen." last>
+              <select
+                value={config.resumenHora}
+                onChange={e => updateField({ resumenHora: Number(e.target.value) })}
+                className="rounded-lg border border-gray-200 dark:border-white/10 bg-white/60 dark:bg-white/[0.04] px-3 py-1.5 text-xs text-gray-700 dark:text-gray-300 focus:outline-none focus:ring-2 focus:ring-primary/40"
+              >
+                {Array.from({ length: 24 }, (_, i) => (
+                  <option key={i} value={i}>{String(i).padStart(2, '0')}:00</option>
+                ))}
+              </select>
+            </SectionRow>
+          </>
+        )}
+      </SectionCard>
+    </>
+  )
+}
+
 function NotificationsSection() {
   const { notifications, updateNotifications } = useSettingsStore()
 
@@ -307,139 +422,50 @@ function NotificationsSection() {
       <div className="mb-4 flex items-start gap-3 rounded-2xl border border-primary/20 bg-primary/5 px-5 py-4">
         <AlertCircle size={15} className="shrink-0 mt-0.5 text-primary/70" />
         <p className="text-xs text-gray-600 dark:text-gray-400 leading-relaxed">
-          Los resúmenes de <strong className="text-gray-800 dark:text-gray-200">membresías y deudas</strong> se envían todos los días a las <strong className="text-gray-800 dark:text-gray-200">9:00 AM</strong> solo si hay datos para reportar.
+          Los resúmenes de <strong className="text-gray-800 dark:text-gray-200">membresías y deudas</strong> se envían automáticamente según la periodicidad configurada (por defecto, todos los días a las <strong className="text-gray-800 dark:text-gray-200">9:00 AM</strong>).
           El resto de los avisos se envían <strong className="text-gray-800 dark:text-gray-200">al instante</strong> cuando ocurren.
+          Usá el ícono <Cog size={11} className="inline text-gray-400" /> para editar el template de cada notificación.
         </p>
       </div>
 
       <SectionCard>
-        <SectionRow
-          label="Membresías por vencer"
-          description="Recibís un email con la lista de membresías activas que vencen pronto. Incluye nombre del cliente, plan, fecha de vencimiento y días restantes."
-        >
-          <div className="flex items-center gap-2.5">
-            <ProbarBtn tipo="vencimientos" />
-            <Toggle
-              checked={notifications.notifVencimientos}
-              onChange={(v) => updateNotifications({ notifVencimientos: v })}
-            />
-          </div>
-        </SectionRow>
-        <SectionRow
-          label="Clientes con deuda"
-          description="Email diario con todos los clientes en estado DEUDA. Incluye nombre, email y teléfono para facilitar el contacto."
-        >
-          <div className="flex items-center gap-2.5">
-            <ProbarBtn tipo="deudas" />
-            <Toggle
-              checked={notifications.notifDeudas}
-              onChange={(v) => updateNotifications({ notifDeudas: v })}
-            />
-          </div>
-        </SectionRow>
-        <SectionRow
-          label="Nuevos clientes"
-          description="Email inmediato al registrar un cliente. Incluye nombre, CUIL y email del nuevo socio."
-        >
-          <div className="flex items-center gap-2.5">
-            <ProbarBtn tipo="nuevos-clientes" />
-            <Toggle
-              checked={notifications.notifNuevosClientes}
-              onChange={(v) => updateNotifications({ notifNuevosClientes: v })}
-            />
-          </div>
-        </SectionRow>
-        <SectionRow
-          label="Nuevos usuarios del sistema"
-          description="Email inmediato al crear un usuario (staff, profesor o admin) o al aprobar una solicitud de acceso. Incluye nombre, email y rol asignado."
-        >
-          <div className="flex items-center gap-2.5">
-            <ProbarBtn tipo="nuevos-usuarios" />
-            <Toggle
-              checked={notifications.notifNuevosUsuarios}
-              onChange={(v) => updateNotifications({ notifNuevosUsuarios: v })}
-            />
-          </div>
-        </SectionRow>
-        <SectionRow
-          label="Email al aprobar solicitudes"
-          description="Cuando cualquier admin aprueba una solicitud de acceso, todos los admins con esta opción activa reciben un email con el nombre, email, rol asignado, quién aprobó y la fecha y hora exactas."
-        >
-          <div className="flex items-center gap-2.5">
-            <ProbarBtn tipo="solicitud-aprobada" />
-            <Toggle
-              checked={notifications.emailAlAprobarSolicitudes}
-              onChange={(v) => updateNotifications({ emailAlAprobarSolicitudes: v })}
-            />
-          </div>
-        </SectionRow>
-        <SectionRow
-          label="Bajas automáticas de turnos"
-          description="Recibís un email cuando un cliente es dado de baja automáticamente de sus turnos al pasar a estado inactivo (manual o por vencimiento). También se notifica al profesor del turno afectado."
-          last
-        >
-          <div className="flex items-center gap-2.5">
-            <CalendarOff size={14} className="text-gray-400 shrink-0" />
-            <Toggle
-              checked={notifications.notifBajaAutomatica}
-              onChange={(v) => updateNotifications({ notifBajaAutomatica: v })}
-            />
-          </div>
-        </SectionRow>
+        <NotifRow tipo="vencimientos" label="Membresías por vencer"
+          description="Recibís un email con la lista de membresías activas que vencen pronto."
+          checked={notifications.notifVencimientos} onChange={(v) => updateNotifications({ notifVencimientos: v })} />
+        <NotifRow tipo="deudas" label="Clientes con deuda"
+          description="Email con todos los clientes en estado DEUDA."
+          checked={notifications.notifDeudas} onChange={(v) => updateNotifications({ notifDeudas: v })} />
+        <NotifRow tipo="nuevos-clientes" label="Nuevos clientes"
+          description="Email inmediato al registrar un cliente."
+          checked={notifications.notifNuevosClientes} onChange={(v) => updateNotifications({ notifNuevosClientes: v })} />
+        <NotifRow tipo="nuevos-usuarios" label="Nuevos usuarios del sistema"
+          description="Email inmediato al crear un usuario o al aprobar una solicitud."
+          checked={notifications.notifNuevosUsuarios} onChange={(v) => updateNotifications({ notifNuevosUsuarios: v })} />
+        <NotifRow tipo="solicitud-aprobada" label="Email al aprobar solicitudes"
+          description="Notificación a admins cuando se aprueba una solicitud de acceso."
+          checked={notifications.emailAlAprobarSolicitudes} onChange={(v) => updateNotifications({ emailAlAprobarSolicitudes: v })} />
+        <NotifRow tipo="baja-automatica" label="Bajas automáticas de turnos"
+          description="Email cuando un cliente es dado de baja automáticamente de sus turnos."
+          checked={notifications.notifBajaAutomatica} onChange={(v) => updateNotifications({ notifBajaAutomatica: v })} last />
       </SectionCard>
 
       <SectionHeader title="Solicitudes y accesos" />
       <SectionCard>
-        <SectionRow
-          label="Solicitudes de acceso"
-          description="Email inmediato cuando alguien solicita acceso al sistema desde la pantalla de login. Incluye nombre, email y rol solicitado."
-        >
-          <div className="flex items-center gap-2.5">
-            <ProbarBtn tipo="solicitud-acceso" />
-            <Toggle
-              checked={notifications.notifSolicitudAcceso}
-              onChange={(v) => updateNotifications({ notifSolicitudAcceso: v })}
-            />
-          </div>
-        </SectionRow>
-        <SectionRow
-          label="Solicitudes de cambio de contraseña"
-          description="Email inmediato cuando un usuario pide recuperar su contraseña. Te avisa para que apruebes o rechaces la solicitud desde el panel."
-        >
-          <div className="flex items-center gap-2.5">
-            <ProbarBtn tipo="reset-password" />
-            <Toggle
-              checked={notifications.notifResetPassword}
-              onChange={(v) => updateNotifications({ notifResetPassword: v })}
-            />
-          </div>
-        </SectionRow>
-        <SectionRow
-          label="Solicitudes de turno (lista de espera)"
-          description="Email cuando se libera un cupo y un cliente de la lista de espera pasa a estado pendiente de aprobación. Te avisa para inscribirlo o rechazarlo."
-        >
-          <div className="flex items-center gap-2.5">
-            <ProbarBtn tipo="solicitud-turno" />
-            <Toggle
-              checked={notifications.notifSolicitudTurno}
-              onChange={(v) => updateNotifications({ notifSolicitudTurno: v })}
-            />
-          </div>
-        </SectionRow>
-        <SectionRow
-          label="Pagos registrados"
-          description="Email cada vez que se registra un pago en el sistema. Útil para supervisar cobros realizados por staff. Incluye cliente, monto, método y fecha."
-          last
-        >
-          <div className="flex items-center gap-2.5">
-            <ProbarBtn tipo="pago-registrado" />
-            <Toggle
-              checked={notifications.notifPagoRegistrado}
-              onChange={(v) => updateNotifications({ notifPagoRegistrado: v })}
-            />
-          </div>
-        </SectionRow>
+        <NotifRow tipo="solicitud-acceso" label="Solicitudes de acceso"
+          description="Email inmediato cuando alguien solicita acceso al sistema."
+          checked={notifications.notifSolicitudAcceso} onChange={(v) => updateNotifications({ notifSolicitudAcceso: v })} />
+        <NotifRow tipo="reset-password" label="Solicitudes de cambio de contraseña"
+          description="Email cuando un usuario pide recuperar su contraseña."
+          checked={notifications.notifResetPassword} onChange={(v) => updateNotifications({ notifResetPassword: v })} />
+        <NotifRow tipo="solicitud-turno" label="Solicitudes de turno (lista de espera)"
+          description="Email cuando se libera un cupo y un cliente pasa a pendiente de aprobación."
+          checked={notifications.notifSolicitudTurno} onChange={(v) => updateNotifications({ notifSolicitudTurno: v })} />
+        <NotifRow tipo="pago-registrado" label="Pagos registrados"
+          description="Email cada vez que se registra un pago en el sistema."
+          checked={notifications.notifPagoRegistrado} onChange={(v) => updateNotifications({ notifPagoRegistrado: v })} last />
       </SectionCard>
+
+      <ResumenPeriodicidadCard />
 
     </div>
   )

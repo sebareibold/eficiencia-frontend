@@ -48,6 +48,7 @@ const ResetPasswordPage  = lazy(() => import('./pages/ResetPasswordPage'))
 const SolicitudesPage        = lazy(() => import('./pages/SolicitudesPage'))
 const MisTurnosPage          = lazy(() => import('./pages/MisTurnosPage'))
 const DiaEspecialWizardPage  = lazy(() => import('./pages/DiaEspecialWizardPage'))
+const NotificationTemplatePage = lazy(() => import('./pages/NotificationTemplatePage'))
 
 function DefaultRedirect() {
   const user = useAuthStore((s) => s.user)
@@ -137,6 +138,7 @@ export default function App() {
 
               {/* Accesibles a todos los usuarios autenticados */}
               <Route path={ROUTES.SETTINGS} element={<SettingsPage />} />
+              <Route path={ROUTES.NOTIFICATION_TEMPLATE} element={<NotificationTemplatePage />} />
               <Route path={ROUTES.MANUAL}   element={<ManualPage />} />
               <Route path={ROUTES.SECURITY} element={<SecurityPage />} />
             </Route>

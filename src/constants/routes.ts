@@ -40,4 +40,5 @@ export const ROUTES = {
   MIS_TURNOS: '/mis-turnos',
   DIA_ESPECIAL_NEW: '/dias-especiales/new',
   DIA_ESPECIAL_EDIT: '/dias-especiales/:id/edit',
+  NOTIFICATION_TEMPLATE: '/settings/notificaciones/:tipo',
 } as const
