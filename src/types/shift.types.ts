@@ -18,8 +18,12 @@ export interface Shift {
   enrolled: number
   profesorSalaAId: string
   profesorSalaANombre: string
+  profesorSalaAActivo: boolean
+  profesorSalaAFechaBaja: string | null
   profesorSalaBId: string
   profesorSalaBNombre: string
+  profesorSalaBActivo: boolean
+  profesorSalaBFechaBaja: string | null
   createdAt: string
 }
 

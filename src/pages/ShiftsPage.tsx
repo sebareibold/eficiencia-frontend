@@ -116,6 +116,25 @@ function getOccupancyStyle(enrolled: number, capacity: number): string {
   return 'border-green-500/50 bg-green-500/10 hover:bg-green-500/25 hover:border-green-500/80'
 }
 
+/** Devuelve el nombre del profesor visible para una fecha concreta.
+ *  Si el profesor está inactivo y la fecha >= fechaBaja, no se muestra. */
+function getProfesorDisplayForDate(shift: Shift, dateStr: string): { text: string; hasProfesor: boolean } {
+  const profAVisible = shift.profesorSalaANombre && (
+    shift.profesorSalaAActivo !== false ||
+    !shift.profesorSalaAFechaBaja ||
+    dateStr < shift.profesorSalaAFechaBaja.slice(0, 10)
+  )
+  const profBVisible = shift.profesorSalaBNombre && (
+    shift.profesorSalaBActivo !== false ||
+    !shift.profesorSalaBFechaBaja ||
+    dateStr < shift.profesorSalaBFechaBaja.slice(0, 10)
+  )
+  const nameA = profAVisible ? shift.profesorSalaANombre : ''
+  const nameB = profBVisible ? shift.profesorSalaBNombre : ''
+  if (nameA && nameB && nameA !== nameB) return { text: '2 profesores', hasProfesor: true }
+  return { text: nameA || nameB || 'Sin profesor asignado', hasProfesor: !!(nameA || nameB) }
+}
+
 function timeToMinutes(t: string): number {
   const [h, m] = t.split(':').map(Number)
   return h * 60 + m
@@ -1189,11 +1208,14 @@ export default function ShiftsPage() {
                                     {shift.startTime} – {shift.endTime}
                                     {!shift.recurrente && <span className="ml-1 text-amber-500 dark:text-amber-400">⚡</span>}
                                   </p>
-                                  <p className={`text-[10px] truncate leading-tight mt-0.5 ${shift.profesorSalaANombre || shift.profesorSalaBNombre ? 'text-gray-500 dark:text-[#8A8A9A]' : 'text-amber-500 dark:text-amber-400 font-semibold'}`}>
-                                    {shift.profesorSalaANombre && shift.profesorSalaBNombre && shift.profesorSalaANombre !== shift.profesorSalaBNombre
-                                      ? '2 profesores'
-                                      : shift.profesorSalaANombre || shift.profesorSalaBNombre || 'Sin profesor asignado'}
-                                  </p>
+                                  {(() => {
+                                    const prof = getProfesorDisplayForDate(shift, dateStr)
+                                    return (
+                                      <p className={`text-[10px] truncate leading-tight mt-0.5 ${prof.hasProfesor ? 'text-gray-500 dark:text-[#8A8A9A]' : 'text-amber-500 dark:text-amber-400 font-semibold'}`}>
+                                        {prof.text}
+                                      </p>
+                                    )
+                                  })()}
                                   <p className="text-[10px] font-semibold leading-tight mt-1">
                                     <span className="text-blue-500 dark:text-blue-400">A: {shift.inscritosA}/{shift.cupoMaximoSalaA}</span>
                                     <span className="text-gray-400 mx-1">·</span>

@@ -1008,7 +1008,9 @@ export default function ShiftDetailPage() {
                           <span className="h-2 w-2 rounded-full bg-blue-400 shrink-0" />
                           <span className="text-xs font-bold text-gray-500 dark:text-[#8A8A9A]">Sala A</span>
                           {shift.profesorSalaANombre && (
-                            <span className="text-xs text-gray-400 dark:text-[#6A6A7A]">· {shift.profesorSalaANombre}</span>
+                            <span className={`text-xs ${shift.profesorSalaAActivo === false ? 'text-red-400/70 dark:text-red-400/60' : 'text-gray-400 dark:text-[#6A6A7A]'}`}>
+                              · {shift.profesorSalaANombre}{shift.profesorSalaAActivo === false ? ' (inactivo)' : ''}
+                            </span>
                           )}
                         </div>
                         <span className="text-xs font-bold tabular-nums text-gray-900 dark:text-white">
@@ -1032,7 +1034,9 @@ export default function ShiftDetailPage() {
                           <span className="h-2 w-2 rounded-full bg-purple-400 shrink-0" />
                           <span className="text-xs font-bold text-gray-500 dark:text-[#8A8A9A]">Sala B</span>
                           {shift.profesorSalaBNombre && (
-                            <span className="text-xs text-gray-400 dark:text-[#6A6A7A]">· {shift.profesorSalaBNombre}</span>
+                            <span className={`text-xs ${shift.profesorSalaBActivo === false ? 'text-red-400/70 dark:text-red-400/60' : 'text-gray-400 dark:text-[#6A6A7A]'}`}>
+                              · {shift.profesorSalaBNombre}{shift.profesorSalaBActivo === false ? ' (inactivo)' : ''}
+                            </span>
                           )}
                         </div>
                         <span className="text-xs font-bold tabular-nums text-gray-900 dark:text-white">

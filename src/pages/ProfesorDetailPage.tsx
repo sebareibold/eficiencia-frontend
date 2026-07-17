@@ -275,11 +275,12 @@ function TurnosList({ turnos, onNavigate }: {
 
 // ── Vista: Calendario mensual ──────────────────────────────────────────────────
 
-function TurnosCalendar({ turnos, onNavigate }: {
+function TurnosCalendar({ turnos, onNavigate, fechaCutoff }: {
   turnos: TurnoDisplayItem[]
-  onNavigate: (id: string) => void
+  onNavigate: (id: string, dateStr?: string) => void
+  fechaCutoff?: string | null
 }) {
-  const [month, setMonth] = useState(() => startOfMonth(new Date()))
+  const [month, setMonth] = useState(() => fechaCutoff ? startOfMonth(parseISO(fechaCutoff)) : startOfMonth(new Date()))
 
   const calendarDays = useMemo(() => {
     const calStart = startOfWeek(startOfMonth(month), { weekStartsOn: 1 })
@@ -320,7 +321,9 @@ function TurnosCalendar({ turnos, onNavigate }: {
           const dateStr       = format(day, 'yyyy-MM-dd')
           const isCurrentMonth = day.getMonth() === month.getMonth()
           const isToday        = dateStr === todayStr
-          const dayTurnos      = getTurnosForDate(turnos, day)
+          const cutoffStr      = fechaCutoff?.slice(0, 10)
+          const isPastCutoff   = cutoffStr && dateStr >= cutoffStr
+          const dayTurnos      = isPastCutoff ? [] : getTurnosForDate(turnos, day)
 
           return (
             <div
@@ -338,7 +341,7 @@ function TurnosCalendar({ turnos, onNavigate }: {
                   return (
                     <button
                       key={t.id}
-                      onClick={() => onNavigate(t.id)}
+                      onClick={() => onNavigate(t.id, dateStr)}
                       className={`w-full text-left rounded-lg px-1.5 py-0.5 text-[9px] font-bold truncate transition-all hover:opacity-80 ${
                         isExc
                           ? 'bg-amber-400/15 text-amber-600 dark:text-amber-400 border border-amber-400/20'
@@ -455,9 +458,9 @@ export default function ProfesorDetailPage() {
       const result = await usuariosApi.bajaProfesor(id)
       await load()
       setShowBaja(false)
-      const n = result.turnosDespejados
+      const n = result.turnosAfectados
       addToast(
-        `Baja registrada. ${n} turno${n !== 1 ? 's' : ''} sin profesor asignado.`,
+        `Baja registrada. ${n} turno${n !== 1 ? 's' : ''} conserva${n !== 1 ? 'n' : ''} la referencia histórica.`,
         'success',
       )
     } catch (err: any) {
@@ -773,10 +776,15 @@ export default function ProfesorDetailPage() {
         <div className="flex items-center justify-between px-6 py-4 border-b border-white/20 dark:border-white/[0.06]">
           <div className="flex items-center gap-2.5">
             <CalendarDays size={16} className="text-gray-400" />
-            <h3 className="font-bold text-gray-900 dark:text-white">Turnos asignados</h3>
+            <h3 className="font-bold text-gray-900 dark:text-white">{isActivo ? 'Turnos asignados' : 'Historial de turnos'}</h3>
             <span className="text-xs font-bold px-2.5 py-1 rounded-xl bg-white/40 dark:bg-white/[0.06] text-gray-500 dark:text-[#8A8A9A]">
               {turnosDisplay.length}
             </span>
+            {!isActivo && p.fechaBaja && (
+              <span className="text-[10px] font-semibold text-red-500 dark:text-red-400">
+                hasta {format(parseISO(p.fechaBaja), "d MMM yyyy", { locale: es })}
+              </span>
+            )}
           </div>
 
           {turnosDisplay.length > 0 && (
@@ -815,7 +823,7 @@ export default function ProfesorDetailPage() {
         ) : turnoView === 'list' ? (
           <TurnosList turnos={turnosDisplay} onNavigate={id => navigate(`/shifts/${id}`)} />
         ) : (
-          <TurnosCalendar turnos={turnosDisplay} onNavigate={id => navigate(`/shifts/${id}`)} />
+          <TurnosCalendar turnos={turnosDisplay} onNavigate={(id, date) => navigate(`/shifts/${id}${date ? `?date=${date}` : ''}`)} fechaCutoff={!isActivo ? p.fechaBaja : null} />
         )}
       </motion.div>
 
@@ -823,8 +831,8 @@ export default function ProfesorDetailPage() {
       <ConfirmDialog
         isOpen={showBaja}
         title="Dar de baja al profesor"
-        message={`¿Dar de baja a ${prof.nombre}? Se lo desvinculará de ${turnosDisplay.length} turno${turnosDisplay.length !== 1 ? 's' : ''} activo${turnosDisplay.length !== 1 ? 's' : ''}. Las asistencias y rutinas históricas se conservan intactas.`}
-        warning={turnosDisplay.length > 0 ? `Los ${turnosDisplay.length} turno${turnosDisplay.length !== 1 ? 's' : ''} quedarán sin profesor asignado y deberás reasignarlos manualmente.` : undefined}
+        message={`¿Dar de baja a ${prof.nombre}? Se marcará como inactivo desde hoy. Los ${turnosDisplay.length} turno${turnosDisplay.length !== 1 ? 's' : ''} conservarán la referencia histórica.`}
+        warning={turnosDisplay.length > 0 ? `Para reasignar los turnos a otro profesor, editá cada turno manualmente.` : undefined}
         confirmLabel="Dar de baja"
         isLoading={acting}
         onConfirm={onBaja}

@@ -88,7 +88,7 @@ export const usuariosApi = {
   getProfesorDetalle: (usuarioId: string): Promise<ProfesorDetalle> =>
     api.get(`/usuarios/profesores/${usuarioId}`).then(r => r.data),
 
-  bajaProfesor: (usuarioId: string): Promise<{ turnosDespejados: number }> =>
+  bajaProfesor: (usuarioId: string): Promise<{ turnosAfectados: number }> =>
     api.patch(`/usuarios/profesores/${usuarioId}/baja`).then(r => r.data),
 
   reactivarProfesor: (usuarioId: string): Promise<AppUser> =>

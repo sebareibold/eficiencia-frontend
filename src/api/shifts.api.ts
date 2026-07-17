@@ -51,8 +51,12 @@ function mapTurno(t: any): Shift {
     enrolled: inscritosA + inscritosB,
     profesorSalaAId: String(t.profesorSalaAId ?? ''),
     profesorSalaANombre: t.profesorSalaA?.usuario?.nombre ?? '',
+    profesorSalaAActivo: t.profesorSalaA?.activo ?? true,
+    profesorSalaAFechaBaja: t.profesorSalaA?.fechaBaja ?? null,
     profesorSalaBId: String(t.profesorSalaBId ?? ''),
     profesorSalaBNombre: t.profesorSalaB?.usuario?.nombre ?? '',
+    profesorSalaBActivo: t.profesorSalaB?.activo ?? true,
+    profesorSalaBFechaBaja: t.profesorSalaB?.fechaBaja ?? null,
     createdAt: t.createdAt ?? '',
   }
 }
