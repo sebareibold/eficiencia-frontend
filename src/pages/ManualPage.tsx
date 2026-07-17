@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from 'react'
+import React, { useEffect, useRef, useState } from 'react'
 import { createPortal } from 'react-dom'
 import { useNavigate } from 'react-router-dom'
 import { motion, AnimatePresence } from 'framer-motion'
@@ -293,9 +293,9 @@ function PermissionsMatrix() {
         </thead>
         <tbody className="divide-y divide-gray-100/40 dark:divide-white/[0.04]">
           {MODULES_MATRIX.map(mod => (
-            <>
+            <React.Fragment key={mod.id}>
               {/* Header de módulo */}
-              <tr key={`header-${mod.id}`}>
+              <tr>
                 <td
                   colSpan={MATRIX_ROLES.length + 1}
                   className="px-5 py-2.5 text-xs font-extrabold text-gray-900 dark:text-white bg-primary/[0.04] dark:bg-primary/[0.06] border-y border-primary/10"
@@ -316,7 +316,7 @@ function PermissionsMatrix() {
                   ))}
                 </tr>
               ))}
-            </>
+            </React.Fragment>
           ))}
         </tbody>
       </table>

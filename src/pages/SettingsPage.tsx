@@ -301,6 +301,8 @@ function ResumenPeriodicidadCard() {
   const [config, setConfig] = useState<ConfiguracionSistema | null>(null)
   const [loading, setLoading] = useState(true)
   const addToast = useUiStore(s => s.addToast)
+  const { notifications, updateNotifications } = useSettingsStore()
+  const navigate = useNavigate()
 
   useEffect(() => {
     configuracionSistemaApi.get()
@@ -339,10 +341,20 @@ function ResumenPeriodicidadCard() {
           label="Envío automático"
           description="Si está activado, el resumen de membresías y deudas se envía automáticamente según la periodicidad configurada."
         >
-          <Toggle
-            checked={config.resumenAutomatico}
-            onChange={(v) => updateField({ resumenAutomatico: v })}
-          />
+          <div className="flex items-center gap-2.5">
+            <button
+              type="button"
+              onClick={() => navigate('/settings/notificaciones/vencimientos')}
+              title="Configurar template"
+              className="flex items-center justify-center h-8 w-8 rounded-lg border border-gray-200/70 dark:border-white/10 bg-white/50 dark:bg-white/[0.04] text-gray-400 hover:text-gray-700 dark:hover:text-gray-200 hover:border-gray-300 dark:hover:border-white/20 transition-all"
+            >
+              <Cog size={14} />
+            </button>
+            <Toggle
+              checked={config.resumenAutomatico}
+              onChange={(v) => updateField({ resumenAutomatico: v })}
+            />
+          </div>
         </SectionRow>
 
         {config.resumenAutomatico && (
@@ -393,7 +405,7 @@ function ResumenPeriodicidadCard() {
               </SectionRow>
             )}
 
-            <SectionRow label="Hora de envío" description="A qué hora se envía el resumen." last>
+            <SectionRow label="Hora de envío" description="A qué hora se envía el resumen.">
               <select
                 value={config.resumenHora}
                 onChange={e => updateField({ resumenHora: Number(e.target.value) })}
@@ -406,6 +418,16 @@ function ResumenPeriodicidadCard() {
             </SectionRow>
           </>
         )}
+
+        <SectionRow label="Email de destino" description="Dirección donde llega el resumen. Si está vacío se usa el email del administrador." last>
+          <input
+            type="email"
+            value={notifications.emailDestino}
+            onChange={e => updateNotifications({ emailDestino: e.target.value })}
+            placeholder="admin@eficiencia.com"
+            className="w-56 rounded-xl border border-gray-200/50 dark:border-white/10 bg-gray-50/80 dark:bg-black/20 px-3.5 py-2 text-sm font-semibold text-gray-700 dark:text-gray-200 placeholder-gray-400 dark:placeholder-gray-600 focus:outline-none focus:ring-2 focus:ring-primary/30"
+          />
+        </SectionRow>
       </SectionCard>
     </>
   )
@@ -419,14 +441,6 @@ function NotificationsSection() {
       <SectionHeader title="Qué notificar" />
 
       {/* Info banner */}
-      <div className="mb-4 flex items-start gap-3 rounded-2xl border border-primary/20 bg-primary/5 px-5 py-4">
-        <AlertCircle size={15} className="shrink-0 mt-0.5 text-primary/70" />
-        <p className="text-xs text-gray-600 dark:text-gray-400 leading-relaxed">
-          Los resúmenes de <strong className="text-gray-800 dark:text-gray-200">membresías y deudas</strong> se envían automáticamente según la periodicidad configurada (por defecto, todos los días a las <strong className="text-gray-800 dark:text-gray-200">9:00 AM</strong>).
-          El resto de los avisos se envían <strong className="text-gray-800 dark:text-gray-200">al instante</strong> cuando ocurren.
-          Usá el ícono <Cog size={11} className="inline text-gray-400" /> para editar el template de cada notificación.
-        </p>
-      </div>
 
       <SectionCard>
         <NotifRow tipo="vencimientos" label="Membresías por vencer"
