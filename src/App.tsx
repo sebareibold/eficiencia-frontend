@@ -46,6 +46,7 @@ const SecurityPage       = lazy(() => import('./pages/SecurityPage'))
 const ManualPage         = lazy(() => import('./pages/ManualPage'))
 const ResetPasswordPage  = lazy(() => import('./pages/ResetPasswordPage'))
 const SolicitudesPage        = lazy(() => import('./pages/SolicitudesPage'))
+const MisTurnosPage          = lazy(() => import('./pages/MisTurnosPage'))
 const DiaEspecialWizardPage  = lazy(() => import('./pages/DiaEspecialWizardPage'))
 
 function DefaultRedirect() {
@@ -131,6 +132,7 @@ export default function App() {
 
               <Route element={<PermissionGuard module="solicitudes-turno" />}>
                 <Route path={ROUTES.SOLICITUDES} element={<SolicitudesPage />} />
+                <Route path={ROUTES.MIS_TURNOS}  element={<MisTurnosPage />} />
               </Route>
 
               {/* Accesibles a todos los usuarios autenticados */}

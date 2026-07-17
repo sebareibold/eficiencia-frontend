@@ -37,6 +37,7 @@ export const ROUTES = {
   MANUAL: '/settings/manual',
   RESET_PASSWORD: '/reset-password',
   SOLICITUDES: '/solicitudes',
+  MIS_TURNOS: '/mis-turnos',
   DIA_ESPECIAL_NEW: '/dias-especiales/new',
   DIA_ESPECIAL_EDIT: '/dias-especiales/:id/edit',
 } as const

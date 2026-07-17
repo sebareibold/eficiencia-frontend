@@ -2,7 +2,7 @@ import { NavLink, useNavigate, useLocation } from 'react-router-dom'
 import { motion, AnimatePresence } from 'framer-motion'
 import {
   Settings, LogOut, Users, CreditCard, LayoutDashboard,
-  MoreHorizontal, Dumbbell, Tag, Wallet, Menu, X, UserCog, BookOpen, ClipboardList,
+  MoreHorizontal, Dumbbell, Tag, Wallet, Menu, X, UserCog, BookOpen, ClipboardList, CalendarDays,
 } from 'lucide-react'
 import { useAuthStore } from '../../store/authStore'
 import { useUiStore } from '../../store/uiStore'
@@ -20,7 +20,7 @@ const NAV_TABS: { label: string; to: string; module: PermModule | null; icon: Re
   { label: 'Pagos',        to: ROUTES.PAYMENTS,     module: 'payments',          icon: CreditCard },
   { label: 'Gastos',       to: ROUTES.EXPENSES,     module: 'expenses',          icon: Wallet },
   { label: 'Biblioteca',   to: ROUTES.EXERCISES,    module: null,                icon: BookOpen },
-  { label: 'Solicitudes',  to: ROUTES.SOLICITUDES,  module: 'solicitudes-turno', icon: ClipboardList, hideIfAdmin: true },
+  { label: 'Mis Turnos',   to: ROUTES.MIS_TURNOS,   module: 'solicitudes-turno', icon: CalendarDays, hideIfAdmin: true },
   { label: 'Usuarios',     to: ROUTES.USERS,        module: 'users',             icon: UserCog },
 ]
 
