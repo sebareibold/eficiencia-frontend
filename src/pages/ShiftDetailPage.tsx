@@ -1,4 +1,4 @@
-import { useState, useEffect, useMemo } from 'react'
+import { useState, useEffect, useMemo, useRef } from 'react'
 import { useParams, useNavigate, useSearchParams } from 'react-router-dom'
 import { motion, AnimatePresence } from 'framer-motion'
 import { pageVariants, tabContentVariants, staggerContainerFast, fadeUpItem } from '../lib/motion'
@@ -179,7 +179,10 @@ export default function ShiftDetailPage() {
     return format(new Date(), 'yyyy-MM-dd')
   }, [shift?.id, searchParams])
   const [attendanceStates, setAttendanceStates] = useState<Record<string, 'presente' | 'ausente' | 'con_aviso'>>({})
+  const [savedAttendanceStates, setSavedAttendanceStates] = useState<Record<string, 'presente' | 'ausente' | 'con_aviso'>>({})
+  const [lastAttendanceSave, setLastAttendanceSave] = useState<Date | null>(null)
   const [isSavingAttendance, setIsSavingAttendance] = useState(false)
+  const noAttendanceToastRef = useRef<string | null>(null)
   const [dragOverAttendCol, setDragOverAttendCol] = useState<'presente' | 'ausente' | 'con_aviso' | null>(null)
   const [draggingAttendId, setDraggingAttendId] = useState<string | null>(null)
   const [verificacion, setVerificacion] = useState<VerificacionFecha | null>(null)
@@ -376,7 +379,25 @@ export default function ShiftDetailPage() {
       next[r.clientId] = r.present ? 'presente' : r.conAviso ? 'con_aviso' : 'ausente'
     }
     setAttendanceStates(next)
+    setSavedAttendanceStates(next)
   }, [attendanceRecords])
+
+  // Resetear timestamp al cambiar de fecha
+  useEffect(() => { setLastAttendanceSave(null) }, [selectedDate])
+
+  // Notificación push cuando la asistencia aún no fue registrada para esta fecha
+  useEffect(() => {
+    if (tab !== 'asistencia') return
+    if (loadingAttendance || loadingVerificacion || (verificacion?.bloqueado ?? false) || !!dateError) return
+    if (attendanceRecords.length > 0) return
+    const key = `${id}-${selectedDate}`
+    if (noAttendanceToastRef.current === key) return
+    noAttendanceToastRef.current = key
+    const timer = setTimeout(() => {
+      addToast('Asistencia no registrada — todos aparecen como ausentes por defecto. Marcá los presentes y guardá.', 'info', 6000)
+    }, 400)
+    return () => clearTimeout(timer)
+  }, [tab, loadingAttendance, loadingVerificacion, verificacion?.bloqueado, attendanceRecords.length, id, selectedDate])
 
   // Sincronizar local inscripciones con datos del servidor (resetea cambios pendientes)
   useEffect(() => {
@@ -385,6 +406,15 @@ export default function ShiftDetailPage() {
   }, [inscripciones])
 
   const dateError = null
+
+  const isAttendanceDirty = useMemo(() => {
+    const allKeys = new Set([...Object.keys(attendanceStates), ...Object.keys(savedAttendanceStates)])
+    for (const k of allKeys) {
+      // sin_registro (no en el mapa) equivale a 'ausente' para detectar cambios
+      if ((attendanceStates[k] ?? 'ausente') !== (savedAttendanceStates[k] ?? 'ausente')) return true
+    }
+    return false
+  }, [attendanceStates, savedAttendanceStates])
 
   // ─── Handlers ────────────────────────────────────────────────────────────────
 
@@ -662,6 +692,18 @@ export default function ShiftDetailPage() {
     return attendanceStates[clientId] ?? 'presente'
   }
 
+  // Devuelve el estado extendido incluyendo 'sin_registro' para la visualización
+  function getExtendedState(clientId: string): 'sin_registro' | 'presente' | 'ausente' | 'con_aviso' {
+    if (!(clientId in attendanceStates)) return 'sin_registro'
+    return attendanceStates[clientId]
+  }
+
+  function cycleAttendanceState(clientId: string) {
+    const current = getExtendedState(clientId)
+    // sin_registro y ausente → presente; presente → ausente
+    setAttendanceStates(prev => ({ ...prev, [clientId]: current === 'presente' ? 'ausente' : 'presente' }))
+  }
+
   function setAttendanceState(clientId: string, value: 'presente' | 'ausente' | 'con_aviso') {
     setAttendanceStates(prev => ({ ...prev, [clientId]: value }))
   }
@@ -720,11 +762,14 @@ export default function ShiftDetailPage() {
         .map(r => r.clienteId)
       const allClientIds = [...regularClientIds, ...recuperacionClientIds]
 
-      const presentIds = allClientIds.filter(cid => getAttendanceState(cid) === 'presente')
+      // Solo 'presente' explícito — sin_registro (no en el mapa) se guarda como ausente
+      const presentIds = allClientIds.filter(cid => attendanceStates[cid] === 'presente')
       // con_aviso solo aplica a inscriptos regulares (genera AusenciaTurno en su turno propio)
-      const conAvisoIds = regularClientIds.filter(cid => getAttendanceState(cid) === 'con_aviso')
+      const conAvisoIds = regularClientIds.filter(cid => attendanceStates[cid] === 'con_aviso')
       await attendanceApi.bulk(id, selectedDate, presentIds, conAvisoIds)
       await fetchByShiftAndDate(id, selectedDate)
+      setSavedAttendanceStates({ ...attendanceStates })
+      setLastAttendanceSave(new Date())
       const msg = conAvisoIds.length > 0
         ? `Asistencia guardada · ${conAvisoIds.length} crédito${conAvisoIds.length > 1 ? 's' : ''} generado${conAvisoIds.length > 1 ? 's' : ''}`
         : 'Asistencia guardada'
@@ -828,6 +873,7 @@ export default function ShiftDetailPage() {
   if (loading) {
     return (
       <div className="space-y-4 md:space-y-5">
+        {/* Breadcrumb */}
         <button
           onClick={() => navigate('/shifts')}
           className="group flex items-center gap-2 text-sm text-[#8A8A9A] hover:text-gray-900 dark:hover:text-white transition-colors"
@@ -836,53 +882,89 @@ export default function ShiftDetailPage() {
           <span>Turnos</span>
         </button>
 
+        {/* Hero card */}
         <div className={`${glassCard} overflow-hidden`}>
-          <div className="h-[3px] w-full bg-black/[0.06] dark:bg-white/[0.06] animate-pulse" />
+          {/* Barra dual Sala A / Sala B */}
+          <div className="relative h-[3px] w-full">
+            <div className="absolute left-0 right-1/2 h-full animate-pulse bg-black/[0.06] dark:bg-white/[0.08] rounded-full" />
+            <div className="absolute left-1/2 right-0 h-full animate-pulse bg-black/[0.06] dark:bg-white/[0.08] rounded-full" style={{ animationDelay: '0.15s' }} />
+          </div>
           <div className="flex items-stretch">
-            {/* Flecha izq skeleton */}
+            {/* Flecha izq */}
             <div className="w-8 shrink-0 border-r border-gray-200/40 dark:border-white/[0.06] flex items-center justify-center">
-              <div className="h-5 w-3 rounded bg-black/[0.06] dark:bg-white/[0.08] animate-pulse" />
+              <div className="h-5 w-2.5 rounded animate-pulse bg-black/[0.06] dark:bg-white/[0.08]" />
             </div>
-            {/* Contenido skeleton */}
+            {/* Contenido */}
             <div className="flex-1 p-5 md:p-7">
               <div className="flex flex-col sm:flex-row gap-5 sm:items-start">
-                <div className="h-16 w-16 md:h-20 md:w-20 rounded-2xl md:rounded-3xl bg-black/[0.06] dark:bg-white/[0.08] animate-pulse shrink-0" />
-                <div className="flex-1 space-y-3 pt-1">
-                  <div className="h-8 w-48 rounded-xl bg-black/[0.06] dark:bg-white/[0.08] animate-pulse" />
-                  <div className="h-4 w-36 rounded-lg bg-black/[0.04] dark:bg-white/[0.06] animate-pulse" />
-                  <div className="h-3 w-28 rounded bg-black/[0.04] dark:bg-white/[0.05] animate-pulse" />
-                  <div className="pt-4 border-t border-gray-200/40 dark:border-white/[0.06] space-y-3">
-                    <div className="flex items-center gap-3">
-                      <div className="h-3 w-16 rounded bg-black/[0.04] dark:bg-white/[0.06] animate-pulse" />
-                      <div className="flex-1 h-1.5 rounded-full bg-black/[0.06] dark:bg-white/[0.08] animate-pulse" />
-                      <div className="h-3 w-10 rounded bg-black/[0.04] dark:bg-white/[0.06] animate-pulse" />
+                {/* Ícono */}
+                <div className="h-16 w-16 md:h-20 md:w-20 rounded-2xl md:rounded-3xl animate-pulse bg-black/[0.06] dark:bg-white/[0.08] shrink-0" />
+                {/* Info */}
+                <div className="flex-1 min-w-0">
+                  <div className="flex items-start justify-between gap-3">
+                    <div className="space-y-2 pt-1 flex-1">
+                      {/* Horario */}
+                      <div className="h-8 w-44 rounded-xl animate-pulse bg-black/[0.06] dark:bg-white/[0.08]" />
+                      {/* Días */}
+                      <div className="h-4 w-32 rounded-lg animate-pulse bg-black/[0.06] dark:bg-white/[0.08]" style={{ animationDelay: '0.05s' }} />
+                      {/* Fecha próxima */}
+                      <div className="h-3 w-24 rounded animate-pulse bg-black/[0.06] dark:bg-white/[0.08]" style={{ animationDelay: '0.1s' }} />
                     </div>
-                    <div className="flex items-center gap-3">
-                      <div className="h-3 w-16 rounded bg-black/[0.04] dark:bg-white/[0.06] animate-pulse" />
-                      <div className="flex-1 h-1.5 rounded-full bg-black/[0.06] dark:bg-white/[0.08] animate-pulse" />
-                      <div className="h-3 w-10 rounded bg-black/[0.04] dark:bg-white/[0.06] animate-pulse" />
-                    </div>
+                    {/* Botón editar */}
+                    <div className="h-7 w-16 rounded-xl animate-pulse bg-black/[0.06] dark:bg-white/[0.08] shrink-0 mt-1" style={{ animationDelay: '0.15s' }} />
+                  </div>
+
+                  {/* Barras de ocupación Sala A / Sala B */}
+                  <div className="mt-4 pt-4 border-t border-gray-200/40 dark:border-white/[0.06] space-y-3">
+                    {[0, 1].map(i => (
+                      <div key={i} className="space-y-1">
+                        <div className="flex items-center justify-between">
+                          <div className="flex items-center gap-1.5">
+                            <span className="h-2 w-2 rounded-full animate-pulse bg-black/[0.06] dark:bg-white/[0.08] shrink-0" />
+                            <div className="h-3 w-12 rounded animate-pulse bg-black/[0.06] dark:bg-white/[0.08]" style={{ animationDelay: `${i * 0.08}s` }} />
+                          </div>
+                          <div className="h-3 w-8 rounded animate-pulse bg-black/[0.06] dark:bg-white/[0.08]" style={{ animationDelay: `${i * 0.08 + 0.04}s` }} />
+                        </div>
+                        <div className="h-1.5 rounded-full animate-pulse bg-black/[0.06] dark:bg-white/[0.08]" style={{ animationDelay: `${i * 0.08 + 0.08}s` }} />
+                      </div>
+                    ))}
                   </div>
                 </div>
               </div>
             </div>
-            {/* Flecha der skeleton */}
+            {/* Flecha der */}
             <div className="w-8 shrink-0 border-l border-gray-200/40 dark:border-white/[0.06] flex items-center justify-center">
-              <div className="h-5 w-3 rounded bg-black/[0.06] dark:bg-white/[0.08] animate-pulse" />
+              <div className="h-5 w-2.5 rounded animate-pulse bg-black/[0.06] dark:bg-white/[0.08]" style={{ animationDelay: '0.2s' }} />
             </div>
           </div>
         </div>
 
+        {/* Tabs */}
         <div className="flex gap-1 p-1 rounded-2xl bg-white/40 dark:bg-white/[0.04] border border-gray-200/60 dark:border-white/[0.07]">
-          {[1, 2, 3, 4].map(i => (
-            <div key={i} className="flex-1 h-9 rounded-xl bg-black/[0.04] dark:bg-white/[0.06] animate-pulse" />
+          {[0, 1, 2, 3].map(i => (
+            <div key={i} className="flex-1 h-9 rounded-xl animate-pulse bg-black/[0.06] dark:bg-white/[0.08]" style={{ animationDelay: `${i * 0.06}s` }} />
           ))}
         </div>
 
-        <div className={`${glassCard} overflow-hidden p-8 space-y-4`}>
-          {[1, 2, 3, 4, 5].map(i => (
-            <div key={i} className="h-12 w-full rounded-xl bg-black/[0.05] dark:bg-white/[0.06] animate-pulse" style={{ opacity: 1 - i * 0.15 }} />
-          ))}
+        {/* Contenido (Resumen placeholder) */}
+        <div className={`${glassCard} overflow-hidden p-5 md:p-7 space-y-4`}>
+          {/* Header Sala A / Sala B */}
+          <div className="grid grid-cols-2 gap-3">
+            {[0, 1].map(col => (
+              <div key={col} className="space-y-2">
+                <div className="flex items-center gap-2">
+                  <span className="h-2.5 w-2.5 rounded-full animate-pulse bg-black/[0.06] dark:bg-white/[0.08] shrink-0" />
+                  <div className="h-3.5 w-12 rounded-lg animate-pulse bg-black/[0.06] dark:bg-white/[0.08]" style={{ animationDelay: `${col * 0.07}s` }} />
+                  <div className="ml-auto h-3 w-8 rounded animate-pulse bg-black/[0.06] dark:bg-white/[0.08]" />
+                </div>
+                <div className="space-y-2">
+                  {[0, 1, 2, 3].map(row => (
+                    <div key={row} className="h-11 rounded-xl animate-pulse bg-black/[0.06] dark:bg-white/[0.08]" style={{ animationDelay: `${(col * 4 + row) * 0.04}s`, opacity: 1 - row * 0.15 }} />
+                  ))}
+                </div>
+              </div>
+            ))}
+          </div>
         </div>
       </div>
     )
@@ -916,10 +998,10 @@ export default function ShiftDetailPage() {
   // shift.enrolled se actualiza optimísticamente → badge siempre en sincronía con el hero card
   const inscripBadge = inscripciones.length > 0 ? activeInscrip.length : shift.enrolled
   const TABS: { value: DetailTab; label: string; badge?: number }[] = [
-    { value: 'resumen',        label: 'Resumen',         badge: shift.enrolled },
-    { value: 'inscripciones',  label: 'Inscripciones',   badge: inscripBadge },
-    { value: 'asistencia',     label: 'Asistencia' },
-    { value: 'espera',         label: 'Lista de espera', badge: esperaEntries.filter(e => e.estado === 'PENDIENTE').length },
+    { value: 'resumen',       label: 'Resumen',         badge: shift.enrolled },
+    { value: 'asistencia',    label: 'Asistencia' },
+    { value: 'espera',        label: 'Lista de espera', badge: esperaEntries.filter(e => e.estado === 'PENDIENTE').length },
+    { value: 'inscripciones', label: 'Inscripciones',   badge: inscripBadge },
   ]
 
   return (
@@ -1526,8 +1608,8 @@ export default function ShiftDetailPage() {
                           <p className="text-xs text-center text-[#8A8A9A] py-6">Sin clientes en Sala A</p>
                         ) : (
                           <div className="flex flex-col gap-2">
-                            {inscripA.map(insc => (
-                              <ResumenCard key={insc.id} insc={insc} clients={clients} sala="A" aviso={avisóIds.has(insc.clienteId)} />
+                            {inscripA.map((insc, i) => (
+                              <ResumenCard key={insc.id} insc={insc} clients={clients} sala="A" aviso={avisóIds.has(insc.clienteId)} attendState={getExtendedState(insc.clienteId)} index={i} />
                             ))}
                             {recuperandoHoy.map(rec => (
                               <div key={rec.id} className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 p-4 rounded-2xl border border-emerald-500/20 bg-emerald-500/[0.03] dark:bg-emerald-500/[0.04] backdrop-blur-xl hover:bg-emerald-500/[0.06] transition-all">
@@ -1572,8 +1654,8 @@ export default function ShiftDetailPage() {
                           <p className="text-xs text-center text-[#8A8A9A] py-6">Sin clientes en Sala B</p>
                         ) : (
                           <div className="flex flex-col gap-2">
-                            {inscripB.map(insc => (
-                              <ResumenCard key={insc.id} insc={insc} clients={clients} sala="B" aviso={avisóIds.has(insc.clienteId)} />
+                            {inscripB.map((insc, i) => (
+                              <ResumenCard key={insc.id} insc={insc} clients={clients} sala="B" aviso={avisóIds.has(insc.clienteId)} attendState={getExtendedState(insc.clienteId)} index={i} />
                             ))}
                           </div>
                         )}
@@ -1839,6 +1921,7 @@ export default function ShiftDetailPage() {
           <motion.div key="asistencia" {...tabContentVariants}>
             <div className="p-5 space-y-5">
               <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 pb-4 border-b border-gray-200/50 dark:border-white/[0.06]">
+                {/* Fecha */}
                 <div className="flex flex-col gap-0.5">
                   <span className="text-[10px] font-bold text-gray-500 dark:text-[#8A8A9A] uppercase tracking-wider">Fecha</span>
                   {selectedDate && (
@@ -1847,15 +1930,51 @@ export default function ShiftDetailPage() {
                     </p>
                   )}
                 </div>
+
+                {/* Acciones + indicador */}
                 <div className="flex items-center gap-2">
+                  {/* Indicador guardado/sin guardar — junto a las acciones, donde el usuario mira */}
+                  {!loadingAttendance && !verificacion?.bloqueado && (
+                    <AnimatePresence mode="wait">
+                      {isAttendanceDirty ? (
+                        <motion.span
+                          key="dirty"
+                          initial={{ opacity: 0, scale: 0.92 }}
+                          animate={{ opacity: 1, scale: 1 }}
+                          exit={{ opacity: 0, scale: 0.92 }}
+                          transition={{ duration: 0.15 }}
+                          className="flex items-center gap-1.5 rounded-full border border-amber-400/30 bg-amber-400/10 px-2.5 py-1 text-[11px] font-semibold text-amber-500 dark:text-amber-400"
+                        >
+                          <span className="h-1.5 w-1.5 rounded-full bg-amber-400 shrink-0 animate-pulse" />
+                          Sin guardar
+                        </motion.span>
+                      ) : attendanceRecords.length > 0 || lastAttendanceSave ? (
+                        <motion.span
+                          key="saved"
+                          initial={{ opacity: 0, scale: 0.92 }}
+                          animate={{ opacity: 1, scale: 1 }}
+                          exit={{ opacity: 0, scale: 0.92 }}
+                          transition={{ duration: 0.15 }}
+                          className="flex items-center gap-1.5 rounded-full border border-white/10 bg-white/[0.04] px-2.5 py-1 text-[11px] font-semibold text-gray-400 dark:text-[#8A8A9A]"
+                        >
+                          <CheckCircle2 size={11} className="shrink-0 text-gray-400" />
+                          {lastAttendanceSave ? `Guardado · ${format(lastAttendanceSave, 'HH:mm')}` : 'Guardado'}
+                        </motion.span>
+                      ) : null}
+                    </AnimatePresence>
+                  )}
+
+                  {/* "Todos presentes" — acción secundaria, ghost para no competir */}
                   <button
                     onClick={handleMarkAllPresent}
                     disabled={!!dateError || loadingVerificacion || (verificacion?.bloqueado ?? false)}
-                    className="flex items-center gap-1.5 rounded-2xl border border-green-500/30 bg-green-500/10 px-3 py-2 text-xs font-semibold text-green-600 dark:text-green-400 hover:bg-green-500/20 transition-all disabled:opacity-40 disabled:cursor-not-allowed"
+                    title="Marcar todos como presentes"
+                    className="flex items-center gap-1.5 rounded-xl border border-gray-200/50 dark:border-white/[0.08] bg-transparent px-3 py-2 text-xs font-semibold text-gray-500 dark:text-[#8A8A9A] hover:text-gray-800 dark:hover:text-white hover:border-gray-300 dark:hover:border-white/20 transition-all disabled:opacity-40 disabled:cursor-not-allowed"
                   >
-                    <UserCheck size={14} />
+                    <UserCheck size={13} />
                     Todos presentes
                   </button>
+
                   <Button
                     onClick={saveAttendance}
                     isLoading={isSavingAttendance}
@@ -1928,12 +2047,6 @@ export default function ShiftDetailPage() {
                 </div>
               )}
 
-              {!dateError && !loadingVerificacion && !verificacion?.bloqueado && !loadingAttendance && attendanceRecords.length === 0 && (
-                <div className="flex items-center gap-2.5 rounded-xl bg-blue-500/10 border border-blue-500/20 px-4 py-3 text-sm text-blue-400">
-                  <AlertTriangle size={16} className="shrink-0" />
-                  <span>Asistencia no registrada para esta fecha. Todos aparecen como ausentes por defecto — marcá los presentes y guardá.</span>
-                </div>
-              )}
 
               {!dateError && verificacion?.bloqueado && (
                 <div className="flex flex-col items-center justify-center gap-3 py-16 text-[#8A8A9A]">
@@ -1945,7 +2058,7 @@ export default function ShiftDetailPage() {
               )}
 
               {!dateError && !verificacion?.bloqueado && (loadingAttendance || loadingInscrip || loadingRecuperaciones ? (
-                <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
                   {Array.from({ length: 2 }).map((_, i) => (
                     <div key={i} className="space-y-2">
                       <Skeleton className="h-7 rounded-xl w-24" />
@@ -1976,53 +2089,70 @@ export default function ShiftDetailPage() {
                   <EmptyState icon={Users} message="No hay clientes para esta fecha" className="py-10" />
                 )
 
-                const asistenciaList = allEntries.filter(e => getAttendanceState(e.clienteId) !== 'con_aviso')
-                const conAvisoList   = allEntries.filter(e => getAttendanceState(e.clienteId) === 'con_aviso')
+                const salaAEntries = allEntries.filter(e => e.sala === 'A')
+                const salaBEntries = allEntries.filter(e => e.sala === 'B')
 
                 return (
-                  <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
-                    {/* Columna 1 — Asistencia */}
-                    <div className="rounded-2xl border border-white/[0.08] bg-white/[0.02] p-3">
-                      <div className="flex items-center gap-2 mb-3">
-                        <span className="text-xs font-bold uppercase tracking-widest text-gray-500 dark:text-[#8A8A9A]">Asistencia</span>
-                        <span className="ml-auto text-xs font-semibold tabular-nums text-gray-500 dark:text-[#8A8A9A]">{asistenciaList.length}</span>
-                      </div>
-                      <div className="space-y-1.5">
-                        {asistenciaList.map(entry => (
-                          <AttendanceRowCard
-                            key={entry.clienteId}
-                            entry={entry}
-                            state={getAttendanceState(entry.clienteId) as 'presente' | 'ausente'}
-                            onToggle={() => setAttendanceState(entry.clienteId, getAttendanceState(entry.clienteId) === 'presente' ? 'ausente' : 'presente')}
-                            onConAviso={() => setAttendanceState(entry.clienteId, 'con_aviso')}
-                          />
-                        ))}
-                      </div>
+                  <div className="space-y-3">
+                    {/* Leyenda de colores */}
+                    <div className="flex flex-wrap items-center gap-x-4 gap-y-1.5">
+                      {([
+                        { dot: 'bg-blue-400',   label: 'Sin registro' },
+                        { dot: 'bg-green-400',  label: 'Presente'     },
+                        { dot: 'bg-yellow-400', label: 'Ausente'      },
+                        { dot: 'bg-orange-400', label: 'Ausente con aviso' },
+                      ] as const).map(item => (
+                        <span key={item.label} className="flex items-center gap-1.5 text-[11px] text-gray-500 dark:text-[#8A8A9A]">
+                          <span className={`h-2 w-2 rounded-full shrink-0 ${item.dot}`} />
+                          {item.label}
+                        </span>
+                      ))}
                     </div>
-
-                    {/* Columna 2 — Con aviso */}
-                    <div className="rounded-2xl border border-amber-500/20 bg-amber-500/[0.02] p-3">
-                      <div className="flex items-center gap-2 mb-3">
-                        <span className="h-2.5 w-2.5 rounded-full shrink-0 bg-amber-400" />
-                        <span className="text-xs font-bold uppercase tracking-widest text-amber-500 dark:text-amber-400">Con aviso</span>
-                        <span className="text-[10px] text-amber-400/60 font-medium">genera crédito</span>
-                        <span className="ml-auto text-xs font-semibold tabular-nums text-amber-500 dark:text-amber-400">{conAvisoList.length}</span>
-                      </div>
-                      <div className="space-y-1.5">
-                        {conAvisoList.map(entry => (
-                          <ConAvisoRowCard
-                            key={entry.clienteId}
-                            entry={entry}
-                            onUndo={() => setAttendanceState(entry.clienteId, 'ausente')}
-                          />
-                        ))}
-                        {conAvisoList.length === 0 && (
-                          <div className="flex items-center justify-center py-6 rounded-xl border-2 border-dashed border-amber-500/20">
-                            <p className="text-xs text-amber-400/40">Ningún cliente avisó</p>
+                    {/* Grid Sala A / Sala B */}
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                    {(['A', 'B'] as const).map(sala => {
+                      const entries = sala === 'A' ? salaAEntries : salaBEntries
+                      const presenteCount   = entries.filter(e => getExtendedState(e.clienteId) === 'presente').length
+                      const ausenteCount    = entries.filter(e => getExtendedState(e.clienteId) === 'ausente').length
+                      const conAvisoCount   = entries.filter(e => getExtendedState(e.clienteId) === 'con_aviso').length
+                      const sinRegistroCount = entries.filter(e => getExtendedState(e.clienteId) === 'sin_registro').length
+                      return (
+                        <div key={sala} className="rounded-2xl border border-white/[0.08] bg-white/[0.02] p-3 space-y-3">
+                          {/* Header sala */}
+                          <div className="flex items-center gap-2">
+                            <span className={`h-2 w-2 rounded-full shrink-0 ${sala === 'A' ? 'bg-blue-400' : 'bg-purple-400'}`} />
+                            <span className="text-xs font-bold uppercase tracking-widest text-gray-500 dark:text-[#8A8A9A]">
+                              Sala {sala}
+                            </span>
+                            <div className="ml-auto flex items-center gap-1.5">
+                              {sinRegistroCount > 0 && <span className="text-[10px] font-bold text-blue-400/80 tabular-nums">{sinRegistroCount}✗</span>}
+                              {presenteCount   > 0 && <span className="text-[10px] font-bold text-green-400/80 tabular-nums">{presenteCount}✓</span>}
+                              {ausenteCount    > 0 && <span className="text-[10px] font-bold text-yellow-400/80 tabular-nums">{ausenteCount}–</span>}
+                              {conAvisoCount   > 0 && <span className="text-[10px] font-bold text-orange-400/80 tabular-nums">{conAvisoCount}!</span>}
+                              <span className="text-[10px] text-gray-500 dark:text-[#8A8A9A] tabular-nums ml-0.5">/ {entries.length}</span>
+                            </div>
                           </div>
-                        )}
-                      </div>
-                    </div>
+                          {/* Filas */}
+                          <div className="space-y-1.5">
+                            {entries.length === 0 ? (
+                              <div className="flex items-center justify-center py-6 rounded-xl border-2 border-dashed border-white/[0.06]">
+                                <p className="text-xs text-gray-500 dark:text-[#8A8A9A]">Sin inscriptos en Sala {sala}</p>
+                              </div>
+                            ) : entries.map(entry => (
+                              <AttendanceCard
+                                key={entry.clienteId}
+                                entry={entry}
+                                state={getExtendedState(entry.clienteId)}
+                                onCycle={() => cycleAttendanceState(entry.clienteId)}
+                                onConAviso={() => setAttendanceState(entry.clienteId, 'con_aviso')}
+                                onQuitarAviso={() => setAttendanceState(entry.clienteId, 'ausente')}
+                              />
+                            ))}
+                          </div>
+                        </div>
+                      )
+                    })}
+                  </div>
                   </div>
                 )
               })())}
@@ -2398,7 +2528,14 @@ export default function ShiftDetailPage() {
 
 // ─── Sub-components ───────────────────────────────────────────────────────────
 
-function ResumenCard({ insc, clients, sala, aviso }: { insc: InscripcionEntry; clients: any[]; sala: 'A' | 'B'; aviso?: boolean }) {
+const ATTEND_PILL: Record<ExtendedAttendanceState, { dot: string; label: string; pill: string }> = {
+  sin_registro: { dot: 'bg-blue-400',   label: 'Sin registro',    pill: 'bg-blue-500/10 text-blue-500 dark:text-blue-400 border-blue-500/20' },
+  presente:     { dot: 'bg-green-400',  label: 'Presente',        pill: 'bg-green-500/10 text-green-600 dark:text-green-400 border-green-500/20' },
+  ausente:      { dot: 'bg-yellow-400', label: 'Ausente',         pill: 'bg-yellow-500/10 text-yellow-600 dark:text-yellow-400 border-yellow-500/20' },
+  con_aviso:    { dot: 'bg-orange-400', label: 'Ausente c/aviso', pill: 'bg-orange-500/10 text-orange-600 dark:text-orange-400 border-orange-500/20' },
+}
+
+function ResumenCard({ insc, clients, sala, aviso, attendState, index = 0 }: { insc: InscripcionEntry; clients: any[]; sala: 'A' | 'B'; aviso?: boolean; attendState?: ExtendedAttendanceState; index?: number }) {
   const clientData = clients.find(c => String(c.id) === String(insc.clienteId))
   const statusConfig: Record<string, { label: string; classes: string }> = {
     active:   { label: 'Activo',     classes: 'bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border border-emerald-500/20' },
@@ -2416,15 +2553,73 @@ function ResumenCard({ insc, clients, sala, aviso }: { insc: InscripcionEntry; c
   const avatarText = aviso
     ? 'text-amber-500'
     : sala === 'A' ? 'text-blue-500' : 'text-purple-500'
-  const cardBorder = aviso
+  // Usar clienteEstado del propio entry (mapeado del backend) — no depende del useClients paginado
+  const clientEstado = insc.clienteEstado ?? clientData?.status
+  const isExpiredMembership = clientEstado === 'expiring' || clientEstado === 'debt'
+  const isInactive = clientEstado === 'inactive'
+  const isAlerta = isExpiredMembership || isInactive
+  const hasAttend = attendState && attendState !== 'sin_registro'
+
+  // Rojo alerta para vencidos/inactivos — tiene prioridad sobre todo
+  const cardBorder = isAlerta
+    ? 'border-red-500/35 dark:border-red-500/25'
+    : hasAttend
+    ? attendState === 'presente'   ? 'border-green-500/25 dark:border-green-500/20'
+    : attendState === 'ausente'    ? 'border-yellow-500/25 dark:border-yellow-500/20'
+                                   : 'border-orange-500/25 dark:border-orange-500/20'
+    : aviso
     ? 'border-amber-500/25 dark:border-amber-500/20'
     : 'border-white/50 dark:border-white/[0.08]'
-  const cardBg = aviso
+  const cardBg = isAlerta
+    ? 'bg-red-500/[0.06] dark:bg-red-500/[0.05]'
+    : hasAttend
+    ? attendState === 'presente'   ? 'bg-green-500/[0.05] dark:bg-green-500/[0.04]'
+    : attendState === 'ausente'    ? 'bg-yellow-500/[0.04] dark:bg-yellow-500/[0.03]'
+                                   : 'bg-orange-500/[0.05] dark:bg-orange-500/[0.04]'
+    : aviso
     ? 'bg-amber-500/5 dark:bg-amber-500/[0.04]'
     : 'bg-white/30 dark:bg-white/[0.05]'
 
+  const ATTEND_LABEL: Record<string, string> = {
+    presente: 'Presente', ausente: 'Ausente', con_aviso: 'Con aviso',
+  }
+  // Watermark: alerta de estado del cliente, o estado de asistencia
+  const watermarkText = isExpiredMembership ? 'Vencido'
+    : isInactive ? 'Inactivo'
+    : hasAttend  ? ATTEND_LABEL[attendState!]
+    : null
+
+  const hoverTitle = isInactive
+    ? 'Inconsistencia: cliente inactivo inscripto en el turno — verificar estado de membresía'
+    : undefined
+
   return (
-    <div className={`flex flex-col sm:flex-row sm:items-center justify-between gap-4 p-4 rounded-2xl border ${cardBorder} ${cardBg} backdrop-blur-xl hover:bg-white/50 dark:hover:bg-white/[0.08] transition-all hover:shadow-sm`}>
+    <motion.div
+      initial={{ opacity: 0, y: 6 }}
+      animate={{ opacity: 1, y: 0 }}
+      transition={{ duration: 0.2, ease: [0.22, 1, 0.36, 1], delay: index * 0.05 }}
+      className={`relative overflow-hidden flex flex-col sm:flex-row sm:items-center justify-between gap-4 p-4 rounded-2xl border ${cardBorder} ${cardBg} backdrop-blur-xl transition-colors duration-200`}
+      title={hoverTitle}
+    >
+      {/* Watermark fantasma */}
+      <AnimatePresence mode="wait">
+        {watermarkText && (
+          <motion.div
+            key={watermarkText}
+            initial={{ opacity: 0, scale: 0.88 }}
+            animate={{ opacity: isAlerta ? 0.08 : 0.045, scale: 1 }}
+            exit={{ opacity: 0, scale: 0.88 }}
+            transition={{ duration: 0.18, ease: [0.22, 1, 0.36, 1] }}
+            className={`pointer-events-none select-none absolute inset-0 flex items-center justify-center ${
+              isAlerta ? 'text-red-600 dark:text-red-400' : ''
+            }`}
+          >
+            <span className="text-4xl font-black uppercase tracking-tight whitespace-nowrap">
+              {watermarkText}
+            </span>
+          </motion.div>
+        )}
+      </AnimatePresence>
       <div className="flex items-center gap-3 min-w-0">
         <div className={`h-10 w-10 rounded-xl flex items-center justify-center shrink-0 ${avatarBg}`}>
           <span className={`text-xs font-black ${avatarText}`}>
@@ -2436,9 +2631,6 @@ function ResumenCard({ insc, clients, sala, aviso }: { insc: InscripcionEntry; c
             <p className="text-sm font-bold text-gray-900 dark:text-white truncate max-w-[150px] sm:max-w-none">
               {insc.clienteNombre}
             </p>
-            <span className={`text-[10px] font-bold px-2 py-0.5 rounded-full shrink-0 ${clientStatus.classes}`}>
-              {clientStatus.label}
-            </span>
             {aviso && (
               <span className="text-[10px] font-bold px-2 py-0.5 rounded-full shrink-0 bg-amber-500/10 text-amber-600 dark:text-amber-400 border border-amber-500/20">
                 Avisó que falta
@@ -2452,90 +2644,83 @@ function ResumenCard({ insc, clients, sala, aviso }: { insc: InscripcionEntry; c
                 CUIL {clientData.cuil}
               </span>
             )}
-            {clientData?.planName && (
-              <span className="inline-flex items-center gap-1 text-[11px] text-primary font-semibold bg-primary/5 dark:bg-primary/10 px-1.5 py-0.5 rounded">
-                <Tag size={10} className="shrink-0 opacity-60" />
-                {clientData.planName}
-              </span>
-            )}
           </div>
         </div>
       </div>
       <a
         href={`/clients/${insc.clienteId}`}
-        className="flex items-center gap-1.5 self-end sm:self-center text-xs font-semibold px-3 py-2 rounded-xl border border-gray-200 dark:border-white/[0.08] bg-white/60 dark:bg-white/[0.04] text-gray-600 dark:text-[#8A8A9A] hover:text-gray-900 dark:hover:text-white hover:bg-white dark:hover:bg-white/[0.09] transition-all shrink-0"
+        className="flex items-center gap-1.5 self-end sm:self-center text-xs font-semibold px-3 py-2 rounded-xl border border-gray-200 dark:border-white/[0.08] bg-white/60 dark:bg-white/[0.04] text-gray-600 dark:text-[#8A8A9A] hover:text-gray-900 dark:hover:text-white hover:bg-white dark:hover:bg-white/[0.09] transition-colors duration-150 active:scale-[0.97] shrink-0"
       >
         Ver perfil →
       </a>
-    </div>
+    </motion.div>
   )
 }
 
 type AttendanceEntry = { clienteId: string; nombre: string; sala: 'A' | 'B'; esRecuperacion: boolean }
 
-function AttendanceRowCard({ entry, state, onToggle, onConAviso }: {
-  entry: AttendanceEntry
-  state: 'presente' | 'ausente'
-  onToggle: () => void
-  onConAviso: () => void
-}) {
-  return (
-    <motion.div layout initial={{ opacity: 0 }} animate={{ opacity: 1 }}
-      className="flex items-center gap-2 rounded-xl border border-white/[0.08] bg-white/[0.03] px-3 py-2 backdrop-blur-xl"
-    >
-      {entry.esRecuperacion
-        ? <span className="h-2 w-2 rounded-full shrink-0 bg-emerald-400" />
-        : <span className={`h-2 w-2 rounded-full shrink-0 ${entry.sala === 'A' ? 'bg-blue-400' : 'bg-purple-400'}`} />
-      }
-      <p className="flex-1 text-sm font-semibold text-gray-900 dark:text-white truncate min-w-0">{entry.nombre}</p>
-      {entry.esRecuperacion && (
-        <span className="text-[9px] font-bold uppercase tracking-wide text-emerald-600 dark:text-emerald-400 bg-emerald-500/10 border border-emerald-500/20 px-1.5 py-0.5 rounded-full shrink-0 whitespace-nowrap">
-          Recupera
-        </span>
-      )}
-      <button
-        onClick={onToggle}
-        className={`relative inline-flex h-6 w-11 shrink-0 items-center rounded-full border-2 transition-colors duration-200 focus:outline-none ${
-          state === 'presente' ? 'bg-green-500 border-green-500' : 'bg-red-500/30 border-red-500/40'
-        }`}
-      >
-        <span className={`inline-block h-4 w-4 rounded-full bg-white shadow transition-transform duration-200 ${
-          state === 'presente' ? 'translate-x-5' : 'translate-x-0.5'
-        }`} />
-      </button>
-      <button
-        onClick={onConAviso}
-        title="Con aviso"
-        className="rounded-lg p-1.5 text-amber-500/40 hover:text-amber-400 hover:bg-amber-500/10 transition-all"
-      >
-        <Bell size={13} />
-      </button>
-    </motion.div>
-  )
+type ExtendedAttendanceState = 'sin_registro' | 'presente' | 'ausente' | 'con_aviso'
+
+const ATTENDANCE_STYLE: Record<ExtendedAttendanceState, {
+  border: string; bg: string; dot: string; label: string
+}> = {
+  sin_registro: { border: 'border-blue-500/25',   bg: 'bg-blue-500/[0.07]',   dot: 'bg-blue-400',   label: 'Sin registro' },
+  presente:     { border: 'border-green-500/30',  bg: 'bg-green-500/[0.08]',  dot: 'bg-green-400',  label: 'Presente'     },
+  ausente:      { border: 'border-yellow-500/30', bg: 'bg-yellow-500/[0.07]', dot: 'bg-yellow-400', label: 'Ausente'      },
+  con_aviso:    { border: 'border-orange-500/30', bg: 'bg-orange-500/[0.08]', dot: 'bg-orange-400', label: 'Ausente con aviso' },
 }
 
-function ConAvisoRowCard({ entry, onUndo }: { entry: AttendanceEntry; onUndo: () => void }) {
+function AttendanceCard({ entry, state, onCycle, onConAviso, onQuitarAviso }: {
+  entry: AttendanceEntry
+  state: ExtendedAttendanceState
+  onCycle: () => void
+  onConAviso: () => void
+  onQuitarAviso: () => void
+}) {
+  const s = ATTENDANCE_STYLE[state]
   return (
     <motion.div layout initial={{ opacity: 0 }} animate={{ opacity: 1 }}
-      className="flex items-center gap-2 rounded-xl border border-amber-500/20 bg-amber-500/[0.05] px-3 py-2 backdrop-blur-xl"
+      className={`flex items-center gap-2.5 rounded-xl border ${s.border} ${s.bg} px-3 py-2.5 transition-colors duration-150`}
     >
-      {entry.esRecuperacion
-        ? <span className="h-2 w-2 rounded-full shrink-0 bg-emerald-400" />
-        : <span className={`h-2 w-2 rounded-full shrink-0 ${entry.sala === 'A' ? 'bg-blue-400' : 'bg-purple-400'}`} />
-      }
-      <p className="flex-1 text-sm font-semibold text-gray-900 dark:text-white truncate min-w-0">{entry.nombre}</p>
+      {/* Dot de estado — clickeable para ciclar */}
+      <button
+        onClick={onCycle}
+        title={`Estado: ${s.label} — click para cambiar`}
+        className="shrink-0 flex items-center justify-center rounded-full w-5 h-5 hover:scale-110 transition-transform"
+      >
+        <span className={`h-2.5 w-2.5 rounded-full ${s.dot}`} />
+      </button>
+
+      {/* Nombre — también clickeable */}
+      <button onClick={onCycle} className="flex-1 min-w-0 text-left">
+        <p className="text-sm font-semibold text-gray-900 dark:text-white truncate">{entry.nombre}</p>
+      </button>
+
+      {/* Badge recuperación */}
       {entry.esRecuperacion && (
         <span className="text-[9px] font-bold uppercase tracking-wide text-emerald-600 dark:text-emerald-400 bg-emerald-500/10 border border-emerald-500/20 px-1.5 py-0.5 rounded-full shrink-0 whitespace-nowrap">
           Recupera
         </span>
       )}
-      <button
-        onClick={onUndo}
-        title="Quitar aviso"
-        className="rounded-lg p-1.5 text-gray-400 hover:text-red-400 hover:bg-red-500/10 transition-all"
-      >
-        <X size={13} />
-      </button>
+
+      {/* Acción secundaria: con aviso / quitar aviso */}
+      {state === 'con_aviso' ? (
+        <button
+          onClick={onQuitarAviso}
+          title="Quitar aviso"
+          className="rounded-lg p-1.5 text-orange-400/60 hover:text-red-400 hover:bg-red-500/10 transition-all"
+        >
+          <X size={13} />
+        </button>
+      ) : (
+        <button
+          onClick={onConAviso}
+          title="Marcar con aviso (genera crédito)"
+          className="rounded-lg p-1.5 text-gray-400/30 hover:text-orange-400 hover:bg-orange-500/10 transition-all"
+        >
+          <Bell size={13} />
+        </button>
+      )}
     </motion.div>
   )
 }

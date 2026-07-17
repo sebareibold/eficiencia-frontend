@@ -4,6 +4,7 @@ export type InscripcionEntry = {
   id: string
   clienteId: string
   clienteNombre: string
+  clienteEstado?: 'active' | 'expiring' | 'debt' | 'inactive'
   sala: 'A' | 'B'
   fechaDesde: string
   estado: 'ACTIVA' | 'BAJA'
@@ -19,11 +20,19 @@ export type InscripcionClienteEntry = {
   dias: string[]
 }
 
+const ESTADO_MAP: Record<string, 'active' | 'expiring' | 'debt' | 'inactive'> = {
+  ACTIVO:   'active',
+  VENCIDO:  'expiring',
+  EN_DEUDA: 'debt',
+  INACTIVO: 'inactive',
+}
+
 function mapInscripcion(i: any): InscripcionEntry {
   return {
     id: String(i.id),
     clienteId: String(i.clienteId),
     clienteNombre: i.cliente ? `${i.cliente.nombre} ${i.cliente.apellido}` : 'Cliente desconocido',
+    clienteEstado: i.cliente?.estado ? (ESTADO_MAP[i.cliente.estado] ?? 'active') : undefined,
     sala: i.sala === 'B' ? 'B' : 'A',
     fechaDesde: i.fechaDesde,
     estado: i.estado,

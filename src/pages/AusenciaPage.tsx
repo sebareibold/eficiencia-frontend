@@ -140,12 +140,14 @@ export default function AusenciaPage() {
   const [step, setStep] = useState<1 | 2>(1)
   const [ausenciaCreada, setAusenciaCreada] = useState<AusenciaTurno | null>(null)
 
-  // Step 1 — default: la fecha válida más reciente (hoy o antes)
+  // Step 1 — default: fecha pre-seleccionada por URL (?fecha=YYYY-MM-DD) o la más reciente pasada
+  const fechaParam = searchParams.get('fecha') ?? ''
   const defaultFecha = useMemo(() => {
+    if (fechaParam) return fechaParam
     const today = todayStr()
     const pasadas = fechasValidas.filter(f => f <= today)
     return pasadas.length > 0 ? pasadas[pasadas.length - 1] : (fechasValidas[0] ?? today)
-  }, [fechasValidas])
+  }, [fechasValidas, fechaParam])
 
   const [selectionMode, setSelectionMode] = useState<'individual' | 'range'>('individual')
   const [fechasAusencia, setFechasAusencia] = useState<Set<string>>(() => new Set([defaultFecha]))

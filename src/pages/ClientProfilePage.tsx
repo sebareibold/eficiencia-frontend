@@ -1026,19 +1026,30 @@ export default function ClientProfilePage() {
   const conAvisoCount = useMemo(() => ausencias.filter(a => a.conAviso).length, [ausencias])
   const recuperos = useMemo(
     () => ausencias
-      .filter(a => a.conAviso && a.recuperacion && a.recuperacion.estado !== 'CANCELADA')
+      .filter(a => a.recuperacion && a.recuperacion.estado !== 'CANCELADA')
       .sort((a, b) => (b.recuperacion!.fecha ?? '').localeCompare(a.recuperacion!.fecha ?? '')),
     [ausencias]
   )
   const recuperosPendientesCount = useMemo(() => recuperos.filter(a => a.recuperacion?.estado === 'PENDIENTE').length, [recuperos])
-  // Créditos disponibles: ausencias con aviso SIN recuperación activa (ni pendiente ni completada)
-  // Decrementa al agendar una recuperación (no solo al completarla)
+  // Créditos disponibles: ausencias SIN recuperación activa (ni pendiente ni completada)
+  // Aplica tanto a ausencias con aviso como sin aviso
   const creditosDisponibles = useMemo(
-    () => ausencias.filter(a => a.conAviso && (!a.recuperacion || a.recuperacion.estado === 'CANCELADA')).length,
+    () => ausencias.filter(a => !a.recuperacion || a.recuperacion.estado === 'CANCELADA').length,
     [ausencias]
   )
   const porRecuperar = creditosDisponibles
   const recoveryRate  = ausencias.length > 0 ? Math.round(ausenciasRecuperadas.length / ausencias.length * 100) : 0
+
+  // Ausencias implícitas: Asistencia(presente=false) de bulk sin AusenciaTurno asociada
+  // Se muestran en el panel "Ausencias y Recuperaciones" como "sin aviso" simples
+  const ausenciasImplicitas = useMemo(() => {
+    const ausenciaKeys = new Set(
+      ausencias.map(a => `${a.inscripcion?.turno?.id ?? ''}__${a.fecha.slice(0, 10)}`)
+    )
+    return attendance
+      .filter(r => !r.present && !ausenciaKeys.has(`${r.shiftId}__${r.date.slice(0, 10)}`))
+      .sort((a, b) => b.date.localeCompare(a.date))
+  }, [attendance, ausencias])
 
   // Timeline unificado: combina attendance + ausencias en 3 estados
   const mergedTimeline = useMemo(() => {
@@ -1053,7 +1064,7 @@ export default function ClientProfilePage() {
         ...r,
         dateKey,
         state: r.present ? 'presente' as const
-          : ausenciaMap.has(dateKey) ? 'con_aviso' as const
+          : (ausenciaMap.get(dateKey)?.conAviso === true) ? 'con_aviso' as const
           : 'ausente' as const,
         ausencia: ausenciaMap.get(dateKey),
       }
@@ -2216,7 +2227,7 @@ export default function ClientProfilePage() {
                       {([
                         ['historial',  'Historial'],
                         ['presentes',  `Presentes${presentDays > 0 ? ` (${presentDays})` : ''}`],
-                        ['ausencias',  `Ausencias${ausencias.length > 0 ? ` (${ausencias.length})` : ''}`],
+                        ['ausencias',  `Ausencias${(ausencias.length + ausenciasImplicitas.length) > 0 ? ` (${ausencias.length + ausenciasImplicitas.length})` : ''}`],
                         ['recuperos',  `Recuperos${recuperosPendientesCount > 0 ? ` (${recuperosPendientesCount})` : ''}`],
                       ] as const).map(([v, l]) => (
                         <button key={v} onClick={() => setLeftTab(v)}
@@ -2361,13 +2372,14 @@ export default function ClientProfilePage() {
                             </div>
                           ))
                         })()
-                      ) : leftTab === 'ausencias' && ausencias.length === 0 ? (
+                      ) : leftTab === 'ausencias' && ausencias.length === 0 && ausenciasImplicitas.length === 0 ? (
                         <div className="flex flex-col items-center justify-center py-8 text-center px-4">
                           <CalendarCheck2 size={20} className="text-gray-300 dark:text-[#444] mb-2" />
                           <p className="text-xs text-gray-400 dark:text-[#666]">Sin ausencias registradas</p>
                         </div>
                       ) : leftTab === 'ausencias' ? (
-                        gruposAusencias.map((grupo, gi) => {
+                        <>
+                        {gruposAusencias.map((grupo, gi) => {
                           const isBulk = grupo.length > 1
                           const sortedItems = [...grupo].sort((a, b) => b.fecha.localeCompare(a.fecha))
                           const minFecha = sortedItems[sortedItems.length - 1].fecha
@@ -2460,7 +2472,7 @@ export default function ClientProfilePage() {
                                   }`}>
                                     {a.recuperacion?.estado === 'COMPLETADA' ? '✓ Recuperada'
                                       : a.recuperacion?.estado === 'PENDIENTE' ? `Pendiente${a.recuperacion.fecha ? ` — ${safeFormatDate(a.recuperacion.fecha, "d 'de' MMMM", es)}` : ''}${a.recuperacion.turnoDestino ? ` · ${a.recuperacion.turnoDestino.horaInicio}` : ''}`
-                                      : a.conAviso ? 'Sin recuperar' : '—'}
+                                      : 'Sin recuperar'}
                                   </span>
                                   {a.notas && (
                                     <p className="text-[11px] text-gray-500 dark:text-[#8A8A9A] mt-0.5 leading-snug">{a.notas}</p>
@@ -2495,7 +2507,54 @@ export default function ClientProfilePage() {
                               </div>
                             </div>
                           )
-                        })
+                        })}
+                        {ausenciasImplicitas.map(r => {
+                          const insc = inscripciones.find(i => i.turnoId === r.shiftId)
+                          const fechaStr = r.date.slice(0, 10)
+                          return (
+                            <div
+                              key={`impl-${r.id}`}
+                              onClick={() => insc && navigate(`/clients/${id}/ausencia?inscripcionId=${insc.id}&fecha=${fechaStr}&dias=${insc.dias.join(',')}`)}
+                              className={`hover:bg-black/[0.03] dark:hover:bg-white/[0.03] transition-colors group border-b border-gray-100 dark:border-white/[0.04] last:border-0 px-4 py-3 ${insc ? 'cursor-pointer' : ''}`}
+                            >
+                              <div className="flex items-start gap-2">
+                                <div className="h-2 w-2 rounded-full shrink-0 mt-1.5 bg-red-400" />
+                                <div className="flex-1 min-w-0">
+                                  <div className="flex items-center gap-1.5">
+                                    <p className="text-xs font-bold text-gray-900 dark:text-white capitalize leading-tight">
+                                      {safeFormatDate(r.date, "EEEE d 'de' MMMM yyyy", es)}
+                                    </p>
+                                    <span className="text-[9px] font-bold px-1.5 py-0.5 rounded-full shrink-0 bg-red-400/10 text-red-400">
+                                      s/aviso
+                                    </span>
+                                  </div>
+                                  <p className="text-[10px] text-gray-400 dark:text-[#666] mt-0.5">
+                                    {r.shiftLabel}
+                                  </p>
+                                </div>
+                                <div className="flex items-center gap-1 shrink-0">
+                                  {insc && (
+                                    <button
+                                      onClick={e => { e.stopPropagation(); navigate(`/clients/${id}/ausencia?inscripcionId=${insc.id}&fecha=${fechaStr}&dias=${insc.dias.join(',')}`) }}
+                                      className="p-1.5 rounded-lg text-primary opacity-0 group-hover:opacity-100 hover:bg-primary/10 transition-all"
+                                      title="Registrar y agendar recupero"
+                                    >
+                                      <CalendarCheck2 size={12} />
+                                    </button>
+                                  )}
+                                  <button
+                                    onClick={e => { e.stopPropagation(); navigate(`/shifts/${r.shiftId}`) }}
+                                    className="p-1.5 rounded-lg text-gray-300 dark:text-[#444] hover:text-primary hover:bg-primary/10 transition-all"
+                                    title="Ver turno"
+                                  >
+                                    <ExternalLink size={12} />
+                                  </button>
+                                </div>
+                              </div>
+                            </div>
+                          )
+                        })}
+                        </>
                       ) : recuperos.length === 0 ? (
                         <div className="flex flex-col items-center justify-center py-8 text-center px-4">
                           <CalendarCheck2 size={20} className="text-gray-300 dark:text-[#444] mb-2" />
@@ -3058,7 +3117,7 @@ export default function ClientProfilePage() {
               <div className="space-y-2.5">
                 {[1, 2, 3].map(i => <Skeleton key={i} className="h-20 w-full rounded-2xl" />)}
               </div>
-            ) : ausencias.length === 0 ? (
+            ) : ausencias.length === 0 && ausenciasImplicitas.length === 0 ? (
               <div className="flex flex-col items-center gap-3 py-10">
                 <div className="h-14 w-14 rounded-2xl bg-gray-50 dark:bg-white/[0.03] border border-gray-100 dark:border-white/[0.06] flex items-center justify-center">
                   <CalendarCheck2 size={22} className="text-gray-300 dark:text-[#444]" />
@@ -3071,6 +3130,43 @@ export default function ClientProfilePage() {
             ) : (
               <AnimatePresence initial={false}>
                 <div className="space-y-3">
+                  {ausenciasImplicitas.map(r => {
+                    const insc = inscripciones.find(i => i.turnoId === r.shiftId)
+                    const fechaStr = r.date.slice(0, 10)
+                    return (
+                      <motion.div
+                        key={`impl-${r.id}`}
+                        initial={{ opacity: 0, y: 6 }}
+                        animate={{ opacity: 1, y: 0 }}
+                        exit={{ opacity: 0, y: -4 }}
+                        transition={{ duration: 0.18, ease: [0.23, 1, 0.32, 1] }}
+                        className="flex items-start justify-between gap-3 rounded-2xl border border-gray-200 dark:border-white/[0.07] bg-white/40 dark:bg-white/[0.02] px-4 py-4 group"
+                      >
+                        <div className="flex items-start gap-3 min-w-0 flex-1">
+                          <CalendarX2 size={14} className="text-red-400 shrink-0 mt-0.5" />
+                          <div className="min-w-0 space-y-1">
+                            <div className="flex items-center gap-2 flex-wrap">
+                              <p className="text-sm font-bold text-gray-900 dark:text-white">
+                                {formatDate(r.date)}
+                              </p>
+                              <span className="inline-flex items-center text-[10px] font-bold px-2 py-0.5 rounded-full bg-red-500/10 text-red-500 dark:text-red-400 border border-red-500/20">
+                                sin aviso
+                              </span>
+                            </div>
+                            <p className="text-xs text-gray-500 dark:text-[#8A8A9A]">{r.shiftLabel}</p>
+                          </div>
+                        </div>
+                        {insc && (
+                          <button
+                            onClick={() => navigate(`/clients/${id}/ausencia?inscripcionId=${insc.id}&fecha=${fechaStr}&dias=${insc.dias.join(',')}`)}
+                            className="shrink-0 flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-bold text-primary border border-primary/20 bg-primary/5 hover:bg-primary/10 transition-all active:scale-[0.96] opacity-0 group-hover:opacity-100"
+                          >
+                            <CalendarCheck2 size={12} /> Agendar
+                          </button>
+                        )}
+                      </motion.div>
+                    )
+                  })}
                   {ausencias.map(a => {
                     const recup = a.recuperacion
                     const estado = recup?.estado ?? 'SIN_RECUPERACION'
@@ -3131,9 +3227,13 @@ export default function ClientProfilePage() {
                                 <span className={`h-1.5 w-1.5 rounded-full ${estadoCfg.dot}`} />
                                 {estadoCfg.label}
                               </span>
-                              {a.conAviso && (
+                              {a.conAviso ? (
                                 <span className="inline-flex items-center text-[10px] font-bold px-2 py-0.5 rounded-full bg-blue-500/10 text-blue-500 dark:text-blue-400 border border-blue-500/20">
                                   con aviso
+                                </span>
+                              ) : (
+                                <span className="inline-flex items-center text-[10px] font-bold px-2 py-0.5 rounded-full bg-red-500/10 text-red-500 dark:text-red-400 border border-red-500/20">
+                                  sin aviso
                                 </span>
                               )}
                             </div>
