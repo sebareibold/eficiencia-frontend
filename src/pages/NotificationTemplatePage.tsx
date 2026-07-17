@@ -295,7 +295,10 @@ export default function NotificationTemplatePage() {
     if (!tipo) return
     setTesting(true)
     try {
-      const override = hasChanges ? { asunto, cuerpo } : undefined
+      // Siempre enviamos el estado actual del editor para que el email refleje
+      // exactamente lo que se ve en pantalla (asunto, cuerpo y colores), sin
+      // necesidad de guardar primero.
+      const override = { asunto, cuerpo, colorAcento, colorCuerpo, colorFooter, colorLogo, logoInvertido }
       const res = await notificacionesApi.probarPlantillaSistema(tipo, override)
       addToast(`Prueba enviada a ${res.destino}`, 'success')
     } catch {

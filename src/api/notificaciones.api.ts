@@ -46,6 +46,6 @@ export const notificacionesApi = {
   updatePlantillaSistema: (tipo: string, data: { asunto?: string; cuerpo?: string; colorAcento?: string; colorCuerpo?: string; colorFooter?: string; colorLogo?: string; logoInvertido?: boolean }): Promise<PlantillaSistema> =>
     api.patch(`/notificaciones/plantillas-sistema/${tipo}`, data).then(r => r.data),
 
-  probarPlantillaSistema: (tipo: string, override?: { asunto?: string; cuerpo?: string }): Promise<{ enviado: boolean; destino: string }> =>
+  probarPlantillaSistema: (tipo: string, override?: { asunto?: string; cuerpo?: string; colorAcento?: string; colorCuerpo?: string; colorFooter?: string; colorLogo?: string; logoInvertido?: boolean }): Promise<{ enviado: boolean; destino: string }> =>
     api.post(`/notificaciones/plantillas-sistema/${tipo}/probar`, override ?? {}).then(r => r.data),
 }
