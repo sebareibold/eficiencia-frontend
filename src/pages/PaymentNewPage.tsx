@@ -6,7 +6,7 @@ import { pageVariants } from '../lib/motion'
 import {
   ArrowLeft, Banknote, ArrowLeftRight, CreditCard,
   User, Search, X, CheckCircle2, Loader2, UserPlus,
-  Check, AlertCircle,
+  Check, AlertCircle, Phone, Calendar,
 } from 'lucide-react'
 import { useForm } from 'react-hook-form'
 import { zodResolver } from '@hookform/resolvers/zod'
@@ -25,11 +25,23 @@ import type { Client } from '../types/client.types'
 // ── Schemas ───────────────────────────────────────────────────────────────────
 
 const newClientSchema = z.object({
-  name:     z.string().min(1, 'Requerido'),
-  lastName: z.string().min(1, 'Requerido'),
-  phone:    z.string().optional(),
-  email:    z.string().email('Email inválido').optional().or(z.literal('')),
+  name:                z.string().min(1, 'Requerido'),
+  lastName:            z.string().min(1, 'Requerido'),
+  phone:               z.string().optional(),
+  email:               z.string().email('Email inválido').optional().or(z.literal('')),
+  fechaNacimiento:     z.string().min(1, 'Requerido'),
+  responsableContacto: z.string().optional(),
 })
+
+function esMenorDeEdad(fecha: string): boolean {
+  if (!fecha) return false
+  const [y, m, d] = fecha.split('-').map(Number)
+  if (!y || !m || !d) return false
+  const hoy = new Date()
+  const diffM = hoy.getMonth() + 1 - m
+  const ajuste = diffM < 0 || (diffM === 0 && hoy.getDate() < d) ? 1 : 0
+  return hoy.getFullYear() - y - ajuste < 18
+}
 type NewClientValues = z.infer<typeof newClientSchema>
 
 const paymentSchema = z.object({
@@ -112,7 +124,10 @@ export default function PaymentNewPage() {
     handleSubmit: submitClient,
     formState: { errors: clientErrors },
     reset: resetClient,
+    watch: watchClient,
   } = useForm<NewClientValues>({ resolver: zodResolver(newClientSchema) })
+  const watchFecha = watchClient('fechaNacimiento') ?? ''
+  const esMenor = esMenorDeEdad(watchFecha)
 
   // ── Paso 2: pago ──────────────────────────────────────────────────────────
   const [membresias,  setMembresias]  = useState<MembresiaCliente[]>([])
@@ -270,10 +285,12 @@ export default function PaymentNewPage() {
         clientId = String(selectedClient.id)
       } else {
         const created = await clientsApi.create({
-          name:     pendingNewClient!.name,
-          lastName: pendingNewClient!.lastName,
-          phone:    pendingNewClient!.phone  || undefined,
-          email:    pendingNewClient!.email  || undefined,
+          name:                pendingNewClient!.name,
+          lastName:            pendingNewClient!.lastName,
+          phone:               pendingNewClient!.phone               || undefined,
+          email:               pendingNewClient!.email               || undefined,
+          fechaNacimiento:     pendingNewClient!.fechaNacimiento      || undefined,
+          responsableContacto: pendingNewClient!.responsableContacto || undefined,
         })
         clientId = String(created.id)
         addToast(`Cliente ${created.name} ${created.lastName} creado`, 'success')
@@ -620,10 +637,40 @@ export default function PaymentNewPage() {
               </div>
             </div>
 
+            <div className="space-y-1.5">
+              <label className="text-[11px] font-bold uppercase tracking-widest text-gray-400 dark:text-[#6A6A7A] flex items-center gap-1">
+                Fecha de nacimiento <span className="text-primary text-[10px]">*</span>
+              </label>
+              <div className="flex items-center gap-2">
+                <input
+                  {...regClient('fechaNacimiento')}
+                  type="date"
+                  max={today}
+                  className={ic()}
+                />
+                {watchFecha && (
+                  <span className="shrink-0 self-stretch flex items-center px-3 rounded-xl bg-gray-900 dark:bg-white/10 text-white text-xs font-bold whitespace-nowrap">
+                    {(() => {
+                      const [y, m, d] = watchFecha.split('-').map(Number)
+                      const hoy = new Date()
+                      const diffM = hoy.getMonth() + 1 - m
+                      const ajuste = diffM < 0 || (diffM === 0 && hoy.getDate() < d) ? 1 : 0
+                      return `${hoy.getFullYear() - y - ajuste} años`
+                    })()}
+                  </span>
+                )}
+              </div>
+              {clientErrors.fechaNacimiento && (
+                <p className="flex items-center gap-1.5 text-xs text-red-500 dark:text-red-400">
+                  <AlertCircle size={11} />{clientErrors.fechaNacimiento.message}
+                </p>
+              )}
+            </div>
+
             <div className="grid grid-cols-2 gap-3">
               <div className="space-y-1.5">
                 <label className="text-[11px] font-bold uppercase tracking-widest text-gray-400 dark:text-[#6A6A7A]">
-                  Teléfono <span className="font-normal normal-case tracking-normal opacity-60 text-[10px]">(opcional)</span>
+                  {esMenor ? 'Tel. personal' : 'Teléfono'} <span className="font-normal normal-case tracking-normal opacity-60 text-[10px]">(opcional)</span>
                 </label>
                 <input {...regClient('phone')} placeholder="1155554444" className={ic()} />
               </div>
@@ -639,6 +686,19 @@ export default function PaymentNewPage() {
                 )}
               </div>
             </div>
+
+            {esMenor && (
+              <div className="rounded-xl border border-amber-400/30 bg-amber-400/[0.05] p-3 space-y-1.5">
+                <label className="text-[11px] font-bold uppercase tracking-widest text-amber-500 flex items-center gap-1.5">
+                  <Phone size={11} /> Tel. del responsable <span className="font-normal normal-case tracking-normal opacity-60 text-[10px]">(opcional)</span>
+                </label>
+                <input
+                  {...regClient('responsableContacto')}
+                  placeholder="1155559999"
+                  className={ic()}
+                />
+              </div>
+            )}
           </motion.div>
         )}
       </div>

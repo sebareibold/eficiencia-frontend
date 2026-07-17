@@ -69,6 +69,7 @@ export const paymentsApi = {
   getAll: (params?: {
     month?: string; anio?: string; desde?: string; hasta?: string
     clientId?: string | number; page?: number; pageSize?: number
+    method?: Payment['method']
   }): Promise<PaginatedPayments> =>
     api.get('/pagos', {
       params: {
@@ -77,6 +78,7 @@ export const paymentsApi = {
         ...(params?.desde    && { desde:     params.desde }),
         ...(params?.hasta    && { hasta:     params.hasta }),
         ...(params?.clientId && { clienteId: params.clientId }),
+        ...(params?.method   && { metodo:    mapMetodoToBackend(params.method) }),
         page:     params?.page     ?? 1,
         pageSize: params?.pageSize ?? 10,
       },

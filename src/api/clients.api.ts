@@ -47,6 +47,13 @@ function mapCliente(c: any): Client {
     updatedAt: c.updatedAt ?? c.createdAt,
     proporcionalPendiente: membership?.proporcionalPendiente ?? false,
     descuentoProporcional: membership?.descuentoProporcional != null ? Number(membership.descuentoProporcional) : 0,
+    fechaNacimiento: c.fechaNacimiento ?? null,
+    esMenor: c.esMenor ?? false,
+    exentoDePago: c.exentoDePago ?? false,
+    motivoExencion: c.motivoExencion ?? null,
+    responsableNombre: c.responsableNombre ?? null,
+    responsableCuil: c.responsableCuil ?? null,
+    responsableContacto: c.responsableContacto ?? null,
   }
 }
 
@@ -119,23 +126,35 @@ export const clientsApi = {
 
   create: (dto: CreateClientDto): Promise<Client> =>
     api.post('/clientes', {
-      nombre: dto.name,
-      apellido: dto.lastName,
-      email: dto.email || undefined,
-      telefono: dto.phone || undefined,
-      cuil: dto.cuil || undefined,
+      nombre:    dto.name,
+      apellido:  dto.lastName,
+      email:     dto.email || undefined,
+      telefono:  dto.phone || undefined,
+      cuil:      dto.cuil || undefined,
       fechaInicio: new Date().toISOString(),
+      ...(dto.fechaNacimiento   && { fechaNacimiento:     dto.fechaNacimiento }),
+      ...(dto.exentoDePago !== undefined && { exentoDePago: dto.exentoDePago }),
+      ...(dto.motivoExencion    && { motivoExencion:      dto.motivoExencion }),
+      ...(dto.responsableNombre && { responsableNombre:   dto.responsableNombre }),
+      ...(dto.responsableCuil   && { responsableCuil:     dto.responsableCuil }),
+      ...(dto.responsableContacto && { responsableContacto: dto.responsableContacto }),
     }).then((r) => mapCliente(r.data)),
 
   update: (id: string | number, dto: UpdateClientDto): Promise<Client> =>
     api.patch(`/clientes/${id}`, {
-      ...(dto.name !== undefined && { nombre: dto.name }),
-      ...(dto.lastName !== undefined && { apellido: dto.lastName }),
+      ...(dto.name !== undefined       && { nombre:              dto.name }),
+      ...(dto.lastName !== undefined   && { apellido:            dto.lastName }),
       ...(dto.email ? { email: dto.email } : {}),
-      ...(dto.phone !== undefined && { telefono: dto.phone }),
-      ...(dto.cuil !== undefined && { cuil: dto.cuil }),
-      ...(dto.sedeId !== undefined && { sedeId: dto.sedeId || null }),
-      ...(dto.estado !== undefined && { estado: dto.estado }),
+      ...(dto.phone !== undefined      && { telefono:            dto.phone }),
+      ...(dto.cuil !== undefined       && { cuil:                dto.cuil }),
+      ...(dto.sedeId !== undefined     && { sedeId:              dto.sedeId || null }),
+      ...(dto.estado !== undefined     && { estado:              dto.estado }),
+      ...(dto.fechaNacimiento !== undefined && { fechaNacimiento: dto.fechaNacimiento || null }),
+      ...(dto.exentoDePago !== undefined   && { exentoDePago:    dto.exentoDePago }),
+      ...(dto.motivoExencion !== undefined && { motivoExencion:  dto.motivoExencion || null }),
+      ...(dto.responsableNombre !== undefined   && { responsableNombre:   dto.responsableNombre || null }),
+      ...(dto.responsableCuil !== undefined     && { responsableCuil:     dto.responsableCuil || null }),
+      ...(dto.responsableContacto !== undefined && { responsableContacto: dto.responsableContacto || null }),
     }).then((r) => mapCliente(r.data)),
 
   bulkUpdateEstado: (ids: string[], estado: 'ACTIVO' | 'INACTIVO'): Promise<{ updated: number }> =>

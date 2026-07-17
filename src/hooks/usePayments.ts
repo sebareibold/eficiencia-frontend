@@ -10,6 +10,7 @@ interface UsePaymentsParams {
   hasta?: string
   clientId?: number
   pageSize?: number
+  method?: 'cash' | 'transfer' | 'card'
 }
 
 export function usePayments(params?: UsePaymentsParams) {

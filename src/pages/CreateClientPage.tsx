@@ -206,7 +206,11 @@ export default function CreateClientPage() {
   const navigate = useNavigate()
 
   const [step, setStep] = useState<StepId>(1)
-  const [clientData, setClientData] = useState({ nombre: '', apellido: '', cuil: '', email: '', telefono: '' })
+  const [clientData, setClientData] = useState({
+    nombre: '', apellido: '', cuil: '', email: '', telefono: '',
+    fechaNacimiento: '', responsableNombre: '', responsableCuil: '', responsableContacto: '',
+    exentoDePago: false, motivoExencion: '',
+  })
   const [membershipData, setMembershipData] = useState<{
     planId: string; modalidad: Modalidad; precio: string; fechaInicio: string
   }>({ planId: '', modalidad: 'EFECTIVO', precio: '', fechaInicio: today })
@@ -292,13 +296,14 @@ export default function CreateClientPage() {
       if (!clientData.nombre.trim()) e.nombre = 'Requerido'
       if (!clientData.apellido.trim()) e.apellido = 'Requerido'
       if (clientData.email.trim() && !isValidEmail(clientData.email)) e.email = 'Email inválido'
+      if (!clientData.fechaNacimiento) e.fechaNacimiento = 'Requerido'
     }
     if (s === 2) {
       if (!membershipData.planId) e.planId = 'Seleccioná un plan'
       if (!membershipData.precio || Number(membershipData.precio) <= 0) e.precio = 'Ingresá un precio válido'
     }
     if (s === 3) {
-      if (!paymentData.monto || Number(paymentData.monto) <= 0) e.monto = 'Ingresá un monto válido'
+      if (!clientData.exentoDePago && (!paymentData.monto || Number(paymentData.monto) <= 0)) e.monto = 'Ingresá un monto válido'
       if (!paymentData.fecha) e.fecha = 'La fecha es requerida'
     }
     return e
@@ -308,8 +313,8 @@ export default function CreateClientPage() {
     const errs = validate(step)
     if (Object.keys(errs).length > 0) { setErrors(errs); return }
     setErrors({})
-    if (step === 2 && !paymentData.monto) {
-      setPaymentData(p => ({ ...p, monto: membershipData.precio }))
+    if (step === 2) {
+      setPaymentData(p => ({ ...p, monto: clientData.exentoDePago ? '0' : (p.monto || membershipData.precio) }))
     }
     if (step === 1) { setStep(2); return }
     if (step === 2) { setStep(3); return }
@@ -331,6 +336,12 @@ export default function CreateClientPage() {
       const client = await clientsApi.create({
         name: clientData.nombre, lastName: clientData.apellido,
         email: clientData.email, phone: clientData.telefono, cuil: clientData.cuil || undefined,
+        fechaNacimiento: clientData.fechaNacimiento || undefined,
+        exentoDePago: clientData.exentoDePago || undefined,
+        motivoExencion: clientData.motivoExencion || undefined,
+        responsableNombre: clientData.responsableNombre || undefined,
+        responsableCuil: clientData.responsableCuil || undefined,
+        responsableContacto: clientData.responsableContacto || undefined,
       })
       const membresia = await membresiasClienteApi.create({
         clienteId: String(client.id), planId: membershipData.planId,
@@ -473,6 +484,15 @@ export default function CreateClientPage() {
     )
   }
 
+  function esMenorDeEdad(fecha: string): boolean {
+    if (!fecha) return false
+    const hoy = new Date()
+    const nac = new Date(fecha)
+    const edad = hoy.getFullYear() - nac.getFullYear()
+    const m = hoy.getMonth() - nac.getMonth()
+    return edad < 18 || (edad === 18 && (m < 0 || (m === 0 && hoy.getDate() < nac.getDate())))
+  }
+
   // ── Step 1 — Datos ────────────────────────────────────────────────────────
   function Step1() {
     return (
@@ -494,13 +514,15 @@ export default function CreateClientPage() {
           </Field>
         </div>
 
-        <Field label="CUIL" error={errors.cuil} icon={Hash}>
-          <input
-            value={clientData.cuil}
-            onChange={e => setClientData(p => ({ ...p, cuil: e.target.value }))}
-            className={ic(true)}
-          />
-        </Field>
+        {!(clientData.fechaNacimiento && esMenorDeEdad(clientData.fechaNacimiento)) && (
+          <Field label="CUIL" error={errors.cuil} icon={Hash}>
+            <input
+              value={clientData.cuil}
+              onChange={e => setClientData(p => ({ ...p, cuil: e.target.value }))}
+              className={ic(true)}
+            />
+          </Field>
+        )}
 
         <div className="grid grid-cols-2 gap-4">
           <Field label="Email" error={errors.email} icon={Mail}>
@@ -523,6 +545,76 @@ export default function CreateClientPage() {
             />
           </Field>
         </div>
+
+        <Field label="Fecha de nacimiento" required error={errors.fechaNacimiento} icon={Calendar}>
+          <input
+            type="date"
+            value={clientData.fechaNacimiento}
+            max={today}
+            onChange={e => setClientData(p => ({ ...p, fechaNacimiento: e.target.value }))}
+            className={ic(true)}
+          />
+        </Field>
+
+        {/* Toggle exento de pago */}
+        <div className="rounded-xl border border-white/50 dark:border-white/10 bg-white/40 dark:bg-white/[0.04] p-4 flex flex-col gap-3">
+          <div className="flex items-center justify-between gap-3">
+            <div>
+              <p className="text-sm font-bold text-gray-900 dark:text-white">Exento de pago</p>
+              <p className="text-xs text-gray-500 dark:text-[#6A6A7A] mt-0.5">El cliente tiene membresía activa pero no paga cuotas</p>
+            </div>
+            <div
+              role="button"
+              onClick={() => setClientData(p => ({ ...p, exentoDePago: !p.exentoDePago, motivoExencion: p.exentoDePago ? '' : p.motivoExencion }))}
+              className="flex items-center gap-2 cursor-pointer shrink-0"
+            >
+              <div className={`relative h-6 w-11 rounded-full transition-colors duration-200 ${clientData.exentoDePago ? 'bg-emerald-500' : 'bg-gray-300 dark:bg-gray-600'}`}>
+                <div className={`absolute top-1 h-4 w-4 rounded-full bg-white shadow transition-transform duration-200 ${clientData.exentoDePago ? 'translate-x-5' : 'translate-x-1'}`} />
+              </div>
+            </div>
+          </div>
+          {clientData.exentoDePago && (
+            <Field label="Motivo (opcional)" icon={BookOpen}>
+              <input
+                value={clientData.motivoExencion}
+                onChange={e => setClientData(p => ({ ...p, motivoExencion: e.target.value }))}
+                placeholder="Ej. Convenio, socio fundador, staff…"
+                className={ic(true)}
+              />
+            </Field>
+          )}
+        </div>
+
+        {clientData.fechaNacimiento && esMenorDeEdad(clientData.fechaNacimiento) && (
+          <div className="rounded-xl border border-amber-400/30 bg-amber-400/5 p-4 space-y-4">
+            <p className="text-xs font-bold text-amber-500 flex items-center gap-2">
+              <AlertCircle size={13} /> Cliente menor de edad — datos del responsable
+            </p>
+            <Field label="Nombre del responsable" icon={User}>
+              <input
+                value={clientData.responsableNombre}
+                onChange={e => setClientData(p => ({ ...p, responsableNombre: e.target.value }))}
+                className={ic(true)}
+              />
+            </Field>
+            <div className="grid grid-cols-2 gap-4">
+              <Field label="CUIL del responsable" icon={Hash}>
+                <input
+                  value={clientData.responsableCuil}
+                  onChange={e => setClientData(p => ({ ...p, responsableCuil: e.target.value }))}
+                  className={ic(true)}
+                />
+              </Field>
+              <Field label="Contacto del responsable" icon={Phone}>
+                <input
+                  value={clientData.responsableContacto}
+                  onChange={e => setClientData(p => ({ ...p, responsableContacto: e.target.value }))}
+                  className={ic(true)}
+                />
+              </Field>
+            </div>
+          </div>
+        )}
       </div>
     )
   }
@@ -745,24 +837,34 @@ export default function CreateClientPage() {
           </div>
         </div>
 
+        {/* Banner exento */}
+        {clientData.exentoDePago && (
+          <div className="flex items-start gap-3 rounded-xl border border-emerald-400/30 bg-emerald-400/5 px-4 py-3">
+            <AlertCircle size={14} className="text-emerald-500 shrink-0 mt-0.5" />
+            <div>
+              <p className="text-xs font-bold text-emerald-600 dark:text-emerald-400">Cliente exento de pago</p>
+              <p className="text-xs text-emerald-600/70 dark:text-emerald-400/60 mt-0.5">Se registrará un pago de $0 para mantener el historial.</p>
+            </div>
+          </div>
+        )}
+
         {/* Monto — destacado */}
         <div>
           <p className="text-[11px] font-bold uppercase tracking-widest text-gray-400 dark:text-[#6A6A7A] mb-2">
-            Monto Cuota 1 <span className="text-primary">*</span>
+            Monto Cuota 1 {!clientData.exentoDePago && <span className="text-primary">*</span>}
           </p>
           <div className="relative">
             <span className="absolute left-4 top-1/2 -translate-y-1/2 text-xl font-black text-gray-400 dark:text-[#5A5A6A] pointer-events-none">$</span>
             <input
               type="number" min={0}
-              value={paymentData.monto}
-              onChange={e => setPaymentData(p => ({ ...p, monto: e.target.value }))}
+              value={clientData.exentoDePago ? '0' : paymentData.monto}
+              readOnly={clientData.exentoDePago}
+              onChange={e => !clientData.exentoDePago && setPaymentData(p => ({ ...p, monto: e.target.value }))}
               className={[
                 'w-full pl-9 pr-4 py-4 rounded-xl text-2xl font-black tabular-nums transition-all duration-200',
-                'bg-gray-50 dark:bg-white/[0.05]',
-                'border border-gray-200 dark:border-white/[0.08]',
-                'text-gray-900 dark:text-white',
-                'focus:outline-none focus:bg-white dark:focus:bg-white/[0.08]',
-                'focus:border-primary/50 focus:ring-2 focus:ring-primary/10',
+                clientData.exentoDePago
+                  ? 'bg-gray-100 dark:bg-white/[0.02] border border-gray-200 dark:border-white/[0.05] text-gray-400 dark:text-[#5A5A6A] cursor-default'
+                  : 'bg-gray-50 dark:bg-white/[0.05] border border-gray-200 dark:border-white/[0.08] text-gray-900 dark:text-white focus:outline-none focus:bg-white dark:focus:bg-white/[0.08] focus:border-primary/50 focus:ring-2 focus:ring-primary/10',
               ].join(' ')}
             />
           </div>
@@ -1155,7 +1257,7 @@ export default function CreateClientPage() {
             className="flex-1"
             onClick={() => {
               setStep(1)
-              setClientData({ nombre: '', apellido: '', cuil: '', email: '', telefono: '' })
+              setClientData({ nombre: '', apellido: '', cuil: '', email: '', telefono: '', fechaNacimiento: '', responsableNombre: '', responsableCuil: '', responsableContacto: '', exentoDePago: false, motivoExencion: '' })
               setMembershipData({ planId: '', modalidad: 'EFECTIVO', precio: '', fechaInicio: today })
               setPaymentData({ monto: '', metodo: 'EFECTIVO', fecha: today, comprobante: '' })
               setSelectedTurnoId(null)

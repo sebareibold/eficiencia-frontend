@@ -25,6 +25,13 @@ export interface Client {
   updatedAt: string
   proporcionalPendiente?: boolean
   descuentoProporcional?: number
+  fechaNacimiento?: string | null
+  esMenor?: boolean
+  exentoDePago?: boolean
+  motivoExencion?: string | null
+  responsableNombre?: string | null
+  responsableCuil?: string | null
+  responsableContacto?: string | null
 }
 
 export interface CreateClientDto {
@@ -33,9 +40,21 @@ export interface CreateClientDto {
   email: string
   phone: string
   cuil: string
+  fechaNacimiento?: string
+  exentoDePago?: boolean
+  motivoExencion?: string
+  responsableNombre?: string
+  responsableCuil?: string
+  responsableContacto?: string
 }
 
 export interface UpdateClientDto extends Partial<CreateClientDto> {
   sedeId?: string | null
   estado?: 'ACTIVO' | 'INACTIVO'
+  fechaNacimiento?: string | null
+  exentoDePago?: boolean
+  motivoExencion?: string | null
+  responsableNombre?: string | null
+  responsableCuil?: string | null
+  responsableContacto?: string | null
 }

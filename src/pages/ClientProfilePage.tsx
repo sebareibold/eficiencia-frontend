@@ -11,7 +11,7 @@ import {
   MessageCircle, Tag, Dumbbell, BookOpen, Plus, ChevronDown, ChevronRight, ChevronLeft,
   BarChart2, PieChart as PieIcon, LineChart as LineChartIcon,
   Receipt, AlertTriangle, MapPin, User, Trophy, Trash2, Save,
-  CalendarX2, CalendarCheck2, RefreshCw, Check, ExternalLink, UserX, UserCheck,
+  CalendarX2, CalendarCheck2, RefreshCw, Check, ExternalLink, UserX, UserCheck, Shield,
 } from 'lucide-react'
 import { format, parseISO, addDays, isValid, type Locale } from 'date-fns'
 import { es } from 'date-fns/locale'
@@ -91,6 +91,14 @@ const editSchema = z.object({
   experiencia:     z.string().optional(),
   lesiones:        z.string().optional(),
   patologiasBase:  z.string().optional(),
+  // condición especial
+  exentoDePago:   z.boolean().optional(),
+  motivoExencion: z.string().optional(),
+  fechaNacimiento: z.string().optional(),
+  // responsable (menores)
+  responsableNombre:    z.string().optional(),
+  responsableCuil:      z.string().optional(),
+  responsableContacto:  z.string().optional(),
 })
 type EditValues = z.infer<typeof editSchema>
 
@@ -550,6 +558,11 @@ export default function ClientProfilePage() {
     planId: string; modalidad: Modalidad; precio: string; fechaInicio: string
   }>({ planId: '', modalidad: 'TRANSFERENCIA_MENSUAL', precio: '', fechaInicio: '' })
 
+  // Exención de pago
+  const [showExentoConfirm, setShowExentoConfirm] = useState(false)
+
+  // Exención de pago — confirm modal
+
   // Rutinas — solo para el resumen en el tab (la edición vive en ClientRutinaPage)
   const { rutinas, isLoading: loadingRutinas, refetch: refetchRutinas } = useRutinas(id)
 
@@ -589,9 +602,21 @@ export default function ClientProfilePage() {
     }
   }
 
-  const { register, handleSubmit, formState: { errors }, reset } = useForm<EditValues>({
+  const { register, handleSubmit, formState: { errors }, reset, watch, setValue } = useForm<EditValues>({
     resolver: zodResolver(editSchema),
   })
+  const watchExento = watch('exentoDePago')
+  const watchFechaNacimiento = watch('fechaNacimiento')
+  const showResponsable = (() => {
+    const fn = isEditing ? watchFechaNacimiento : client?.fechaNacimiento?.slice(0, 10)
+    if (!fn) return client?.esMenor ?? false
+    const [y, m, d] = fn.split('-').map(Number)
+    if (!y || !m || !d) return client?.esMenor ?? false
+    const hoy = new Date()
+    const diffM = hoy.getMonth() + 1 - m
+    const ajuste = diffM < 0 || (diffM === 0 && hoy.getDate() < d) ? 1 : 0
+    return hoy.getFullYear() - y - ajuste < 18
+  })()
 
   useEffect(() => { clientsApi.getSedes().then(setSedes).catch(() => {}) }, [])
 
@@ -646,6 +671,12 @@ export default function ClientProfilePage() {
         reset({
           name: c.name, lastName: c.lastName, email: c.email ?? '', phone: c.phone ?? '', cuil: c.cuil ?? '',
           sedeId: c.sede?.id ?? '',
+          exentoDePago: c.exentoDePago ?? false,
+          motivoExencion: c.motivoExencion ?? '',
+          fechaNacimiento: c.fechaNacimiento ? c.fechaNacimiento.slice(0, 10) : '',
+          responsableNombre:   c.responsableNombre   ?? '',
+          responsableCuil:     c.responsableCuil     ?? '',
+          responsableContacto: c.responsableContacto ?? '',
           peso:            f?.peso    != null ? String(f.peso)   : '',
           altura:          f?.altura  != null ? String(f.altura) : '',
           actividadDiaria: f?.actividadDiaria  ?? '',
@@ -738,6 +769,12 @@ export default function ClientProfilePage() {
           name: data.name, lastName: data.lastName,
           email: data.email ?? '', phone: data.phone ?? '', cuil: data.cuil,
           sedeId: data.sedeId || null,
+          exentoDePago: data.exentoDePago ?? false,
+          motivoExencion: data.motivoExencion || null,
+          fechaNacimiento: data.fechaNacimiento || null,
+          responsableNombre:   data.responsableNombre   || null,
+          responsableCuil:     data.responsableCuil     || null,
+          responsableContacto: data.responsableContacto || null,
         }),
         clientsApi.updateFicha(client.id, {
           peso:            toNum(data.peso),
@@ -803,6 +840,7 @@ export default function ClientProfilePage() {
     setEditingEvento(ev)
     setEventoForm({ nombre: ev.nombre, fecha: ev.fecha.slice(0, 10), observacion: ev.observacion ?? '' })
   }
+
 
   async function handleCreateMembresia() {
     if (!client) return
@@ -1371,11 +1409,11 @@ export default function ClientProfilePage() {
 
       {/* ── HERO CARD ───────────────────────────────────────────────────────── */}
       <div id="perfil" className={`${glassCard} overflow-hidden`}>
-        {/* Accent bar (status color) */}
-        <div className={`h-1 w-full ${statusBarColor(client.status)}`} />
+        {/* Accent bar (status color / exento) */}
+        <div className={`h-1 w-full ${client.exentoDePago ? 'bg-emerald-500' : statusBarColor(client.status)}`} />
 
         {/* ── Contenedor 1: Header ────────────────────────────────────────── */}
-        <div className="px-5 md:px-7 pt-5 md:pt-7 pb-3 md:pb-4">
+        <div className={`px-5 md:px-7 pt-5 md:pt-7 pb-3 md:pb-4 transition-colors${client.exentoDePago ? ' bg-emerald-500/[0.04] dark:bg-emerald-500/[0.05]' : ''}`}>
           <div className="flex flex-col sm:flex-row gap-5 sm:items-center">
             {/* Avatar */}
             <div className={`h-16 w-16 md:h-20 md:w-20 rounded-2xl md:rounded-3xl flex items-center justify-center text-2xl md:text-3xl font-black shrink-0 ${avatarColors(client.status)}`}>
@@ -1393,6 +1431,14 @@ export default function ClientProfilePage() {
                   <p className="text-sm text-gray-400 dark:text-[#8A8A9A] mt-1.5">
                     Miembro desde {formatDate(client.createdAt)}
                   </p>
+                  {/* Badge exento */}
+                  {client.exentoDePago && (
+                    <div className="mt-2 inline-flex items-center gap-1.5 text-xs px-2.5 py-1 rounded-lg font-semibold bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border border-emerald-500/20">
+                      <Shield size={11} />
+                      Exento de pago
+                      {client.motivoExencion && <span className="opacity-60">· {client.motivoExencion}</span>}
+                    </div>
+                  )}
                   {/* Badges con etiqueta — Actividad + Estado membresía */}
                   <div className="flex items-center gap-5 mt-4">
                     <div className="flex flex-col gap-1.5 items-start">
@@ -1445,7 +1491,7 @@ export default function ClientProfilePage() {
                       <>
                         <button
                           type="button"
-                          onClick={() => { reset({ name: client.name, lastName: client.lastName, email: client.email ?? '', phone: client.phone ?? '', cuil: client.cuil ?? '', peso: ficha?.peso != null ? String(ficha.peso) : '', altura: ficha?.altura != null ? String(ficha.altura) : '', actividadDiaria: ficha?.actividadDiaria ?? '', objetivos: ficha?.objetivos ?? '', deportePractica: ficha?.deportePractica ?? '', experiencia: ficha?.experiencia ?? '', lesiones: ficha?.lesiones ?? '', patologiasBase: ficha?.patologiasBase ?? '' }); setIsEditing(false) }}
+                          onClick={() => { reset({ name: client.name, lastName: client.lastName, email: client.email ?? '', phone: client.phone ?? '', cuil: client.cuil ?? '', peso: ficha?.peso != null ? String(ficha.peso) : '', altura: ficha?.altura != null ? String(ficha.altura) : '', actividadDiaria: ficha?.actividadDiaria ?? '', objetivos: ficha?.objetivos ?? '', deportePractica: ficha?.deportePractica ?? '', experiencia: ficha?.experiencia ?? '', lesiones: ficha?.lesiones ?? '', patologiasBase: ficha?.patologiasBase ?? '', exentoDePago: client.exentoDePago ?? false, motivoExencion: client.motivoExencion ?? '', fechaNacimiento: client.fechaNacimiento ? client.fechaNacimiento.slice(0, 10) : '', responsableNombre: client.responsableNombre ?? '', responsableCuil: client.responsableCuil ?? '', responsableContacto: client.responsableContacto ?? '' }); setIsEditing(false) }}
                           className="flex items-center gap-1.5 text-xs font-semibold px-3 py-1.5 rounded-xl border border-gray-200 dark:border-white/[0.1] bg-white/70 dark:bg-white/[0.04] text-gray-700 dark:text-gray-300 hover:bg-white dark:hover:bg-white/[0.09] transition-all"
                         >
                           <XCircle size={12} />
@@ -1463,7 +1509,7 @@ export default function ClientProfilePage() {
                       </>
                     ) : (
                       <button
-                        onClick={() => { reset({ name: client.name, lastName: client.lastName, email: client.email ?? '', phone: client.phone ?? '', cuil: client.cuil ?? '', peso: ficha?.peso != null ? String(ficha.peso) : '', altura: ficha?.altura != null ? String(ficha.altura) : '', actividadDiaria: ficha?.actividadDiaria ?? '', objetivos: ficha?.objetivos ?? '', deportePractica: ficha?.deportePractica ?? '', experiencia: ficha?.experiencia ?? '', lesiones: ficha?.lesiones ?? '', patologiasBase: ficha?.patologiasBase ?? '' }); setIsEditing(true) }}
+                        onClick={() => { reset({ name: client.name, lastName: client.lastName, email: client.email ?? '', phone: client.phone ?? '', cuil: client.cuil ?? '', peso: ficha?.peso != null ? String(ficha.peso) : '', altura: ficha?.altura != null ? String(ficha.altura) : '', actividadDiaria: ficha?.actividadDiaria ?? '', objetivos: ficha?.objetivos ?? '', deportePractica: ficha?.deportePractica ?? '', experiencia: ficha?.experiencia ?? '', lesiones: ficha?.lesiones ?? '', patologiasBase: ficha?.patologiasBase ?? '', exentoDePago: client.exentoDePago ?? false, motivoExencion: client.motivoExencion ?? '', fechaNacimiento: client.fechaNacimiento ? client.fechaNacimiento.slice(0, 10) : '', responsableNombre: client.responsableNombre ?? '', responsableCuil: client.responsableCuil ?? '', responsableContacto: client.responsableContacto ?? '' }); setIsEditing(true) }}
                         className="flex items-center gap-1.5 text-xs font-semibold px-3 py-1.5 rounded-xl border border-gray-200 dark:border-white/[0.1] bg-white/70 dark:bg-white/[0.04] text-gray-700 dark:text-gray-300 hover:bg-white dark:hover:bg-white/[0.09] transition-all"
                       >
                         <Edit2 size={12} />
@@ -1489,8 +1535,9 @@ export default function ClientProfilePage() {
 
         {/* ── Contenedor 2: Tablas de Datos ───────────────────────────────── */}
         <div className="px-5 md:px-7 pt-3 md:pt-4 pb-5 md:pb-7">
-          {/* Tabla unificada: Datos Personales + Ficha en 2 columnas */}
-          <div className="rounded-2xl border border-gray-200/60 dark:border-white/[0.08] bg-white/20 dark:bg-white/[0.01] overflow-hidden text-xs">
+          {/* Tabla unificada: Datos Personales + Responsable legal */}
+          <div className="flex flex-col lg:flex-row gap-4 items-start">
+          <div className="flex-1 min-w-0 rounded-2xl border border-gray-200/60 dark:border-white/[0.08] bg-white/20 dark:bg-white/[0.01] overflow-hidden text-xs">
             <div className="border-b border-gray-200/60 dark:border-white/[0.06] bg-gray-50/50 dark:bg-white/[0.02] px-4 py-3">
               <span className="text-[11px] font-bold uppercase tracking-wider text-gray-500 dark:text-[#8A8A9A]">Datos Personales</span>
             </div>
@@ -1501,7 +1548,7 @@ export default function ClientProfilePage() {
                 {([
                   { label: 'Nombre',   regKey: 'name'     as keyof EditValues, Icon: User,  placeholder: 'Sin nombre',   raw: client.name },
                   { label: 'Apellido', regKey: 'lastName' as keyof EditValues, Icon: User,  placeholder: 'Sin apellido', raw: client.lastName },
-                  { label: 'CUIL',     regKey: 'cuil'     as keyof EditValues, Icon: Hash,  placeholder: 'Sin CUIL',     raw: client.cuil },
+                  ...(!showResponsable ? [{ label: 'CUIL', regKey: 'cuil' as keyof EditValues, Icon: Hash, placeholder: 'Sin CUIL', raw: client.cuil }] : []),
                   { label: 'Email',    regKey: 'email'    as keyof EditValues, Icon: Mail,  placeholder: 'Sin email',    raw: client.email },
                   { label: 'Teléfono', regKey: 'phone'    as keyof EditValues, Icon: Phone, placeholder: 'Sin teléfono', raw: client.phone },
                 ]).map(({ label, regKey, Icon, placeholder, raw }) => (
@@ -1535,6 +1582,35 @@ export default function ClientProfilePage() {
                     )}
                   </div>
                 ))}
+
+                {/* Fecha de nacimiento / Edad */}
+                <div className="grid grid-cols-[3fr_5fr] px-4 py-2.5 hover:bg-black/[0.02] dark:hover:bg-white/[0.01] transition-colors items-start">
+                  <span className="text-gray-500 dark:text-[#8A8A9A] flex items-center gap-1.5 font-semibold pt-1">
+                    <CalendarDays size={12} className="opacity-60 text-gray-400 dark:text-gray-500 shrink-0" />
+                    Edad
+                  </span>
+                  {isEditing ? (
+                    <input
+                      type="date"
+                      max={new Date().toISOString().slice(0, 10)}
+                      className="w-full bg-white/60 dark:bg-white/[0.06] border border-gray-200 dark:border-white/[0.15] rounded-lg px-2 py-1 text-xs text-gray-900 dark:text-white placeholder-gray-400 focus:outline-none focus:ring-1 focus:ring-primary/60 transition-all"
+                      {...register('fechaNacimiento')}
+                    />
+                  ) : (
+                    <span className={client.fechaNacimiento ? 'text-gray-900 dark:text-white font-semibold pt-0.5' : 'text-gray-400 dark:text-gray-500 pt-0.5'}>
+                      {client.fechaNacimiento ? (() => {
+                        const str = client.fechaNacimiento.slice(0, 10)
+                        const [y, m, d] = str.split('-').map(Number)
+                        const hoy = new Date()
+                        const diffM = hoy.getMonth() + 1 - m
+                        const ajuste = diffM < 0 || (diffM === 0 && hoy.getDate() < d) ? 1 : 0
+                        const edad = hoy.getFullYear() - y - ajuste
+                        return `${edad} años · ${format(parseISO(str), 'dd/MM/yyyy')}`
+                      })() : '—'}
+                    </span>
+                  )}
+                </div>
+
               </div>
 
               {/* Col 2 — Sede, Act. diaria, Objetivos, Deporte, Experiencia */}
@@ -1616,10 +1692,97 @@ export default function ClientProfilePage() {
                     )}
                   </div>
                 ))}
+
+                {/* Exento de pago — solo visible para admin o si ya es exento */}
+                {(isAdmin || client.exentoDePago) && (
+                  <div className="grid grid-cols-[3fr_5fr] px-4 py-2.5 hover:bg-black/[0.02] dark:hover:bg-white/[0.01] transition-colors items-center">
+                    <span className="text-gray-500 dark:text-[#8A8A9A] flex items-center gap-1.5 font-semibold">
+                      <Shield size={12} className="opacity-60 text-gray-400 dark:text-gray-500 shrink-0" />
+                      Exento
+                    </span>
+                    {isEditing && isAdmin ? (
+                      <div
+                        role="button"
+                        onClick={() => watchExento ? setValue('exentoDePago', false) : setShowExentoConfirm(true)}
+                        className="flex items-center gap-2 cursor-pointer w-fit"
+                      >
+                        <div className={`relative h-4 w-7 rounded-full transition-colors duration-200 ${watchExento ? 'bg-emerald-500' : 'bg-gray-300 dark:bg-gray-600'}`}>
+                          <div className={`absolute top-0.5 h-3 w-3 rounded-full bg-white shadow transition-transform duration-200 ${watchExento ? 'translate-x-3' : 'translate-x-0.5'}`} />
+                        </div>
+                        <span className="text-xs font-semibold text-gray-500 dark:text-gray-400">
+                          {watchExento ? 'Sí' : 'No'}
+                        </span>
+                      </div>
+                    ) : (
+                      <span className={client.exentoDePago ? 'text-emerald-600 dark:text-emerald-400 font-semibold' : 'text-gray-400 dark:text-gray-500'}>
+                        {client.exentoDePago ? 'Sí' : 'No'}
+                      </span>
+                    )}
+                  </div>
+                )}
+
+                {/* Motivo exención */}
+                {(isAdmin || client.motivoExencion) && (watchExento || (!isEditing && client.exentoDePago)) && (
+                  <div className="grid grid-cols-[3fr_5fr] px-4 py-2.5 hover:bg-black/[0.02] dark:hover:bg-white/[0.01] transition-colors items-start">
+                    <span className="text-gray-500 dark:text-[#8A8A9A] flex items-center gap-1.5 font-semibold pt-1">
+                      <Shield size={12} className="opacity-0 shrink-0" />
+                      Motivo
+                    </span>
+                    {isEditing ? (
+                      <input
+                        placeholder="Convenio, socio fundador…"
+                        className="w-full bg-white/60 dark:bg-white/[0.06] border border-gray-200 dark:border-white/[0.15] rounded-lg px-2 py-1 text-xs text-gray-900 dark:text-white placeholder-gray-400 focus:outline-none focus:ring-1 focus:ring-primary/60 transition-all"
+                        {...register('motivoExencion')}
+                      />
+                    ) : (
+                      <span className={client.motivoExencion ? 'text-gray-900 dark:text-white font-semibold pt-0.5' : 'text-gray-400 dark:text-gray-500 pt-0.5'}>
+                        {client.motivoExencion || '—'}
+                      </span>
+                    )}
+                  </div>
+                )}
               </div>
 
             </div>
           </div>
+
+
+          {/* ── Responsable legal (menores de edad) ─────────────────────────── */}
+          {showResponsable && (
+            <div className="lg:w-64 lg:shrink-0 rounded-2xl border border-amber-400/25 dark:border-amber-400/20 bg-white/20 dark:bg-white/[0.01] overflow-hidden text-xs">
+              <div className="border-b border-amber-400/20 bg-amber-400/[0.05] px-4 py-3">
+                <span className="text-[11px] font-bold uppercase tracking-wider text-amber-600 dark:text-amber-400 flex items-center gap-1.5">
+                  <User size={11} className="opacity-80" /> Responsable legal
+                </span>
+              </div>
+              <div className="divide-y divide-gray-100 dark:divide-white/[0.04]">
+                {([
+                  { label: 'Nombre',   regKey: 'responsableNombre'   as keyof EditValues, raw: client.responsableNombre },
+                  { label: 'CUIL',     regKey: 'responsableCuil'     as keyof EditValues, raw: client.responsableCuil },
+                  { label: 'Contacto', regKey: 'responsableContacto' as keyof EditValues, raw: client.responsableContacto },
+                ]).map(({ label, regKey, raw }) => (
+                  <div key={regKey} className="grid grid-cols-[3fr_5fr] px-4 py-2.5 hover:bg-black/[0.02] dark:hover:bg-white/[0.01] transition-colors items-start">
+                    <span className="text-gray-500 dark:text-[#8A8A9A] flex items-center gap-1.5 font-semibold pt-1">
+                      <User size={12} className="opacity-60 text-gray-400 dark:text-gray-500 shrink-0" />
+                      {label}
+                    </span>
+                    {isEditing ? (
+                      <input
+                        placeholder="—"
+                        className="w-full bg-white/60 dark:bg-white/[0.06] border border-gray-200 dark:border-white/[0.15] rounded-lg px-2 py-1 text-xs text-gray-900 dark:text-white placeholder-gray-400 focus:outline-none focus:ring-1 focus:ring-primary/60 transition-all"
+                        {...register(regKey)}
+                      />
+                    ) : (
+                      <span className={raw ? 'text-gray-900 dark:text-white font-semibold pt-0.5' : 'text-gray-400 dark:text-gray-500 pt-0.5'}>
+                        {raw || '—'}
+                      </span>
+                    )}
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
+          </div>{/* end flex datos + responsable */}
 
           {/* ── Membresía + Calendario en grid ──────────────────────────────── */}
           <div className="mt-4 grid grid-cols-1 md:grid-cols-2 gap-6 items-start">
@@ -3818,6 +3981,23 @@ export default function ClientProfilePage() {
         isLoading={deletingRutina}
         onConfirm={() => void handleDeleteRutina()}
         onClose={() => setDeleteRutinaId(null)}
+      />
+
+      <ConfirmDialog
+        isOpen={showExentoConfirm}
+        title="Activar exención de pago"
+        message={`${client?.name} ${client?.lastName} quedará marcado como cliente exento. Esto tiene las siguientes implicancias:`}
+        details={[
+          'Siempre figurará como "Al día" en el sistema, aunque su membresía esté vencida o sin renovar.',
+          'No será afectado por la baja automática por vencimiento: el cron de inactivación lo saltea.',
+          'No aparecerá en alertas de deuda del dashboard ni en los correos de notificación de mora.',
+          'Igual necesita una membresía activa para que el sistema sepa en qué turnos puede inscribirse y cuándo vence su período.',
+        ]}
+        warning="Esta exención debe ser por un motivo puntual. Completá el campo Motivo antes de guardar para dejar registro del contexto."
+        confirmLabel="Activar exención"
+        confirmVariant="primary"
+        onConfirm={() => { setValue('exentoDePago', true); setShowExentoConfirm(false) }}
+        onClose={() => setShowExentoConfirm(false)}
       />
 
       <ConfirmDialog

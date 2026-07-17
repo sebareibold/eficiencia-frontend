@@ -520,13 +520,14 @@ export default function PaymentsPage() {
 
   const { memberships: plans, isLoading: plansLoading, error: plansError, refetch: refetchPlans } = useMemberships()
   const { payments, total: serverTotal, totalPages, currentPage, goToPage, isLoading, error, refetch } = usePayments({
-    desde: periodDesde,
-    hasta: periodHasta,
-    anio:  periodAnio,
+    desde:  periodDesde,
+    hasta:  periodHasta,
+    anio:   periodAnio,
+    method: methodFilter !== 'all' ? methodFilter : undefined,
   })
 
-  // Resetear página al cambiar período
-  useEffect(() => { goToPage(1) }, [periodMode, navDate.getFullYear(), navDate.getMonth()]) // eslint-disable-line react-hooks/exhaustive-deps
+  // Resetear página al cambiar período o método
+  useEffect(() => { goToPage(1) }, [periodMode, navDate.getFullYear(), navDate.getMonth(), methodFilter]) // eslint-disable-line react-hooks/exhaustive-deps
 
   // Posicionar popover bajo el botón trigger
   useEffect(() => {
@@ -845,7 +846,7 @@ export default function PaymentsPage() {
           <div className="flex flex-col gap-1.5">
             <span className="text-[10px] font-bold uppercase tracking-wider text-gray-400 dark:text-gray-500 px-1">Período</span>
             <div className="flex items-center rounded-full border border-white/50 dark:border-white/10 bg-white/30 dark:bg-black/30 backdrop-blur-xl p-1 shadow-sm gap-1 shrink-0">
-              {([['day', 'Hoy'], ['month', 'Mes'], ['year', 'Año'], ['all', 'Histórico']] as [PeriodMode, string][]).map(([m, lbl]) => {
+              {([['day', 'Día'], ['month', 'Mes'], ['year', 'Año'], ['all', 'Histórico']] as [PeriodMode, string][]).map(([m, lbl]) => {
                 const isActive = periodMode === m
                 return (
                   <motion.button key={m} onClick={() => { setPeriodMode(m); setNavDate(today) }} whileTap={{ scale: 0.94 }}
