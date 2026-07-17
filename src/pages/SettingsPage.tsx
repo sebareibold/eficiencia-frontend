@@ -137,111 +137,6 @@ function ProbarBtn({ tipo }: { tipo: string }) {
   )
 }
 
-const TIPO_LABEL: Record<string, string> = {
-  'resumen-diario': 'Resumen diario',
-  'nuevo-cliente': 'Nuevos clientes',
-  'nuevo-usuario': 'Nuevos usuarios',
-  'solicitud-aprobada': 'Solicitudes aprobadas',
-  'solicitud-acceso': 'Solicitudes de acceso',
-  'lista-espera-notificado': 'Solicitudes de turno',
-  'pago-registrado': 'Pagos registrados',
-  'baja-cliente': 'Bajas automáticas',
-  'prueba': 'Emails de prueba',
-  'general': 'Otros',
-}
-
-function ConteoEmailsCard() {
-  const [data, setData] = useState<{
-    hoy: number
-    esteMes: number
-    limites: { diario: number; mensual: number }
-    desglose: { tipo: string; count: number }[]
-  } | null>(null)
-  const [loading, setLoading] = useState(true)
-
-  useEffect(() => {
-    notificacionesApi.conteoEmails()
-      .then(setData)
-      .catch(() => {})
-      .finally(() => setLoading(false))
-  }, [])
-
-  function ProgressBar({ value, max }: { value: number; max: number }) {
-    const pct = Math.min(100, (value / max) * 100)
-    const color = pct >= 90 ? 'bg-red-500' : pct >= 70 ? 'bg-amber-400' : 'bg-primary'
-    return (
-      <div className="h-1.5 w-full rounded-full bg-gray-100 dark:bg-white/10 overflow-hidden">
-        <div className={`h-full rounded-full transition-all duration-700 ${color}`} style={{ width: `${pct}%` }} />
-      </div>
-    )
-  }
-
-  return (
-    <SectionCard>
-      <div className="px-8 py-6 space-y-5">
-        <div className="flex items-center justify-between">
-          <p className="text-sm font-bold text-gray-900 dark:text-gray-100">Uso de emails (Resend)</p>
-          {!loading && data && (
-            <span className="text-xs text-gray-400 dark:text-gray-500">Plan gratuito</span>
-          )}
-        </div>
-
-        {loading ? (
-          <div className="space-y-3">
-            <div className="h-4 w-40 rounded-lg bg-gray-100 dark:bg-white/10 animate-pulse" />
-            <div className="h-1.5 w-full rounded-full bg-gray-100 dark:bg-white/10 animate-pulse" />
-            <div className="h-4 w-40 rounded-lg bg-gray-100 dark:bg-white/10 animate-pulse" />
-            <div className="h-1.5 w-full rounded-full bg-gray-100 dark:bg-white/10 animate-pulse" />
-          </div>
-        ) : data ? (
-          <div className="space-y-4">
-            <div className="space-y-1.5">
-              <div className="flex items-center justify-between text-xs">
-                <span className="font-semibold text-gray-600 dark:text-gray-400">Hoy</span>
-                <span className="font-black tabular-nums text-gray-900 dark:text-gray-100">
-                  {data.hoy} <span className="font-medium text-gray-400">/ {data.limites.diario}</span>
-                </span>
-              </div>
-              <ProgressBar value={data.hoy} max={data.limites.diario} />
-            </div>
-
-            <div className="space-y-1.5">
-              <div className="flex items-center justify-between text-xs">
-                <span className="font-semibold text-gray-600 dark:text-gray-400">Este mes</span>
-                <span className="font-black tabular-nums text-gray-900 dark:text-gray-100">
-                  {data.esteMes} <span className="font-medium text-gray-400">/ {data.limites.mensual}</span>
-                </span>
-              </div>
-              <ProgressBar value={data.esteMes} max={data.limites.mensual} />
-            </div>
-
-            {data.desglose.length > 0 && (
-              <div className="pt-2 border-t border-gray-100/50 dark:border-white/5">
-                <p className="text-xs font-bold text-gray-400 dark:text-gray-500 uppercase tracking-widest mb-2.5">
-                  Desglose del mes <span className="normal-case font-medium">(desde que se activó el tracking)</span>
-                </p>
-                <div className="flex flex-wrap gap-2">
-                  {data.desglose.map(d => (
-                    <span
-                      key={d.tipo}
-                      className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-gray-100/80 dark:bg-white/[0.06] text-xs font-semibold text-gray-600 dark:text-gray-400"
-                    >
-                      {TIPO_LABEL[d.tipo] ?? d.tipo}
-                      <span className="font-black text-gray-900 dark:text-gray-200">{d.count}</span>
-                    </span>
-                  ))}
-                </div>
-              </div>
-            )}
-          </div>
-        ) : (
-          <p className="text-xs text-gray-400">No se pudo cargar el conteo</p>
-        )}
-      </div>
-    </SectionCard>
-  )
-}
-
 function EnviarResumenCard() {
   const [loading, setLoading] = useState(false)
   const { addToast } = useUiStore()
@@ -406,23 +301,6 @@ function NotificationsSection() {
 
   return (
     <div>
-      <SectionHeader title="Destino" />
-      <SectionCard>
-        <SectionRow
-          label="Email de notificaciones"
-          description="Dirección donde llegan los avisos. Si lo dejás vacío, se usa el email del administrador registrado en el sistema."
-          last
-        >
-          <input
-            type="email"
-            value={notifications.emailDestino}
-            onChange={(e) => updateNotifications({ emailDestino: e.target.value })}
-            placeholder="admin@eficiencia.com"
-            className="w-52 rounded-xl border border-gray-200/50 dark:border-white/10 bg-gray-50/80 dark:bg-black/20 px-3.5 py-2 text-sm font-semibold text-gray-700 dark:text-gray-200 placeholder-gray-400 dark:placeholder-gray-600 focus:outline-none focus:ring-2 focus:ring-primary/30"
-          />
-        </SectionRow>
-      </SectionCard>
-
       <SectionHeader title="Qué notificar" />
 
       {/* Info banner */}
@@ -447,34 +325,6 @@ function NotificationsSection() {
             />
           </div>
         </SectionRow>
-        <AnimatePresence initial={false}>
-          {notifications.notifVencimientos && (
-            <motion.div
-              key="dias"
-              initial={{ height: 0, opacity: 0 }}
-              animate={{ height: 'auto', opacity: 1 }}
-              exit={{ height: 0, opacity: 0 }}
-              transition={{ duration: 0.2, ease: 'easeInOut' }}
-              className="overflow-hidden"
-            >
-              <SectionRow label="Días de anticipación" description="El sistema buscará membresías que venzan dentro de este rango. Ej: 7 días = avisás una semana antes.">
-                <div className="flex items-center gap-2">
-                  <button
-                    type="button"
-                    onClick={() => updateNotifications({ diasAnticipacion: Math.max(1, notifications.diasAnticipacion - 1) })}
-                    className="flex h-7 w-7 items-center justify-center rounded-lg border border-gray-200/50 dark:border-white/10 bg-gray-50/80 dark:bg-black/20 text-gray-500 dark:text-gray-400 hover:text-gray-900 dark:hover:text-white transition-colors font-bold text-sm"
-                  >−</button>
-                  <span className="w-8 text-center text-sm font-black text-gray-900 dark:text-white tabular-nums">{notifications.diasAnticipacion}</span>
-                  <button
-                    type="button"
-                    onClick={() => updateNotifications({ diasAnticipacion: Math.min(30, notifications.diasAnticipacion + 1) })}
-                    className="flex h-7 w-7 items-center justify-center rounded-lg border border-gray-200/50 dark:border-white/10 bg-gray-50/80 dark:bg-black/20 text-gray-500 dark:text-gray-400 hover:text-gray-900 dark:hover:text-white transition-colors font-bold text-sm"
-                  >+</button>
-                </div>
-              </SectionRow>
-            </motion.div>
-          )}
-        </AnimatePresence>
         <SectionRow
           label="Clientes con deuda"
           description="Email diario con todos los clientes en estado DEUDA. Incluye nombre, email y teléfono para facilitar el contacto."
@@ -591,30 +441,6 @@ function NotificationsSection() {
         </SectionRow>
       </SectionCard>
 
-      <SectionHeader title="Uso de emails" />
-      <ConteoEmailsCard />
-
-      <SectionHeader title="Enviar ahora" />
-      <EnviarResumenCard />
-
-      <SectionHeader title="Canal" />
-      <SectionCard>
-        <SectionRow
-          label="Cómo recibir los avisos"
-          description="Dashboard: las alertas aparecen en la sección de inicio. Email: recibís los avisos en tu correo. Ambos: las dos opciones activas."
-          last
-        >
-          <SegmentedControl
-            options={[
-              { value: 'app', label: 'Dashboard' },
-              { value: 'email', label: 'Email' },
-              { value: 'both', label: 'Ambos' },
-            ]}
-            value={notifications.canal}
-            onChange={(v) => updateNotifications({ canal: v as 'app' | 'email' | 'both' })}
-          />
-        </SectionRow>
-      </SectionCard>
     </div>
   )
 }
@@ -1033,6 +859,7 @@ function PermissionsSection() {
 function SistemaSection() {
   const navigate  = useNavigate()
   const addToast  = useUiStore(s => s.addToast)
+  const { notifications, updateNotifications } = useSettingsStore()
   const [config, setConfig] = useState<ConfiguracionSistema | null>(null)
   const [saving,  setSaving]  = useState(false)
 
@@ -1122,7 +949,6 @@ function SistemaSection() {
               <span className="text-gray-500 dark:text-[#8A8A9A]">Configurado para las <strong className="text-gray-900 dark:text-white">{horaLabel} hs</strong>.</span>
             </>
           }
-          last
         >
           <div className="flex items-center gap-2">
             <Clock size={14} className="text-gray-400 shrink-0" />
@@ -1137,16 +963,56 @@ function SistemaSection() {
             </select>
           </div>
         </SectionRow>
+
+        <SectionRow
+          label="Email de notificaciones"
+          description="Dirección donde llegan los avisos del sistema. Si lo dejás vacío, se usa el email del administrador."
+        >
+          <input
+            type="email"
+            value={notifications.emailDestino}
+            onChange={(e) => updateNotifications({ emailDestino: e.target.value })}
+            placeholder="admin@eficiencia.com"
+            className="w-52 rounded-xl border border-gray-200/50 dark:border-white/10 bg-gray-50/80 dark:bg-black/20 px-3.5 py-2 text-sm font-semibold text-gray-700 dark:text-gray-200 placeholder-gray-400 dark:placeholder-gray-600 focus:outline-none focus:ring-2 focus:ring-primary/30"
+          />
+        </SectionRow>
+
+        <SectionRow
+          label="Días de anticipación"
+          description="Cuántos días antes del vencimiento de una membresía se envía el aviso. Ej: 7 días = avisás una semana antes."
+        >
+          <div className="flex items-center gap-2">
+            <button type="button"
+              onClick={() => updateNotifications({ diasAnticipacion: Math.max(1, notifications.diasAnticipacion - 1) })}
+              className="flex h-7 w-7 items-center justify-center rounded-lg border border-gray-200/50 dark:border-white/10 bg-gray-50/80 dark:bg-black/20 text-gray-500 dark:text-gray-400 hover:text-gray-900 dark:hover:text-white transition-colors font-bold text-sm"
+            >−</button>
+            <span className="w-8 text-center text-sm font-black text-gray-900 dark:text-white tabular-nums">{notifications.diasAnticipacion}</span>
+            <button type="button"
+              onClick={() => updateNotifications({ diasAnticipacion: Math.min(30, notifications.diasAnticipacion + 1) })}
+              className="flex h-7 w-7 items-center justify-center rounded-lg border border-gray-200/50 dark:border-white/10 bg-gray-50/80 dark:bg-black/20 text-gray-500 dark:text-gray-400 hover:text-gray-900 dark:hover:text-white transition-colors font-bold text-sm"
+            >+</button>
+          </div>
+        </SectionRow>
+
+        <SectionRow
+          label="Canal de notificaciones"
+          description="Dashboard: alertas en la sección de inicio. Email: avisos por correo. Ambos: las dos opciones activas."
+          last
+        >
+          <SegmentedControl
+            options={[
+              { value: 'app', label: 'Dashboard' },
+              { value: 'email', label: 'Email' },
+              { value: 'both', label: 'Ambos' },
+            ]}
+            value={notifications.canal}
+            onChange={(v) => updateNotifications({ canal: v as 'app' | 'email' | 'both' })}
+          />
+        </SectionRow>
       </SectionCard>
 
-      <div className="flex justify-end">
-        <button onClick={handleSave} disabled={saving}
-          className="flex items-center gap-1.5 rounded-xl btn-action px-4 py-2 text-sm font-bold disabled:opacity-60"
-        >
-          {saving ? <span className="h-3.5 w-3.5 animate-spin rounded-full border-2 border-gray-900/30 border-t-gray-900" /> : <Save size={13} />}
-          Guardar cambios
-        </button>
-      </div>
+      <SectionHeader title="Enviar ahora" />
+      <EnviarResumenCard />
 
       {/* ── Herramientas ─────────────────────────────────────────────────────── */}
       <SectionHeader title="Herramientas" />
@@ -1261,6 +1127,15 @@ function SistemaSection() {
           </motion.div>
         )}
       </AnimatePresence>
+
+      <div className="flex justify-end">
+        <button onClick={handleSave} disabled={saving}
+          className="flex items-center gap-1.5 rounded-xl btn-action px-4 py-2 text-sm font-bold disabled:opacity-60"
+        >
+          {saving ? <span className="h-3.5 w-3.5 animate-spin rounded-full border-2 border-gray-900/30 border-t-gray-900" /> : <Save size={13} />}
+          Guardar cambios
+        </button>
+      </div>
     </div>
   )
 }
@@ -1313,7 +1188,7 @@ const CATEGORIES: {
     label: 'Sistema',
     icon: Settings2,
     adminOnly: true,
-    keywords: ['inactivación', 'automática', 'días', 'gracia', 'cron', 'horario', 'vencimiento', 'seguridad', 'actividad', 'mantenimiento', 'consistencia', 'membresías'],
+    keywords: ['inactivación', 'automática', 'días', 'gracia', 'cron', 'horario', 'vencimiento', 'seguridad', 'actividad', 'mantenimiento', 'consistencia', 'membresías', 'email', 'canal', 'anticipación', 'resend'],
   },
 ]
 

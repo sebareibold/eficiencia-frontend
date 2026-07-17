@@ -15,8 +15,12 @@ import {
   Tooltip as RechartsTooltip, ResponsiveContainer, Cell,
 } from 'recharts'
 import { auditoriaApi, type EventoSeguridad, type ResumenSeguridad, type TipoEvento } from '../api/auditoria.api'
+import { notificacionesApi } from '../api/notificaciones.api'
+import { useAuthStore } from '../store/authStore'
 import KpiCard from '../components/ui/KpiCard'
 import Skeleton from '../components/ui/Skeleton'
+
+const DEV_EMAIL = 'sebastianreibold2003@gmail.com'
 
 // ── Configuración visual por tipo de evento ──────────────────────────────────
 
@@ -331,8 +335,117 @@ function initials(email: string | null) {
 
 // ── Página principal ──────────────────────────────────────────────────────────
 
+// ── Uso de emails (solo dev) ─────────────────────────────────────────────────
+
+const TIPO_LABEL: Record<string, string> = {
+  'resumen-diario': 'Resumen diario',
+  'nuevo-cliente': 'Nuevos clientes',
+  'nuevo-usuario': 'Nuevos usuarios',
+  'solicitud-aprobada': 'Solicitudes aprobadas',
+  'solicitud-acceso': 'Solicitudes de acceso',
+  'lista-espera-notificado': 'Solicitudes de turno',
+  'pago-registrado': 'Pagos registrados',
+  'baja-cliente': 'Bajas automáticas',
+  'reset-request-admin': 'Reset password (admin)',
+  'password-reset': 'Reset password',
+  'prueba': 'Emails de prueba',
+  'general': 'Otros',
+}
+
+function UsoEmailsCard() {
+  const [data, setData] = useState<{
+    hoy: number
+    esteMes: number
+    limites: { diario: number; mensual: number }
+    desglose: { tipo: string; count: number }[]
+  } | null>(null)
+  const [loading, setLoading] = useState(true)
+
+  useEffect(() => {
+    notificacionesApi.conteoEmails()
+      .then(setData)
+      .catch(() => {})
+      .finally(() => setLoading(false))
+  }, [])
+
+  function ProgressBar({ value, max }: { value: number; max: number }) {
+    const pct = Math.min(100, (value / max) * 100)
+    const color = pct >= 90 ? 'bg-red-500' : pct >= 70 ? 'bg-amber-400' : 'bg-primary'
+    return (
+      <div className="h-1.5 w-full rounded-full bg-gray-100 dark:bg-white/10 overflow-hidden">
+        <div className={`h-full rounded-full transition-all duration-700 ${color}`} style={{ width: `${pct}%` }} />
+      </div>
+    )
+  }
+
+  return (
+    <div className={`${GLASS} p-6 space-y-5`}>
+      <div className="flex items-center justify-between">
+        <p className="text-sm font-bold text-gray-900 dark:text-gray-100">Uso de emails (Resend)</p>
+        {!loading && data && (
+          <span className="text-xs text-gray-400 dark:text-gray-500">Plan gratuito</span>
+        )}
+      </div>
+
+      {loading ? (
+        <div className="space-y-3">
+          <div className="h-4 w-40 rounded-lg bg-gray-100 dark:bg-white/10 animate-pulse" />
+          <div className="h-1.5 w-full rounded-full bg-gray-100 dark:bg-white/10 animate-pulse" />
+          <div className="h-4 w-40 rounded-lg bg-gray-100 dark:bg-white/10 animate-pulse" />
+          <div className="h-1.5 w-full rounded-full bg-gray-100 dark:bg-white/10 animate-pulse" />
+        </div>
+      ) : data ? (
+        <div className="space-y-4">
+          <div className="space-y-1.5">
+            <div className="flex items-center justify-between text-xs">
+              <span className="font-semibold text-gray-600 dark:text-gray-400">Hoy</span>
+              <span className="font-black tabular-nums text-gray-900 dark:text-gray-100">
+                {data.hoy} <span className="font-medium text-gray-400">/ {data.limites.diario}</span>
+              </span>
+            </div>
+            <ProgressBar value={data.hoy} max={data.limites.diario} />
+          </div>
+
+          <div className="space-y-1.5">
+            <div className="flex items-center justify-between text-xs">
+              <span className="font-semibold text-gray-600 dark:text-gray-400">Este mes</span>
+              <span className="font-black tabular-nums text-gray-900 dark:text-gray-100">
+                {data.esteMes} <span className="font-medium text-gray-400">/ {data.limites.mensual}</span>
+              </span>
+            </div>
+            <ProgressBar value={data.esteMes} max={data.limites.mensual} />
+          </div>
+
+          {data.desglose.length > 0 && (
+            <div className="pt-2 border-t border-gray-100/50 dark:border-white/5">
+              <p className="text-xs font-bold text-gray-400 dark:text-gray-500 uppercase tracking-widest mb-2.5">
+                Desglose del mes
+              </p>
+              <div className="flex flex-wrap gap-2">
+                {data.desglose.map(d => (
+                  <span
+                    key={d.tipo}
+                    className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-gray-100/80 dark:bg-white/[0.06] text-xs font-semibold text-gray-600 dark:text-gray-400"
+                  >
+                    {TIPO_LABEL[d.tipo] ?? d.tipo}
+                    <span className="font-black text-gray-900 dark:text-gray-200">{d.count}</span>
+                  </span>
+                ))}
+              </div>
+            </div>
+          )}
+        </div>
+      ) : (
+        <p className="text-xs text-gray-400">No se pudo cargar el conteo</p>
+      )}
+    </div>
+  )
+}
+
 export default function SecurityPage() {
   const navigate = useNavigate()
+  const { user } = useAuthStore()
+  const isDev = user?.email === DEV_EMAIL
   const [resumen, setResumen] = useState<ResumenSeguridad | null>(null)
   const [eventos, setEventos] = useState<EventoSeguridad[]>([])
   const [chartEvents, setChartEvents] = useState<EventoSeguridad[]>([])
@@ -917,6 +1030,14 @@ export default function SecurityPage() {
               )
             })}
           </div>
+        </motion.div>
+      )}
+
+      {/* ── Uso de emails (solo dev) ── */}
+      {isDev && (
+        <motion.div variants={cardVariants} initial="initial" animate="animate">
+          <SectionHeader tag="Infraestructura" label="Uso de emails" description="Consumo real de la cuota de Resend (plan gratuito)" />
+          <UsoEmailsCard />
         </motion.div>
       )}
 
