@@ -20,6 +20,8 @@ import {
   type TurnoViewMode,
 } from '../components/profesor/TurnosProfesor'
 
+const glassCard = 'rounded-3xl border border-white/50 dark:border-white/[0.08] bg-white/30 dark:bg-black/30 backdrop-blur-3xl shadow-[0_8px_32px_rgba(0,0,0,0.04)] dark:shadow-[0_8px_32px_rgba(0,0,0,0.25)]'
+
 function PageSkeleton() {
   return (
     <div className="space-y-6 animate-pulse">
