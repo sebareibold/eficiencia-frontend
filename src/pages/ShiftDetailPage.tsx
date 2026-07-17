@@ -40,6 +40,7 @@ import Input from '../components/ui/Input'
 import Select from '../components/ui/Select'
 import Skeleton from '../components/ui/Skeleton'
 import ConfirmDialog from '../components/ui/ConfirmDialog'
+import Modal from '../components/ui/Modal'
 import EmptyState from '../components/ui/EmptyState'
 import type { Shift, WeekDay } from '../types/shift.types'
 import type { InscripcionEntry } from '../api/inscripciones.api'
@@ -141,6 +142,10 @@ export default function ShiftDetailPage() {
   const [addEsperaClientId, setAddEsperaClientId] = useState('')
   const [addEsperaTipo, setAddEsperaTipo] = useState<TipoEspera>('INTERNA')
   const [addEsperaSubmitting, setAddEsperaSubmitting] = useState(false)
+  // Modal aviso cupo disponible al agregar a lista de espera
+  const [cupoWarningOpen, setCupoWarningOpen] = useState(false)
+  const [cupoWarningSala, setCupoWarningSala] = useState<'A' | 'B'>('A')
+  const [cupoWarningSubmitting, setCupoWarningSubmitting] = useState(false)
   const [esperaTipoTab, setEsperaTipoTab] = useState<'TODOS' | 'INTERNA' | 'EXTERNA'>('TODOS')
   const [addExternoNombre, setAddExternoNombre] = useState('')
   const [addExternoApellido, setAddExternoApellido] = useState('')
@@ -510,11 +515,9 @@ export default function ShiftDetailPage() {
     }
   }
 
-  async function handleAddToWaitingList() {
+  async function doAddToWaitingList() {
     if (!id) return
     const hasClient = addEsperaClientId !== ''
-    const hasExternal = addExternoNombre.trim() && addExternoApellido.trim() && addExternoWhatsapp.trim()
-    if (!hasClient && !hasExternal) return
     setAddEsperaSubmitting(true)
     try {
       if (hasClient) {
@@ -530,11 +533,56 @@ export default function ShiftDetailPage() {
       setAddEsperaClientId(''); setAddEsperaClientSearch('')
       setAddExternoNombre(''); setAddExternoApellido(''); setAddExternoWhatsapp('')
       setAddEsperaMode(false)
+      setCupoWarningOpen(false)
       refetchEspera()
     } catch (e: any) {
       addToast(e?.response?.data?.message ?? 'Error al agregar a lista de espera', 'error')
     } finally {
       setAddEsperaSubmitting(false)
+    }
+  }
+
+  async function handleAddToWaitingList() {
+    if (!id) return
+    const hasClient = addEsperaClientId !== ''
+    const hasExternal = addExternoNombre.trim() && addExternoApellido.trim() && addExternoWhatsapp.trim()
+    if (!hasClient && !hasExternal) return
+    // Si es cliente interno, verificar cupo disponible antes de agregar a lista de espera
+    if (hasClient && shift) {
+      const cupoA = shift.inscritosA < shift.cupoMaximoSalaA
+      const cupoB = shift.inscritosB < shift.cupoMaximoSalaB
+      if (cupoA || cupoB) {
+        // Preseleccionar la sala con más espacio disponible
+        const defaultSala: 'A' | 'B' = !cupoA ? 'B' : !cupoB ? 'A'
+          : shift.cupoMaximoSalaA - shift.inscritosA >= shift.cupoMaximoSalaB - shift.inscritosB ? 'A' : 'B'
+        setCupoWarningSala(defaultSala)
+        setCupoWarningOpen(true)
+        return
+      }
+    }
+    await doAddToWaitingList()
+  }
+
+  async function handleInscribirDirecto() {
+    if (!id || !addEsperaClientId) return
+    setCupoWarningSubmitting(true)
+    try {
+      const res = await inscripcionesApi.enroll(addEsperaClientId, id, cupoWarningSala)
+      inscripcionesApi.getByTurno(id).then(setInscripciones).catch(() => {})
+      setShift(s => {
+        if (!s) return s
+        const newInscritosA = cupoWarningSala === 'A' && !res.enListaEspera ? s.inscritosA + 1 : s.inscritosA
+        const newInscritosB = cupoWarningSala === 'B' && !res.enListaEspera ? s.inscritosB + 1 : s.inscritosB
+        return { ...s, inscritosA: newInscritosA, inscritosB: newInscritosB, enrolled: newInscritosA + newInscritosB }
+      })
+      addToast(`Cliente inscripto en Sala ${cupoWarningSala}`, 'success')
+      setAddEsperaClientId(''); setAddEsperaClientSearch('')
+      setAddEsperaMode(false)
+      setCupoWarningOpen(false)
+    } catch (e: any) {
+      addToast(e?.response?.data?.message ?? 'Error al inscribir', 'error')
+    } finally {
+      setCupoWarningSubmitting(false)
     }
   }
 
@@ -847,9 +895,11 @@ export default function ShiftDetailPage() {
   const pctA = Math.min((realInscritosA / shift.cupoMaximoSalaA) * 100, 100)
   const pctB = Math.min((shift.inscritosB / shift.cupoMaximoSalaB) * 100, 100)
 
+  // shift.enrolled se actualiza optimísticamente → badge siempre en sincronía con el hero card
+  const inscripBadge = inscripciones.length > 0 ? activeInscrip.length : shift.enrolled
   const TABS: { value: DetailTab; label: string; badge?: number }[] = [
     { value: 'resumen',        label: 'Resumen',         badge: shift.enrolled },
-    { value: 'inscripciones',  label: 'Inscripciones',   badge: inscripciones.length },
+    { value: 'inscripciones',  label: 'Inscripciones',   badge: inscripBadge },
     { value: 'asistencia',     label: 'Asistencia' },
     { value: 'espera',         label: 'Lista de espera', badge: esperaEntries.filter(e => e.estado === 'PENDIENTE').length },
   ]
@@ -2180,6 +2230,73 @@ export default function ShiftDetailPage() {
         </AnimatePresence>
         </div>
       </div>
+
+      {/* Modal: aviso cupo disponible al agregar a lista de espera */}
+      <Modal
+        isOpen={cupoWarningOpen}
+        onClose={() => { if (!cupoWarningSubmitting && !addEsperaSubmitting) setCupoWarningOpen(false) }}
+        size="sm"
+      >
+        {(() => {
+          if (!shift) return null
+          const cupoA = shift.inscritosA < shift.cupoMaximoSalaA
+          const cupoB = shift.inscritosB < shift.cupoMaximoSalaB
+          const ambas = cupoA && cupoB
+          const selectedClient = clients.find(c => String(c.id) === addEsperaClientId)
+          const clienteNombre = selectedClient ? `${selectedClient.name} ${selectedClient.lastName}` : 'El cliente'
+          return (
+            <div className="space-y-4">
+              <div className="flex items-start gap-3">
+                <div className="h-10 w-10 rounded-xl bg-amber-500/10 flex items-center justify-center shrink-0 mt-0.5">
+                  <AlertTriangle size={18} className="text-amber-500" />
+                </div>
+                <div>
+                  <p className="text-base font-bold text-gray-900 dark:text-white">Este turno tiene cupo disponible</p>
+                  <p className="text-sm text-gray-500 dark:text-[#8A8A9A] mt-1 leading-relaxed">
+                    {clienteNombre} puede inscribirse directamente ya que hay lugar libre.
+                    ¿Querés inscribirlo o de todas formas agregarlo a la lista de espera?
+                  </p>
+                </div>
+              </div>
+
+              {ambas && (
+                <div>
+                  <p className="text-xs font-bold text-[#8A8A9A] mb-2">Sala</p>
+                  <div className="flex gap-2">
+                    {(['A', 'B'] as const).map(s => (
+                      <button key={s} type="button" onClick={() => setCupoWarningSala(s)}
+                        disabled={cupoWarningSubmitting || addEsperaSubmitting}
+                        className={`flex-1 flex items-center justify-center gap-1.5 rounded-lg py-2 text-xs font-bold transition-all border ${
+                          cupoWarningSala === s
+                            ? s === 'A'
+                              ? 'bg-blue-500/10 border-blue-500/30 text-blue-600 dark:text-blue-400'
+                              : 'bg-purple-500/10 border-purple-500/30 text-purple-600 dark:text-purple-400'
+                            : 'border-gray-200 dark:border-white/[0.08] text-gray-500 dark:text-[#8A8A9A]'
+                        }`}
+                      >
+                        <span className={`h-2 w-2 rounded-full ${s === 'A' ? 'bg-blue-400' : 'bg-purple-400'}`} />
+                        Sala {s} · {s === 'A'
+                          ? `${shift.cupoMaximoSalaA - shift.inscritosA} libre${shift.cupoMaximoSalaA - shift.inscritosA !== 1 ? 's' : ''}`
+                          : `${shift.cupoMaximoSalaB - shift.inscritosB} libre${shift.cupoMaximoSalaB - shift.inscritosB !== 1 ? 's' : ''}`
+                        }
+                      </button>
+                    ))}
+                  </div>
+                </div>
+              )}
+
+              <div className="flex flex-col gap-2">
+                <Button onClick={handleInscribirDirecto} isLoading={cupoWarningSubmitting} disabled={addEsperaSubmitting} className="w-full">
+                  <UserCheck size={14} /> Inscribir en Sala {cupoWarningSala}
+                </Button>
+                <Button variant="ghost" onClick={doAddToWaitingList} isLoading={addEsperaSubmitting} disabled={cupoWarningSubmitting} className="w-full">
+                  Agregar a lista de espera igual
+                </Button>
+              </div>
+            </div>
+          )
+        })()}
+      </Modal>
 
       <ConfirmDialog
         isOpen={isConfirmDeleteShift}

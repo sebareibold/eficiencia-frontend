@@ -675,7 +675,17 @@ export default function ClientProfilePage() {
       inscripcionesApi.getByCliente(id),
       listaEsperaApi.getByCliente(id),
     ]).then(([inscRes, espRes]) => {
-      if (inscRes.status === 'fulfilled') setInscripciones(inscRes.value)
+      if (inscRes.status === 'fulfilled') {
+        const DAY_ORDER: Record<string, number> = { monday: 0, tuesday: 1, wednesday: 2, thursday: 3, friday: 4, saturday: 5, sunday: 6 }
+        setInscripciones(
+          [...inscRes.value].sort((a, b) => {
+            const minA = Math.min(...(a.dias.length ? a.dias.map(d => DAY_ORDER[d] ?? 7) : [7]))
+            const minB = Math.min(...(b.dias.length ? b.dias.map(d => DAY_ORDER[d] ?? 7) : [7]))
+            if (minA !== minB) return minA - minB
+            return a.horaInicio.localeCompare(b.horaInicio)
+          })
+        )
+      }
       if (espRes.status === 'fulfilled') setListaEsperaCliente(espRes.value)
       setTurnosLoaded(true)
     }).finally(() => setLoadingTurnos(false))
