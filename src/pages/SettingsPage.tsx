@@ -142,6 +142,10 @@ const TIPO_LABEL: Record<string, string> = {
   'nuevo-cliente': 'Nuevos clientes',
   'nuevo-usuario': 'Nuevos usuarios',
   'solicitud-aprobada': 'Solicitudes aprobadas',
+  'solicitud-acceso': 'Solicitudes de acceso',
+  'lista-espera-notificado': 'Solicitudes de turno',
+  'pago-registrado': 'Pagos registrados',
+  'baja-cliente': 'Bajas automáticas',
   'prueba': 'Emails de prueba',
   'general': 'Otros',
 }
@@ -426,7 +430,7 @@ function NotificationsSection() {
         <AlertCircle size={15} className="shrink-0 mt-0.5 text-primary/70" />
         <p className="text-xs text-gray-600 dark:text-gray-400 leading-relaxed">
           Los resúmenes de <strong className="text-gray-800 dark:text-gray-200">membresías y deudas</strong> se envían todos los días a las <strong className="text-gray-800 dark:text-gray-200">9:00 AM</strong> solo si hay datos para reportar.
-          Los avisos de <strong className="text-gray-800 dark:text-gray-200">nuevos clientes y usuarios</strong> se envían <strong className="text-gray-800 dark:text-gray-200">al instante</strong> cuando ocurren.
+          El resto de los avisos se envían <strong className="text-gray-800 dark:text-gray-200">al instante</strong> cuando ocurren.
         </p>
       </div>
 
@@ -529,6 +533,59 @@ function NotificationsSection() {
             <Toggle
               checked={notifications.notifBajaAutomatica}
               onChange={(v) => updateNotifications({ notifBajaAutomatica: v })}
+            />
+          </div>
+        </SectionRow>
+      </SectionCard>
+
+      <SectionHeader title="Solicitudes y accesos" />
+      <SectionCard>
+        <SectionRow
+          label="Solicitudes de acceso"
+          description="Email inmediato cuando alguien solicita acceso al sistema desde la pantalla de login. Incluye nombre, email y rol solicitado."
+        >
+          <div className="flex items-center gap-2.5">
+            <ProbarBtn tipo="solicitud-acceso" />
+            <Toggle
+              checked={notifications.notifSolicitudAcceso}
+              onChange={(v) => updateNotifications({ notifSolicitudAcceso: v })}
+            />
+          </div>
+        </SectionRow>
+        <SectionRow
+          label="Solicitudes de cambio de contraseña"
+          description="Email inmediato cuando un usuario pide recuperar su contraseña. Te avisa para que apruebes o rechaces la solicitud desde el panel."
+        >
+          <div className="flex items-center gap-2.5">
+            <ProbarBtn tipo="reset-password" />
+            <Toggle
+              checked={notifications.notifResetPassword}
+              onChange={(v) => updateNotifications({ notifResetPassword: v })}
+            />
+          </div>
+        </SectionRow>
+        <SectionRow
+          label="Solicitudes de turno (lista de espera)"
+          description="Email cuando se libera un cupo y un cliente de la lista de espera pasa a estado pendiente de aprobación. Te avisa para inscribirlo o rechazarlo."
+        >
+          <div className="flex items-center gap-2.5">
+            <ProbarBtn tipo="solicitud-turno" />
+            <Toggle
+              checked={notifications.notifSolicitudTurno}
+              onChange={(v) => updateNotifications({ notifSolicitudTurno: v })}
+            />
+          </div>
+        </SectionRow>
+        <SectionRow
+          label="Pagos registrados"
+          description="Email cada vez que se registra un pago en el sistema. Útil para supervisar cobros realizados por staff. Incluye cliente, monto, método y fecha."
+          last
+        >
+          <div className="flex items-center gap-2.5">
+            <ProbarBtn tipo="pago-registrado" />
+            <Toggle
+              checked={notifications.notifPagoRegistrado}
+              onChange={(v) => updateNotifications({ notifPagoRegistrado: v })}
             />
           </div>
         </SectionRow>
@@ -1296,6 +1353,10 @@ export default function SettingsPage() {
         notifNuevosUsuarios: notifications.notifNuevosUsuarios,
         emailAlAprobarSolicitudes: notifications.emailAlAprobarSolicitudes,
         notifBajaAutomatica: notifications.notifBajaAutomatica,
+        notifSolicitudAcceso: notifications.notifSolicitudAcceso,
+        notifResetPassword: notifications.notifResetPassword,
+        notifSolicitudTurno: notifications.notifSolicitudTurno,
+        notifPagoRegistrado: notifications.notifPagoRegistrado,
       })
     } catch {
       // La config local ya se guardó; si falla el server no se bloquea el UX

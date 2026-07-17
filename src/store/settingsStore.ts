@@ -25,6 +25,10 @@ const DEFAULT_SETTINGS = {
     notifNuevosUsuarios: false,
     emailAlAprobarSolicitudes: false,
     notifBajaAutomatica: true,
+    notifSolicitudAcceso: true,
+    notifResetPassword: true,
+    notifSolicitudTurno: true,
+    notifPagoRegistrado: false,
   },
 }
 
@@ -77,13 +81,17 @@ export const useSettingsStore = create<SettingsState>()(
             ...(config.notifNuevosUsuarios          !== undefined && { notifNuevosUsuarios:          config.notifNuevosUsuarios }),
             ...(config.emailAlAprobarSolicitudes    !== undefined && { emailAlAprobarSolicitudes:    config.emailAlAprobarSolicitudes }),
             ...(config.notifBajaAutomatica          !== undefined && { notifBajaAutomatica:          config.notifBajaAutomatica }),
+            ...(config.notifSolicitudAcceso        !== undefined && { notifSolicitudAcceso:        config.notifSolicitudAcceso }),
+            ...(config.notifResetPassword          !== undefined && { notifResetPassword:          config.notifResetPassword }),
+            ...(config.notifSolicitudTurno         !== undefined && { notifSolicitudTurno:         config.notifSolicitudTurno }),
+            ...(config.notifPagoRegistrado         !== undefined && { notifPagoRegistrado:         config.notifPagoRegistrado }),
           },
           hasUnsavedChanges: false,
         })),
     }),
     {
       name: 'eficiencia-settings',
-      version: 5,
+      version: 6,
       migrate: (state: unknown, version: number) => {
         const s = state as Record<string, unknown>
         if (version < 2) {
@@ -109,6 +117,19 @@ export const useSettingsStore = create<SettingsState>()(
           return {
             ...s,
             notifications: { ...notif, notifBajaAutomatica: true },
+          }
+        }
+        if (version < 6) {
+          const notif = (s.notifications as Record<string, unknown>) ?? {}
+          return {
+            ...s,
+            notifications: {
+              ...notif,
+              notifSolicitudAcceso: true,
+              notifResetPassword: true,
+              notifSolicitudTurno: true,
+              notifPagoRegistrado: false,
+            },
           }
         }
         return s

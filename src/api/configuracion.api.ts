@@ -13,6 +13,10 @@ export interface ConfiguracionData {
   notifNuevosUsuarios?: boolean
   emailAlAprobarSolicitudes?: boolean
   notifBajaAutomatica?: boolean
+  notifSolicitudAcceso?: boolean
+  notifResetPassword?: boolean
+  notifSolicitudTurno?: boolean
+  notifPagoRegistrado?: boolean
 }
 
 export const configuracionApi = {
