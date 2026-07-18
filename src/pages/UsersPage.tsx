@@ -1188,13 +1188,20 @@ function SolicitudesTab() {
     try {
       await solicitudesApi.remove(id)
       addToast('Solicitud eliminada', 'success')
-      setSolicitudes(prev => {
-        const next = prev.filter(s => s.id !== id)
-        setPendingCount(next.filter(s => s.estado === 'PENDIENTE').length + resets.length)
-        return next
-      })
-    } catch { addToast('Error al eliminar', 'error') }
-    finally { setActioningId(null) }
+    } catch (err: any) {
+      if (err?.response?.status !== 404) {
+        addToast('Error al eliminar', 'error')
+        return
+      }
+      // 404 → ya no existe en la BD, igual la sacamos de la lista
+    } finally {
+      setActioningId(null)
+    }
+    setSolicitudes(prev => {
+      const next = prev.filter(s => s.id !== id)
+      setPendingCount(next.filter(s => s.estado === 'PENDIENTE').length + resets.length)
+      return next
+    })
   }
 
   // ── Acciones reset de contraseña ──
