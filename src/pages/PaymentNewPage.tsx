@@ -316,6 +316,7 @@ export default function PaymentNewPage() {
           planId: selectedPlanId,
           modalidad: selectedModalidad as Modalidad,
           precio: Number(data.amount),
+          fechaInicio: data.paidAt,
           ...(aplicarProporcional && descuentoEstimado > 0 && {
             descuentoProporcional: descuentoEstimado,
           }),
@@ -956,9 +957,12 @@ export default function PaymentNewPage() {
             {/* Fecha */}
             <div className="space-y-1.5">
               <label className="text-[11px] font-bold uppercase tracking-widest text-gray-400 dark:text-[#6A6A7A]">
-                Fecha <span className="text-primary text-[10px]">*</span>
+                Fecha del pago <span className="text-primary text-[10px]">*</span>
               </label>
               <input type="date" {...regPay('paidAt')} className={ic()} />
+              <p className="text-xs text-gray-400 dark:text-[#6A6A7A]">
+                La fecha de registro se guarda automáticamente (hoy, {format(new Date(), 'dd/MM/yyyy')}). Acá indicá cuándo se efectuó realmente el pago.
+              </p>
               {payErrors.paidAt && (
                 <p className="flex items-center gap-1.5 text-xs text-red-500 dark:text-red-400">
                   <AlertCircle size={11} />{payErrors.paidAt.message}

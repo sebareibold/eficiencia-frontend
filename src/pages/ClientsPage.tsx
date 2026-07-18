@@ -464,7 +464,7 @@ export default function ClientsPage() {
     },
     {
       key: 'membershipStartDate',
-      header: 'Inicio',
+      header: 'Inicio membresía',
       sortable: true,
       render: (c) => {
         const d = fmtDate(c.membershipStartDate)

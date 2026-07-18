@@ -240,9 +240,9 @@ export default function PaymentDetailPage() {
                   </div>
                 </div>
 
-                {/* Fecha */}
+                {/* Fecha del pago */}
                 <div className="flex flex-col gap-1.5">
-                  <label className={labelCls}>Fecha</label>
+                  <label className={labelCls}>Fecha del pago</label>
                   <input
                     type="date"
                     value={editForm.paidAt}
@@ -413,15 +413,23 @@ export default function PaymentDetailPage() {
                     <p className="text-4xl xl:text-5xl font-black tabular-nums tracking-tighter text-gray-900 dark:text-white">
                       {formatCurrency(payment.amount)}
                     </p>
-                    <div className="flex items-center gap-3 mt-3 flex-wrap">
-                      <span className="flex items-center gap-1.5 text-sm text-gray-500 dark:text-gray-400">
-                        <Calendar size={13} /> {formatDate(payment.paidAt)}
-                      </span>
-                      <span className="text-gray-300 dark:text-gray-600">·</span>
-                      <span className="font-mono text-xs text-gray-400 dark:text-gray-500">
-                        #{String(payment.id).slice(0, 8)}…
-                      </span>
+                    <div className="mt-4 grid grid-cols-2 gap-4">
+                      <div>
+                        <p className="text-[10px] font-semibold uppercase tracking-wider text-gray-400 dark:text-[#5A5A6A] flex items-center gap-1 mb-1">
+                          <Calendar size={10} /> Pagado el
+                        </p>
+                        <p className="text-base font-bold text-gray-900 dark:text-white">{formatDate(payment.paidAt)}</p>
+                      </div>
+                      <div>
+                        <p className="text-[10px] font-semibold uppercase tracking-wider text-gray-400 dark:text-[#5A5A6A] mb-1">
+                          Registrado el
+                        </p>
+                        <p className="text-base font-bold text-gray-500 dark:text-gray-400">{formatDate(payment.createdAt)}</p>
+                      </div>
                     </div>
+                    <p className="font-mono text-xs text-gray-400 dark:text-gray-500 mt-3">
+                      #{String(payment.id).slice(0, 8)}…
+                    </p>
                   </div>
                   {payment.notes && (
                     <div className="pt-4 border-t border-white/20 dark:border-white/[0.08]">
