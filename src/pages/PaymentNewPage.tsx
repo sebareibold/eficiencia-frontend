@@ -30,6 +30,7 @@ const newClientSchema = z.object({
   phone:               z.string().optional(),
   email:               z.string().email('Email inválido').optional().or(z.literal('')),
   fechaNacimiento:     z.string().optional(),
+  cuil:                z.string().optional(),
   responsableContacto: z.string().optional(),
 })
 
@@ -290,6 +291,7 @@ export default function PaymentNewPage() {
           lastName:            pendingNewClient!.lastName,
           phone:               pendingNewClient!.phone               || undefined,
           email:               pendingNewClient!.email               || undefined,
+          cuil:                pendingNewClient!.cuil                || undefined,
           fechaNacimiento:     pendingNewClient!.fechaNacimiento      || undefined,
           responsableContacto: pendingNewClient!.responsableContacto || undefined,
         })
@@ -638,33 +640,38 @@ export default function PaymentNewPage() {
               </div>
             </div>
 
-            <div className="space-y-1.5">
-              <label className="text-[11px] font-bold uppercase tracking-widest text-gray-400 dark:text-[#6A6A7A] flex items-center gap-1">
-                Fecha de nacimiento <span className="font-normal normal-case tracking-normal opacity-60 text-[10px]">(opcional)</span>
-              </label>
-              <div className="flex items-center gap-2">
-                <input
-                  {...regClient('fechaNacimiento')}
-                  type="date"
-                  max={today}
-                  className={ic()}
-                />
-                {watchFecha && (
-                  <span className="shrink-0 self-stretch flex items-center px-3 rounded-xl bg-gray-900 dark:bg-white/10 text-white text-xs font-bold whitespace-nowrap">
-                    {(() => {
-                      const [y, m, d] = watchFecha.split('-').map(Number)
-                      const hoy = new Date()
-                      const diffM = hoy.getMonth() + 1 - m
-                      const ajuste = diffM < 0 || (diffM === 0 && hoy.getDate() < d) ? 1 : 0
-                      return `${hoy.getFullYear() - y - ajuste} años`
-                    })()}
-                  </span>
-                )}
+            <div className="grid grid-cols-2 gap-3">
+              <div className={`space-y-1.5${esMenor ? ' col-span-2' : ''}`}>
+                <label className="text-[11px] font-bold uppercase tracking-widest text-gray-400 dark:text-[#6A6A7A] flex items-center gap-1">
+                  Fecha de nacimiento <span className="font-normal normal-case tracking-normal opacity-60 text-[10px]">(opcional)</span>
+                </label>
+                <div className="flex items-center gap-2">
+                  <input
+                    {...regClient('fechaNacimiento')}
+                    type="date"
+                    max={today}
+                    className={ic()}
+                  />
+                  {watchFecha && (
+                    <span className="shrink-0 self-stretch flex items-center px-3 rounded-xl bg-gray-900 dark:bg-white/10 text-white text-xs font-bold whitespace-nowrap">
+                      {(() => {
+                        const [y, m, d] = watchFecha.split('-').map(Number)
+                        const hoy = new Date()
+                        const diffM = hoy.getMonth() + 1 - m
+                        const ajuste = diffM < 0 || (diffM === 0 && hoy.getDate() < d) ? 1 : 0
+                        return `${hoy.getFullYear() - y - ajuste} años`
+                      })()}
+                    </span>
+                  )}
+                </div>
               </div>
-              {clientErrors.fechaNacimiento && (
-                <p className="flex items-center gap-1.5 text-xs text-red-500 dark:text-red-400">
-                  <AlertCircle size={11} />{clientErrors.fechaNacimiento.message}
-                </p>
+              {!esMenor && (
+                <div className="space-y-1.5">
+                  <label className="text-[11px] font-bold uppercase tracking-widest text-gray-400 dark:text-[#6A6A7A]">
+                    CUIL <span className="font-normal normal-case tracking-normal opacity-60 text-[10px]">(opcional)</span>
+                  </label>
+                  <input {...regClient('cuil')} placeholder="20-12345678-9" className={ic()} />
+                </div>
               )}
             </div>
 
