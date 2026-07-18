@@ -4,6 +4,7 @@ import { motion, AnimatePresence } from 'framer-motion'
 import { pageVariants, staggerContainerFast, fadeUpItem } from '../lib/motion'
 import { Plus, Search, RefreshCw, LayoutList, LayoutGrid, ChevronRight, ChevronLeft, ChevronsRight, ChevronsLeft, Phone, Mail, Users, X, ArrowUpDown, UserX, SlidersHorizontal } from 'lucide-react'
 import { format, startOfMonth, endOfMonth, addMonths, subMonths, differenceInDays } from 'date-fns'
+import { formatDate } from '../utils/formatDate'
 import { es } from 'date-fns/locale'
 import { usePermissions } from '../hooks/usePermissions'
 import { useClients } from '../hooks/useClients'
@@ -102,7 +103,7 @@ const SORT_TO_COL: Record<SortKey, string> = {
 
 function fmtDate(d: string | null | undefined) {
   if (!d) return null
-  try { return format(new Date(d), 'dd MMM yy', { locale: es }) } catch { return null }
+  try { return formatDate(d, 'dd MMM yy') } catch { return null }
 }
 
 function vencimientoColor(d: string | null | undefined) {

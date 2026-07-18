@@ -19,6 +19,7 @@ import { inscripcionesApi } from '../api/inscripciones.api'
 import { rutinasApi } from '../api/rutinas.api'
 import { shiftsApi, professorsApi } from '../api/shifts.api'
 import { formatCurrency } from '../utils/formatCurrency'
+import { formatDate } from '../utils/formatDate'
 import type { Membership, Modalidad } from '../types/membership.types'
 import type { Shift, WeekDay } from '../types/shift.types'
 
@@ -1188,7 +1189,7 @@ export default function CreateClientPage() {
         label: 'Membresía activa',
         value: `${createdResult.planName} · ${modLabel}`,
         sub: (() => {
-          try { return `Finaliza el ${format(new Date(createdResult.fechaVencimiento), "d 'de' MMMM yyyy", { locale: es })}` }
+          try { return `Finaliza el ${formatDate(createdResult.fechaVencimiento, "d 'de' MMMM yyyy")}` }
           catch { return '' }
         })(),
       },
