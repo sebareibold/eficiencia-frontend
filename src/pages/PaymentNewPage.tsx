@@ -6,7 +6,7 @@ import { pageVariants } from '../lib/motion'
 import {
   ArrowLeft, Banknote, ArrowLeftRight, CreditCard,
   User, Search, X, CheckCircle2, Loader2, UserPlus,
-  Check, AlertCircle, Phone, Calendar,
+  Check, AlertCircle, Phone, Calendar, Shield,
 } from 'lucide-react'
 import { useForm } from 'react-hook-form'
 import { zodResolver } from '@hookform/resolvers/zod'
@@ -29,7 +29,7 @@ const newClientSchema = z.object({
   lastName:            z.string().min(1, 'Requerido'),
   phone:               z.string().optional(),
   email:               z.string().email('Email inválido').optional().or(z.literal('')),
-  fechaNacimiento:     z.string().min(1, 'Requerido'),
+  fechaNacimiento:     z.string().optional(),
   responsableContacto: z.string().optional(),
 })
 
@@ -45,7 +45,7 @@ function esMenorDeEdad(fecha: string): boolean {
 type NewClientValues = z.infer<typeof newClientSchema>
 
 const paymentSchema = z.object({
-  amount:   z.string().min(1, 'Requerido').refine(v => !isNaN(Number(v)) && Number(v) > 0, 'Debe ser mayor a 0'),
+  amount:   z.string().min(1, 'Requerido').refine(v => !isNaN(Number(v)) && Number(v) >= 0, 'Debe ser 0 o mayor'),
   method:   z.enum(['cash', 'transfer', 'card']),
   paidAt:   z.string().min(1, 'Requerido'),
   invoiced: z.boolean().optional(),
@@ -254,7 +254,8 @@ export default function PaymentNewPage() {
   // ── Seleccionar modalidad → auto-llenar monto y vincular membresía ────────
   function handleSelectModalidad(modalidad: Modalidad, precio: number) {
     setSelectedModalidad(modalidad)
-    const raw = String(precio)
+    const effectivePrecio = selectedClient?.exentoDePago ? 0 : precio
+    const raw = String(effectivePrecio)
     setDisplayAmount(Number(raw).toLocaleString('es-AR'))
     setValue('amount', raw, { shouldValidate: true })
     const plan = plans.find(p => p.id === selectedPlanId)
@@ -639,7 +640,7 @@ export default function PaymentNewPage() {
 
             <div className="space-y-1.5">
               <label className="text-[11px] font-bold uppercase tracking-widest text-gray-400 dark:text-[#6A6A7A] flex items-center gap-1">
-                Fecha de nacimiento <span className="text-primary text-[10px]">*</span>
+                Fecha de nacimiento <span className="font-normal normal-case tracking-normal opacity-60 text-[10px]">(opcional)</span>
               </label>
               <div className="flex items-center gap-2">
                 <input
@@ -740,6 +741,16 @@ export default function PaymentNewPage() {
             </div>
           )
         })()}
+
+        {/* Banner cliente exento */}
+        {selectedClient?.exentoDePago && (
+          <div className="flex items-start gap-3 px-4 py-3 rounded-xl bg-emerald-500/[0.06] border border-emerald-500/20">
+            <Shield size={14} className="text-emerald-500 shrink-0 mt-0.5" />
+            <p className="text-xs text-emerald-600 dark:text-emerald-400 leading-snug">
+              <strong>Cliente exento de pago.</strong> El monto se cargó en $0. Podés modificarlo si realizó un aporte voluntario.
+            </p>
+          </div>
+        )}
 
         {/* Grid 2 columnas: izquierda = membresía + monto · derecha = método + fecha + notas + facturado */}
         <div className="grid grid-cols-1 md:grid-cols-2 gap-x-8 gap-y-5">

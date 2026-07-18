@@ -646,7 +646,7 @@ export default function ClientProfilePage() {
     const plan = planes.find(p => p.id === newMembresiaForm.planId)
     if (!plan) return
     const tarifa = plan.tarifas.find(t => t.modalidad === newMembresiaForm.modalidad)
-    if (tarifa) setNewMembresiaForm(prev => ({ ...prev, precio: String(tarifa.precio) }))
+    if (tarifa) setNewMembresiaForm(prev => ({ ...prev, precio: client?.exentoDePago ? '0' : String(tarifa.precio) }))
   }, [newMembresiaForm.planId, newMembresiaForm.modalidad, planes])
 
   useEffect(() => {
@@ -3232,6 +3232,21 @@ export default function ClientProfilePage() {
                   )}
                 </div>
               </div>
+            ) : client.exentoDePago ? (
+              <div className="flex items-center gap-4 p-5 border border-dashed border-emerald-500/20 dark:border-emerald-500/15 rounded-2xl bg-emerald-500/[0.03]">
+                <div className="h-10 w-10 rounded-xl bg-emerald-500/10 flex items-center justify-center shrink-0">
+                  <Shield size={16} className="text-emerald-500" />
+                </div>
+                <div className="flex-1 min-w-0">
+                  <p className="text-sm font-semibold text-gray-900 dark:text-white">Cliente exento de pago</p>
+                  <p className="text-xs text-gray-400 dark:text-[#6A6A7A] mt-0.5">El sistema lo marca como al día automáticamente. Podés asignarle una membresía para llevar registro de su período activo.</p>
+                </div>
+                {can('memberships', 'create') && (
+                  <button onClick={() => setNewMembresiaOpen(true)} className="shrink-0 text-xs text-primary hover:underline transition-colors">
+                    Asignar →
+                  </button>
+                )}
+              </div>
             ) : (
               <div className="flex items-center gap-4 p-5 border border-dashed border-gray-200 dark:border-white/10 rounded-2xl">
                 <div className="h-10 w-10 rounded-xl bg-gray-100 dark:bg-white/[0.04] flex items-center justify-center shrink-0">
@@ -3564,6 +3579,11 @@ export default function ClientProfilePage() {
             <label className="text-xs font-semibold text-gray-500 dark:text-[#8A8A9A] uppercase tracking-wider">
               Precio (ARS)
             </label>
+            {client.exentoDePago && newMembresiaForm.planId && (
+              <div className="flex items-center gap-1.5 text-xs text-emerald-600 dark:text-emerald-400">
+                <Shield size={11} /> Cliente exento — precio cargado en $0, podés modificarlo
+              </div>
+            )}
             <input
               type="number"
               value={newMembresiaForm.precio}
