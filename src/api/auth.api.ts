@@ -79,4 +79,7 @@ export const authApi = {
 
   rechazarReset: (id: string) =>
     api.patch(`/auth/reset-requests/${id}/rechazar`),
+
+  eliminarReset: (id: string) =>
+    api.delete(`/auth/reset-requests/${id}`),
 }

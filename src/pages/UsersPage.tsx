@@ -1138,7 +1138,7 @@ function SolicitudesTab() {
   const [loading, setLoading]           = useState(true)
   const [actioningId, setActioningId]   = useState<string | null>(null)
   const [rechazarTarget, setRechazarTarget] = useState<{ id: string; tipo: 'acceso' | 'reset' | 'inscripcion' } | null>(null)
-  const [eliminarTarget, setEliminarTarget] = useState<string | null>(null)
+  const [eliminarTarget, setEliminarTarget] = useState<{ id: string; tipo: 'acceso' | 'reset' } | null>(null)
 
   const load = useCallback(() => {
     setLoading(true)
@@ -1183,25 +1183,36 @@ function SolicitudesTab() {
     finally { setActioningId(null) }
   }
 
-  async function eliminarAcceso(id: string) {
+  async function eliminarItem(id: string, tipo: 'acceso' | 'reset') {
     setActioningId(id)
     try {
-      await solicitudesApi.remove(id)
+      if (tipo === 'reset') {
+        await authApi.eliminarReset(id)
+        setResets(prev => {
+          const next = prev.filter(r => r.id !== id)
+          setPendingCount(solicitudes.filter(s => s.estado === 'PENDIENTE').length + next.filter(r => r.estado === 'PENDIENTE').length)
+          return next
+        })
+      } else {
+        await solicitudesApi.remove(id)
+        setSolicitudes(prev => {
+          const next = prev.filter(s => s.id !== id)
+          setPendingCount(next.filter(s => s.estado === 'PENDIENTE').length + resets.length)
+          return next
+        })
+      }
       addToast('Solicitud eliminada', 'success')
     } catch (err: any) {
-      if (err?.response?.status !== 404) {
+      if (err?.response?.status === 404) {
+        // Ya no existe en la BD — limpiamos el estado local igual
+        if (tipo === 'reset') setResets(prev => prev.filter(r => r.id !== id))
+        else setSolicitudes(prev => prev.filter(s => s.id !== id))
+      } else {
         addToast('Error al eliminar', 'error')
-        return
       }
-      // 404 → ya no existe en la BD, igual la sacamos de la lista
     } finally {
       setActioningId(null)
     }
-    setSolicitudes(prev => {
-      const next = prev.filter(s => s.id !== id)
-      setPendingCount(next.filter(s => s.estado === 'PENDIENTE').length + resets.length)
-      return next
-    })
   }
 
   // ── Acciones reset de contraseña ──
@@ -1338,7 +1349,7 @@ function SolicitudesTab() {
                   actioningId={actioningId}
                   onAprobar={(id) => handleAprobar(id, item.tipo)}
                   onRechazar={(id) => handleRechazar(id, item.tipo)}
-                  onEliminar={(id) => setEliminarTarget(id)}
+                  onEliminar={(id) => setEliminarTarget({ id, tipo: item.tipo === 'reset' ? 'reset' : 'acceso' })}
                 />
               ))}
             </div>
@@ -1356,7 +1367,7 @@ function SolicitudesTab() {
                   actioningId={actioningId}
                   onAprobar={(id) => handleAprobar(id, item.tipo)}
                   onRechazar={(id) => handleRechazar(id, item.tipo)}
-                  onEliminar={(id) => setEliminarTarget(id)}
+                  onEliminar={(id) => setEliminarTarget({ id, tipo: item.tipo === 'reset' ? 'reset' : 'acceso' })}
                 />
               ))}
             </div>
@@ -1379,7 +1390,7 @@ function SolicitudesTab() {
         message="Se eliminará permanentemente de la base de datos. Esta acción no se puede deshacer."
         confirmLabel="Eliminar"
         isLoading={actioningId !== null}
-        onConfirm={() => { if (eliminarTarget) { eliminarAcceso(eliminarTarget); setEliminarTarget(null) } }}
+        onConfirm={() => { if (eliminarTarget) { eliminarItem(eliminarTarget.id, eliminarTarget.tipo); setEliminarTarget(null) } }}
         onClose={() => setEliminarTarget(null)}
       />
     </div>
