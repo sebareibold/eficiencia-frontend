@@ -7,8 +7,8 @@ import { Dumbbell, Plus, Edit2, Trash2, ExternalLink, Search, ChevronLeft, Chevr
 import { ejerciciosApi } from '../api/ejercicios.api'
 import { patronesApi, type PatronMovimientoConfig } from '../api/patrones.api'
 import { categoriasEjercicioApi, type CategoriaEjercicio } from '../api/categorias-ejercicio.api'
-import { useAuthStore } from '../store/authStore'
 import { useUiStore } from '../store/uiStore'
+import { usePermissions } from '../hooks/usePermissions'
 import type { EjercicioCatalogo } from '../types/ejercicio-catalogo.types'
 import PlantillasPage from './PlantillasPage'
 import { ROUTES } from '../constants/routes'
@@ -37,10 +37,9 @@ const selectCls = 'rounded-xl border border-white/50 dark:border-white/10 bg-whi
 const PAGE_SIZE = 10
 
 export default function ExercisesPage() {
-  const user     = useAuthStore(s => s.user)
   const addToast = useUiStore(s => s.addToast)
   const navigate = useNavigate()
-  const isAdmin  = user?.role === 'admin'
+  const { can, isAdmin } = usePermissions()
 
   const [items, setItems]         = useState<EjercicioCatalogo[]>([])
   const [loading, setLoading]     = useState(true)
@@ -295,9 +294,11 @@ export default function ExercisesPage() {
     >
 
       {/* ══ Sección Plantillas ══ */}
-      <section>
-        <PlantillasPage embedded />
-      </section>
+      {can('plantillas', 'read') && (
+        <section>
+          <PlantillasPage embedded />
+        </section>
+      )}
 
       {/* ══ Sección Catálogo ══ */}
       <section className="flex flex-col gap-5">

@@ -13,13 +13,13 @@ import { solicitudesApi } from '../../api/solicitudes.api'
 import { ROUTES } from '../../constants/routes'
 import { useState, useRef, useLayoutEffect, useEffect, useCallback } from 'react'
 
-const NAV_TABS: { label: string; to: string; module: PermModule | null; icon: React.ComponentType<{ size?: number; className?: string }>; hideIfAdmin?: boolean }[] = [
+const NAV_TABS: { label: string; to: string; module: PermModule; icon: React.ComponentType<{ size?: number; className?: string }>; hideIfAdmin?: boolean }[] = [
   { label: 'Dashboard',    to: ROUTES.DASHBOARD,    module: 'dashboard',         icon: LayoutDashboard },
   { label: 'Turnos',       to: ROUTES.SHIFTS,       module: 'shifts',            icon: Dumbbell },
   { label: 'Clientes',     to: ROUTES.CLIENTS,      module: 'clients',           icon: Users },
   { label: 'Pagos',        to: ROUTES.PAYMENTS,     module: 'payments',          icon: CreditCard },
   { label: 'Gastos',       to: ROUTES.EXPENSES,     module: 'expenses',          icon: Wallet },
-  { label: 'Biblioteca',   to: ROUTES.EXERCISES,    module: null,                icon: BookOpen },
+  { label: 'Biblioteca',   to: ROUTES.EXERCISES,    module: 'exercises',         icon: BookOpen },
   { label: 'Mis Turnos',   to: ROUTES.MIS_TURNOS,   module: 'solicitudes-turno', icon: CalendarDays, hideIfAdmin: true },
   { label: 'Usuarios',     to: ROUTES.USERS,        module: 'users',             icon: UserCog },
 ]
@@ -49,7 +49,7 @@ export default function Navbar() {
 
   const visibleTabs = NAV_TABS.filter(t => {
     if (t.hideIfAdmin && isAdmin) return false
-    return t.module === null || canUI(t.module, 'read')
+    return canUI(t.module, 'read')
   })
 
   useEffect(() => {

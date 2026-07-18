@@ -561,7 +561,6 @@ const MODULES_MATRIX = [
       { id: 'view_rutinas',     name: 'Gestionar rutinas del cliente' },
       { id: 'view_turnos',      name: 'Ver clases del cliente' },
       { id: 'view_asistencia',  name: 'Ver asistencia del cliente' },
-      { id: 'manage_turnos',    name: 'Inscribir/desinscribir de turnos' },
     ],
   },
   {
@@ -593,8 +592,9 @@ const MODULES_MATRIX = [
     actions: [
       { id: 'read',   name: 'Ver membresías y planes' },
       { id: 'create', name: 'Crear membresías' },
-      { id: 'update', name: 'Editar membresías' },
-      { id: 'delete', name: 'Eliminar membresías' },
+      { id: 'update',        name: 'Editar membresías' },
+      { id: 'delete',        name: 'Eliminar membresías' },
+      { id: 'manage_planes', name: 'Crear y editar planes y tarifas' },
     ],
   },
   {

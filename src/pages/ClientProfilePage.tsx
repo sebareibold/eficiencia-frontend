@@ -513,8 +513,7 @@ export default function ClientProfilePage() {
   const queryClient = useQueryClient()
   const addToast = useUiStore(s => s.addToast)
   const user = useAuthStore(s => s.user)
-  const isAdmin = user?.role === 'admin'
-  const { can } = usePermissions()
+  const { can, isAdmin } = usePermissions()
 
   // Visita de regreso → no animar desde opacity:0 para evitar flash "solo navbar"
   const isReturnVisit = Boolean(id && loadedClientIds.has(id))
@@ -2181,7 +2180,7 @@ export default function ClientProfilePage() {
                         <span className="ml-1.5 tabular-nums text-gray-400 dark:text-white/40">{inscripciones.length}{planFreq ? `/${planFreq}` : ''}</span>
                       )}
                     </span>
-                    {can('clients', 'manage_turnos') && (
+                    {can('shifts', 'create') && (
                       <button
                         onClick={() => { if (!limiteAlcanzado) setEnrollOpen(true) }}
                         disabled={limiteAlcanzado}
@@ -2455,13 +2454,15 @@ export default function ClientProfilePage() {
                                     {r.shiftId && (
                                       <button onClick={() => navigate(`/shifts/${r.shiftId}?date=${r.dateKey}`)} className="text-gray-300 dark:text-[#555] hover:text-primary transition-colors shrink-0" title="Ver turno">→</button>
                                     )}
-                                    <button
-                                      onClick={() => handleDeleteAttendance(r.id, { isAusenciaOnly: r.isAusenciaOnly, ausenciaId: r.ausencia?.id })}
-                                      disabled={deletingAttendanceId === r.id}
-                                      className="text-gray-300 dark:text-[#555] hover:text-red-400 transition-colors shrink-0 disabled:opacity-40"
-                                    >
-                                      {deletingAttendanceId === r.id ? <span className="text-[9px]">...</span> : <Trash2 size={11} />}
-                                    </button>
+                                    {can('attendance', 'delete') && (
+                                      <button
+                                        onClick={() => handleDeleteAttendance(r.id, { isAusenciaOnly: r.isAusenciaOnly, ausenciaId: r.ausencia?.id })}
+                                        disabled={deletingAttendanceId === r.id}
+                                        className="text-gray-300 dark:text-[#555] hover:text-red-400 transition-colors shrink-0 disabled:opacity-40"
+                                      >
+                                        {deletingAttendanceId === r.id ? <span className="text-[9px]">...</span> : <Trash2 size={11} />}
+                                      </button>
+                                    )}
                                   </div>
                                 ))}
                               </div>
@@ -2487,19 +2488,21 @@ export default function ClientProfilePage() {
                                 →
                               </button>
                             )}
-                            <button
-                              onClick={() => handleDeleteAttendance(r.id, {
-                                isAusenciaOnly: r.isAusenciaOnly,
-                                ausenciaId: r.ausencia?.id,
-                              })}
-                              disabled={deletingAttendanceId === r.id}
-                              className="text-gray-300 dark:text-[#555] hover:text-red-400 dark:hover:text-red-400 transition-colors shrink-0 disabled:opacity-40"
-                              title="Eliminar registro"
-                            >
-                              {deletingAttendanceId === r.id
-                                ? <span className="text-[9px]">...</span>
-                                : <Trash2 size={11} />}
-                            </button>
+                            {can('attendance', 'delete') && (
+                              <button
+                                onClick={() => handleDeleteAttendance(r.id, {
+                                  isAusenciaOnly: r.isAusenciaOnly,
+                                  ausenciaId: r.ausencia?.id,
+                                })}
+                                disabled={deletingAttendanceId === r.id}
+                                className="text-gray-300 dark:text-[#555] hover:text-red-400 dark:hover:text-red-400 transition-colors shrink-0 disabled:opacity-40"
+                                title="Eliminar registro"
+                              >
+                                {deletingAttendanceId === r.id
+                                  ? <span className="text-[9px]">...</span>
+                                  : <Trash2 size={11} />}
+                              </button>
+                            )}
                           </div>
                           )
                         })

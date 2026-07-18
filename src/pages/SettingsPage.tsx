@@ -30,6 +30,7 @@ import {
 import { useUiStore } from '../store/uiStore'
 import { useSettingsStore } from '../store/settingsStore'
 import { useAuthStore } from '../store/authStore'
+import { usePermissions } from '../hooks/usePermissions'
 import { configuracionApi } from '../api/configuracion.api'
 import { configuracionSistemaApi, type ConfiguracionSistema } from '../api/configuracion-sistema.api'
 import { mantenimientoApi, type ConsistenciaReport } from '../api/mantenimiento.api'
@@ -280,17 +281,20 @@ function NotifRow({
   last?: boolean
 }) {
   const navigate = useNavigate()
+  const { isAdmin } = usePermissions()
   return (
     <SectionRow label={label} description={description} last={last}>
       <div className="flex items-center gap-2.5">
-        <button
-          type="button"
-          onClick={() => navigate(`/settings/notificaciones/${tipo}`)}
-          title="Configurar template"
-          className="flex items-center justify-center h-8 w-8 rounded-lg border border-gray-200/70 dark:border-white/10 bg-white/50 dark:bg-white/[0.04] text-gray-400 hover:text-gray-700 dark:hover:text-gray-200 hover:border-gray-300 dark:hover:border-white/20 transition-all"
-        >
-          <Cog size={14} />
-        </button>
+        {isAdmin && (
+          <button
+            type="button"
+            onClick={() => navigate(`/settings/notificaciones/${tipo}`)}
+            title="Configurar template"
+            className="flex items-center justify-center h-8 w-8 rounded-lg border border-gray-200/70 dark:border-white/10 bg-white/50 dark:bg-white/[0.04] text-gray-400 hover:text-gray-700 dark:hover:text-gray-200 hover:border-gray-300 dark:hover:border-white/20 transition-all"
+          >
+            <Cog size={14} />
+          </button>
+        )}
         <Toggle checked={checked} onChange={onChange} />
       </div>
     </SectionRow>
@@ -710,7 +714,7 @@ const MODULE_ACTIONS: Record<string, string[]> = {
   shifts:       ['read', 'create', 'update', 'delete'],
   attendance:   ['read', 'mark', 'delete'],
   expenses:     ['read', 'create', 'update', 'delete'],
-  memberships:  ['read', 'create', 'update', 'delete'],
+  memberships:  ['read', 'create', 'update', 'delete', 'manage_planes'],
   users:        ['read', 'create', 'update', 'delete'],
   rutinas:      ['read', 'create', 'update', 'delete'],
   exercises:    ['read', 'create', 'update', 'delete'],
@@ -728,7 +732,6 @@ const MODULE_SUBACTIONS: Record<string, { key: string; label: string; fromModule
     { key: 'view_rutinas',    label: 'Ver rutinas del cliente' },
     { key: 'view_turnos',     label: 'Ver clases del cliente' },
     { key: 'view_asistencia', label: 'Ver asistencia del cliente' },
-    { key: 'manage_turnos',   label: 'Inscribir/desinscribir de turnos' },
     { key: 'read',   label: 'Ver reposiciones y ausencias del cliente',  fromModule: 'reposiciones' },
     { key: 'create', label: 'Registrar ausencias y agendar recuperaciones', fromModule: 'reposiciones' },
   ],

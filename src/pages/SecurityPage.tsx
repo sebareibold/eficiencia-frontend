@@ -1,5 +1,5 @@
 import { useState, useEffect, useCallback, useMemo } from 'react'
-import { useNavigate } from 'react-router-dom'
+import { Navigate, useNavigate } from 'react-router-dom'
 import { motion, AnimatePresence } from 'framer-motion'
 import { pageVariants, cardVariants } from '../lib/motion'
 import {
@@ -17,6 +17,8 @@ import {
 import { auditoriaApi, type EventoSeguridad, type ResumenSeguridad, type TipoEvento } from '../api/auditoria.api'
 import { notificacionesApi } from '../api/notificaciones.api'
 import { useAuthStore } from '../store/authStore'
+import { usePermissions } from '../hooks/usePermissions'
+import { ROUTES } from '../constants/routes'
 import KpiCard from '../components/ui/KpiCard'
 import Skeleton from '../components/ui/Skeleton'
 
@@ -445,6 +447,7 @@ function UsoEmailsCard() {
 export default function SecurityPage() {
   const navigate = useNavigate()
   const { user } = useAuthStore()
+  const { isAdmin } = usePermissions()
   const isDev = user?.email === DEV_EMAIL
   const [resumen, setResumen] = useState<ResumenSeguridad | null>(null)
   const [eventos, setEventos] = useState<EventoSeguridad[]>([])
@@ -576,6 +579,8 @@ export default function SecurityPage() {
 
   const totalPages = Math.ceil(total / PAGE_SIZE)
   const hasChartData = chartEvents.length > 0
+
+  if (!isAdmin) return <Navigate to={ROUTES.SETTINGS} replace />
 
   return (
     <motion.div variants={pageVariants} initial="initial" animate="animate" className="space-y-8 md:space-y-10">

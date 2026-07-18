@@ -18,7 +18,7 @@ export type PermModule =
   | 'reposiciones'
   | 'solicitudes-turno'
 
-export type PermAction = 'read' | 'create' | 'update' | 'delete' | 'mark' | 'view_pagos' | 'view_membresias' | 'view_rutinas' | 'view_turnos' | 'view_asistencia' | 'manage_turnos'
+export type PermAction = 'read' | 'create' | 'update' | 'delete' | 'mark' | 'view_pagos' | 'view_membresias' | 'view_rutinas' | 'view_turnos' | 'view_asistencia' | 'manage_planes'
 
 type RolePerms = Partial<Record<PermModule, Partial<Record<PermAction, boolean>>>>
 
@@ -26,12 +26,12 @@ type RolePerms = Partial<Record<PermModule, Partial<Record<PermAction, boolean>>
 // La fuente de verdad real es la tabla Permiso en la BD (permisos.service.ts).
 export const MATRIX: Record<UserRole, RolePerms> = {
   admin: {
-    clients:            { read: true, create: true, update: true, delete: true, view_pagos: true, view_membresias: true, view_rutinas: true, view_turnos: true, view_asistencia: true, manage_turnos: true },
+    clients:            { read: true, create: true, update: true, delete: true, view_pagos: true, view_membresias: true, view_rutinas: true, view_turnos: true, view_asistencia: true },
     payments:           { read: true, create: true, update: true, delete: true  },
     shifts:             { read: true, create: true, update: true, delete: true  },
     attendance:         { read: true, mark: true                                 },
     expenses:           { read: true, create: true, update: true, delete: true  },
-    memberships:        { read: true, create: true, update: true, delete: true  },
+    memberships:        { read: true, create: true, update: true, delete: true, manage_planes: true  },
     dashboard:          { read: true                                             },
     users:              { read: true, create: true, update: true, delete: true  },
     rutinas:            { read: true, create: true, update: true, delete: true  },
@@ -41,7 +41,7 @@ export const MATRIX: Record<UserRole, RolePerms> = {
     'solicitudes-turno': { read: true, update: true                             },
   },
   staff: {
-    clients:            { read: true, create: true, update: true, delete: false, view_pagos: true, view_membresias: true, view_rutinas: false, view_turnos: true, view_asistencia: true, manage_turnos: true },
+    clients:            { read: true, create: true, update: true, delete: false, view_pagos: true, view_membresias: true, view_rutinas: false, view_turnos: true, view_asistencia: true },
     payments:           { read: true, create: true, update: false, delete: false },
     shifts:             { read: true, create: true, update: true, delete: true  },
     attendance:         { read: true, mark: true                                 },

@@ -1,5 +1,5 @@
 import { useState, useEffect, useCallback } from 'react'
-import { useNavigate, useParams, useLocation } from 'react-router-dom'
+import { Navigate, useNavigate, useParams, useLocation } from 'react-router-dom'
 import { motion, AnimatePresence, LayoutGroup } from 'framer-motion'
 import { pageVariants } from '../lib/motion'
 import {
@@ -10,6 +10,7 @@ import {
 import { diasEspecialesApi } from '../api/dias-especiales.api'
 import { professorsApi } from '../api/shifts.api'
 import { useUiStore } from '../store/uiStore'
+import { usePermissions } from '../hooks/usePermissions'
 import { ROUTES } from '../constants/routes'
 import Button from '../components/ui/Button'
 import type { DiaEspecial, TipoDiaEspecial, TurnoPreviewWizard } from '../types/dias-especiales.types'
@@ -172,6 +173,7 @@ export default function DiaEspecialWizardPage() {
   const location  = useLocation()
   const { id }    = useParams<{ id: string }>()
   const addToast  = useUiStore(s => s.addToast)
+  const { isAdmin } = usePermissions()
   const isEditing = !!id
 
   const diaExistente: DiaEspecial | undefined = (location.state as { dia?: DiaEspecial })?.dia
@@ -218,6 +220,8 @@ export default function DiaEspecialWizardPage() {
       setLoadingPreview(false)
     }
   }, [tipo, fecha, horaDesde, horaHasta])
+
+  if (!isAdmin) return <Navigate to={ROUTES.SHIFTS} replace />
 
   function goNext() {
     if (step === 1) {

@@ -203,7 +203,7 @@ export default function ShiftsPage() {
   const addToast   = useUiStore(s => s.addToast)
   const user       = useAuthStore(s => s.user)
   const queryClient = useQueryClient()
-  const { can } = usePermissions()
+  const { can, isAdmin } = usePermissions()
   const canCreate = can('shifts', 'create')
   const canUpdate = can('shifts', 'update')
   const canDelete = can('shifts', 'delete')
@@ -1481,7 +1481,7 @@ export default function ShiftsPage() {
             <h2 className="text-xl font-bold text-gray-900 dark:text-white">Días sin Clases</h2>
             <p className="text-sm text-[#8A8A9A]">Feriados, cierres y horarios reducidos del gimnasio</p>
           </div>
-          {canCreate && (
+          {isAdmin && (
             <button
               onClick={() => navigate(ROUTES.DIA_ESPECIAL_NEW)}
               className="ml-auto flex items-center gap-2 rounded-xl bg-red-500/10 px-4 py-2 text-sm font-semibold text-red-400 hover:bg-red-500/20 transition-all"

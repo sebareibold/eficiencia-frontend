@@ -131,7 +131,7 @@ function PrecioRow({
               <span className="text-base font-black tabular-nums text-emerald-600 dark:text-emerald-400">
                 {tarifa ? formatCurrency(tarifa.precio) : <span className="text-sm font-medium text-gray-400 italic">—</span>}
               </span>
-              {can('memberships', 'update') && (
+              {can('memberships', 'manage_planes') && (
                 <button
                   onClick={() => setIsEditing(true)}
                   className="rounded-xl p-1.5 text-gray-400 dark:text-gray-600 hover:text-primary hover:bg-primary/10 transition-all"
@@ -955,9 +955,9 @@ export default function PaymentsPage() {
                   <div className="flex flex-col items-end gap-1.5 shrink-0">
                     <span className="text-sm font-black text-emerald-600 dark:text-emerald-400 tabular-nums">{formatCurrency(p.amount)}</span>
                     <button
-                      onClick={e => { e.stopPropagation(); if (!togglingIds.has(p.id)) toggleInvoiced(p) }}
-                      disabled={togglingIds.has(p.id)}
-                      title={p.invoiced ? 'Quitar facturado' : 'Marcar como facturado'}
+                      onClick={e => { e.stopPropagation(); if (!togglingIds.has(p.id) && can('payments', 'update')) toggleInvoiced(p) }}
+                      disabled={togglingIds.has(p.id) || !can('payments', 'update')}
+                      title={!can('payments', 'update') ? 'Sin permiso para editar pagos' : p.invoiced ? 'Quitar facturado' : 'Marcar como facturado'}
                       className="flex items-center gap-1.5 disabled:opacity-50 disabled:cursor-not-allowed"
                     >
                       <span className={`relative inline-flex h-4 w-7 shrink-0 items-center rounded-full transition-colors duration-200 ${p.invoiced ? 'bg-emerald-500' : 'bg-gray-200 dark:bg-white/20'}`}>
@@ -1035,9 +1035,9 @@ export default function PaymentsPage() {
                       </td>
                       <td className="px-6 py-4">
                         <button
-                          onClick={e => { e.stopPropagation(); if (!togglingIds.has(p.id)) toggleInvoiced(p) }}
-                          disabled={togglingIds.has(p.id)}
-                          title={p.invoiced ? 'Quitar facturado' : 'Marcar como facturado'}
+                          onClick={e => { e.stopPropagation(); if (!togglingIds.has(p.id) && can('payments', 'update')) toggleInvoiced(p) }}
+                          disabled={togglingIds.has(p.id) || !can('payments', 'update')}
+                          title={!can('payments', 'update') ? 'Sin permiso para editar pagos' : p.invoiced ? 'Quitar facturado' : 'Marcar como facturado'}
                           className="flex items-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed hover:opacity-75 transition-opacity active:scale-95"
                         >
                           <span className={`relative inline-flex h-5 w-9 shrink-0 items-center rounded-full transition-colors duration-200 ${p.invoiced ? 'bg-emerald-500' : 'bg-gray-200 dark:bg-white/20'}`}>
@@ -1114,9 +1114,9 @@ export default function PaymentsPage() {
                           {METHOD_LABELS[p.method] ?? p.method}
                         </span>
                         <button
-                          onClick={e => { e.stopPropagation(); if (!togglingIds.has(p.id)) toggleInvoiced(p) }}
-                          disabled={togglingIds.has(p.id)}
-                          title={p.invoiced ? 'Quitar facturado' : 'Marcar como facturado'}
+                          onClick={e => { e.stopPropagation(); if (!togglingIds.has(p.id) && can('payments', 'update')) toggleInvoiced(p) }}
+                          disabled={togglingIds.has(p.id) || !can('payments', 'update')}
+                          title={!can('payments', 'update') ? 'Sin permiso para editar pagos' : p.invoiced ? 'Quitar facturado' : 'Marcar como facturado'}
                           className="flex items-center gap-1.5 disabled:opacity-50 disabled:cursor-not-allowed hover:opacity-75 transition-opacity active:scale-95"
                         >
                           <span className={`relative inline-flex h-5 w-9 shrink-0 items-center rounded-full transition-colors duration-200 ${p.invoiced ? 'bg-emerald-500' : 'bg-gray-200 dark:bg-white/20'}`}>
@@ -1188,7 +1188,7 @@ export default function PaymentsPage() {
               Planes y precios
             </h2>
           </div>
-          {can('memberships', 'create') && (
+          {can('memberships', 'manage_planes') && (
             <button
               onClick={openCreatePlan}
               className="flex items-center gap-2 rounded-xl btn-action px-4 py-2.5 text-sm"

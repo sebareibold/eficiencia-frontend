@@ -43,7 +43,7 @@ export interface Plan {
   membresiaCount?: number
 }
 
-// Alias de compatibilidad (PaymentsPage y MembershipsPage usan Membership)
+// Alias de compatibilidad usado en PaymentsPage
 export type Membership = Plan
 
 export interface CreatePlanDto {

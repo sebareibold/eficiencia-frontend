@@ -11,6 +11,7 @@ import { paymentsApi } from '../api/payments.api'
 import { membresiasClienteApi } from '../api/membresiasCliente.api'
 import { useUiStore } from '../store/uiStore'
 import { useAuthStore } from '../store/authStore'
+import { usePermissions } from '../hooks/usePermissions'
 import { ROUTES } from '../constants/routes'
 import { formatCurrency } from '../utils/formatCurrency'
 import { formatDate } from '../utils/formatDate'
@@ -51,7 +52,7 @@ export default function PaymentDetailPage() {
   const navigate = useNavigate()
   const addToast = useUiStore(s => s.addToast)
   const user = useAuthStore(s => s.user)
-  const isAdmin = user?.role === 'admin'
+  const { isAdmin, can } = usePermissions()
 
   const [payment, setPayment] = useState<Payment | null>(null)
   const [isLoading, setIsLoading] = useState(true)
@@ -521,12 +522,13 @@ export default function PaymentDetailPage() {
                   <button
                     type="button"
                     onClick={handleToggleInvoiced}
-                    disabled={togglingInvoiced}
+                    disabled={togglingInvoiced || !can('payments', 'update')}
+                    title={!can('payments', 'update') ? 'Sin permiso para editar pagos' : undefined}
                     className={`relative inline-flex h-7 w-14 items-center rounded-full transition-all duration-300 focus:outline-none shrink-0 ${
                       payment.invoiced
                         ? 'bg-emerald-500 shadow-[0_0_16px_rgba(16,185,129,0.35)]'
                         : 'bg-gray-200 dark:bg-gray-700/60'
-                    } ${togglingInvoiced ? 'opacity-60 cursor-not-allowed' : 'cursor-pointer hover:scale-105'}`}
+                    } ${togglingInvoiced || !can('payments', 'update') ? 'opacity-60 cursor-not-allowed' : 'cursor-pointer hover:scale-105'}`}
                     aria-checked={payment.invoiced}
                     role="switch"
                   >

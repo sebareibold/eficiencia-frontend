@@ -89,12 +89,14 @@ export default function App() {
               </Route>
 
               <Route element={<PermissionGuard module="shifts" />}>
-                <Route path={ROUTES.SHIFTS}           element={<ShiftsPage />} />
-                <Route path={ROUTES.SHIFT_NEW}        element={<ShiftNewPage />} />
-                <Route path={ROUTES.SHIFT_DETAIL}     element={<ShiftDetailPage />} />
-                <Route path={ROUTES.CALENDAR}         element={<CalendarPage />} />
+                <Route path={ROUTES.SHIFTS}            element={<ShiftsPage />} />
+                <Route path={ROUTES.SHIFT_DETAIL}      element={<ShiftDetailPage />} />
+                <Route path={ROUTES.CALENDAR}          element={<CalendarPage />} />
                 <Route path={ROUTES.DIA_ESPECIAL_NEW}  element={<DiaEspecialWizardPage />} />
                 <Route path={ROUTES.DIA_ESPECIAL_EDIT} element={<DiaEspecialWizardPage />} />
+                <Route element={<PermissionGuard module="shifts" action="create" />}>
+                  <Route path={ROUTES.SHIFT_NEW} element={<ShiftNewPage />} />
+                </Route>
               </Route>
 
               <Route element={<PermissionGuard module="attendance" />}>
@@ -113,9 +115,11 @@ export default function App() {
 
               <Route element={<PermissionGuard module="rutinas" />}>
                 <Route path={ROUTES.CLIENT_RUTINA}    element={<ClientRutinaPage />} />
-                <Route path={ROUTES.RUTINA_CREAR}     element={<CreateRutinaPage />} />
                 <Route path={ROUTES.EJECUCION}        element={<EjecucionPage />} />
                 <Route path={ROUTES.EJECUCION_RUTINA} element={<EjecucionRutinaPage />} />
+                <Route element={<PermissionGuard module="rutinas" action="create" />}>
+                  <Route path={ROUTES.RUTINA_CREAR} element={<CreateRutinaPage />} />
+                </Route>
               </Route>
 
               <Route element={<PermissionGuard module="expenses" />}>

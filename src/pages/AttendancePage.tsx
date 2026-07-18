@@ -11,6 +11,8 @@ import type { VerificacionFecha } from '../api/attendance.api'
 import { inscripcionesApi } from '../api/inscripciones.api'
 import { reposicionesApi } from '../api/reposiciones.api'
 import { useUiStore } from '../store/uiStore'
+import { useAuthStore } from '../store/authStore'
+import { usuariosApi } from '../api/usuarios.api'
 import Skeleton from '../components/ui/Skeleton'
 import Select from '../components/ui/Select'
 import type { WeekDay } from '../types/shift.types'
@@ -157,6 +159,17 @@ export default function AttendancePage() {
   const { shifts, isLoading: loadingShifts } = useShifts()
   const { records, isLoading: loadingAttendance, fetchByShiftAndDate } = useAttendance()
   const addToast = useUiStore(s => s.addToast)
+  const user    = useAuthStore(s => s.user)
+  const isProfesor = user?.role === 'profesor'
+
+  const [profesorId, setProfesorId] = useState<string | null>(null)
+
+  useEffect(() => {
+    if (!isProfesor) return
+    usuariosApi.getMiPerfilProfesor()
+      .then(p => setProfesorId(p.profesor?.id ?? null))
+      .catch(() => {})
+  }, [isProfesor])
 
   const [selectedShift, setSelectedShift] = useState('')
   const [selectedDate, setSelectedDate] = useState(format(new Date(), 'yyyy-MM-dd'))
@@ -297,7 +310,11 @@ export default function AttendancePage() {
     }
   }
 
-  const shiftOptions = shifts.map(s => ({
+  const visibleShifts = (isProfesor && profesorId)
+    ? shifts.filter(s => s.profesorSalaAId === profesorId || s.profesorSalaBId === profesorId)
+    : shifts
+
+  const shiftOptions = visibleShifts.map(s => ({
     value: String(s.id),
     label: `${s.startTime}–${s.endTime} Sala ${s.room} (${s.days.map(d => DAY_LABELS[d].slice(0, 3)).join('/')})`,
   }))

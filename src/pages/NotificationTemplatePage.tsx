@@ -1,9 +1,10 @@
 import { useState, useEffect, useRef, useCallback } from 'react'
-import { useParams, useNavigate } from 'react-router-dom'
+import { Navigate, useParams, useNavigate } from 'react-router-dom'
 import { motion, AnimatePresence } from 'framer-motion'
 import { ArrowLeft, Save, Send, Copy, RotateCcw, Eye, EyeOff, ChevronDown, ChevronUp, GripVertical, Pencil } from 'lucide-react'
 import { notificacionesApi, type PlantillaSistema, type VariableSimple } from '../api/notificaciones.api'
 import { useUiStore } from '../store/uiStore'
+import { usePermissions } from '../hooks/usePermissions'
 import { ROUTES } from '../constants/routes'
 
 const fadeUp = { initial: { opacity: 0, y: 16 }, animate: { opacity: 1, y: 0 }, transition: { duration: 0.35 } }
@@ -196,6 +197,7 @@ export default function NotificationTemplatePage() {
   const { tipo } = useParams<{ tipo: string }>()
   const navigate = useNavigate()
   const addToast = useUiStore(s => s.addToast)
+  const { isAdmin } = usePermissions()
 
   const [plantilla, setPlantilla] = useState<PlantillaSistema | null>(null)
   const [asunto, setAsunto] = useState('')
@@ -263,6 +265,8 @@ export default function NotificationTemplatePage() {
       .catch(() => addToast('Error al cargar la plantilla', 'error'))
       .finally(() => setLoading(false))
   }, [tipo])
+
+  if (!isAdmin) return <Navigate to={ROUTES.SETTINGS} replace />
 
   const variables: VariableSimple[] = plantilla?.variablesDisponibles ?? plantilla?.variables ?? []
 
