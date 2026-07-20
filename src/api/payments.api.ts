@@ -42,6 +42,8 @@ function mapPago(p: any): Payment {
     id: p.id,
     clientId: p.clienteId,
     clientName,
+    clientCuil: p.cliente?.cuil ?? null,
+    clientPhone: p.cliente?.telefono ?? null,
     amount: Number(p.monto),
     method: mapMetodoToFrontend(p.metodo),
     invoiced: p.facturado,
@@ -69,7 +71,7 @@ export const paymentsApi = {
   getAll: (params?: {
     month?: string; anio?: string; desde?: string; hasta?: string
     clientId?: string | number; page?: number; pageSize?: number
-    method?: Payment['method']
+    method?: Payment['method']; search?: string
   }): Promise<PaginatedPayments> =>
     api.get('/pagos', {
       params: {
@@ -79,8 +81,9 @@ export const paymentsApi = {
         ...(params?.hasta    && { hasta:     params.hasta }),
         ...(params?.clientId && { clienteId: params.clientId }),
         ...(params?.method   && { metodo:    mapMetodoToBackend(params.method) }),
+        ...(params?.search   && { search:    params.search }),
         page:     params?.page     ?? 1,
-        pageSize: params?.pageSize ?? 10,
+        pageSize: params?.pageSize ?? 20,
       },
     }).then((r) => {
       const raw = r.data

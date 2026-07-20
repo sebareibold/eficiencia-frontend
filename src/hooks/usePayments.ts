@@ -11,6 +11,7 @@ interface UsePaymentsParams {
   clientId?: number
   pageSize?: number
   method?: 'cash' | 'transfer' | 'card'
+  search?: string
 }
 
 export function usePayments(params?: UsePaymentsParams) {

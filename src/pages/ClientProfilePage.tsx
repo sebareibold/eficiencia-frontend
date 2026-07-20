@@ -1571,7 +1571,7 @@ export default function ClientProfilePage() {
                         {regKey === 'email' && raw ? (
                           <a href={`mailto:${raw}`} className="text-primary hover:underline font-semibold transition-all">{raw}</a>
                         ) : regKey === 'phone' && raw ? (
-                          <a href={`https://wa.me/54${raw.replace(/\D/g, '')}`} target="_blank" rel="noopener noreferrer" className="text-emerald-600 dark:text-emerald-400 hover:underline font-semibold">{raw}</a>
+                          <a href={`https://wa.me/${(d => d.startsWith('549') ? d : '54' + d)(raw.replace(/\D/g, ''))}?text=${encodeURIComponent('Hola ' + client!.name + '! C\u00f3mo est\u00e1s? Te contactamos desde Eficiencia.')}`} target="_blank" rel="noopener noreferrer" className="text-emerald-600 dark:text-emerald-400 hover:underline font-semibold">{raw}</a>
                         ) : raw ? (
                           <span className="text-gray-900 dark:text-white font-semibold">{raw}</span>
                         ) : (
@@ -1771,6 +1771,15 @@ export default function ClientProfilePage() {
                         className="w-full bg-white/60 dark:bg-white/[0.06] border border-gray-200 dark:border-white/[0.15] rounded-lg px-2 py-1 text-xs text-gray-900 dark:text-white placeholder-gray-400 focus:outline-none focus:ring-1 focus:ring-primary/60 transition-all"
                         {...register(regKey)}
                       />
+                    ) : regKey === 'responsableContacto' && raw ? (
+                      <a
+                        href={`https://wa.me/${(d => d.startsWith('549') ? d : '54' + d)(raw.replace(/\D/g, ''))}?text=${encodeURIComponent('Hola ' + (client!.responsableNombre || 'buen d\u00eda') + '! C\u00f3mo est\u00e1s? Te contactamos desde Eficiencia.')}`}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="text-emerald-600 dark:text-emerald-400 hover:underline font-semibold pt-0.5"
+                      >
+                        {raw}
+                      </a>
                     ) : (
                       <span className={raw ? 'text-gray-900 dark:text-white font-semibold pt-0.5' : 'text-gray-400 dark:text-gray-500 pt-0.5'}>
                         {raw || '—'}

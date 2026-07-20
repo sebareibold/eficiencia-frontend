@@ -4,6 +4,8 @@ export interface Payment {
   id: number
   clientId: number
   clientName: string
+  clientCuil: string | null
+  clientPhone: string | null
   amount: number
   method: PaymentMethod
   invoiced: boolean
