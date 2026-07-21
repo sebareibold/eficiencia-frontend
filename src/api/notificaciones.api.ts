@@ -22,6 +22,17 @@ export interface PlantillaSistema {
   updatedAt: string
 }
 
+export interface PlantillaWhatsapp {
+  id: string
+  tipo: string
+  nombre: string
+  cuerpo: string
+  variables: VariableSimple[]
+  variablesDisponibles?: VariableSimple[]
+  activo: boolean
+  updatedAt: string
+}
+
 export const notificacionesApi = {
   probar: (tipo: string): Promise<{ enviado: boolean; destino: string }> =>
     api.post(`/notificaciones/probar/${tipo}`).then(r => r.data),
@@ -48,4 +59,20 @@ export const notificacionesApi = {
 
   probarPlantillaSistema: (tipo: string, override?: { asunto?: string; cuerpo?: string; colorAcento?: string; colorCuerpo?: string; colorFooter?: string; colorLogo?: string; logoInvertido?: boolean }): Promise<{ enviado: boolean; destino: string }> =>
     api.post(`/notificaciones/plantillas-sistema/${tipo}/probar`, override ?? {}).then(r => r.data),
+
+  // Plantillas WhatsApp
+  getPlantillasWhatsapp: (): Promise<PlantillaWhatsapp[]> =>
+    api.get('/notificaciones/plantillas-whatsapp').then(r => r.data),
+
+  getPlantillaWhatsapp: (tipo: string): Promise<PlantillaWhatsapp> =>
+    api.get(`/notificaciones/plantillas-whatsapp/${tipo}`).then(r => r.data),
+
+  updatePlantillaWhatsapp: (tipo: string, data: { cuerpo?: string; activo?: boolean }): Promise<PlantillaWhatsapp> =>
+    api.patch(`/notificaciones/plantillas-whatsapp/${tipo}`, data).then(r => r.data),
+
+  previewPlantillaWhatsapp: (tipo: string, cuerpo?: string): Promise<{ preview: string }> =>
+    api.post(`/notificaciones/plantillas-whatsapp/${tipo}/preview`, { cuerpo }).then(r => r.data),
+
+  resetPlantillaWhatsapp: (tipo: string): Promise<PlantillaWhatsapp> =>
+    api.post(`/notificaciones/plantillas-whatsapp/${tipo}/reset`).then(r => r.data),
 }

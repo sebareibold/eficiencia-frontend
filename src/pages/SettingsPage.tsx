@@ -1,5 +1,5 @@
 import { useState, useRef, useEffect } from 'react'
-import { useNavigate } from 'react-router-dom'
+import { useNavigate, useLocation } from 'react-router-dom'
 import { motion, AnimatePresence } from 'framer-motion'
 import {
   Palette,
@@ -26,12 +26,14 @@ import {
   Play,
   RefreshCw,
   Cog,
+  Mail,
+  MessageCircle,
 } from 'lucide-react'
 import { useUiStore } from '../store/uiStore'
 import { useSettingsStore } from '../store/settingsStore'
 import { useAuthStore } from '../store/authStore'
 import { usePermissions } from '../hooks/usePermissions'
-import { configuracionApi } from '../api/configuracion.api'
+import { configuracionApi, type ConfiguracionData } from '../api/configuracion.api'
 import { configuracionSistemaApi, type ConfiguracionSistema } from '../api/configuracion-sistema.api'
 import { mantenimientoApi, type ConsistenciaReport } from '../api/mantenimiento.api'
 import { notificacionesApi } from '../api/notificaciones.api'
@@ -39,6 +41,9 @@ import { authApi } from '../api/auth.api'
 import { permisosApi, type PermisosMap } from '../api/permisos.api'
 import { ROUTES } from '../constants/routes'
 import { ManualContent } from './ManualPage'
+import { WhatsappTemplatesPanel } from '../components/notificaciones/WhatsappTemplatesPanel'
+import { useWhatsappTemplates } from '../hooks/useWhatsappTemplates'
+import Skeleton from '../components/ui/Skeleton'
 
 // ─── Sub-components ──────────────────────────────────────────────────────────
 
@@ -161,11 +166,13 @@ function SectionRow({
   description,
   children,
   last,
+  icon,
 }: {
   label: string
   description?: string
   children: React.ReactNode
   last?: boolean
+  icon?: React.ReactNode
 }) {
   return (
     <div
@@ -174,7 +181,10 @@ function SectionRow({
       }`}
     >
       <div className="min-w-0 flex-1">
-        <p className="text-sm font-bold text-gray-900 dark:text-gray-100 leading-tight">{label}</p>
+        <div className="flex items-center gap-2">
+          {icon}
+          <p className="text-sm font-bold text-gray-900 dark:text-gray-100 leading-tight">{label}</p>
+        </div>
         {description && (
           <p className="text-xs text-gray-500 dark:text-gray-400 mt-1.5 leading-relaxed">{description}</p>
         )}
@@ -283,7 +293,12 @@ function NotifRow({
   const navigate = useNavigate()
   const { isAdmin } = usePermissions()
   return (
-    <SectionRow label={label} description={description} last={last}>
+    <SectionRow
+      label={label}
+      description={description}
+      last={last}
+      icon={<Mail size={13} className="text-blue-400 shrink-0" />}
+    >
       <div className="flex items-center gap-2.5">
         {isAdmin && (
           <button
@@ -328,7 +343,22 @@ function ResumenPeriodicidadCard() {
     }
   }
 
-  if (loading || !config) return null
+  if (loading || !config) {
+    return (
+      <>
+        <SectionHeader title="Resumen automático" />
+        <div className="bg-white/30 dark:bg-black/30 backdrop-blur-3xl rounded-3xl border border-white/50 dark:border-white/10">
+          <div className="flex items-center justify-between gap-6 px-8 py-6">
+            <div className="flex-1 space-y-2">
+              <Skeleton className="h-4 w-44" />
+              <Skeleton className="h-3 w-64" />
+            </div>
+            <Skeleton className="h-6 w-11 rounded-full shrink-0" />
+          </div>
+        </div>
+      </>
+    )
+  }
 
   const DIAS_SEMANA = ['Domingo', 'Lunes', 'Martes', 'Miércoles', 'Jueves', 'Viernes', 'Sábado']
   const FRECUENCIAS = [
@@ -437,54 +467,544 @@ function ResumenPeriodicidadCard() {
   )
 }
 
-function NotificationsSection() {
-  const { notifications, updateNotifications } = useSettingsStore()
+function EmailUsageCard() {
+  const [data, setData] = useState<{
+    hoy: number
+    esteMes: number
+    limites: { diario: number; mensual: number }
+    desglose: { tipo: string; count: number }[]
+  } | null>(null)
+  const [loading, setLoading] = useState(true)
+
+  useEffect(() => {
+    notificacionesApi.conteoEmails()
+      .then(setData)
+      .catch(() => {})
+      .finally(() => setLoading(false))
+  }, [])
+
+  if (loading) {
+    return (
+      <div className="bg-white/30 dark:bg-black/30 backdrop-blur-3xl rounded-3xl border border-white/50 dark:border-white/10 px-8 py-6 space-y-4">
+        <div className="grid grid-cols-2 gap-4">
+          {[0, 1].map(i => (
+            <div key={i} className="rounded-2xl border border-white/60 dark:border-white/[0.06] px-5 py-4 space-y-3">
+              <Skeleton className="h-2.5 w-10" />
+              <Skeleton className="h-8 w-16" />
+              <Skeleton className="h-3 w-28" />
+              <Skeleton className="h-1.5 w-full rounded-full" />
+            </div>
+          ))}
+        </div>
+        <div className="border-t border-gray-100/50 dark:border-white/[0.06] pt-4 flex gap-6">
+          <div className="w-1/2 space-y-2.5">
+            <Skeleton className="h-2.5 w-28" />
+            {[0, 1, 2].map(i => (
+              <div key={i} className="flex items-center gap-2">
+                <Skeleton className="h-2 w-2 rounded-full shrink-0" />
+                <Skeleton className="h-3 w-32" />
+                <Skeleton className="h-3 w-6 ml-auto" />
+              </div>
+            ))}
+          </div>
+          <div className="w-1/2 space-y-2">
+            <Skeleton className="h-2.5 w-20" />
+            <Skeleton className="h-28 w-full rounded-xl" />
+          </div>
+        </div>
+      </div>
+    )
+  }
+
+  if (!data) return null
+
+  const pctDiario = Math.min(100, (data.hoy / 50) * 100)
+  const pctMensual = Math.min(100, (data.esteMes / 1000) * 100)
+
+  return (
+    <SectionCard>
+      <div className="px-8 py-6 space-y-4">
+        <div className="grid grid-cols-2 gap-4">
+          <div className="rounded-2xl bg-white/40 dark:bg-white/[0.04] border border-white/60 dark:border-white/[0.06] px-5 py-4">
+            <p className="text-[10px] font-bold uppercase tracking-widest text-gray-400 dark:text-gray-500 mb-1">Hoy</p>
+            <p className="text-3xl font-black text-gray-900 dark:text-white tabular-nums">{data.hoy}</p>
+            <p className="text-xs text-gray-400 dark:text-white/30 mt-0.5">de 50 disponibles</p>
+            <div className="mt-3 h-1.5 rounded-full bg-gray-200/60 dark:bg-white/10 overflow-hidden">
+              <div className="h-full rounded-full bg-primary transition-all" style={{ width: `${pctDiario}%` }} />
+            </div>
+          </div>
+          <div className="rounded-2xl bg-white/40 dark:bg-white/[0.04] border border-white/60 dark:border-white/[0.06] px-5 py-4">
+            <p className="text-[10px] font-bold uppercase tracking-widest text-gray-400 dark:text-gray-500 mb-1">Este mes</p>
+            <p className="text-3xl font-black text-gray-900 dark:text-white tabular-nums">{data.esteMes}</p>
+            <p className="text-xs text-gray-400 dark:text-white/30 mt-0.5">de 1.000 disponibles</p>
+            <div className="mt-3 h-1.5 rounded-full bg-gray-200/60 dark:bg-white/10 overflow-hidden">
+              <div className="h-full rounded-full bg-primary transition-all" style={{ width: `${pctMensual}%` }} />
+            </div>
+          </div>
+        </div>
+        {data.desglose.length > 0 && (
+          <div className="border-t border-gray-100/50 dark:border-white/[0.06] pt-4">
+            <div className="flex gap-6">
+
+              {/* Columna izquierda — leyenda */}
+              <div className="flex w-1/2 flex-col justify-between">
+                <p className="text-[10px] font-bold uppercase tracking-widest text-gray-400 dark:text-gray-500">Desglose del mes</p>
+                <div className="flex flex-col justify-end gap-2.5">
+                {data.desglose.map(d => (
+                  <div key={d.tipo} className="flex items-center gap-2">
+                    <div className="h-2 w-2 rounded-full bg-primary shrink-0" />
+                    <span className="text-[11px] text-gray-500 dark:text-gray-400 capitalize leading-tight">
+                      {d.tipo.replace(/_/g, ' ').toLowerCase()}
+                    </span>
+                    <span className="ml-auto text-[11px] font-bold text-gray-900 dark:text-white tabular-nums">{d.count}</span>
+                  </div>
+                ))}
+                </div>
+              </div>
+
+              {/* Columna derecha — gráfico de barras premium */}
+              {(() => {
+                const maxCount = Math.max(...data.desglose.map(d => d.count), 1)
+                const maxTipo = data.desglose.find(d => d.count === maxCount)?.tipo ?? ''
+                const LABEL_H = 22  // área del valor encima de cada barra
+                const TRACK_H = 96  // área de las barras
+                const TOTAL_H = LABEL_H + TRACK_H
+
+                return (
+                  <div className="flex w-1/2 flex-col justify-between">
+
+                    {/* Header: título + badge de categoría líder */}
+                    <div className="flex items-center justify-between gap-2">
+                      <p className="text-[10px] font-bold uppercase tracking-widest text-gray-400 dark:text-gray-500">
+                        Emails por tipo
+                      </p>
+                      {maxTipo && (
+                        <span className="shrink-0 rounded-full bg-primary/10 px-2 py-0.5 text-[9px] font-semibold capitalize text-primary">
+                          ↑ {maxTipo.replace(/_/g, ' ').split(' ').slice(0, 2).join(' ').toLowerCase()}
+                        </span>
+                      )}
+                    </div>
+
+                    <div className="flex gap-2">
+                      {/* Eje Y */}
+                      <div
+                        className="flex shrink-0 flex-col justify-between items-end w-6"
+                        style={{ marginTop: LABEL_H, height: TRACK_H }}
+                      >
+                        <span className="text-[8px] tabular-nums leading-none text-gray-300 dark:text-white/20">{maxCount}</span>
+                        <span className="text-[8px] tabular-nums leading-none text-gray-300 dark:text-white/20">{Math.round(maxCount / 2)}</span>
+                        <span className="text-[8px] tabular-nums leading-none text-gray-300 dark:text-white/20">0</span>
+                      </div>
+
+                      {/* Área de barras */}
+                      <div className="relative flex-1" style={{ height: TOTAL_H }}>
+                        {/* Línea guía: tope del track */}
+                        <div
+                          className="pointer-events-none absolute inset-x-0 border-t border-dashed border-gray-200/35 dark:border-white/[0.05]"
+                          style={{ top: LABEL_H }}
+                        />
+                        {/* Línea guía: mitad */}
+                        <div
+                          className="pointer-events-none absolute inset-x-0 border-t border-dashed border-gray-200/35 dark:border-white/[0.05]"
+                          style={{ top: LABEL_H + TRACK_H / 2 }}
+                        />
+                        {/* Eje X */}
+                        <div className="pointer-events-none absolute inset-x-0 bottom-0 border-t border-gray-200/60 dark:border-white/[0.09]" />
+
+                        {/* Barras finas */}
+                        <div className="absolute inset-0 flex justify-around items-start px-2">
+                          {data.desglose.map((d, i) => {
+                            const pct = Math.round((d.count / maxCount) * 100)
+                            const isMax = d.count === maxCount
+                            return (
+                              <div
+                                key={d.tipo}
+                                className="flex flex-col items-center"
+                                style={{ height: TOTAL_H }}
+                              >
+                                {/* Valor encima */}
+                                <div className="flex items-end justify-center pb-1" style={{ height: LABEL_H }}>
+                                  <span className={`tabular-nums leading-none ${
+                                    isMax
+                                      ? 'text-[11px] font-black text-primary drop-shadow-[0_0_6px_rgba(251,198,8,0.5)]'
+                                      : 'text-[9px] font-semibold text-gray-400 dark:text-gray-500'
+                                  }`}>
+                                    {d.count}
+                                  </span>
+                                </div>
+                                {/* Bastón fino */}
+                                <div
+                                  className="w-3 overflow-hidden rounded-t-full flex flex-col justify-end bg-gray-100 dark:bg-white/[0.08]"
+                                  style={{ height: TRACK_H }}
+                                >
+                                  <motion.div
+                                    className={`w-full rounded-t-full ${
+                                      isMax
+                                        ? 'bg-primary shadow-[0_-8px_20px_rgba(251,198,8,0.5)]'
+                                        : 'bg-primary/50'
+                                    }`}
+                                    initial={{ height: 0 }}
+                                    animate={{ height: `${pct}%` }}
+                                    transition={{ duration: 0.65, delay: i * 0.07, ease: [0.23, 1, 0.32, 1] }}
+                                  />
+                                </div>
+                              </div>
+                            )
+                          })}
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+                )
+              })()}
+
+            </div>
+          </div>
+        )}
+      </div>
+    </SectionCard>
+  )
+}
+
+// ─── MetricasTab ──────────────────────────────────────────────────────────────
+
+function MetricasTab() {
+  const { notifications } = useSettingsStore()
+  const { templates: wspTemplates, loaded: wspLoaded } = useWhatsappTemplates()
+  const [sysConfig, setSysConfig] = useState<ConfiguracionSistema | null>(null)
+  const [sysLoading, setSysLoading] = useState(true)
+
+  useEffect(() => {
+    configuracionSistemaApi.get()
+      .then(setSysConfig)
+      .catch(() => {})
+      .finally(() => setSysLoading(false))
+  }, [])
+
+  const emailToggles = [
+    notifications.notifVencimientos, notifications.notifDeudas, notifications.notifNuevosClientes,
+    notifications.notifNuevosUsuarios, notifications.emailAlAprobarSolicitudes, notifications.notifBajaAutomatica,
+    notifications.notifSolicitudAcceso, notifications.notifResetPassword, notifications.notifSolicitudTurno,
+    notifications.notifPagoRegistrado,
+  ]
+  const emailActivosCount = emailToggles.filter(Boolean).length
+  const emailTotalCount = emailToggles.length
+
+  const WSP_TOTAL = 11
+  const wspActivosCount = wspLoaded ? Object.keys(wspTemplates).length : 0
+
+  const extrasLoading = sysLoading || !wspLoaded
+
+  const FREQ_LABEL: Record<string, string> = { DAILY: 'Diario', WEEKLY: 'Semanal', MONTHLY: 'Mensual' }
 
   return (
     <div>
-      <SectionHeader title="Qué notificar" />
+      <SectionHeader title="Uso de emails" />
+      <EmailUsageCard />
 
-      {/* Info banner */}
+      <SectionHeader title="Canales activos" />
+      {extrasLoading ? (
+        <div className="grid grid-cols-2 gap-4">
+          {[0, 1].map(i => (
+            <div key={i} className="bg-white/30 dark:bg-black/30 backdrop-blur-3xl rounded-3xl border border-white/50 dark:border-white/10 px-6 py-5 space-y-4">
+              <div className="flex items-center gap-2.5">
+                <Skeleton className="h-8 w-8 rounded-xl shrink-0" />
+                <div className="space-y-1.5">
+                  <Skeleton className="h-2.5 w-14" />
+                  <Skeleton className="h-3 w-24" />
+                </div>
+              </div>
+              <Skeleton className="h-8 w-16" />
+              <Skeleton className="h-1.5 w-full rounded-full" />
+            </div>
+          ))}
+        </div>
+      ) : (
+        <div className="grid grid-cols-2 gap-4">
+          {/* Email */}
+          <SectionCard>
+            <div className="px-6 py-5">
+              <div className="flex items-center gap-2.5 mb-4">
+                <div className="h-8 w-8 rounded-xl bg-blue-50 dark:bg-blue-500/10 border border-blue-100 dark:border-blue-500/20 flex items-center justify-center shrink-0">
+                  <Mail size={14} className="text-blue-500" />
+                </div>
+                <div>
+                  <p className="text-[10px] font-bold uppercase tracking-widest text-gray-400 dark:text-gray-500">Email</p>
+                  <p className="text-xs font-bold text-gray-700 dark:text-gray-300">Automatizados</p>
+                </div>
+              </div>
+              <div className="flex items-end gap-1 mb-1">
+                <span className="text-3xl font-black text-gray-900 dark:text-white tabular-nums">{emailActivosCount}</span>
+                <span className="text-sm text-gray-400 dark:text-gray-500 pb-0.5 tabular-nums">/{emailTotalCount}</span>
+              </div>
+              <p className="text-xs text-gray-400 dark:text-gray-500 mb-3">activos</p>
+              <div className="h-1.5 rounded-full bg-gray-200/60 dark:bg-white/10 overflow-hidden">
+                <div className="h-full rounded-full bg-blue-400 transition-all duration-700" style={{ width: `${(emailActivosCount / emailTotalCount) * 100}%` }} />
+              </div>
+            </div>
+          </SectionCard>
 
-      <SectionCard>
-        <NotifRow tipo="vencimientos" label="Membresías por vencer"
-          description="Recibís un email con la lista de membresías activas que vencen pronto."
-          checked={notifications.notifVencimientos} onChange={(v) => updateNotifications({ notifVencimientos: v })} />
-        <NotifRow tipo="deudas" label="Clientes con deuda"
-          description="Email con todos los clientes en estado DEUDA."
-          checked={notifications.notifDeudas} onChange={(v) => updateNotifications({ notifDeudas: v })} />
-        <NotifRow tipo="nuevos-clientes" label="Nuevos clientes"
-          description="Email inmediato al registrar un cliente."
-          checked={notifications.notifNuevosClientes} onChange={(v) => updateNotifications({ notifNuevosClientes: v })} />
-        <NotifRow tipo="nuevos-usuarios" label="Nuevos usuarios del sistema"
-          description="Email inmediato al crear un usuario o al aprobar una solicitud."
-          checked={notifications.notifNuevosUsuarios} onChange={(v) => updateNotifications({ notifNuevosUsuarios: v })} />
-        <NotifRow tipo="solicitud-aprobada" label="Email al aprobar solicitudes"
-          description="Notificación a admins cuando se aprueba una solicitud de acceso."
-          checked={notifications.emailAlAprobarSolicitudes} onChange={(v) => updateNotifications({ emailAlAprobarSolicitudes: v })} />
-        <NotifRow tipo="baja-automatica" label="Bajas automáticas de turnos"
-          description="Email cuando un cliente es dado de baja automáticamente de sus turnos."
-          checked={notifications.notifBajaAutomatica} onChange={(v) => updateNotifications({ notifBajaAutomatica: v })} last />
-      </SectionCard>
+          {/* WhatsApp */}
+          <SectionCard>
+            <div className="px-6 py-5">
+              <div className="flex items-center gap-2.5 mb-4">
+                <div className="h-8 w-8 rounded-xl bg-green-50 dark:bg-green-500/10 border border-green-100 dark:border-green-500/20 flex items-center justify-center shrink-0">
+                  <MessageCircle size={14} className="text-green-500" />
+                </div>
+                <div>
+                  <p className="text-[10px] font-bold uppercase tracking-widest text-gray-400 dark:text-gray-500">WhatsApp</p>
+                  <p className="text-xs font-bold text-gray-700 dark:text-gray-300">Plantillas</p>
+                </div>
+              </div>
+              <div className="flex items-end gap-1 mb-1">
+                <span className="text-3xl font-black text-gray-900 dark:text-white tabular-nums">{wspActivosCount}</span>
+                <span className="text-sm text-gray-400 dark:text-gray-500 pb-0.5 tabular-nums">/{WSP_TOTAL}</span>
+              </div>
+              <p className="text-xs text-gray-400 dark:text-gray-500 mb-3">activas</p>
+              <div className="h-1.5 rounded-full bg-gray-200/60 dark:bg-white/10 overflow-hidden">
+                <div className="h-full rounded-full bg-green-400 transition-all duration-700" style={{ width: `${(wspActivosCount / WSP_TOTAL) * 100}%` }} />
+              </div>
+            </div>
+          </SectionCard>
+        </div>
+      )}
 
-      <SectionHeader title="Solicitudes y accesos" />
-      <SectionCard>
-        <NotifRow tipo="solicitud-acceso" label="Solicitudes de acceso"
-          description="Email inmediato cuando alguien solicita acceso al sistema."
-          checked={notifications.notifSolicitudAcceso} onChange={(v) => updateNotifications({ notifSolicitudAcceso: v })} />
-        <NotifRow tipo="reset-password" label="Solicitudes de cambio de contraseña"
-          description="Email cuando un usuario pide recuperar su contraseña."
-          checked={notifications.notifResetPassword} onChange={(v) => updateNotifications({ notifResetPassword: v })} />
-        <NotifRow tipo="solicitud-turno" label="Solicitudes de turno (lista de espera)"
-          description="Email cuando se libera un cupo y un cliente pasa a pendiente de aprobación."
-          checked={notifications.notifSolicitudTurno} onChange={(v) => updateNotifications({ notifSolicitudTurno: v })} />
-        <NotifRow tipo="pago-registrado" label="Pagos registrados"
-          description="Email cada vez que se registra un pago en el sistema."
-          checked={notifications.notifPagoRegistrado} onChange={(v) => updateNotifications({ notifPagoRegistrado: v })} last />
-      </SectionCard>
+      <SectionHeader title="Resumen periódico" />
+      {extrasLoading ? (
+        <div className="bg-white/30 dark:bg-black/30 backdrop-blur-3xl rounded-3xl border border-white/50 dark:border-white/10">
+          <div className="flex items-center justify-between gap-6 px-8 py-6">
+            <div className="flex-1 space-y-2">
+              <div className="flex items-center gap-2">
+                <Skeleton className="h-3.5 w-3.5 rounded" />
+                <Skeleton className="h-4 w-48" />
+              </div>
+              <Skeleton className="h-3 w-64" />
+            </div>
+            <Skeleton className="h-7 w-16 rounded-full shrink-0" />
+          </div>
+        </div>
+      ) : sysConfig ? (
+        <SectionCard>
+          <SectionRow
+            label="Estado del envío automático"
+            description={
+              sysConfig.resumenAutomatico
+                ? `${FREQ_LABEL[sysConfig.resumenFrecuencia] ?? sysConfig.resumenFrecuencia} a las ${String(sysConfig.resumenHora).padStart(2, '0')}:00 hs`
+                : 'El envío automático está desactivado. Podés activarlo en la pestaña Automatizados.'
+            }
+            last
+            icon={<Clock size={13} className={sysConfig.resumenAutomatico ? 'text-green-400 shrink-0' : 'text-gray-400 shrink-0'} />}
+          >
+            <span className={`inline-flex items-center rounded-full px-3 py-1 text-[10px] font-bold uppercase tracking-wider border ${
+              sysConfig.resumenAutomatico
+                ? 'bg-green-50 dark:bg-green-500/10 border-green-200 dark:border-green-500/20 text-green-600 dark:text-green-400'
+                : 'bg-gray-100 dark:bg-white/[0.04] border-gray-200 dark:border-white/10 text-gray-400 dark:text-gray-500'
+            }`}>
+              {sysConfig.resumenAutomatico ? 'Activo' : 'Inactivo'}
+            </span>
+          </SectionRow>
+        </SectionCard>
+      ) : null}
 
-      <ResumenPeriodicidadCard />
+      <div className="mt-4">
+        {extrasLoading ? (
+          <div className="bg-white/30 dark:bg-black/30 backdrop-blur-3xl rounded-3xl border border-white/50 dark:border-white/10">
+            <div className="flex items-center justify-between gap-6 px-8 py-6">
+              <div className="flex-1 space-y-2">
+                <Skeleton className="h-4 w-36" />
+                <Skeleton className="h-3 w-72" />
+              </div>
+              <Skeleton className="h-10 w-28 rounded-xl shrink-0" />
+            </div>
+          </div>
+        ) : (
+          <EnviarResumenCard />
+        )}
+      </div>
+    </div>
+  )
+}
 
+// ─── Sub-tab types ────────────────────────────────────────────────────────────
+
+type NotifSubtab = 'automatizados' | 'preautomatizados' | 'metricas'
+
+type SeccionFiltro = 'todos' | 'clientes' | 'turnos' | 'pagos' | 'gastos' | 'biblioteca' | 'usuarios' | 'sistema'
+
+const SECCION_FILTRO_PILLS: { id: SeccionFiltro; label: string }[] = [
+  { id: 'todos',      label: 'Todos' },
+  { id: 'clientes',   label: 'Clientes' },
+  { id: 'turnos',     label: 'Turnos' },
+  { id: 'pagos',      label: 'Pagos' },
+  { id: 'gastos',     label: 'Gastos' },
+  { id: 'biblioteca', label: 'Biblioteca' },
+  { id: 'usuarios',   label: 'Usuarios' },
+  { id: 'sistema',    label: 'Sistema' },
+]
+
+const NOTIF_SECCION: Record<string, SeccionFiltro> = {
+  'vencimientos':       'clientes',
+  'deudas':             'clientes',
+  'nuevos-clientes':    'clientes',
+  'nuevos-usuarios':    'usuarios',
+  'solicitud-aprobada': 'usuarios',
+  'baja-automatica':    'turnos',
+  'solicitud-acceso':   'usuarios',
+  'reset-password':     'usuarios',
+  'solicitud-turno':    'turnos',
+  'pago-registrado':    'pagos',
+}
+
+const NOTIF_SUBTABS: { id: NotifSubtab; label: string }[] = [
+  { id: 'automatizados',    label: 'Automatizados' },
+  { id: 'preautomatizados', label: 'Preautomatizados' },
+  { id: 'metricas',         label: 'Métricas' },
+]
+
+function NotificationsSection({ initialSubtab = 'automatizados' }: { initialSubtab?: NotifSubtab }) {
+  const { notifications, updateNotifications, saveSettings } = useSettingsStore()
+  const addToast = useUiStore(s => s.addToast)
+  const [subtab, setSubtab] = useState<NotifSubtab>(initialSubtab)
+  const [filtroSeccion, setFiltroSeccion] = useState<SeccionFiltro>('todos')
+
+  async function handleToggle(field: keyof typeof notifications, value: boolean) {
+    const prev = notifications[field]
+    updateNotifications({ [field]: value })
+    try {
+      await configuracionApi.update({ [field]: value } as Partial<ConfiguracionData>)
+      saveSettings()
+      addToast({ type: 'success', message: value ? 'Notificación activada' : 'Notificación desactivada' })
+    } catch {
+      updateNotifications({ [field]: prev })
+      addToast({ type: 'error', message: 'Error al guardar' })
+    }
+  }
+
+  return (
+    <div>
+      {/* Sub-tab bar — mismo patrón visual que las tabs principales de Settings */}
+      <div className="rounded-2xl border border-white/50 dark:border-white/10 bg-white/30 dark:bg-black/30 backdrop-blur-3xl p-1.5 shadow-[0_8px_32px_rgba(0,0,0,0.04)] dark:shadow-[0_8px_32px_rgba(0,0,0,0.3)] mb-6">
+        <div className="flex items-center gap-1">
+          {NOTIF_SUBTABS.map((tab) => {
+            const isActive = subtab === tab.id
+            return (
+              <button
+                key={tab.id}
+                type="button"
+                onClick={() => setSubtab(tab.id)}
+                className={`relative flex items-center gap-2.5 px-4 py-2.5 rounded-xl whitespace-nowrap outline-none shrink-0 transition-colors duration-150 ${
+                  isActive
+                    ? 'text-gray-900 dark:text-white'
+                    : 'text-gray-500 dark:text-[#8A8A9A] hover:text-gray-800 dark:hover:text-gray-200 hover:bg-black/[0.05] dark:hover:bg-white/[0.06]'
+                }`}
+              >
+                {isActive && (
+                  <motion.div
+                    layoutId="notif-subtab-active"
+                    className="absolute inset-0 rounded-xl bg-white/30 dark:bg-black/30 backdrop-blur-3xl border border-white/50 dark:border-white/10 shadow-[0_4px_12px_rgba(0,0,0,0.06)] dark:shadow-[0_4px_12px_rgba(0,0,0,0.3)]"
+                    initial={false}
+                    transition={{ type: 'spring', stiffness: 400, damping: 38 }}
+                  />
+                )}
+                <span className="relative z-10 text-[13px] font-semibold leading-none tracking-wide">
+                  {tab.label}
+                </span>
+              </button>
+            )
+          })}
+        </div>
+      </div>
+
+      {/* ── Automatizados ────────────────────────────────────────────────────── */}
+      {subtab === 'automatizados' && (() => {
+        type NotifItem = { tipo: string; label: string; description: string; checked: boolean; onChange: (v: boolean) => void }
+        const ALL_NOTIFS: NotifItem[] = [
+          { tipo: 'vencimientos',       label: 'Membresías por vencer',               description: 'Recibís un email con la lista de membresías activas que vencen pronto.',           checked: notifications.notifVencimientos,         onChange: (v) => handleToggle('notifVencimientos', v) },
+          { tipo: 'deudas',             label: 'Clientes con deuda',                  description: 'Email con todos los clientes en estado DEUDA.',                                     checked: notifications.notifDeudas,              onChange: (v) => handleToggle('notifDeudas', v) },
+          { tipo: 'nuevos-clientes',    label: 'Nuevos clientes',                     description: 'Email inmediato al registrar un cliente.',                                          checked: notifications.notifNuevosClientes,      onChange: (v) => handleToggle('notifNuevosClientes', v) },
+          { tipo: 'nuevos-usuarios',    label: 'Nuevos usuarios del sistema',         description: 'Email inmediato al crear un usuario o al aprobar una solicitud.',                  checked: notifications.notifNuevosUsuarios,      onChange: (v) => handleToggle('notifNuevosUsuarios', v) },
+          { tipo: 'solicitud-aprobada', label: 'Email al aprobar solicitudes',        description: 'Notificación a admins cuando se aprueba una solicitud de acceso.',                checked: notifications.emailAlAprobarSolicitudes, onChange: (v) => handleToggle('emailAlAprobarSolicitudes', v) },
+          { tipo: 'baja-automatica',    label: 'Bajas automáticas de turnos',         description: 'Email cuando un cliente es dado de baja automáticamente de sus turnos.',          checked: notifications.notifBajaAutomatica,      onChange: (v) => handleToggle('notifBajaAutomatica', v) },
+          { tipo: 'solicitud-acceso',   label: 'Solicitudes de acceso',               description: 'Email inmediato cuando alguien solicita acceso al sistema.',                       checked: notifications.notifSolicitudAcceso,     onChange: (v) => handleToggle('notifSolicitudAcceso', v) },
+          { tipo: 'reset-password',     label: 'Solicitudes de cambio de contraseña', description: 'Email cuando un usuario pide recuperar su contraseña.',                           checked: notifications.notifResetPassword,       onChange: (v) => handleToggle('notifResetPassword', v) },
+          { tipo: 'solicitud-turno',    label: 'Solicitudes de turno (lista de espera)', description: 'Email cuando se libera un cupo y un cliente pasa a pendiente de aprobación.', checked: notifications.notifSolicitudTurno,      onChange: (v) => handleToggle('notifSolicitudTurno', v) },
+          { tipo: 'pago-registrado',    label: 'Pagos registrados',                   description: 'Email cada vez que se registra un pago en el sistema.',                           checked: notifications.notifPagoRegistrado,      onChange: (v) => handleToggle('notifPagoRegistrado', v) },
+        ]
+        const visibleNotifs = filtroSeccion === 'todos' ? ALL_NOTIFS : ALL_NOTIFS.filter(n => NOTIF_SECCION[n.tipo] === filtroSeccion)
+        return (
+          <div>
+            {/* Filtro por sección */}
+            <div className="flex flex-col gap-1.5 mb-6">
+              <span className="text-[10px] font-bold uppercase tracking-wider text-gray-400 dark:text-gray-500 px-1">Sección</span>
+              <div className="flex items-center w-fit overflow-x-auto rounded-full border border-white/50 dark:border-white/10 bg-white/30 dark:bg-black/30 backdrop-blur-xl p-1 shadow-sm gap-1">
+                {SECCION_FILTRO_PILLS.map(pill => {
+                  const isActive = filtroSeccion === pill.id
+                  return (
+                    <button
+                      key={pill.id}
+                      type="button"
+                      onClick={() => setFiltroSeccion(pill.id)}
+                      className={`relative inline-flex items-center justify-center rounded-full px-4 py-1.5 text-xs font-bold whitespace-nowrap transition-all duration-300 cursor-pointer ${
+                        isActive
+                          ? 'text-white dark:text-gray-900'
+                          : 'text-gray-500 dark:text-[#8A8A9A] hover:text-gray-900 dark:hover:text-white'
+                      }`}
+                    >
+                      {isActive && <div className="absolute inset-0 rounded-full bg-gray-900 dark:bg-white shadow-[0_2px_8px_rgba(0,0,0,0.15)]" style={{ zIndex: 0 }} />}
+                      <span className="relative z-10">{pill.label}</span>
+                    </button>
+                  )
+                })}
+              </div>
+            </div>
+
+            {filtroSeccion === 'todos' ? (
+              <>
+                <SectionHeader title="Qué notificar" />
+                <SectionCard>
+                  {ALL_NOTIFS.slice(0, 6).map((n, i) => (
+                    <NotifRow key={n.tipo} tipo={n.tipo} label={n.label} description={n.description}
+                      checked={n.checked} onChange={n.onChange} last={i === 5} />
+                  ))}
+                </SectionCard>
+                <SectionHeader title="Solicitudes y accesos" />
+                <SectionCard>
+                  {ALL_NOTIFS.slice(6).map((n, i, arr) => (
+                    <NotifRow key={n.tipo} tipo={n.tipo} label={n.label} description={n.description}
+                      checked={n.checked} onChange={n.onChange} last={i === arr.length - 1} />
+                  ))}
+                </SectionCard>
+                <ResumenPeriodicidadCard />
+              </>
+            ) : visibleNotifs.length > 0 ? (
+              <SectionCard>
+                {visibleNotifs.map((n, i) => (
+                  <NotifRow key={n.tipo} tipo={n.tipo} label={n.label} description={n.description}
+                    checked={n.checked} onChange={n.onChange} last={i === visibleNotifs.length - 1} />
+                ))}
+              </SectionCard>
+            ) : (
+              <div className="flex flex-col items-center gap-3 py-16 rounded-3xl border border-white/50 dark:border-white/10 bg-white/30 dark:bg-black/30 backdrop-blur-3xl">
+                <div className="h-12 w-12 rounded-2xl bg-gray-100 dark:bg-white/[0.04] border border-gray-200 dark:border-white/[0.06] flex items-center justify-center">
+                  <Mail size={20} className="text-gray-400 dark:text-gray-500" />
+                </div>
+                <p className="text-sm font-bold text-gray-500 dark:text-gray-400">
+                  Sin notificaciones en {SECCION_FILTRO_PILLS.find(p => p.id === filtroSeccion)?.label ?? filtroSeccion}
+                </p>
+                <p className="text-xs text-gray-400 dark:text-gray-500 text-center max-w-xs">
+                  Esta sección no tiene notificaciones por email configuradas todavía.
+                </p>
+              </div>
+            )}
+          </div>
+        )
+      })()}
+
+      {/* ── Preautomatizados: plantillas WhatsApp ───────────────────────────── */}
+      {subtab === 'preautomatizados' && <WhatsappTemplatesPanel />}
+
+      {/* ── Métricas ─────────────────────────────────────────────────────────── */}
+      {subtab === 'metricas' && <MetricasTab />}
     </div>
   )
 }
@@ -1251,8 +1771,11 @@ export default function SettingsPage() {
   const isAdmin = user?.role === 'admin'
 
   const navigate = useNavigate()
-  const [activeCategory, setActiveCategory] = useState<CategoryId>('account')
+  const location = useLocation()
+  const locationState = location.state as { activeCategory?: CategoryId; subtab?: NotifSubtab } | null
+  const [activeCategory, setActiveCategory] = useState<CategoryId>(locationState?.activeCategory ?? 'account')
   const [search, setSearch] = useState('')
+  const initialSubtab: NotifSubtab = locationState?.subtab ?? 'automatizados'
   const searchRef = useRef<HTMLInputElement>(null)
 
   const filteredCategories = CATEGORIES.filter((cat) => {
@@ -1298,7 +1821,7 @@ export default function SettingsPage() {
   const sectionContent: Partial<Record<CategoryId, React.ReactNode>> = {
     account: <AccountSection />,
     appearance: <AppearanceSection />,
-    notifications: <NotificationsSection />,
+    notifications: <NotificationsSection initialSubtab={initialSubtab} />,
     manual: <ManualContent />,
     permissions: <PermissionsSection />,
     sistema: <SistemaSection />,

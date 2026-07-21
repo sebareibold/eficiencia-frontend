@@ -41,4 +41,5 @@ export const ROUTES = {
   DIA_ESPECIAL_NEW: '/dias-especiales/new',
   DIA_ESPECIAL_EDIT: '/dias-especiales/:id/edit',
   NOTIFICATION_TEMPLATE: '/settings/notificaciones/:tipo',
+  WHATSAPP_TEMPLATE: '/settings/notificaciones/whatsapp/:tipo',
 } as const

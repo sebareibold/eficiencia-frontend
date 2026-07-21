@@ -587,7 +587,7 @@ export default function NotificationTemplatePage() {
       {/* Header */}
       <motion.div {...fadeUp} className="flex items-center gap-4">
         <button
-          onClick={() => navigate(ROUTES.SETTINGS, { replace: true })}
+          onClick={() => navigate(ROUTES.SETTINGS, { replace: true, state: { activeCategory: 'notifications', subtab: 'automatizados' } })}
           className="flex items-center gap-1.5 text-sm text-gray-500 dark:text-gray-400 hover:text-gray-800 dark:hover:text-gray-200 transition-colors"
         >
           <ArrowLeft size={16} />

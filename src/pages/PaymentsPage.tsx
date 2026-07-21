@@ -36,6 +36,8 @@ import ConfirmDialog from '../components/ui/ConfirmDialog'
 import DotsLoader from '../components/ui/DotsLoader'
 import { formatCurrency } from '../utils/formatCurrency'
 import { formatDate } from '../utils/formatDate'
+import { useWhatsappTemplates } from '../hooks/useWhatsappTemplates'
+import { resolveWhatsappTemplate } from '../utils/whatsappTemplate'
 import type { Payment, PaymentMethod } from '../types/payment.types'
 
 // ── Constantes de pagos ───────────────────────────────────────────────────────
@@ -465,6 +467,8 @@ export default function PaymentsPage() {
   const today = new Date()
   const navigate = useNavigate()
   const queryClient = useQueryClient()
+  const { templates: wspTemplates, loaded: wspLoaded } = useWhatsappTemplates()
+  const showWaColumn = wspLoaded && !!wspTemplates['comprobante-pago']
 
   // ── Estado pagos ──
   const [viewMode, setViewMode] = useState<'list' | 'grid'>('list')
@@ -1026,13 +1030,13 @@ export default function PaymentsPage() {
                       )}
                     </>
                   ))}
-                  <th className="px-4 py-4 text-left text-xs font-extrabold uppercase tracking-widest text-gray-500 dark:text-gray-400">Acciones</th>
+                  {showWaColumn && <th className="px-4 py-4 text-left text-xs font-extrabold uppercase tracking-widest text-gray-500 dark:text-gray-400">Acciones</th>}
                   <th className="w-14 py-4"></th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-white/20 dark:divide-white/10">
                 {sortedFiltered.length === 0 ? (
-                  <tr><td colSpan={7} className="px-6 py-16 text-center text-gray-500 dark:text-gray-400 font-medium">No se encontraron pagos con los filtros actuales</td></tr>
+                  <tr><td colSpan={showWaColumn ? 7 : 6} className="px-6 py-16 text-center text-gray-500 dark:text-gray-400 font-medium">No se encontraron pagos con los filtros actuales</td></tr>
                 ) : sortedFiltered.map(p => {
                   const MethodIcon = METHOD_ICONS[p.method] ?? CreditCard
                   return (
@@ -1094,12 +1098,22 @@ export default function PaymentsPage() {
                           </span>
                         </button>
                       </td>
+                      {showWaColumn && (
                       <td className="px-4 py-4">
                         {p.clientPhone ? (() => {
                           const digits = p.clientPhone!.replace(/\D/g, '')
                           const waNumber = digits.startsWith('549') ? digits : '54' + digits
                           const firstName = p.clientName.split(' ')[0]
-                          const msg = encodeURIComponent('Hola ' + firstName + '! Te enviamos tu comprobante de pago de ' + formatCurrency(p.amount) + '. Muchas gracias!')
+                          const tpl = wspTemplates['comprobante-pago']!
+                          const textoResuelto = resolveWhatsappTemplate(tpl, {
+                                'cliente.nombre':              firstName,
+                                'plan.nombre':                 p.membresia?.planNombre ?? '',
+                                'pago.monto':                  formatCurrency(p.amount),
+                                'pago.fecha':                  formatDate(p.paidAt),
+                                'pago.metodo':                 METHOD_LABELS[p.method] ?? p.method,
+                                'membresia.fechaVencimiento':  p.membresia?.fechaVencimiento ? formatDate(p.membresia.fechaVencimiento) : '',
+                              })
+                          const msg = encodeURIComponent(textoResuelto)
                           return (
                             <a
                               href={`https://wa.me/${waNumber}?text=${msg}`}
@@ -1117,6 +1131,7 @@ export default function PaymentsPage() {
                           )
                         })() : <span className="text-xs text-gray-300 dark:text-gray-600">—</span>}
                       </td>
+                      )}
                       <td className="px-4 py-4 text-right">
                         {can('payments', 'delete') && (<button onClick={e => { e.stopPropagation(); setDeletePaymentTarget(p.id) }}
                           className="rounded-xl p-2 text-gray-400 dark:text-gray-600 opacity-0 group-hover:opacity-100 hover:bg-red-50 dark:hover:bg-red-500/10 hover:text-red-600 dark:hover:text-red-400 transition-all duration-200">

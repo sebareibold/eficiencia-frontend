@@ -8,6 +8,8 @@ import { formatDate } from '../utils/formatDate'
 import { es } from 'date-fns/locale'
 import { usePermissions } from '../hooks/usePermissions'
 import { useClients } from '../hooks/useClients'
+import { useWhatsappTemplates } from '../hooks/useWhatsappTemplates'
+import { resolveWhatsappTemplate } from '../utils/whatsappTemplate'
 import { useUiStore } from '../store/uiStore'
 import { clientsApi } from '../api/clients.api'
 import { configuracionSistemaApi } from '../api/configuracion-sistema.api'
@@ -340,6 +342,7 @@ export default function ClientsPage() {
   }
 
   const isAdmin = can('clients', 'delete')
+  const { templates: wspTemplates } = useWhatsappTemplates()
 
   const columns: Column<Client>[] = [
     ...(isAdmin ? [{
@@ -389,9 +392,12 @@ export default function ClientsPage() {
       sortable: true,
       render: (c) => {
         const buildWaLink = (phone: string, nombre: string, display: string) => {
+          const tpl = wspTemplates['contacto-cliente']
+          if (!tpl) return <span className="text-sm text-gray-900 dark:text-white">{display}</span>
           const digits = phone.replace(/\D/g, '')
           const waNumber = digits.startsWith('549') ? digits : '54' + digits
-          const mensaje = encodeURIComponent('Hola ' + nombre + '! C\u00f3mo est\u00e1s? Te contactamos desde Eficiencia.')
+          const textoResuelto = resolveWhatsappTemplate(tpl, { 'cliente.nombre': nombre })
+          const mensaje = encodeURIComponent(textoResuelto)
           return (
             <a
               href={`https://wa.me/${waNumber}?text=${mensaje}`}
