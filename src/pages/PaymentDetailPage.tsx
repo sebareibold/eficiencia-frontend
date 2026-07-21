@@ -5,10 +5,12 @@ import { pageVariants } from '../lib/motion'
 import {
   ArrowLeft, Banknote, ArrowLeftRight, CreditCard,
   CheckCircle2, Trash2, User, FileText,
-  Tag, Calendar, Hash, Edit2, XCircle, Save,
+  Tag, Calendar, Hash, Edit2, XCircle, Save, Building2,
 } from 'lucide-react'
 import { paymentsApi } from '../api/payments.api'
 import { membresiasClienteApi } from '../api/membresiasCliente.api'
+import { cuentasDestinoApi } from '../api/cuentas-destino.api'
+import type { CuentaDestino } from '../api/cuentas-destino.api'
 import { useUiStore } from '../store/uiStore'
 import { useAuthStore } from '../store/authStore'
 import { usePermissions } from '../hooks/usePermissions'
@@ -65,9 +67,11 @@ export default function PaymentDetailPage() {
   const [membresias, setMembresias] = useState<MembresiaCliente[]>([])
   const [loadingMemb, setLoadingMemb] = useState(false)
   const [membPage, setMembPage] = useState(0)
+  const [cuentas, setCuentas] = useState<CuentaDestino[]>([])
+  const [loadingCuentas, setLoadingCuentas] = useState(false)
   const [editForm, setEditForm] = useState<{
-    amount: string; method: Payment['method']; paidAt: string; notes: string; membresiaId: string
-  }>({ amount: '', method: 'cash', paidAt: '', notes: '', membresiaId: '' })
+    amount: string; method: Payment['method']; paidAt: string; notes: string; membresiaId: string; cuentaDestinoId: string
+  }>({ amount: '', method: 'cash', paidAt: '', notes: '', membresiaId: '', cuentaDestinoId: '' })
 
   useEffect(() => {
     if (!id) return
@@ -87,6 +91,7 @@ export default function PaymentDetailPage() {
       paidAt: payment.paidAt.slice(0, 10),
       notes: payment.notes ?? '',
       membresiaId: payment.membresiaId ?? '',
+      cuentaDestinoId: payment.cuentaDestinoId ?? '',
     })
     setMembPage(0)
     setIsEditing(true)
@@ -95,6 +100,12 @@ export default function PaymentDetailPage() {
       membresiasClienteApi.getAll(String(payment.clientId))
         .then(m => setMembresias([...m].sort((a, b) => b.fechaInicio.localeCompare(a.fechaInicio))))
         .finally(() => setLoadingMemb(false))
+    }
+    if (cuentas.length === 0) {
+      setLoadingCuentas(true)
+      cuentasDestinoApi.getAll()
+        .then(c => setCuentas(c.filter(x => x.activa)))
+        .finally(() => setLoadingCuentas(false))
     }
   }
 
@@ -105,11 +116,12 @@ export default function PaymentDetailPage() {
     setSaving(true)
     try {
       await paymentsApi.update(payment.id, {
-        amount:      parseFloat(editForm.amount),
-        method:      editForm.method,
-        paidAt:      editForm.paidAt,
-        notes:       editForm.notes || null,
-        membresiaId: editForm.membresiaId || null,
+        amount:          parseFloat(editForm.amount),
+        method:          editForm.method,
+        paidAt:          editForm.paidAt,
+        notes:           editForm.notes || null,
+        membresiaId:     editForm.membresiaId || null,
+        cuentaDestinoId: editForm.cuentaDestinoId || null,
       })
       // Re-fetch para obtener relaciones anidadas (membresia.plan) actualizadas
       const fresh = await paymentsApi.getById(payment.id)
@@ -251,6 +263,29 @@ export default function PaymentDetailPage() {
                     className={inputCls}
                   />
                 </div>
+
+                {/* Cuenta destino (solo TRANSFERENCIA) */}
+                {editForm.method === 'transfer' && (
+                  <div className="flex flex-col gap-1.5">
+                    <label className={labelCls}>Cuenta destino <span className="normal-case font-normal opacity-60">(opcional)</span></label>
+                    {loadingCuentas ? (
+                      <div className={`${inputCls} h-10 animate-pulse bg-gray-100 dark:bg-white/[0.04]`} />
+                    ) : (
+                      <select
+                        value={editForm.cuentaDestinoId}
+                        onChange={e => setEditForm(f => ({ ...f, cuentaDestinoId: e.target.value }))}
+                        className={inputCls}
+                      >
+                        <option value="">Sin cuenta específica</option>
+                        {cuentas.map(c => (
+                          <option key={c.id} value={c.id}>
+                            {c.nombre}{c.alias ? ` — ${c.alias}` : ''}{c.banco ? ` (${c.banco})` : ''}
+                          </option>
+                        ))}
+                      </select>
+                    )}
+                  </div>
+                )}
 
                 {/* Notas */}
                 <div className="flex flex-col gap-1.5">
@@ -440,7 +475,28 @@ export default function PaymentDetailPage() {
                   )}
                 </div>
 
-                {/* 2 — Cliente */}
+                {/* 2 — Cuenta destino (solo transferencias con cuenta asignada) */}
+                {payment.method === 'transfer' && payment.cuentaDestino && (
+                  <div className="rounded-[2rem] border border-blue-500/20 bg-blue-500/[0.04] backdrop-blur-3xl p-7 shadow-sm flex flex-col gap-4">
+                    <p className={`${labelCls} text-blue-500 flex items-center gap-1.5`}><Building2 size={11} /> Cuenta destino</p>
+                    <div className="flex items-start gap-4">
+                      <div className="h-12 w-12 rounded-2xl bg-blue-500/10 flex items-center justify-center shrink-0">
+                        <Building2 size={20} className="text-blue-500" />
+                      </div>
+                      <div className="flex-1 min-w-0">
+                        <p className="text-base font-black text-gray-900 dark:text-white leading-tight">{payment.cuentaDestino.nombre}</p>
+                        {payment.cuentaDestino.alias && (
+                          <p className="text-sm font-mono text-blue-600 dark:text-blue-400 mt-0.5">{payment.cuentaDestino.alias}</p>
+                        )}
+                        {payment.cuentaDestino.banco && (
+                          <p className="text-xs text-gray-500 dark:text-gray-400 mt-0.5">{payment.cuentaDestino.banco}</p>
+                        )}
+                      </div>
+                    </div>
+                  </div>
+                )}
+
+                {/* 3 — Cliente */}
                 <div className="rounded-[2rem] border border-white/50 dark:border-white/10 bg-white/30 dark:bg-black/30 backdrop-blur-3xl p-7 shadow-sm flex flex-col gap-5">
                   <p className={`${labelCls} flex items-center gap-1.5`}><User size={11} /> Cliente</p>
                   <div className="flex items-center gap-4">

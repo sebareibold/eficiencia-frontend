@@ -16,6 +16,8 @@ import { paymentsApi } from '../api/payments.api'
 import { clientsApi } from '../api/clients.api'
 import { membresiasClienteApi } from '../api/membresiasCliente.api'
 import { membershipsApi } from '../api/memberships.api'
+import { cuentasDestinoApi } from '../api/cuentas-destino.api'
+import type { CuentaDestino } from '../api/cuentas-destino.api'
 import { useUiStore } from '../store/uiStore'
 import { ROUTES } from '../constants/routes'
 import { MODALIDAD_LABELS } from '../types/membership.types'
@@ -133,7 +135,10 @@ export default function PaymentNewPage() {
   // ── Paso 2: pago ──────────────────────────────────────────────────────────
   const [membresias,  setMembresias]  = useState<MembresiaCliente[]>([])
   const [loadingMemb, setLoadingMemb] = useState(false)
-  const [membresiaId,    setMembresiaId]    = useState('')
+  const [membresiaId,      setMembresiaId]      = useState('')
+  const [cuentaDestinoId,  setCuentaDestinoId]  = useState('')
+  const [cuentas,          setCuentas]          = useState<CuentaDestino[]>([])
+  const [loadingCuentas,   setLoadingCuentas]   = useState(false)
   const [displayAmount,  setDisplayAmount]  = useState('')
   const [submitting,     setSubmitting]     = useState(false)
   const [submitError,    setSubmitError]    = useState<string | null>(null)
@@ -194,11 +199,20 @@ export default function PaymentNewPage() {
     return () => clearTimeout(t)
   }, [clientQuery, searchClients])
 
-  // ── Cargar planes al entrar al Step 2 ────────────────────────────────────
+  // ── Cargar planes y cuentas al entrar al Step 2 ──────────────────────────
   useEffect(() => {
-    if (step !== 2 || plans.length > 0) return
-    setLoadingPlans(true)
-    membershipsApi.getAll().then(setPlans).catch(() => {}).finally(() => setLoadingPlans(false))
+    if (step !== 2) return
+    if (plans.length === 0) {
+      setLoadingPlans(true)
+      membershipsApi.getAll().then(setPlans).catch(() => {}).finally(() => setLoadingPlans(false))
+    }
+    if (cuentas.length === 0) {
+      setLoadingCuentas(true)
+      cuentasDestinoApi.getAll()
+        .then(c => setCuentas(c.filter(x => x.activa)))
+        .catch(() => {})
+        .finally(() => setLoadingCuentas(false))
+    }
   }, [step]) // eslint-disable-line react-hooks/exhaustive-deps
 
   // ── Seleccionar cliente y avanzar al paso 2 ───────────────────────────────
@@ -225,6 +239,7 @@ export default function PaymentNewPage() {
     setPendingNewClient(null)
     setMembresias([])
     setMembresiaId('')
+    setCuentaDestinoId('')
     setSubmitError(null)
     setShowNewClient(false)
     resetClient()
@@ -346,6 +361,7 @@ export default function PaymentNewPage() {
         notes:    data.notes || undefined,
         ...(finalMembresiaId && { membresiaId: finalMembresiaId }),
         ...(cuotaNumero !== undefined && { cuotaNumero }),
+        ...(cuentaDestinoId && { cuentaDestinoId }),
       })
       addToast('Pago registrado', 'success')
 
@@ -953,6 +969,32 @@ export default function PaymentNewPage() {
                 )
               })()}
             </div>
+
+            {/* Cuenta destino (solo transferencias) */}
+            {watchedMethod === 'transfer' && (
+              <div className="space-y-1.5">
+                <label className="text-[11px] font-bold uppercase tracking-widest text-gray-400 dark:text-[#6A6A7A]">
+                  Cuenta destino{' '}
+                  <span className="font-normal normal-case tracking-normal opacity-60 text-[10px]">(opcional)</span>
+                </label>
+                {loadingCuentas ? (
+                  <div className={`${ic()} h-10 animate-pulse`} />
+                ) : (
+                  <select
+                    value={cuentaDestinoId}
+                    onChange={e => setCuentaDestinoId(e.target.value)}
+                    className={ic()}
+                  >
+                    <option value="">Sin cuenta específica</option>
+                    {cuentas.map(c => (
+                      <option key={c.id} value={c.id}>
+                        {c.nombre}{c.alias ? ` — ${c.alias}` : ''}{c.banco ? ` (${c.banco})` : ''}
+                      </option>
+                    ))}
+                  </select>
+                )}
+              </div>
+            )}
 
             {/* Fecha */}
             <div className="space-y-1.5">

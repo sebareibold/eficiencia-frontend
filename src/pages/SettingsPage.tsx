@@ -28,6 +28,11 @@ import {
   Cog,
   Mail,
   MessageCircle,
+  Building2,
+  Plus,
+  Trash2,
+  Edit2,
+  X,
 } from 'lucide-react'
 import { useUiStore } from '../store/uiStore'
 import { useSettingsStore } from '../store/settingsStore'
@@ -36,6 +41,7 @@ import { usePermissions } from '../hooks/usePermissions'
 import { configuracionApi, type ConfiguracionData } from '../api/configuracion.api'
 import { configuracionSistemaApi, type ConfiguracionSistema } from '../api/configuracion-sistema.api'
 import { mantenimientoApi, type ConsistenciaReport } from '../api/mantenimiento.api'
+import { cuentasDestinoApi, type CuentaDestino, type CreateCuentaDestinoDto } from '../api/cuentas-destino.api'
 import { notificacionesApi } from '../api/notificaciones.api'
 import { authApi } from '../api/auth.api'
 import { permisosApi, type PermisosMap } from '../api/permisos.api'
@@ -1425,6 +1431,234 @@ function PermissionsSection() {
   )
 }
 
+// ─── Cuentas Destino Section ──────────────────────────────────────────────────
+
+const EMPTY_FORM: CreateCuentaDestinoDto = { nombre: '', alias: '', cbu: '', banco: '' }
+
+function CuentasDestinoSection() {
+  const addToast = useUiStore(s => s.addToast)
+  const [cuentas, setCuentas] = useState<CuentaDestino[]>([])
+  const [loading, setLoading] = useState(true)
+  const [editingId, setEditingId] = useState<string | null>(null)
+  const [showNew, setShowNew] = useState(false)
+  const [form, setForm] = useState<CreateCuentaDestinoDto>(EMPTY_FORM)
+  const [saving, setSaving] = useState(false)
+  const [deletingId, setDeletingId] = useState<string | null>(null)
+
+  const inputCls = 'w-full rounded-xl px-3.5 py-2.5 text-sm bg-gray-50/80 dark:bg-white/[0.05] border border-gray-200 dark:border-white/[0.1] text-gray-900 dark:text-white placeholder-gray-400 focus:outline-none focus:ring-1 focus:ring-primary/60 transition-all'
+
+  useEffect(() => {
+    cuentasDestinoApi.getAll()
+      .then(setCuentas)
+      .catch(() => {})
+      .finally(() => setLoading(false))
+  }, [])
+
+  function startEdit(c: CuentaDestino) {
+    setEditingId(c.id)
+    setForm({ nombre: c.nombre, alias: c.alias ?? '', cbu: c.cbu ?? '', banco: c.banco ?? '', activa: c.activa })
+    setShowNew(false)
+  }
+
+  function cancelEdit() { setEditingId(null); setForm(EMPTY_FORM) }
+  function cancelNew() { setShowNew(false); setForm(EMPTY_FORM) }
+
+  async function handleCreate() {
+    if (!form.nombre.trim()) return
+    setSaving(true)
+    try {
+      const nueva = await cuentasDestinoApi.create({
+        nombre: form.nombre.trim(),
+        alias:  form.alias?.trim() || undefined,
+        cbu:    form.cbu?.trim()   || undefined,
+        banco:  form.banco?.trim() || undefined,
+      })
+      setCuentas(prev => [...prev, nueva])
+      setShowNew(false)
+      setForm(EMPTY_FORM)
+      addToast('Cuenta creada', 'success')
+    } catch {
+      addToast('Error al crear la cuenta', 'error')
+    } finally {
+      setSaving(false)
+    }
+  }
+
+  async function handleUpdate() {
+    if (!editingId || !form.nombre.trim()) return
+    setSaving(true)
+    try {
+      const updated = await cuentasDestinoApi.update(editingId, {
+        nombre: form.nombre.trim(),
+        alias:  form.alias?.trim() || undefined,
+        cbu:    form.cbu?.trim()   || undefined,
+        banco:  form.banco?.trim() || undefined,
+        activa: form.activa,
+      })
+      setCuentas(prev => prev.map(c => c.id === editingId ? updated : c))
+      setEditingId(null)
+      setForm(EMPTY_FORM)
+      addToast('Cuenta actualizada', 'success')
+    } catch {
+      addToast('Error al actualizar', 'error')
+    } finally {
+      setSaving(false)
+    }
+  }
+
+  async function handleDelete(id: string) {
+    setDeletingId(id)
+    try {
+      await cuentasDestinoApi.remove(id)
+      setCuentas(prev => prev.filter(c => c.id !== id))
+      addToast('Cuenta eliminada', 'success')
+    } catch {
+      addToast('Error al eliminar', 'error')
+    } finally {
+      setDeletingId(null)
+    }
+  }
+
+  async function toggleActiva(c: CuentaDestino) {
+    try {
+      const updated = await cuentasDestinoApi.update(c.id, { activa: !c.activa })
+      setCuentas(prev => prev.map(x => x.id === c.id ? updated : x))
+    } catch {
+      addToast('Error al actualizar el estado', 'error')
+    }
+  }
+
+  return (
+    <div className="space-y-4">
+      <div className="flex items-center justify-between">
+        <SectionHeader title="Cuentas destino" description="Cuentas bancarias o billeteras donde se reciben transferencias. Se pueden seleccionar al registrar pagos." />
+        {!showNew && (
+          <button
+            onClick={() => { setShowNew(true); setEditingId(null); setForm(EMPTY_FORM) }}
+            className="flex items-center gap-1.5 rounded-xl btn-action px-3.5 py-2 text-sm shrink-0"
+          >
+            <Plus size={13} /> Nueva
+          </button>
+        )}
+      </div>
+
+      {loading ? (
+        <div className="space-y-2">
+          {[1, 2].map(i => <div key={i} className="h-16 rounded-xl bg-white/10 dark:bg-white/[0.05] animate-pulse" />)}
+        </div>
+      ) : (
+        <div className="space-y-2">
+          {/* Formulario nueva cuenta */}
+          <AnimatePresence>
+            {showNew && (
+              <motion.div
+                initial={{ opacity: 0, y: -6 }}
+                animate={{ opacity: 1, y: 0 }}
+                exit={{ opacity: 0, y: -6 }}
+                className="rounded-2xl border border-primary/30 bg-primary/[0.03] p-5 space-y-3"
+              >
+                <p className="text-[11px] font-bold uppercase tracking-widest text-primary flex items-center gap-1.5">
+                  <Building2 size={11} /> Nueva cuenta destino
+                </p>
+                <div className="grid grid-cols-2 gap-3">
+                  <div className="col-span-2">
+                    <input className={inputCls} placeholder="Nombre *" value={form.nombre} onChange={e => setForm(f => ({ ...f, nombre: e.target.value }))} />
+                  </div>
+                  <input className={inputCls} placeholder="Alias CBU / CVU" value={form.alias ?? ''} onChange={e => setForm(f => ({ ...f, alias: e.target.value }))} />
+                  <input className={inputCls} placeholder="CBU / CVU" value={form.cbu ?? ''} onChange={e => setForm(f => ({ ...f, cbu: e.target.value }))} />
+                  <div className="col-span-2">
+                    <input className={inputCls} placeholder="Banco o billetera" value={form.banco ?? ''} onChange={e => setForm(f => ({ ...f, banco: e.target.value }))} />
+                  </div>
+                </div>
+                <div className="flex items-center gap-2 justify-end pt-1">
+                  <button onClick={cancelNew} className="flex items-center gap-1.5 px-3.5 py-2 rounded-xl text-sm font-semibold text-gray-500 dark:text-gray-400 hover:text-gray-900 dark:hover:text-white transition-colors">
+                    <X size={13} /> Cancelar
+                  </button>
+                  <button onClick={handleCreate} disabled={saving || !form.nombre.trim()} className="flex items-center gap-1.5 rounded-xl btn-action px-3.5 py-2 text-sm font-bold disabled:opacity-50">
+                    <Save size={13} /> {saving ? 'Guardando…' : 'Guardar'}
+                  </button>
+                </div>
+              </motion.div>
+            )}
+          </AnimatePresence>
+
+          {/* Lista de cuentas */}
+          {cuentas.length === 0 && !showNew && (
+            <div className="rounded-2xl border border-dashed border-gray-200 dark:border-white/10 p-8 text-center">
+              <Building2 size={24} className="mx-auto text-gray-300 dark:text-gray-600 mb-2" />
+              <p className="text-sm font-bold text-gray-500 dark:text-gray-400">Sin cuentas registradas</p>
+              <p className="text-xs text-gray-400 dark:text-gray-500 mt-0.5">Creá una para asociarla a transferencias</p>
+            </div>
+          )}
+
+          {cuentas.map(c => (
+            <div key={c.id}>
+              {editingId === c.id ? (
+                <motion.div
+                  initial={{ opacity: 0 }}
+                  animate={{ opacity: 1 }}
+                  className="rounded-2xl border border-primary/30 bg-primary/[0.03] p-5 space-y-3"
+                >
+                  <div className="grid grid-cols-2 gap-3">
+                    <div className="col-span-2">
+                      <input className={inputCls} placeholder="Nombre *" value={form.nombre} onChange={e => setForm(f => ({ ...f, nombre: e.target.value }))} />
+                    </div>
+                    <input className={inputCls} placeholder="Alias CBU / CVU" value={form.alias ?? ''} onChange={e => setForm(f => ({ ...f, alias: e.target.value }))} />
+                    <input className={inputCls} placeholder="CBU / CVU" value={form.cbu ?? ''} onChange={e => setForm(f => ({ ...f, cbu: e.target.value }))} />
+                    <div className="col-span-2">
+                      <input className={inputCls} placeholder="Banco o billetera" value={form.banco ?? ''} onChange={e => setForm(f => ({ ...f, banco: e.target.value }))} />
+                    </div>
+                  </div>
+                  <div className="flex items-center gap-2 justify-end pt-1">
+                    <button onClick={cancelEdit} className="flex items-center gap-1.5 px-3.5 py-2 rounded-xl text-sm font-semibold text-gray-500 dark:text-gray-400 hover:text-gray-900 dark:hover:text-white transition-colors">
+                      <X size={13} /> Cancelar
+                    </button>
+                    <button onClick={handleUpdate} disabled={saving || !form.nombre.trim()} className="flex items-center gap-1.5 rounded-xl btn-action px-3.5 py-2 text-sm font-bold disabled:opacity-50">
+                      <Save size={13} /> {saving ? 'Guardando…' : 'Guardar'}
+                    </button>
+                  </div>
+                </motion.div>
+              ) : (
+                <div className={`rounded-2xl border p-4 transition-all ${c.activa ? 'border-white/50 dark:border-white/10 bg-white/30 dark:bg-black/20' : 'border-gray-200 dark:border-white/[0.05] bg-gray-50/50 dark:bg-white/[0.02] opacity-60'}`}>
+                  <div className="flex items-center gap-3">
+                    <div className={`h-10 w-10 rounded-xl flex items-center justify-center shrink-0 ${c.activa ? 'bg-blue-500/10' : 'bg-gray-200/50 dark:bg-white/[0.04]'}`}>
+                      <Building2 size={17} className={c.activa ? 'text-blue-500' : 'text-gray-400'} />
+                    </div>
+                    <div className="flex-1 min-w-0">
+                      <div className="flex items-center gap-2">
+                        <p className="text-sm font-bold text-gray-900 dark:text-white truncate">{c.nombre}</p>
+                        {!c.activa && <span className="text-[10px] font-semibold text-gray-400 bg-gray-100 dark:bg-white/[0.06] px-1.5 py-0.5 rounded-md shrink-0">Inactiva</span>}
+                      </div>
+                      <div className="flex items-center gap-2 mt-0.5 flex-wrap">
+                        {c.alias && <p className="text-xs font-mono text-blue-600 dark:text-blue-400">{c.alias}</p>}
+                        {c.alias && c.banco && <span className="text-[10px] text-gray-300 dark:text-gray-600">·</span>}
+                        {c.banco && <p className="text-xs text-gray-500 dark:text-gray-400">{c.banco}</p>}
+                        {c.cbu && <p className="text-xs font-mono text-gray-400 dark:text-gray-500 truncate max-w-[140px]">{c.cbu}</p>}
+                      </div>
+                    </div>
+                    <div className="flex items-center gap-1.5 shrink-0">
+                      <button onClick={() => toggleActiva(c)} title={c.activa ? 'Desactivar' : 'Activar'}
+                        className={`h-7 w-12 rounded-full relative transition-colors duration-200 ${c.activa ? 'bg-emerald-500' : 'bg-gray-300 dark:bg-white/20'}`}>
+                        <span className={`absolute top-1 h-5 w-5 rounded-full bg-white shadow-sm transition-transform duration-200 ${c.activa ? 'translate-x-6' : 'translate-x-1'}`} />
+                      </button>
+                      <button onClick={() => startEdit(c)} className="h-8 w-8 rounded-xl border border-gray-200 dark:border-white/10 bg-gray-50/80 dark:bg-white/[0.04] flex items-center justify-center text-gray-500 dark:text-gray-400 hover:text-gray-900 dark:hover:text-white transition-colors">
+                        <Edit2 size={13} />
+                      </button>
+                      <button onClick={() => handleDelete(c.id)} disabled={deletingId === c.id} className="h-8 w-8 rounded-xl border border-red-500/20 bg-red-500/[0.06] flex items-center justify-center text-red-500 hover:bg-red-500/15 transition-colors disabled:opacity-50">
+                        {deletingId === c.id ? <span className="h-3 w-3 animate-spin rounded-full border-2 border-red-500/30 border-t-red-500" /> : <Trash2 size={13} />}
+                      </button>
+                    </div>
+                  </div>
+                </div>
+              )}
+            </div>
+          ))}
+        </div>
+      )}
+    </div>
+  )
+}
+
 // ─── Sistema Section ──────────────────────────────────────────────────────────
 
 function SistemaSection() {
@@ -1698,6 +1932,9 @@ function SistemaSection() {
           </motion.div>
         )}
       </AnimatePresence>
+
+      {/* ── Cuentas destino ────────────────────────────────────────────────── */}
+      <CuentasDestinoSection />
 
       <div className="flex justify-end">
         <button onClick={handleSave} disabled={saving}

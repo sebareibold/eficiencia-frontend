@@ -52,6 +52,15 @@ function mapPago(p: any): Payment {
     createdAt: p.createdAt,
     membresiaId: p.membresiaId ?? null,
     cuotaNumero: p.cuotaNumero ?? null,
+    cuentaDestinoId: p.cuentaDestinoId ?? null,
+    cuentaDestino: p.cuentaDestino
+      ? {
+          id: p.cuentaDestino.id,
+          nombre: p.cuentaDestino.nombre,
+          alias: p.cuentaDestino.alias ?? null,
+          banco: p.cuentaDestino.banco ?? null,
+        }
+      : null,
     membresia: p.membresia
       ? {
           id: p.membresia.id,
@@ -102,8 +111,9 @@ export const paymentsApi = {
       facturado: dto.invoiced ?? false,
       fecha: dto.paidAt,
       comprobante: dto.notes,
-      ...(dto.membresiaId && { membresiaId: dto.membresiaId }),
+      ...(dto.membresiaId     && { membresiaId:     dto.membresiaId     }),
       ...(dto.cuotaNumero !== undefined && { cuotaNumero: dto.cuotaNumero }),
+      ...(dto.cuentaDestinoId && { cuentaDestinoId: dto.cuentaDestinoId }),
     }).then((r) => mapPago(r.data)),
 
   getById: (id: string | number): Promise<Payment> =>
@@ -115,15 +125,17 @@ export const paymentsApi = {
     paidAt?: string
     notes?: string | null
     membresiaId?: string | null
+    cuentaDestinoId?: string | null
     invoiced?: boolean
   }): Promise<Payment> =>
     api.patch(`/pagos/${id}`, {
-      ...(fields.amount    !== undefined && { monto:       fields.amount }),
-      ...(fields.method    !== undefined && { metodo:      mapMetodoToBackend(fields.method) }),
-      ...(fields.paidAt    !== undefined && { fecha:       fields.paidAt }),
-      ...(fields.notes     !== undefined && { comprobante: fields.notes }),
-      ...(fields.membresiaId !== undefined && { membresiaId: fields.membresiaId }),
-      ...(fields.invoiced  !== undefined && { facturado:   fields.invoiced }),
+      ...(fields.amount          !== undefined && { monto:           fields.amount }),
+      ...(fields.method          !== undefined && { metodo:          mapMetodoToBackend(fields.method) }),
+      ...(fields.paidAt          !== undefined && { fecha:           fields.paidAt }),
+      ...(fields.notes           !== undefined && { comprobante:     fields.notes }),
+      ...(fields.membresiaId     !== undefined && { membresiaId:     fields.membresiaId }),
+      ...(fields.cuentaDestinoId !== undefined && { cuentaDestinoId: fields.cuentaDestinoId }),
+      ...(fields.invoiced        !== undefined && { facturado:       fields.invoiced }),
     }).then(r => mapPago(r.data)),
 
   toggleInvoiced: (id: string | number, value: boolean): Promise<void> =>

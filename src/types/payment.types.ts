@@ -14,6 +14,13 @@ export interface Payment {
   createdAt: string
   membresiaId: string | null
   cuotaNumero: number | null
+  cuentaDestinoId: string | null
+  cuentaDestino?: {
+    id: string
+    nombre: string
+    alias: string | null
+    banco: string | null
+  } | null
   membresia?: {
     id: string
     planNombre: string
@@ -35,4 +42,5 @@ export interface CreatePaymentDto {
   notes?: string
   membresiaId?: string
   cuotaNumero?: number
+  cuentaDestinoId?: string
 }
