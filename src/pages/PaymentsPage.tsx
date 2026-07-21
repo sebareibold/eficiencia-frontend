@@ -39,6 +39,8 @@ import { formatDate } from '../utils/formatDate'
 import { useWhatsappTemplates } from '../hooks/useWhatsappTemplates'
 import { resolveWhatsappTemplate } from '../utils/whatsappTemplate'
 import type { Payment, PaymentMethod } from '../types/payment.types'
+import { cuentasDestinoApi } from '../api/cuentas-destino.api'
+import type { CuentaDestino, CreateCuentaDestinoDto } from '../api/cuentas-destino.api'
 
 // ── Constantes de pagos ───────────────────────────────────────────────────────
 
@@ -455,6 +457,246 @@ function PaySortIcon({ active, dir }: { active: boolean; dir: PaySortDir }) {
   return dir === 'asc'
     ? <ArrowUp size={11} className="text-primary" />
     : <ArrowDown size={11} className="text-primary" />
+}
+
+// ── Cuentas Destino Section ───────────────────────────────────────────────────
+
+const EMPTY_CUENTA: CreateCuentaDestinoDto = { nombre: '', alias: '', cbu: '', banco: '' }
+
+const cuentaInputCls = [
+  'w-full rounded-xl px-3.5 py-2.5 text-sm transition-all',
+  'bg-gray-50 dark:bg-white/[0.05]',
+  'border border-gray-200 dark:border-white/[0.08]',
+  'text-gray-900 dark:text-white placeholder-gray-400 dark:placeholder:text-white/30',
+  'focus:outline-none focus:bg-white dark:focus:bg-white/[0.08]',
+].join(' ')
+
+function CuentasDestinoSection() {
+  const addToast = useUiStore(s => s.addToast)
+  const [cuentas, setCuentas]       = useState<CuentaDestino[]>([])
+  const [loading, setLoading]       = useState(true)
+  const [modalOpen, setModalOpen]   = useState(false)
+  const [editingId, setEditingId]   = useState<string | null>(null)
+  const [form, setForm]             = useState<CreateCuentaDestinoDto>(EMPTY_CUENTA)
+  const [saving, setSaving]         = useState(false)
+  const [deletingId, setDeletingId] = useState<string | null>(null)
+  const [togglingId, setTogglingId] = useState<string | null>(null)
+
+  useEffect(() => {
+    cuentasDestinoApi.getAll().then(setCuentas).catch(() => {}).finally(() => setLoading(false))
+  }, [])
+
+  function openNew() {
+    setEditingId(null)
+    setForm(EMPTY_CUENTA)
+    setModalOpen(true)
+  }
+
+  function openEdit(c: CuentaDestino) {
+    setEditingId(c.id)
+    setForm({ nombre: c.nombre, alias: c.alias ?? '', cbu: c.cbu ?? '', banco: c.banco ?? '' })
+    setModalOpen(true)
+  }
+
+  function closeModal() {
+    setModalOpen(false)
+    setEditingId(null)
+    setForm(EMPTY_CUENTA)
+  }
+
+  async function handleSubmit() {
+    if (!form.nombre.trim()) return
+    setSaving(true)
+    try {
+      if (editingId) {
+        const updated = await cuentasDestinoApi.update(editingId, {
+          nombre: form.nombre.trim(),
+          alias:  form.alias?.trim()  || undefined,
+          cbu:    form.cbu?.trim()    || undefined,
+          banco:  form.banco?.trim()  || undefined,
+        })
+        setCuentas(prev => prev.map(c => c.id === editingId ? updated : c))
+        addToast('Cuenta actualizada', 'success')
+      } else {
+        const nueva = await cuentasDestinoApi.create({
+          nombre: form.nombre.trim(),
+          alias:  form.alias?.trim()  || undefined,
+          cbu:    form.cbu?.trim()    || undefined,
+          banco:  form.banco?.trim()  || undefined,
+        })
+        setCuentas(prev => [...prev, nueva])
+        addToast('Cuenta creada', 'success')
+      }
+      closeModal()
+    } catch { addToast('Error al guardar la cuenta', 'error') }
+    finally { setSaving(false) }
+  }
+
+  async function handleDelete(id: string) {
+    setDeletingId(id)
+    try {
+      await cuentasDestinoApi.remove(id)
+      setCuentas(prev => prev.filter(c => c.id !== id))
+      addToast('Cuenta eliminada', 'success')
+    } catch { addToast('Error al eliminar', 'error') }
+    finally { setDeletingId(null) }
+  }
+
+  async function toggleActiva(c: CuentaDestino) {
+    setTogglingId(c.id)
+    try {
+      const updated = await cuentasDestinoApi.update(c.id, { activa: !c.activa })
+      setCuentas(prev => prev.map(x => x.id === c.id ? updated : x))
+    } catch { addToast('Error al actualizar el estado', 'error') }
+    finally { setTogglingId(null) }
+  }
+
+  return (
+    <div className="space-y-6 pt-10">
+      <div className="flex flex-col sm:flex-row sm:items-end justify-between gap-4">
+        <div>
+          <h2 className="text-3xl font-black tracking-tighter text-gray-900 dark:text-white drop-shadow-sm">
+            Cuentas destino
+          </h2>
+          <p className="text-sm text-gray-500 dark:text-gray-400 mt-1">
+            Cuentas bancarias o billeteras donde se reciben transferencias
+          </p>
+        </div>
+        <button
+          onClick={openNew}
+          className="flex items-center gap-2 rounded-xl btn-action px-4 py-2.5 text-sm"
+        >
+          <Plus size={13} strokeWidth={2.5} /> Nueva cuenta
+        </button>
+      </div>
+
+      {loading ? (
+        <div className="grid grid-cols-1 gap-4 lg:gap-6 md:grid-cols-2 lg:grid-cols-3">
+          {[1, 2, 3].map(i => (
+            <div key={i} className="h-36 rounded-2xl lg:rounded-[2rem] bg-white/10 dark:bg-white/[0.05] animate-pulse" />
+          ))}
+        </div>
+      ) : cuentas.length === 0 ? (
+        <div className="rounded-2xl lg:rounded-[2rem] border border-dashed border-gray-200 dark:border-white/10 py-16 text-center">
+          <Building2 size={28} className="mx-auto text-gray-300 dark:text-gray-600 mb-3" />
+          <p className="text-sm font-bold text-gray-500 dark:text-gray-400">Sin cuentas registradas</p>
+          <p className="text-xs text-gray-400 dark:text-gray-500 mt-1">Creá una para asociarla a las transferencias</p>
+        </div>
+      ) : (
+        <div className="grid grid-cols-1 gap-4 lg:gap-6 md:grid-cols-2 lg:grid-cols-3">
+          {cuentas.map(c => (
+            <motion.div
+              key={c.id}
+              layout
+              transition={{ duration: 0.25, ease: 'easeInOut' }}
+              className={`rounded-2xl lg:rounded-[2rem] border border-white/50 dark:border-white/10 bg-white/30 dark:bg-black/30 backdrop-blur-3xl shadow-[0_8px_32px_rgba(0,0,0,0.04)] dark:shadow-[0_8px_32px_rgba(0,0,0,0.3)] transition-all duration-300 flex flex-col hover:-translate-y-1 hover:shadow-[0_20px_40px_rgba(0,0,0,0.08)] dark:hover:shadow-[0_20px_40px_rgba(0,0,0,0.4)] ${!c.activa ? 'opacity-60' : ''}`}
+            >
+              {/* Cabecera */}
+              <div className="flex items-center justify-between gap-3 px-4 pt-4 pb-3 lg:px-6 lg:pt-5 lg:pb-4">
+                <div className="flex items-center gap-3 min-w-0">
+                  <div className={`flex h-11 w-11 items-center justify-center rounded-2xl shadow-inner shrink-0 ${c.activa ? 'bg-blue-500/10' : 'bg-gray-200/50 dark:bg-white/[0.04]'}`}>
+                    <Building2 size={20} className={c.activa ? 'text-blue-500' : 'text-gray-400'} />
+                  </div>
+                  <div className="min-w-0">
+                    <p className="font-bold text-gray-900 dark:text-white truncate">{c.nombre}</p>
+                    {!c.activa && (
+                      <span className="text-[10px] font-semibold text-gray-400 bg-gray-100 dark:bg-white/[0.06] px-1.5 py-0.5 rounded-md">
+                        Inactiva
+                      </span>
+                    )}
+                  </div>
+                </div>
+                <div className="flex items-center gap-1 shrink-0">
+                  <button
+                    onClick={() => openEdit(c)}
+                    className="rounded-xl p-2 text-gray-400 dark:text-gray-600 hover:bg-white/60 dark:hover:bg-white/10 hover:text-gray-900 dark:hover:text-white transition-all"
+                  >
+                    <Edit2 size={15} />
+                  </button>
+                  <button
+                    onClick={() => handleDelete(c.id)}
+                    disabled={deletingId === c.id}
+                    className="rounded-xl p-2 text-gray-400 dark:text-gray-600 hover:bg-red-500/10 hover:text-red-500 transition-all disabled:opacity-50"
+                  >
+                    {deletingId === c.id
+                      ? <span className="h-3.5 w-3.5 animate-spin rounded-full border-2 border-red-500/30 border-t-red-500 block" />
+                      : <Trash2 size={15} />}
+                  </button>
+                </div>
+              </div>
+
+              {/* Info */}
+              <div className="px-4 lg:px-6 pb-4 lg:pb-5 space-y-1.5 flex-1">
+                {c.alias && (
+                  <p className="text-xs font-mono text-blue-600 dark:text-blue-400 truncate">{c.alias}</p>
+                )}
+                {c.banco && (
+                  <p className="text-xs text-gray-500 dark:text-gray-400">{c.banco}</p>
+                )}
+                {c.cbu && (
+                  <p className="text-xs font-mono text-gray-400 dark:text-gray-500 truncate">{c.cbu}</p>
+                )}
+                {!c.alias && !c.banco && !c.cbu && (
+                  <p className="text-xs text-gray-400 dark:text-gray-600 italic">Sin datos adicionales</p>
+                )}
+              </div>
+
+              {/* Footer — toggle */}
+              <div className="border-t border-gray-100 dark:border-white/[0.06] px-4 lg:px-6 py-3 flex items-center justify-end">
+                <button
+                  onClick={() => toggleActiva(c)}
+                  disabled={togglingId === c.id}
+                  title={c.activa ? 'Desactivar' : 'Activar'}
+                  className="flex items-center gap-1.5 disabled:opacity-50 disabled:cursor-not-allowed"
+                >
+                  <span className={`relative inline-flex h-5 w-9 shrink-0 items-center rounded-full transition-colors duration-200 ${c.activa ? 'bg-emerald-500' : 'bg-gray-200 dark:bg-white/20'}`}>
+                    <span className={`pointer-events-none inline-block h-4 w-4 transform rounded-full bg-white shadow-md transition-transform duration-200 ${c.activa ? 'translate-x-[18px]' : 'translate-x-0.5'}`} />
+                  </span>
+                  <span className={`text-xs font-bold ${c.activa ? 'text-emerald-500 dark:text-emerald-400' : 'text-gray-400 dark:text-[#8A8A9A]'}`}>
+                    {c.activa ? 'Activa' : 'Inactiva'}
+                  </span>
+                </button>
+              </div>
+            </motion.div>
+          ))}
+        </div>
+      )}
+
+      {/* Modal crear / editar */}
+      <Modal isOpen={modalOpen} onClose={closeModal} title={editingId ? 'Editar cuenta' : 'Nueva cuenta'} size="lg">
+        <div className="space-y-4">
+          <div className="grid grid-cols-2 gap-3">
+            <div className="col-span-2">
+              <label className="block text-xs font-semibold text-gray-600 dark:text-gray-400 mb-1.5">Nombre *</label>
+              <input className={cuentaInputCls} placeholder="Ej: Cuenta Banco Nación" value={form.nombre}
+                onChange={e => setForm(f => ({ ...f, nombre: e.target.value }))} />
+            </div>
+            <div>
+              <label className="block text-xs font-semibold text-gray-600 dark:text-gray-400 mb-1.5">Alias</label>
+              <input className={cuentaInputCls} placeholder="alias.cbu.mp" value={form.alias ?? ''}
+                onChange={e => setForm(f => ({ ...f, alias: e.target.value }))} />
+            </div>
+            <div>
+              <label className="block text-xs font-semibold text-gray-600 dark:text-gray-400 mb-1.5">CBU / CVU</label>
+              <input className={cuentaInputCls} placeholder="0123456..." value={form.cbu ?? ''}
+                onChange={e => setForm(f => ({ ...f, cbu: e.target.value }))} />
+            </div>
+            <div className="col-span-2">
+              <label className="block text-xs font-semibold text-gray-600 dark:text-gray-400 mb-1.5">Banco o billetera</label>
+              <input className={cuentaInputCls} placeholder="Ej: Mercado Pago" value={form.banco ?? ''}
+                onChange={e => setForm(f => ({ ...f, banco: e.target.value }))} />
+            </div>
+          </div>
+          <div className="flex justify-end gap-2 pt-2">
+            <Button variant="ghost" type="button" onClick={closeModal}>Cancelar</Button>
+            <Button type="button" isLoading={saving} onClick={handleSubmit} disabled={!form.nombre.trim()}>
+              {editingId ? 'Guardar cambios' : 'Crear cuenta'}
+            </Button>
+          </div>
+        </div>
+      </Modal>
+    </div>
+  )
 }
 
 // ── Página principal ──────────────────────────────────────────────────────────
@@ -1265,7 +1507,7 @@ export default function PaymentsPage() {
       <div className="min-h-[8vh] lg:min-h-[14vh] xl:min-h-[20vh]" />
 
       {/* ══ SECCIÓN PLANES ══ */}
-      <div className="space-y-4 lg:space-y-6 pt-6 lg:pt-8 border-t border-gray-100 dark:border-white/[0.07]">
+      <div className="space-y-6 pt-10">
         <div className="flex flex-col sm:flex-row sm:items-end justify-between gap-4">
           <div>
             <h2 className="text-3xl font-black tracking-tighter text-gray-900 dark:text-white drop-shadow-sm">
@@ -1317,6 +1559,9 @@ export default function PaymentsPage() {
           ))}
         </div>
       </div>
+
+      {/* ══ SECCIÓN CUENTAS DESTINO ══ */}
+      {isAdmin && <CuentasDestinoSection />}
 
       {/* ── Modal crear plan ── */}
       <Modal isOpen={planModalOpen} onClose={closePlanModal} title="Nuevo plan" size="sm">
