@@ -552,7 +552,7 @@ function CuentasDestinoSection() {
   }
 
   return (
-    <div className="space-y-6 pt-10">
+    <div className="space-y-6 pt-16">
       <div className="flex flex-col sm:flex-row sm:items-end justify-between gap-4">
         <div>
           <h2 className="text-3xl font-black tracking-tighter text-gray-900 dark:text-white drop-shadow-sm">
@@ -650,7 +650,7 @@ function CuentasDestinoSection() {
                   className="flex items-center gap-1.5 disabled:opacity-50 disabled:cursor-not-allowed"
                 >
                   <span className={`relative inline-flex h-5 w-9 shrink-0 items-center rounded-full transition-colors duration-200 ${c.activa ? 'bg-emerald-500' : 'bg-gray-200 dark:bg-white/20'}`}>
-                    <span className={`pointer-events-none inline-block h-4 w-4 transform rounded-full bg-white shadow-md transition-transform duration-200 ${c.activa ? 'translate-x-[18px]' : 'translate-x-0.5'}`} />
+                    <span className={`pointer-events-none inline-block h-3.5 w-3.5 transform rounded-full bg-white shadow-md transition-transform duration-200 ${c.activa ? 'translate-x-4' : 'translate-x-0.5'}`} />
                   </span>
                   <span className={`text-xs font-bold ${c.activa ? 'text-emerald-500 dark:text-emerald-400' : 'text-gray-400 dark:text-[#8A8A9A]'}`}>
                     {c.activa ? 'Activa' : 'Inactiva'}
@@ -1503,11 +1503,8 @@ export default function PaymentsPage() {
         </div>
       )}
 
-      {/* ── Spacer ── */}
-      <div className="min-h-[8vh] lg:min-h-[14vh] xl:min-h-[20vh]" />
-
       {/* ══ SECCIÓN PLANES ══ */}
-      <div className="space-y-6 pt-10">
+      <div className="space-y-6 pt-16">
         <div className="flex flex-col sm:flex-row sm:items-end justify-between gap-4">
           <div>
             <h2 className="text-3xl font-black tracking-tighter text-gray-900 dark:text-white drop-shadow-sm">
