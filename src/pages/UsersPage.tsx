@@ -574,10 +574,14 @@ const MODULES_MATRIX = [
   {
     id: 'shifts', name: 'Turnos y Calendario',
     actions: [
-      { id: 'read',   name: 'Ver calendario y grilla' },
-      { id: 'create', name: 'Crear nuevos turnos' },
-      { id: 'update', name: 'Editar turnos existentes' },
-      { id: 'delete', name: 'Eliminar turnos' },
+      { id: 'read',                   name: 'Ver calendario y grilla' },
+      { id: 'create',                 name: 'Crear nuevos turnos' },
+      { id: 'update',                 name: 'Editar turnos existentes' },
+      { id: 'delete',                 name: 'Eliminar turnos' },
+      { id: 'view_dias_especiales',   name: 'Ver sección "Días sin clases" en Turnos' },
+      { id: 'create_dia_especial',    name: 'Registrar días sin clases' },
+      { id: 'update_dia_especial',    name: 'Editar días sin clases' },
+      { id: 'delete_dia_especial',    name: 'Eliminar días sin clases' },
     ],
   },
   {

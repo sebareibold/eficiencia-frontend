@@ -207,6 +207,9 @@ export default function ShiftsPage() {
   const canCreate = can('shifts', 'create')
   const canUpdate = can('shifts', 'update')
   const canDelete = can('shifts', 'delete')
+  const canCreateDiaEsp = can('shifts', 'create_dia_especial')
+  const canUpdateDiaEsp = can('shifts', 'update_dia_especial')
+  const canDeleteDiaEsp = can('shifts', 'delete_dia_especial')
   const navigate = useNavigate()
 
   // ── View mode
@@ -1481,7 +1484,7 @@ export default function ShiftsPage() {
             <h2 className="text-xl font-bold text-gray-900 dark:text-white">Días sin Clases</h2>
             <p className="text-sm text-[#8A8A9A]">Feriados, cierres y horarios reducidos del gimnasio</p>
           </div>
-          {isAdmin && (
+          {canCreateDiaEsp && (
             <button
               onClick={() => navigate(ROUTES.DIA_ESPECIAL_NEW)}
               className="ml-auto flex items-center gap-2 rounded-xl bg-red-500/10 px-4 py-2 text-sm font-semibold text-red-400 hover:bg-red-500/20 transition-all"
@@ -1591,24 +1594,28 @@ export default function ShiftsPage() {
                       }
                     </span>
                     {/* Acciones — siempre a la derecha */}
-                    {canDelete && (
+                    {(canUpdateDiaEsp || canDeleteDiaEsp) && (
                       <div className="shrink-0 flex items-center gap-1">
-                        <button
-                          onClick={() => navigate(
-                            ROUTES.DIA_ESPECIAL_EDIT.replace(':id', dia.id),
-                            { state: { dia } }
-                          )}
-                          className="flex h-8 w-8 items-center justify-center rounded-xl bg-white/[0.06] text-gray-400 hover:bg-white/10 hover:text-white transition-all"
-                        >
-                          <Pencil size={13} />
-                        </button>
-                        <button
-                          disabled={deletingDiaEspId === dia.id}
-                          onClick={() => setDeleteConfirmDia(dia)}
-                          className="flex h-8 w-8 items-center justify-center rounded-xl bg-red-500/10 text-red-400 hover:bg-red-500/20 transition-all disabled:opacity-50"
-                        >
-                          {deletingDiaEspId === dia.id ? '…' : <Trash2 size={13} />}
-                        </button>
+                        {canUpdateDiaEsp && (
+                          <button
+                            onClick={() => navigate(
+                              ROUTES.DIA_ESPECIAL_EDIT.replace(':id', dia.id),
+                              { state: { dia } }
+                            )}
+                            className="flex h-8 w-8 items-center justify-center rounded-xl bg-white/[0.06] text-gray-400 hover:bg-white/10 hover:text-white transition-all"
+                          >
+                            <Pencil size={13} />
+                          </button>
+                        )}
+                        {canDeleteDiaEsp && (
+                          <button
+                            disabled={deletingDiaEspId === dia.id}
+                            onClick={() => setDeleteConfirmDia(dia)}
+                            className="flex h-8 w-8 items-center justify-center rounded-xl bg-red-500/10 text-red-400 hover:bg-red-500/20 transition-all disabled:opacity-50"
+                          >
+                            {deletingDiaEspId === dia.id ? '…' : <Trash2 size={13} />}
+                          </button>
+                        )}
                       </div>
                     )}
                   </div>
