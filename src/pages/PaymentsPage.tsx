@@ -1055,8 +1055,8 @@ export default function PaymentsPage() {
         </div>
       </div>
 
-      {/* ── KPI strip — solo Administrador ── */}
-      {isAdmin && (
+      {/* ── KPI strip ── */}
+      {can('payments', 'view_summary') && (
         <div className="grid grid-cols-2 lg:grid-cols-4 gap-2 md:gap-4 xl:gap-6">
           {summaryCards.map(card => (
             <KpiCard key={card.label} label={card.label} value={formatCurrency(card.value)}

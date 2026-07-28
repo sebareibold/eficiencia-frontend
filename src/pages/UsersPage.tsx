@@ -566,9 +566,10 @@ const MODULES_MATRIX = [
   {
     id: 'payments', name: 'Gestión de Pagos',
     actions: [
-      { id: 'read',   name: 'Ver historial de cobros' },
-      { id: 'create', name: 'Registrar nuevos cobros' },
-      { id: 'update', name: 'Editar o anular pagos' },
+      { id: 'read',         name: 'Ver historial de cobros' },
+      { id: 'create',       name: 'Registrar nuevos cobros' },
+      { id: 'update',       name: 'Editar o anular pagos' },
+      { id: 'view_summary', name: 'Ver KPIs y resumen del período' },
     ],
   },
   {
