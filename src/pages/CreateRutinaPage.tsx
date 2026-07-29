@@ -1378,6 +1378,7 @@ export default function CreateRutinaPage() {
           planActivo: full.planName ?? null,
           frecuenciaSemanal: full.planFrequency ?? null,
           membresiaVigente: full.membershipStatus === 'ACTIVA',
+          activo: full.status !== 'inactive',
           rutinaActivaId: null,
           rutinaActivaNombre: null,
         }
@@ -1450,6 +1451,7 @@ export default function CreateRutinaPage() {
           planActivo: full.planName ?? null,
           frecuenciaSemanal: full.planFrequency ?? null,
           membresiaVigente: full.membershipStatus === 'ACTIVA',
+          activo: full.status !== 'inactive',
           rutinaActivaId: null,
           rutinaActivaNombre: null,
         }
@@ -1871,9 +1873,24 @@ export default function CreateRutinaPage() {
               <span className={clienteSeleccionadoRaw.membresiaVigente ? 'text-emerald-400' : 'text-red-400'}>
                 {clienteSeleccionadoRaw.membresiaVigente ? 'Membresía vigente' : 'Sin membresía activa'}
               </span>
+              {!clienteSeleccionadoRaw.activo && (
+                <>
+                  <span className="text-gray-500 dark:text-white/20">·</span>
+                  <span className="text-red-400">Cliente inactivo</span>
+                </>
+              )}
             </div>
 
-            {localRutinas.length > 0 ? (
+            {(!clienteSeleccionadoRaw.membresiaVigente || !clienteSeleccionadoRaw.activo) ? (
+              <div className="flex items-start gap-2.5 rounded-xl border border-red-500/25 bg-red-500/[0.07] px-3.5 py-3">
+                <AlertCircle size={14} className="text-red-400 shrink-0 mt-0.5" />
+                <p className="text-xs text-red-300 leading-relaxed">
+                  {!clienteSeleccionadoRaw.activo
+                    ? 'Este cliente está inactivo. No podés crear una rutina hasta que se reactive.'
+                    : 'Este cliente no tiene membresía activa. No podés crear una rutina hasta que regularice su situación.'}
+                </p>
+              </div>
+            ) : localRutinas.length > 0 ? (
               <div className="space-y-2">
                 {clienteSeleccionadoRaw.rutinaActivaNombre && (
                   <div className="rounded-xl border border-amber-500/20 bg-amber-500/[0.06] px-3 py-2.5">

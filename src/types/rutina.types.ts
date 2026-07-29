@@ -260,6 +260,7 @@ export interface ClienteResumen {
   planActivo: string | null
   frecuenciaSemanal: number | null
   membresiaVigente: boolean
+  activo: boolean
   rutinaActivaId: string | null
   rutinaActivaNombre: string | null
 }
