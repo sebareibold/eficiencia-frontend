@@ -4,12 +4,13 @@ import { motion, AnimatePresence } from 'framer-motion'
 import { pageVariants } from '../lib/motion'
 import {
   CalendarDays, ClipboardList, Check, X, RefreshCw, Clock,
-  GraduationCap, Mail,
+  GraduationCap, Mail, AlertTriangle, ExternalLink,
 } from 'lucide-react'
 import { usuariosApi, type ProfesorDetalle } from '../api/usuarios.api'
 import { listaEsperaApi } from '../api/listaEspera.api'
 import type { PendienteSolicitudEntry } from '../types/listaEspera.types'
 import { useUiStore } from '../store/uiStore'
+import ConfirmDialog from '../components/ui/ConfirmDialog'
 import { formatDate } from '../utils/formatDate'
 import { format, parseISO } from 'date-fns'
 import { es } from 'date-fns/locale'
@@ -57,6 +58,7 @@ export default function MisTurnosPage() {
   const [items,        setItems]        = useState<PendienteSolicitudEntry[]>([])
   const [loadingSol,   setLoadingSol]   = useState(true)
   const [actioningId,  setActioningId]  = useState<string | null>(null)
+  const [pendingAction, setPendingAction] = useState<{ id: string; type: 'aprobar' | 'rechazar' } | null>(null)
 
   const loadSolicitudes = useCallback(() => {
     setLoadingSol(true)
@@ -69,6 +71,7 @@ export default function MisTurnosPage() {
   useEffect(() => { loadSolicitudes() }, [loadSolicitudes])
 
   async function handleAprobar(id: string) {
+    setPendingAction(null)
     setActioningId(id)
     try {
       await listaEsperaApi.aprobar(id)
@@ -81,13 +84,22 @@ export default function MisTurnosPage() {
   }
 
   async function handleRechazar(id: string) {
+    setPendingAction(null)
     setActioningId(id)
     try {
       await listaEsperaApi.rechazar(id)
       addToast('Solicitud rechazada — se notifico al siguiente en la lista', 'success')
       loadSolicitudes()
-    } catch { addToast('Error al rechazar', 'error') }
-    finally { setActioningId(null) }
+    } catch (err: unknown) {
+      const msg = (err as { response?: { data?: { message?: string } } })?.response?.data?.message ?? 'Error al rechazar'
+      addToast(msg, 'error')
+    } finally { setActioningId(null) }
+  }
+
+  async function confirmAction() {
+    if (!pendingAction) return
+    if (pendingAction.type === 'aprobar') await handleAprobar(pendingAction.id)
+    else await handleRechazar(pendingAction.id)
   }
 
   // ── Derived ───────────────────────────────────────────────────────────────
@@ -95,8 +107,25 @@ export default function MisTurnosPage() {
   const turnosDisplay = p ? buildTurnosDisplay(p.turnosSalaA, p.turnosSalaB) : []
   const pendingCount = items.length
 
+  const isNotLinked = !loadingProf && prof === null
+
   return (
     <motion.div {...pageVariants} className="p-4 lg:p-6 xl:p-8 space-y-5 md:space-y-7 relative z-10">
+
+      <ConfirmDialog
+        isOpen={!!pendingAction}
+        title={pendingAction?.type === 'aprobar' ? 'Aprobar solicitud' : 'Rechazar solicitud'}
+        message={
+          pendingAction?.type === 'aprobar'
+            ? '¿Confirmás que querés aprobar esta solicitud? Se creará la inscripción al turno.'
+            : '¿Confirmás que querés rechazar esta solicitud? Se notificará al siguiente en la lista.'
+        }
+        confirmLabel={pendingAction?.type === 'aprobar' ? 'Aprobar' : 'Rechazar'}
+        variant={pendingAction?.type === 'rechazar' ? 'danger' : undefined}
+        isLoading={!!actioningId}
+        onConfirm={confirmAction}
+        onClose={() => setPendingAction(null)}
+      />
 
       {/* Blob */}
       <div className="pointer-events-none fixed inset-0 -z-10 overflow-hidden">
@@ -112,6 +141,17 @@ export default function MisTurnosPage() {
           </p>
         )}
       </div>
+
+      {/* Estado: no vinculado como profesor */}
+      {isNotLinked && (
+        <div className="flex items-start gap-3 rounded-2xl border border-orange-400/30 bg-orange-400/5 px-4 py-3.5">
+          <AlertTriangle size={18} className="text-orange-400 shrink-0 mt-0.5" />
+          <div>
+            <p className="text-sm font-bold text-gray-900 dark:text-white">Tu cuenta no está vinculada como profesor</p>
+            <p className="text-xs text-gray-500 dark:text-gray-400 mt-0.5">No se encontró un perfil de profesor asociado. Contactá al administrador para que lo configure.</p>
+          </div>
+        </div>
+      )}
 
       {/* Tabs */}
       <div className="flex items-center gap-1 p-1 rounded-full border border-white/50 dark:border-white/10 bg-white/30 dark:bg-black/30 backdrop-blur-xl w-fit shadow-sm">
@@ -287,14 +327,15 @@ export default function MisTurnosPage() {
               </div>
             </div>
           ) : (
-            <AnimatePresence initial={false}>
-              <div className="space-y-3">
+            <div className="space-y-3">
+              <AnimatePresence initial={false}>
                 {items.map(item => (
                   <motion.div
                     key={item.id}
                     initial={{ opacity: 0, y: 8 }}
                     animate={{ opacity: 1, y: 0 }}
-                    exit={{ opacity: 0, height: 0, marginBottom: 0 }}
+                    exit={{ opacity: 0, height: 0, marginBottom: 0, paddingTop: 0, paddingBottom: 0 }}
+                    transition={{ duration: 0.2 }}
                     className="rounded-2xl dark:bg-white/[0.04] bg-white border dark:border-white/[0.08] border-gray-200 p-4 lg:p-5 flex flex-col sm:flex-row sm:items-center gap-4"
                   >
                     <div className="flex-1 min-w-0">
@@ -310,7 +351,7 @@ export default function MisTurnosPage() {
                           {item.tipo === 'INTERNA' ? 'Cliente' : 'Externo'}
                         </span>
                       </div>
-                      <div className="flex items-center gap-2 text-sm">
+                      <div className="flex items-center gap-2 text-sm flex-wrap">
                         <span className="font-semibold dark:text-gray-200 text-gray-700">
                           {item.turnoHoraInicio}–{item.turnoHoraFin}
                         </span>
@@ -318,6 +359,13 @@ export default function MisTurnosPage() {
                         <span className="dark:text-gray-400 text-gray-500">
                           {item.turnoDias.map(d => DIA_LABELS[d] ?? d).join(', ')}
                         </span>
+                        <button
+                          onClick={() => navigate(`/shifts/${item.turnoId}`)}
+                          className="flex items-center gap-1 text-xs text-primary hover:text-primary-dark transition-colors font-semibold"
+                        >
+                          <ExternalLink size={11} />
+                          Ver turno
+                        </button>
                       </div>
                       <div className="flex items-center gap-1 mt-1 text-xs dark:text-gray-500 text-gray-400">
                         <Clock size={10} />
@@ -327,8 +375,8 @@ export default function MisTurnosPage() {
 
                     <div className="flex gap-2 shrink-0">
                       <button
-                        onClick={() => handleRechazar(item.id)}
-                        disabled={actioningId === item.id}
+                        onClick={() => setPendingAction({ id: item.id, type: 'rechazar' })}
+                        disabled={!!actioningId}
                         className="flex items-center gap-1.5 px-3 py-2 rounded-xl text-sm font-semibold
                           dark:bg-red-500/10 bg-red-50 dark:text-red-400 text-red-600
                           hover:dark:bg-red-500/20 hover:bg-red-100 disabled:opacity-50 transition-colors"
@@ -337,8 +385,8 @@ export default function MisTurnosPage() {
                         Rechazar
                       </button>
                       <button
-                        onClick={() => handleAprobar(item.id)}
-                        disabled={actioningId === item.id}
+                        onClick={() => setPendingAction({ id: item.id, type: 'aprobar' })}
+                        disabled={!!actioningId}
                         className="flex items-center gap-1.5 px-3 py-2 rounded-xl text-sm font-semibold
                           bg-primary text-black hover:bg-primary-dark disabled:opacity-50 transition-colors"
                       >
@@ -348,8 +396,8 @@ export default function MisTurnosPage() {
                     </div>
                   </motion.div>
                 ))}
-              </div>
-            </AnimatePresence>
+              </AnimatePresence>
+            </div>
           )}
         </>
       )}
