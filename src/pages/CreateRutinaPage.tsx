@@ -75,6 +75,18 @@ function uid(): string {
   return Math.random().toString(36).slice(2, 11)
 }
 
+function getPatronForEjIdx(
+  patrones: { patronMovimiento: PatronMovimientoEnum | null; cantidad: number }[],
+  ejIdx: number,
+): PatronMovimientoEnum | null {
+  let cumulative = 0
+  for (const pt of patrones) {
+    cumulative += pt.cantidad
+    if (ejIdx < cumulative) return pt.patronMovimiento
+  }
+  return patrones[patrones.length - 1]?.patronMovimiento ?? null
+}
+
 function crearEjercicioVacio(): EjercicioDraft {
   return { _id: uid(), nombre: '' }
 }
@@ -2515,7 +2527,7 @@ export default function CreateRutinaPage() {
                             ) : isAssigning ? (
                               <td colSpan={7} className="px-3 py-2">
                                 <SearchableExerciseSelector
-                                  patronHint={bl.patrones[0]?.patronMovimiento ?? null}
+                                  patronHint={getPatronForEjIdx(bl.patrones, ejIdx)}
                                   patrones={patrones}
                                   onSelect={(catalogo, patron) => {
                                     dispatch({ type: 'UPDATE_EJ_W', sesionId: ses._id, bloqueId: bl._id, ejId: ej._id, changes: { catalogoId: catalogo.id, nombre: catalogo.nombre, _esReferencia: false } })
