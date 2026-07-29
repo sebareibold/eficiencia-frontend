@@ -1066,22 +1066,37 @@ export default function PlantillaViewPage() {
                       )
                     }
 
-                    ses.bloques.forEach((bl, blIdx) => {
-                      // Normalizar patrones: usar array nuevo si existe, si no el legacy
-                      const patronesNorm = bl.patrones && bl.patrones.length > 0
-                        ? bl.patrones
-                        : bl.patronMovimiento
-                          ? [{ id: bl.id + '-leg', patronMovimiento: bl.patronMovimiento, cantidad: bl.cantidadEjercicios ?? 2, orden: 0 }]
-                          : [{ id: bl.id + '-empty', patronMovimiento: '', cantidad: 2, orden: 0 }]
+                    // Agrupar bloques por letra (preservando orden de primera aparición)
+                    const bloquesByLetra = new Map<string, typeof ses.bloques>()
+                    ses.bloques.forEach(bl => {
+                      const arr = bloquesByLetra.get(bl.letra) ?? []
+                      arr.push(bl)
+                      bloquesByLetra.set(bl.letra, arr)
+                    })
+
+                    let grupoIdx = 0
+                    bloquesByLetra.forEach((bls, letra) => {
+                      const repBl = bls[0]
+
+                      // Reunir patrones de todos los bloques con esta letra
+                      const mergedPatrons: { patron: { id?: string; patronMovimiento: string; cantidad: number; orden: number }; bloqueId: string; pIdx: number }[] = []
+                      bls.forEach(bl => {
+                        const pats = bl.patrones && bl.patrones.length > 0
+                          ? bl.patrones
+                          : bl.patronMovimiento
+                            ? [{ id: bl.id + '-leg', patronMovimiento: bl.patronMovimiento, cantidad: bl.cantidadEjercicios ?? 2, orden: 0 }]
+                            : [{ id: bl.id + '-empty', patronMovimiento: '', cantidad: 2, orden: 0 }]
+                        pats.forEach((pt, pi) => mergedPatrons.push({ patron: pt, bloqueId: bl.id, pIdx: pi }))
+                      })
 
                       rows.push(
-                        <tr key={bl.id} className={`group/row hover:bg-gray-50/40 dark:hover:bg-white/[0.02] transition-colors ${semBorder(blIdx)}`}>
-                          {sesCell(bl.id)}
+                        <tr key={repBl.id} className={`group/row hover:bg-gray-50/40 dark:hover:bg-white/[0.02] transition-colors ${semBorder(grupoIdx)}`}>
+                          {sesCell(repBl.id)}
                           {/* Bloque badge */}
                           <td className="px-7 py-4 align-top">
                             <div className="flex items-center gap-1.5 mt-0.5">
-                              {isAdmin && renamingBloqueKey === `${ses.id}:${bl.id}` ? (
-                                <form onSubmit={e => { e.preventDefault(); renameBloque(ses.id, bl.id, bloqueLetraVal) }} className="flex items-center gap-1">
+                              {isAdmin && renamingBloqueKey === `${ses.id}:${repBl.id}` ? (
+                                <form onSubmit={e => { e.preventDefault(); renameBloque(ses.id, repBl.id, bloqueLetraVal) }} className="flex items-center gap-1">
                                   <input autoFocus value={bloqueLetraVal} onChange={e => setBloqueLetraVal(e.target.value)} maxLength={3}
                                     className="w-12 text-center bg-white dark:bg-white/[0.08] border border-primary/40 rounded-md px-1 py-0.5 text-xs font-black text-gray-900 dark:text-white focus:outline-none uppercase" />
                                   <button type="submit" className="p-0.5 text-primary shrink-0"><Check size={11} /></button>
@@ -1090,22 +1105,22 @@ export default function PlantillaViewPage() {
                               ) : (
                                 <>
                                   <div
-                                    onClick={isAdmin ? () => { setBloqueLetraVal(bl.letra); setRenamingBloqueKey(`${ses.id}:${bl.id}`) } : undefined}
+                                    onClick={isAdmin ? () => { setBloqueLetraVal(repBl.letra); setRenamingBloqueKey(`${ses.id}:${repBl.id}`) } : undefined}
                                     title={isAdmin ? 'Click para renombrar' : undefined}
-                                    className={`w-9 h-9 rounded-xl ${getBloqueColor(bl.letra).bg} border ${getBloqueColor(bl.letra).border} ${getBloqueColor(bl.letra).text} text-sm font-black flex items-center justify-center shrink-0 ${isAdmin ? 'cursor-pointer hover:opacity-80 transition-opacity' : ''}`}
-                                  >{bl.letra}</div>
-                                  {isAdmin && <button onClick={() => deleteBloque(ses.id, bl.id)} className="p-1 text-gray-400 dark:text-white/30 hover:text-red-400 opacity-0 group-hover/row:opacity-100 transition-all shrink-0"><Trash2 size={13} /></button>}
+                                    className={`w-9 h-9 rounded-xl ${getBloqueColor(letra).bg} border ${getBloqueColor(letra).border} ${getBloqueColor(letra).text} text-sm font-black flex items-center justify-center shrink-0 ${isAdmin ? 'cursor-pointer hover:opacity-80 transition-opacity' : ''}`}
+                                  >{letra}</div>
+                                  {isAdmin && <button onClick={() => deleteBloque(ses.id, repBl.id)} className="p-1 text-gray-400 dark:text-white/30 hover:text-red-400 opacity-0 group-hover/row:opacity-100 transition-all shrink-0"><Trash2 size={13} /></button>}
                                 </>
                               )}
                             </div>
                           </td>
-                          {/* Patrón(es) — stack vertical */}
+                          {/* Patrón(es) — todos los patrones del grupo */}
                           <td className="px-7 py-3 align-top" colSpan={2}>
                             <div className="space-y-1.5">
-                              {patronesNorm.map((pt, pi) => (
-                                <div key={pt.id ?? pi} className="flex items-center gap-2">
+                              {mergedPatrons.map(({ patron: pt, bloqueId, pIdx: pi }) => (
+                                <div key={pt.id ?? `${bloqueId}-${pi}`} className="flex items-center gap-2">
                                   {isAdmin ? (
-                                    <select value={pt.patronMovimiento} onChange={e => updatePatronEntry(ses.id, bl.id, pi, e.target.value)}
+                                    <select value={pt.patronMovimiento} onChange={e => updatePatronEntry(ses.id, bloqueId, pi, e.target.value)}
                                       className="flex-1 min-w-0 appearance-none bg-transparent text-xs text-gray-500 dark:text-white/55 font-medium cursor-pointer hover:text-primary dark:hover:text-primary outline-none border-none transition-colors">
                                       {PATRON_OPTIONS.map(o => <option key={o.value} value={o.value}>{o.label}</option>)}
                                     </select>
@@ -1114,17 +1129,17 @@ export default function PlantillaViewPage() {
                                   )}
                                   {isAdmin ? (
                                     <div className="flex items-center gap-1 shrink-0">
-                                      <button onClick={() => updatePatronCantidad(ses.id, bl.id, pi, -1)} disabled={pt.cantidad <= 1}
+                                      <button onClick={() => updatePatronCantidad(ses.id, bloqueId, pi, -1)} disabled={pt.cantidad <= 1}
                                         className="w-5 h-5 rounded-md border border-gray-200 dark:border-white/[0.08] flex items-center justify-center text-gray-400 dark:text-white/30 hover:text-gray-900 dark:hover:text-white disabled:opacity-30 transition-colors active:scale-[0.97]">
                                         <Minus size={9} />
                                       </button>
                                       <span className="tabular-nums text-xs font-semibold text-gray-700 dark:text-white/70 w-5 text-center select-none">{pt.cantidad}</span>
-                                      <button onClick={() => updatePatronCantidad(ses.id, bl.id, pi, 1)} disabled={pt.cantidad >= 10}
+                                      <button onClick={() => updatePatronCantidad(ses.id, bloqueId, pi, 1)} disabled={pt.cantidad >= 10}
                                         className="w-5 h-5 rounded-md border border-gray-200 dark:border-white/[0.08] flex items-center justify-center text-gray-400 dark:text-white/30 hover:text-gray-900 dark:hover:text-white disabled:opacity-30 transition-colors active:scale-[0.97]">
                                         <Plus size={9} />
                                       </button>
-                                      {patronesNorm.length > 1 && (
-                                        <button onClick={() => removePatronFromBloque(ses.id, bl.id, pi)} className="ml-0.5 text-gray-300 dark:text-white/20 hover:text-red-400 transition-colors active:scale-[0.97]">
+                                      {mergedPatrons.length > 1 && (
+                                        <button onClick={() => removePatronFromBloque(ses.id, bloqueId, pi)} className="ml-0.5 text-gray-300 dark:text-white/20 hover:text-red-400 transition-colors active:scale-[0.97]">
                                           <X size={10} />
                                         </button>
                                       )}
@@ -1134,8 +1149,8 @@ export default function PlantillaViewPage() {
                                   )}
                                 </div>
                               ))}
-                              {isAdmin && patronesNorm.length < 4 && (
-                                <button onClick={() => addPatronToBloque(ses.id, bl.id)} className="flex items-center gap-1 text-[10px] text-gray-400 dark:text-white/25 hover:text-primary transition-colors active:scale-[0.97] mt-0.5">
+                              {isAdmin && mergedPatrons.length < 4 && (
+                                <button onClick={() => addPatronToBloque(ses.id, repBl.id)} className="flex items-center gap-1 text-[10px] text-gray-400 dark:text-white/25 hover:text-primary transition-colors active:scale-[0.97] mt-0.5">
                                   <Plus size={9} /> patrón
                                 </button>
                               )}
@@ -1143,6 +1158,7 @@ export default function PlantillaViewPage() {
                           </td>
                         </tr>
                       )
+                      grupoIdx++
                     })
 
                     // Add bloque
