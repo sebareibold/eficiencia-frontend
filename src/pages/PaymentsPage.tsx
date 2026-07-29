@@ -10,6 +10,7 @@ import {
   Trash2, Search, ChevronLeft, ChevronRight,
   Layers, LayoutList, LayoutGrid, Edit2, X, Save, Pencil,
   ArrowUp, ArrowDown, ArrowUpDown, SlidersHorizontal, Copy, Check,
+  Hash, FileCheck, FileX, TrendingUp, Eye, EyeOff,
 } from 'lucide-react'
 import { useForm } from 'react-hook-form'
 import { zodResolver } from '@hookform/resolvers/zod'
@@ -41,6 +42,7 @@ import { resolveWhatsappTemplate } from '../utils/whatsappTemplate'
 import type { Payment, PaymentMethod } from '../types/payment.types'
 import { cuentasDestinoApi } from '../api/cuentas-destino.api'
 import type { CuentaDestino, CreateCuentaDestinoDto } from '../api/cuentas-destino.api'
+import { configuracionApi } from '../api/configuracion.api'
 
 // ── Constantes de pagos ───────────────────────────────────────────────────────
 
@@ -55,6 +57,48 @@ const METHOD_ICONS = {
   transfer: ArrowLeftRight,
   card: CreditCard,
 }
+
+// ── Definición de todos los KPIs disponibles en el widget manager ─────────────
+
+interface KpiTotals {
+  total: number; byCash: number; byTransfer: number; byCard: number
+  cantidadTotal: number; cantidadEfectivo: number; cantidadTransferencia: number; cantidadCard: number
+  facturado: number; sinFacturar: number; promedio: number
+}
+
+interface KpiDef {
+  id: string
+  label: string
+  icon: React.ElementType
+  color: string
+  bgColor: string
+  getValue: (t: KpiTotals) => string
+}
+
+const ALL_KPI_DEFS: KpiDef[] = [
+  { id: 'total',                label: 'Total cobrado',           icon: CreditCard,    color: 'text-primary',        bgColor: 'bg-primary/10',        getValue: t => formatCurrency(t.total) },
+  { id: 'efectivo',             label: 'Monto efectivo',          icon: Banknote,      color: 'text-green-400',      bgColor: 'bg-green-500/10',      getValue: t => formatCurrency(t.byCash) },
+  { id: 'transferencia',        label: 'Monto transferencia',     icon: ArrowLeftRight,color: 'text-blue-400',       bgColor: 'bg-blue-500/10',       getValue: t => formatCurrency(t.byTransfer) },
+  { id: 'card',                 label: 'Débito / Empresa',        icon: Building2,     color: 'text-purple-400',     bgColor: 'bg-purple-500/10',     getValue: t => formatCurrency(t.byCard) },
+  { id: 'cantidadTotal',        label: 'Cantidad de pagos',       icon: Hash,          color: 'text-yellow-400',     bgColor: 'bg-yellow-500/10',     getValue: t => String(t.cantidadTotal) },
+  { id: 'cantidadEfectivo',     label: 'Cantidad en efectivo',    icon: Banknote,      color: 'text-green-400',      bgColor: 'bg-green-500/10',      getValue: t => String(t.cantidadEfectivo) },
+  { id: 'cantidadTransferencia',label: 'Cantidad transferencias', icon: ArrowLeftRight,color: 'text-blue-400',       bgColor: 'bg-blue-500/10',       getValue: t => String(t.cantidadTransferencia) },
+  { id: 'cantidadCard',         label: 'Cantidad débito/empresa', icon: Building2,     color: 'text-purple-400',     bgColor: 'bg-purple-500/10',     getValue: t => String(t.cantidadCard) },
+  { id: 'facturado',            label: 'Monto facturado',         icon: FileCheck,     color: 'text-emerald-400',    bgColor: 'bg-emerald-500/10',    getValue: t => formatCurrency(t.facturado) },
+  { id: 'sinFacturar',          label: 'Sin facturar',            icon: FileX,         color: 'text-orange-400',     bgColor: 'bg-orange-500/10',     getValue: t => formatCurrency(t.sinFacturar) },
+  { id: 'promedio',             label: 'Ticket promedio',         icon: TrendingUp,    color: 'text-pink-400',       bgColor: 'bg-pink-500/10',       getValue: t => formatCurrency(t.promedio) },
+]
+
+const DEFAULT_WIDGET_IDS = ['total', 'efectivo', 'transferencia', 'card']
+
+const COLS_CLASS: Record<number, string> = {
+  2: 'grid-cols-2',
+  3: 'grid-cols-2 sm:grid-cols-3',
+  4: 'grid-cols-2 lg:grid-cols-4',
+  5: 'grid-cols-2 sm:grid-cols-3 lg:grid-cols-5',
+  6: 'grid-cols-2 sm:grid-cols-3 lg:grid-cols-6',
+}
+
 
 // ── Schemas ───────────────────────────────────────────────────────────────────
 
@@ -742,6 +786,12 @@ export default function PaymentsPage() {
   const [togglingIds, setTogglingIds] = useState<Set<number>>(new Set())
   const [isDeletingPlan, setIsDeletingPlan] = useState(false)
 
+  // ── Widget manager KPIs ──
+  const [isWidgetPanelOpen, setIsWidgetPanelOpen] = useState(false)
+  const [pendingWidgets, setPendingWidgets] = useState<string[]>(DEFAULT_WIDGET_IDS)
+  const [pendingCols, setPendingCols] = useState<number>(4)
+  const [savingWidget, setSavingWidget] = useState(false)
+
   // ── Derivados de período ──
   const periodDesde = periodMode === 'day'   ? format(navDate, 'yyyy-MM-dd')
                     : periodMode === 'month' ? format(startOfMonth(navDate), 'yyyy-MM-dd')
@@ -782,6 +832,16 @@ export default function PaymentsPage() {
 
   // Resetear página al cambiar período, método o búsqueda
   useEffect(() => { goToPage(1) }, [periodMode, navDate.getFullYear(), navDate.getMonth(), methodFilter, searchFilter]) // eslint-disable-line react-hooks/exhaustive-deps
+
+  // Bloquear scroll del body cuando el panel widget está abierto
+  useEffect(() => {
+    if (isWidgetPanelOpen) {
+      document.body.style.overflow = 'hidden'
+    } else {
+      document.body.style.overflow = ''
+    }
+    return () => { document.body.style.overflow = '' }
+  }, [isWidgetPanelOpen])
 
   // Posicionar popover bajo el botón trigger
   useEffect(() => {
@@ -845,11 +905,26 @@ export default function PaymentsPage() {
     queryFn:  () => paymentsApi.getSummary(summaryParams),
     staleTime: 30_000,
   })
-  const totals = {
-    total:      summaryData?.total                             ?? 0,
-    byCash:     summaryData?.porMetodo?.EFECTIVO?.total        ?? 0,
-    byTransfer: summaryData?.porMetodo?.TRANSFERENCIA?.total   ?? 0,
-    byCard:     (summaryData?.porMetodo?.DEBITO?.total ?? 0) + (summaryData?.porMetodo?.EMPRESA?.total ?? 0),
+  const { data: widgetConfig, refetch: refetchWidgetConfig } = useQuery({
+    queryKey: ['configuracion', 'widget-kpis-pagos'],
+    queryFn:  () => configuracionApi.getWidgetKpisPagos(),
+    staleTime: Infinity,
+  })
+  const activeWidgets = widgetConfig?.kpis ?? DEFAULT_WIDGET_IDS
+  const activeCols    = widgetConfig?.cols ?? 4
+
+  const totals: KpiTotals = {
+    total:                summaryData?.total                                                                        ?? 0,
+    byCash:               summaryData?.porMetodo?.EFECTIVO?.total                                                  ?? 0,
+    byTransfer:           summaryData?.porMetodo?.TRANSFERENCIA?.total                                             ?? 0,
+    byCard:               (summaryData?.porMetodo?.DEBITO?.total ?? 0) + (summaryData?.porMetodo?.EMPRESA?.total ?? 0),
+    cantidadTotal:        summaryData?.cantidad                                                                    ?? 0,
+    cantidadEfectivo:     summaryData?.porMetodo?.EFECTIVO?.cantidad                                               ?? 0,
+    cantidadTransferencia:summaryData?.porMetodo?.TRANSFERENCIA?.cantidad                                          ?? 0,
+    cantidadCard:         (summaryData?.porMetodo?.DEBITO?.cantidad ?? 0) + (summaryData?.porMetodo?.EMPRESA?.cantidad ?? 0),
+    facturado:            summaryData?.montoFacturado                                                              ?? 0,
+    sinFacturar:          summaryData?.montoSinFacturar                                                            ?? 0,
+    promedio:             summaryData?.promedio                                                                    ?? 0,
   }
 
   // ── Handlers pagos ──
@@ -931,12 +1006,19 @@ export default function PaymentsPage() {
   const inputCls = 'w-full rounded-xl border-2 border-saas-border bg-white/60 dark:bg-white/5 px-3.5 py-2.5 text-sm text-gray-900 dark:text-white placeholder:text-gray-400 transition-all focus:border-primary focus:outline-none'
   const labelCls = 'mb-1.5 block text-xs font-bold uppercase tracking-widest text-gray-400 dark:text-gray-500'
 
-  const summaryCards = [
-    { label: 'Total cobrado',   value: totals.total,      icon: CreditCard,    color: 'text-primary',      bgColor: 'bg-primary/10' },
-    { label: 'Efectivo',        value: totals.byCash,     icon: Banknote,      color: 'text-green-400',    bgColor: 'bg-green-500/10' },
-    { label: 'Transferencia',   value: totals.byTransfer, icon: ArrowLeftRight,color: 'text-blue-400',     bgColor: 'bg-blue-500/10' },
-    { label: 'Débito',          value: totals.byCard,     icon: Building2,     color: 'text-purple-400',   bgColor: 'bg-purple-500/10' },
-  ]
+  async function saveWidgetConfig() {
+    setSavingWidget(true)
+    try {
+      await configuracionApi.updateWidgetKpisPagos(pendingWidgets, pendingCols)
+      await refetchWidgetConfig()
+      addToast('KPIs actualizados', 'success')
+      setIsWidgetPanelOpen(false)
+    } catch {
+      addToast('Error al guardar la configuración', 'error')
+    } finally {
+      setSavingWidget(false)
+    }
+  }
 
   // ── Portal: popover filtros overflow ──
   const payPopover = createPortal(
@@ -1024,7 +1106,7 @@ export default function PaymentsPage() {
           <h1 className="text-2xl lg:text-3xl xl:text-4xl font-black tracking-tighter text-gray-900 dark:text-white drop-shadow-sm">Pagos</h1>
           <p className="mt-2 text-sm font-semibold text-gray-500 dark:text-gray-400">Gestioná los ingresos y planes del gimnasio</p>
         </div>
-        <div className="flex items-center gap-3">
+        <div className="flex items-center gap-2">
           <div className="flex items-center rounded-full border border-white/50 dark:border-white/10 bg-white/30 dark:bg-black/30 backdrop-blur-xl p-1 shadow-sm gap-1 shrink-0">
             {(['list', 'grid'] as const).map((mode) => {
               const isActive = viewMode === mode
@@ -1041,6 +1123,17 @@ export default function PaymentsPage() {
               )
             })}
           </div>
+          {can('payments', 'view_summary') && (
+            <button
+              onClick={() => { setPendingWidgets(activeWidgets); setPendingCols(activeCols); setIsWidgetPanelOpen(true) }}
+              title="Personalizar KPIs"
+              className="flex items-center justify-center h-[34px] w-[34px] rounded-full shrink-0
+                border border-white/50 dark:border-white/10 bg-white/30 dark:bg-black/30 backdrop-blur-xl shadow-sm
+                text-gray-500 dark:text-[#8A8A9A] hover:text-gray-900 dark:hover:text-white transition-colors"
+            >
+              <SlidersHorizontal size={14} />
+            </button>
+          )}
           {can('payments', 'create') && (
             <button
               onClick={() => navigate(ROUTES.PAYMENT_NEW)}
@@ -1055,14 +1148,137 @@ export default function PaymentsPage() {
         </div>
       </div>
 
-      {/* ── KPI strip ── */}
+      {/* ── KPI strip con widget manager ── */}
       {can('payments', 'view_summary') && (
-        <div className="grid grid-cols-2 lg:grid-cols-4 gap-2 md:gap-4 xl:gap-6">
-          {summaryCards.map(card => (
-            <KpiCard key={card.label} label={card.label} value={formatCurrency(card.value)}
-              icon={card.icon} iconColor={card.color} iconBg={card.bgColor} isLoading={!summaryData} />
-          ))}
+        <div className={`grid gap-2 md:gap-3 xl:gap-4 ${COLS_CLASS[activeCols] ?? COLS_CLASS[4]}`}>
+          {activeWidgets.map(id => {
+            const def = ALL_KPI_DEFS.find(d => d.id === id)
+            if (!def) return null
+            return (
+              <KpiCard key={def.id} label={def.label} value={def.getValue(totals)}
+                icon={def.icon} iconColor={def.color} iconBg={def.bgColor}
+                isLoading={!summaryData} />
+            )
+          })}
         </div>
+      )}
+
+      {/* ── Panel lateral widget manager ── */}
+      {createPortal(
+        <AnimatePresence>
+          {isWidgetPanelOpen && (
+            <>
+              {/* Overlay */}
+              <div
+                className="fixed inset-0 z-[200] bg-black/30 dark:bg-black/50 backdrop-blur-sm"
+                onClick={() => setIsWidgetPanelOpen(false)}
+              />
+
+              {/* Drawer */}
+              <motion.aside
+                initial={{ x: '100%' }}
+                animate={{ x: 0 }}
+                exit={{ x: '100%' }}
+                transition={{ type: 'spring', stiffness: 320, damping: 32 }}
+                className="fixed right-0 top-0 bottom-0 z-[201] w-[22rem] flex flex-col overflow-hidden
+                  bg-white dark:bg-[#141414]
+                  border-l border-saas-border dark:border-white/8
+                  shadow-[−8px_0_60px_rgba(0,0,0,0.12)] dark:shadow-[−8px_0_60px_rgba(0,0,0,0.6)]"
+              >
+                {/* Blobs decorativos */}
+                <div className="pointer-events-none absolute inset-0 overflow-hidden">
+                  <div className="absolute -top-16 -right-16 w-56 h-56 rounded-full bg-primary/20 dark:bg-primary/10 blur-[70px]" />
+                  <div className="absolute -bottom-16 -left-16 w-48 h-48 rounded-full bg-blue-500/15 dark:bg-blue-500/8 blur-[60px]" />
+                </div>
+
+                {/* Header */}
+                <div className="relative flex items-center justify-between px-5 py-4 border-b border-saas-border dark:border-white/8">
+                  <div>
+                    <p className="text-sm font-bold text-saas-text dark:text-white">Personalizar KPIs</p>
+                    <p className="text-xs text-saas-muted dark:text-gray-500 mt-0.5">Elegí qué métricas mostrar</p>
+                  </div>
+                  <button
+                    onClick={() => setIsWidgetPanelOpen(false)}
+                    className="flex h-7 w-7 items-center justify-center rounded-lg text-saas-muted dark:text-gray-400
+                      hover:text-saas-text dark:hover:text-white hover:bg-saas-border/60 dark:hover:bg-white/8 transition-colors"
+                  >
+                    <X size={16} />
+                  </button>
+                </div>
+
+                {/* Selector columnas por fila */}
+                <div className="relative px-4 pt-4 pb-3 border-b border-saas-border dark:border-white/8">
+                  <p className="text-xs font-semibold uppercase tracking-widest text-saas-muted dark:text-gray-500 mb-2.5">Cards por fila</p>
+                  <div className="flex gap-1.5">
+                    {Array.from({ length: Math.min(Math.max(pendingWidgets.length, 2), 6) - 1 }, (_, i) => i + 2).map(n => {
+                      const clamped = Math.min(pendingCols, Math.min(Math.max(pendingWidgets.length, 2), 6))
+                      const isActive = clamped === n
+                      return (
+                        <button
+                          key={n}
+                          onClick={() => setPendingCols(n)}
+                          className={`flex-1 py-2 rounded-xl border text-sm font-bold transition-all
+                            ${isActive
+                              ? 'border-primary/40 bg-primary/8 dark:bg-primary/5 text-primary'
+                              : 'border-saas-border dark:border-white/8 text-saas-muted dark:text-gray-500 hover:border-saas-border dark:hover:border-white/12 hover:text-saas-text dark:hover:text-gray-400'
+                            }`}
+                        >
+                          {n}
+                        </button>
+                      )
+                    })}
+                  </div>
+                </div>
+
+                {/* Lista de KPIs con toggle */}
+                <div className="relative flex-1 overflow-y-auto overscroll-contain px-4 py-4 space-y-1.5">
+                  {ALL_KPI_DEFS.map(def => {
+                    const isActive = pendingWidgets.includes(def.id)
+                    const Icon = def.icon
+                    return (
+                      <button
+                        key={def.id}
+                        onClick={() => setPendingWidgets(prev =>
+                          isActive ? prev.filter(id => id !== def.id) : [...prev, def.id]
+                        )}
+                        className={`w-full flex items-center gap-3 px-3 py-2.5 rounded-xl border transition-all text-left
+                          ${isActive
+                            ? 'border-primary/30 bg-primary/6 dark:bg-primary/5 text-saas-text dark:text-white shadow-sm'
+                            : 'border-saas-border dark:border-white/5 bg-saas-bg/50 dark:bg-white/2 text-saas-muted dark:text-gray-500 hover:border-saas-border dark:hover:border-white/10 hover:text-saas-text dark:hover:text-gray-400'
+                          }`}
+                      >
+                        <div className={`flex h-7 w-7 shrink-0 items-center justify-center rounded-lg ${def.bgColor}`}>
+                          <Icon size={13} className={def.color} />
+                        </div>
+                        <span className="flex-1 text-sm font-medium">{def.label}</span>
+                        {isActive
+                          ? <Eye size={13} className="text-primary shrink-0" />
+                          : <EyeOff size={13} className="text-saas-muted dark:text-gray-600 shrink-0" />
+                        }
+                      </button>
+                    )
+                  })}
+                </div>
+
+                {/* Footer */}
+                <div className="relative px-4 py-4 border-t border-saas-border dark:border-white/8 bg-saas-bg/40 dark:bg-black/20 space-y-3">
+                  <p className="text-xs text-saas-muted dark:text-gray-500 text-center">
+                    {pendingWidgets.length} de {ALL_KPI_DEFS.length} métricas visibles
+                  </p>
+                  <Button
+                    onClick={saveWidgetConfig}
+                    isLoading={savingWidget}
+                    disabled={pendingWidgets.length === 0}
+                    className="w-full"
+                  >
+                    Guardar configuración
+                  </Button>
+                </div>
+              </motion.aside>
+            </>
+          )}
+        </AnimatePresence>,
+        document.body,
       )}
 
       {/* ── Barra de filtros ── */}

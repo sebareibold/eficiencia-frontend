@@ -12,6 +12,9 @@ export interface PaginatedPayments {
 export interface PaymentsSummary {
   total: number
   cantidad: number
+  montoFacturado: number
+  montoSinFacturar: number
+  promedio: number
   porMetodo: {
     EFECTIVO:      { total: number; cantidad: number }
     TRANSFERENCIA: { total: number; cantidad: number }

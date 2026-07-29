@@ -25,4 +25,10 @@ export const configuracionApi = {
 
   update: (data: Partial<ConfiguracionData>): Promise<ConfiguracionData> =>
     api.patch('/configuracion', data).then(r => r.data),
+
+  getWidgetKpisPagos: (): Promise<{ kpis: string[]; cols: number }> =>
+    api.get('/configuracion/widget-kpis-pagos').then(r => r.data),
+
+  updateWidgetKpisPagos: (kpis: string[], cols: number): Promise<{ kpis: string[]; cols: number }> =>
+    api.patch('/configuracion/widget-kpis-pagos', { kpis, cols }).then(r => r.data),
 }
