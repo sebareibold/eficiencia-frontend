@@ -134,7 +134,8 @@ export default function EjecucionPage() {
   }, [search])
 
   const goToRutina = (clienteId: string, name: string, lastName: string) => {
-    navigate(`/ejecucion/${clienteId}`, { state: { name, lastName } })
+    const url = `/ejecucion/${clienteId}?nombre=${encodeURIComponent(name)}&apellido=${encodeURIComponent(lastName)}`
+    window.open(url, '_blank')
   }
 
   const handleKeyDown = (e: React.KeyboardEvent<HTMLInputElement>) => {

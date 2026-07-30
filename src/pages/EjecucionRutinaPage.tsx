@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useCallback, useRef } from 'react'
-import { useParams, useNavigate, useLocation } from 'react-router-dom'
+import { useParams, useNavigate, useLocation, useSearchParams } from 'react-router-dom'
 import { AnimatePresence, motion } from 'framer-motion'
 import { ArrowLeft, ArrowRight, ExternalLink, Save, ChevronRight, ChevronLeft } from 'lucide-react'
 import { format, parseISO } from 'date-fns'
@@ -126,6 +126,7 @@ export default function EjecucionRutinaPage() {
   const { clienteId } = useParams<{ clienteId: string }>()
   const navigate      = useNavigate()
   const location      = useLocation()
+  const [searchParams] = useSearchParams()
   const state         = location.state as LocationState | null
   const addToast      = useUiStore(s => s.addToast)
 
@@ -140,7 +141,10 @@ export default function EjecucionRutinaPage() {
   const [execOffset, setExecOffset]       = useState(0)
 
   const clienteName = state?.name && state?.lastName
-    ? `${state.name} ${state.lastName}` : 'Cliente'
+    ? `${state.name} ${state.lastName}`
+    : (searchParams.get('nombre') && searchParams.get('apellido'))
+      ? `${searchParams.get('nombre')} ${searchParams.get('apellido')}`
+      : 'Cliente'
 
   useEffect(() => {
     if (!clienteId) return
