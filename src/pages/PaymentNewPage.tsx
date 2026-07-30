@@ -6,12 +6,12 @@ import { pageVariants } from '../lib/motion'
 import {
   ArrowLeft, Banknote, ArrowLeftRight, CreditCard,
   User, Search, X, CheckCircle2, Loader2, UserPlus,
-  Check, AlertCircle, Phone, Calendar, Shield,
+  Check, AlertCircle, Phone, Calendar, Shield, ChevronRight,
 } from 'lucide-react'
 import { useForm } from 'react-hook-form'
 import { zodResolver } from '@hookform/resolvers/zod'
 import { z } from 'zod'
-import { format } from 'date-fns'
+import { format, addDays } from 'date-fns'
 import { paymentsApi } from '../api/payments.api'
 import { clientsApi } from '../api/clients.api'
 import { membresiasClienteApi } from '../api/membresiasCliente.api'
@@ -79,6 +79,13 @@ const MODALIDAD_MESES: Record<string, number> = {
   EFECTIVO:              1,
   MEMBRESIA_3_MESES:     3,
   MEMBRESIA_6_MESES:     6,
+}
+
+const DIAS_POR_MODALIDAD: Record<string, number> = {
+  TRANSFERENCIA_MENSUAL: 30,
+  EFECTIVO:              30,
+  MEMBRESIA_3_MESES:     90,
+  MEMBRESIA_6_MESES:     180,
 }
 
 function metodoPagoToMethod(metodoPago: string): 'cash' | 'transfer' | 'card' {
@@ -149,8 +156,10 @@ export default function PaymentNewPage() {
   const [selectedPlanId,    setSelectedPlanId]    = useState('')
   const [selectedModalidad, setSelectedModalidad] = useState<Modalidad | ''>('')
 
-  const [aplicarProporcional, setAplicarProporcional] = useState(false)
-  const [reactivarCliente,   setReactivarCliente]   = useState(true)
+  const [aplicarProporcional,  setAplicarProporcional]  = useState(false)
+  const [reactivarCliente,    setReactivarCliente]    = useState(true)
+  const [inicioMembresiaEsHoy, setInicioMembresiaEsHoy] = useState(true)
+  const [fechaInicioMembresia, setFechaInicioMembresia] = useState('')
 
   const {
     register: regPay,
@@ -175,6 +184,40 @@ export default function PaymentNewPage() {
     const daysInMonth = new Date(date.getFullYear(), date.getMonth() + 1, 0).getDate()
     return Math.round(cuota * (day - 1) / daysInMonth)
   }, [selectedModalidad, displayAmount, watchedPaidAt, today])
+
+  // ── Inicio de membresía: fecha efectiva según toggle ─────────────────────
+  const fechaInicioEfectiva = inicioMembresiaEsHoy
+    ? (watchedPaidAt || today)
+    : fechaInicioMembresia
+
+  const fechaVencimientoEstimada = useMemo(() => {
+    if (!fechaInicioEfectiva || !selectedModalidad) return ''
+    try {
+      const dias = DIAS_POR_MODALIDAD[selectedModalidad] ?? 30
+      return format(addDays(new Date(fechaInicioEfectiva + 'T12:00:00'), dias - 1), 'yyyy-MM-dd')
+    } catch { return '' }
+  }, [fechaInicioEfectiva, selectedModalidad])
+
+  const membresiaActivaExistente = useMemo(() => {
+    return membresias.find(
+      m => (m.estado === 'ACTIVA' || m.estado === 'PENDIENTE') &&
+           m.fechaVencimiento.slice(0, 10) >= today
+    ) ?? null
+  }, [membresias, today])
+
+  const overlapsWithActiva = useMemo(() => {
+    if (!membresiaActivaExistente || !fechaInicioEfectiva || !fechaVencimientoEstimada) return false
+    const activaEnd   = membresiaActivaExistente.fechaVencimiento.slice(0, 10)
+    const activaStart = membresiaActivaExistente.fechaInicio.slice(0, 10)
+    return fechaInicioEfectiva <= activaEnd && fechaVencimientoEstimada >= activaStart
+  }, [membresiaActivaExistente, fechaInicioEfectiva, fechaVencimientoEstimada])
+
+  const fechaSugerida = useMemo(() => {
+    if (!membresiaActivaExistente) return ''
+    try {
+      return format(addDays(new Date(membresiaActivaExistente.fechaVencimiento.slice(0, 10) + 'T12:00:00'), 1), 'yyyy-MM-dd')
+    } catch { return '' }
+  }, [membresiaActivaExistente])
 
   // ── Pre-fill cliente desde ?clienteId= ───────────────────────────────────
   useEffect(() => {
@@ -246,6 +289,8 @@ export default function PaymentNewPage() {
     setSelectedPlanId('')
     setSelectedModalidad('')
     setDisplayAmount('')
+    setInicioMembresiaEsHoy(true)
+    setFechaInicioMembresia('')
   }
 
   // ── Crear cliente inline — solo guarda datos, la API se llama al confirmar el pago ──
@@ -331,7 +376,7 @@ export default function PaymentNewPage() {
           planId: selectedPlanId,
           modalidad: selectedModalidad as Modalidad,
           precio: Number(data.amount),
-          fechaInicio: data.paidAt,
+          fechaInicio: fechaInicioEfectiva || data.paidAt,
           ...(aplicarProporcional && descuentoEstimado > 0 && {
             descuentoProporcional: descuentoEstimado,
           }),
@@ -738,6 +783,14 @@ export default function PaymentNewPage() {
       m => m.estado === 'ACTIVA' && m.fechaVencimiento.slice(0, 10) >= today
     )?.planId ?? ''
 
+    // Hay membresía vigente para este plan+modalidad → solo se vincula, no se crea nueva
+    const tieneVigente = membresias.some(
+      m => m.planId === selectedPlanId && m.modalidad === selectedModalidad &&
+           (m.estado === 'ACTIVA' || m.estado === 'PENDIENTE') &&
+           m.fechaVencimiento.slice(0, 10) >= today
+    )
+    const crearaNueva = !!(selectedPlanId && selectedModalidad && !tieneVigente)
+
     return (
       <div className="space-y-5">
         {/* Cliente seleccionado / pendiente */}
@@ -1011,6 +1064,135 @@ export default function PaymentNewPage() {
                 </p>
               )}
             </div>
+
+            {/* Inicio de membresía — solo cuando vamos a crear una membresía nueva */}
+            {crearaNueva && (
+              <div className="space-y-2">
+                <label className="text-[11px] font-bold uppercase tracking-widest text-gray-400 dark:text-[#6A6A7A]">
+                  Inicio de membresía
+                </label>
+
+                {/* Toggle mismo día / elegir fecha */}
+                <button
+                  type="button"
+                  onClick={() => { setInicioMembresiaEsHoy(v => !v); setFechaInicioMembresia('') }}
+                  className={[
+                    'w-full flex items-center justify-between gap-3 px-4 py-3 rounded-xl border-2 transition-all duration-200',
+                    inicioMembresiaEsHoy
+                      ? 'border-primary/30 bg-primary/[0.04]'
+                      : 'border-gray-200 dark:border-white/[0.07] bg-white/40 dark:bg-white/[0.02] hover:border-primary/20',
+                  ].join(' ')}
+                >
+                  <div className="text-left min-w-0">
+                    <p className={`text-sm font-bold ${inicioMembresiaEsHoy ? 'text-primary' : 'text-gray-600 dark:text-gray-300'}`}>
+                      {inicioMembresiaEsHoy ? 'Mismo día del pago' : 'Elegir fecha de inicio'}
+                    </p>
+                    <p className="text-xs text-gray-500 dark:text-[#6A6A7A] mt-0.5">
+                      {inicioMembresiaEsHoy
+                        ? watchedPaidAt
+                          ? `Inicia el ${format(new Date(watchedPaidAt + 'T12:00:00'), 'dd/MM/yyyy')}`
+                          : 'Inicia el día del pago'
+                        : 'Elegí una fecha de inicio diferente al pago'}
+                    </p>
+                  </div>
+                  <div className={[
+                    'relative shrink-0 h-6 w-11 rounded-full transition-colors duration-200',
+                    inicioMembresiaEsHoy ? 'bg-primary' : 'bg-gray-300 dark:bg-white/[0.12]',
+                  ].join(' ')}>
+                    <div className={[
+                      'absolute top-1 h-4 w-4 rounded-full bg-white shadow transition-transform duration-200',
+                      inicioMembresiaEsHoy ? 'translate-x-5' : 'translate-x-1',
+                    ].join(' ')} />
+                  </div>
+                </button>
+
+                {/* Date picker personalizado */}
+                <AnimatePresence>
+                  {!inicioMembresiaEsHoy && (
+                    <motion.div
+                      key="custom-fecha-inicio"
+                      initial={{ opacity: 0, y: -6 }}
+                      animate={{ opacity: 1, y: 0 }}
+                      exit={{ opacity: 0, y: -6 }}
+                      transition={{ duration: 0.15 }}
+                    >
+                      <input
+                        type="date"
+                        value={fechaInicioMembresia}
+                        onChange={e => setFechaInicioMembresia(e.target.value)}
+                        className={ic()}
+                      />
+                    </motion.div>
+                  )}
+                </AnimatePresence>
+
+                {/* Preview del rango de membresía */}
+                {fechaVencimientoEstimada && fechaInicioEfectiva && !overlapsWithActiva && (
+                  <div className={[
+                    'flex items-center gap-2 px-3 py-2 rounded-xl border text-xs',
+                    fechaInicioEfectiva > today
+                      ? 'bg-blue-500/[0.05] border-blue-500/20 text-blue-600 dark:text-blue-400'
+                      : 'bg-gray-50 dark:bg-white/[0.02] border-gray-100 dark:border-white/[0.05] text-gray-500 dark:text-[#8A8A9A]',
+                  ].join(' ')}>
+                    <Calendar size={11} className="shrink-0" />
+                    <span>
+                      Del{' '}
+                      <strong>{format(new Date(fechaInicioEfectiva + 'T12:00:00'), 'dd/MM/yyyy')}</strong>
+                      {' '}al{' '}
+                      <strong>{format(new Date(fechaVencimientoEstimada + 'T12:00:00'), 'dd/MM/yyyy')}</strong>
+                      {fechaInicioEfectiva > today && (
+                        <span className="ml-1.5 font-bold"> · Quedará programada</span>
+                      )}
+                    </span>
+                  </div>
+                )}
+
+                {/* Warning de solapamiento */}
+                <AnimatePresence>
+                  {overlapsWithActiva && membresiaActivaExistente && (
+                    <motion.div
+                      key="overlap-warning"
+                      initial={{ opacity: 0, y: -4 }}
+                      animate={{ opacity: 1, y: 0 }}
+                      exit={{ opacity: 0, y: -4 }}
+                      transition={{ duration: 0.15 }}
+                      className="space-y-1.5"
+                    >
+                      <div className="flex items-start gap-2.5 px-3 py-2.5 rounded-xl bg-red-500/[0.06] border border-red-500/20">
+                        <AlertCircle size={13} className="text-red-500 shrink-0 mt-0.5" />
+                        <div className="text-xs text-red-600 dark:text-red-400 leading-snug">
+                          <p className="font-bold">
+                            La fecha se superpone con la membresía{' '}
+                            {membresiaActivaExistente.estado === 'PENDIENTE' ? 'programada' : 'activa'}.
+                          </p>
+                          <p className="mt-0.5">
+                            Vence el{' '}
+                            <strong>
+                              {format(new Date(membresiaActivaExistente.fechaVencimiento.slice(0, 10) + 'T12:00:00'), 'dd/MM/yyyy')}
+                            </strong>
+                            . Iniciá después de esa fecha para que quede programada.
+                          </p>
+                        </div>
+                      </div>
+                      {fechaSugerida && (
+                        <button
+                          type="button"
+                          onClick={() => { setInicioMembresiaEsHoy(false); setFechaInicioMembresia(fechaSugerida) }}
+                          className="w-full flex items-center justify-between gap-2 px-3 py-2 rounded-xl border border-blue-500/25 bg-blue-500/[0.04] hover:bg-blue-500/[0.09] transition-colors text-xs font-semibold text-blue-600 dark:text-blue-400"
+                        >
+                          <span>
+                            Usar el{' '}
+                            {format(new Date(fechaSugerida + 'T12:00:00'), 'dd/MM/yyyy')} como inicio
+                            <span className="ml-1.5 font-normal opacity-70">— quedará programada</span>
+                          </span>
+                          <ChevronRight size={12} className="shrink-0" />
+                        </button>
+                      )}
+                    </motion.div>
+                  )}
+                </AnimatePresence>
+              </div>
+            )}
 
             {/* Descuento proporcional — siempre visible en columna derecha */}
             {(() => {

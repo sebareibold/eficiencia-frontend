@@ -1337,6 +1337,7 @@ export default function CreateRutinaPage() {
   const [baseDecidida, setBaseDecidida] = useState(false)
   const [editingEjId,   setEditingEjId]   = useState<string | null>(null)
   const [assigningEjId, setAssigningEjId] = useState<string | null>(null)
+  const [bloqueadoInfo, setBloqueadoInfo] = useState<{ nombre: string; razon: string } | null>(null)
   const [plantillasOptions, setPlantillasOptions] = useState<PlantillaRutinaData[]>([])
   const [loadingPlantillas, setLoadingPlantillas] = useState(false)
   const [patrones, setPatrones] = useState<PatronMovimientoConfig[]>([])
@@ -1381,6 +1382,15 @@ export default function CreateRutinaPage() {
           activo: full.status !== 'inactive',
           rutinaActivaId: null,
           rutinaActivaNombre: null,
+        }
+        if (!resumen.membresiaVigente || !resumen.activo) {
+          if (!cancelled) setBloqueadoInfo({
+            nombre: `${resumen.nombre} ${resumen.apellido}`,
+            razon: !resumen.activo
+              ? 'Este cliente está inactivo. No es posible crear una rutina hasta que se reactive en el sistema.'
+              : 'Este cliente no tiene membresía activa. No es posible crear una rutina hasta que regularice su situación.',
+          })
+          return
         }
         let fetchedRutinas: Rutina[] = []
         try {
@@ -1454,6 +1464,15 @@ export default function CreateRutinaPage() {
           activo: full.status !== 'inactive',
           rutinaActivaId: null,
           rutinaActivaNombre: null,
+        }
+        if (!resumen.membresiaVigente || !resumen.activo) {
+          setBloqueadoInfo({
+            nombre: `${resumen.nombre} ${resumen.apellido}`,
+            razon: !resumen.activo
+              ? 'Este cliente está inactivo. No es posible crear una rutina hasta que se reactive en el sistema.'
+              : 'Este cliente no tiene membresía activa. No es posible crear una rutina hasta que regularice su situación.',
+          })
+          return
         }
         let rutinas: Rutina[] = []
         try {
@@ -1881,16 +1900,7 @@ export default function CreateRutinaPage() {
               )}
             </div>
 
-            {(!clienteSeleccionadoRaw.membresiaVigente || !clienteSeleccionadoRaw.activo) ? (
-              <div className="flex items-start gap-2.5 rounded-xl border border-red-500/25 bg-red-500/[0.07] px-3.5 py-3">
-                <AlertCircle size={14} className="text-red-400 shrink-0 mt-0.5" />
-                <p className="text-xs text-red-300 leading-relaxed">
-                  {!clienteSeleccionadoRaw.activo
-                    ? 'Este cliente está inactivo. No podés crear una rutina hasta que se reactive.'
-                    : 'Este cliente no tiene membresía activa. No podés crear una rutina hasta que regularice su situación.'}
-                </p>
-              </div>
-            ) : localRutinas.length > 0 ? (
+            {localRutinas.length > 0 ? (
               <div className="space-y-2">
                 {clienteSeleccionadoRaw.rutinaActivaNombre && (
                   <div className="rounded-xl border border-amber-500/20 bg-amber-500/[0.06] px-3 py-2.5">
@@ -3384,6 +3394,45 @@ export default function CreateRutinaPage() {
         :root { --line-inactive: rgba(0,0,0,0.08); }
         .dark { --line-inactive: rgba(255,255,255,0.06); }
       `}</style>
+
+      {/* Modal bloqueante — cliente inactivo o sin membresía */}
+      <AnimatePresence>
+        {bloqueadoInfo && (
+          <motion.div
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm"
+          >
+            <motion.div
+              initial={{ opacity: 0, scale: 0.95, y: 10 }}
+              animate={{ opacity: 1, scale: 1, y: 0 }}
+              exit={{ opacity: 0, scale: 0.95, y: 10 }}
+              transition={{ duration: 0.15 }}
+              className="w-full max-w-sm rounded-2xl border border-red-500/20 bg-white dark:bg-[#1A1A1A] p-6 shadow-2xl"
+            >
+              <div className="flex items-center gap-3 mb-4">
+                <div className="h-11 w-11 rounded-xl bg-red-500/10 flex items-center justify-center shrink-0">
+                  <AlertCircle size={20} className="text-red-400" />
+                </div>
+                <div>
+                  <p className="text-base font-black text-gray-900 dark:text-white leading-tight">No se puede crear la rutina</p>
+                  <p className="text-xs text-gray-400 dark:text-white/40 mt-0.5">{bloqueadoInfo.nombre}</p>
+                </div>
+              </div>
+              <p className="text-sm text-gray-600 dark:text-white/55 leading-relaxed mb-6">
+                {bloqueadoInfo.razon}
+              </p>
+              <button
+                onClick={() => setBloqueadoInfo(null)}
+                className="w-full rounded-xl bg-gray-100 dark:bg-white/[0.07] py-2.5 text-sm font-semibold text-gray-700 dark:text-white hover:bg-gray-200 dark:hover:bg-white/[0.1] transition-colors"
+              >
+                Entendido
+              </button>
+            </motion.div>
+          </motion.div>
+        )}
+      </AnimatePresence>
     </motion.div>
   )
 }

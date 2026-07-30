@@ -3096,12 +3096,18 @@ export default function ClientProfilePage() {
                 return (
                   <div className="space-y-2.5">
                     {membPageItems.map(m => {
-                      const statusCfg = MEMBRESIA_STATUS_CONFIG[m.estado] ?? MEMBRESIA_STATUS_CONFIG.CANCELADA
-                      const daysLeftM = Math.ceil((new Date(m.fechaVencimiento).getTime() - Date.now()) / 86_400_000)
+                      const statusCfg  = MEMBRESIA_STATUS_CONFIG[m.estado] ?? MEMBRESIA_STATUS_CONFIG.CANCELADA
+                      const daysLeftM  = Math.ceil((new Date(m.fechaVencimiento + 'T12:00:00').getTime() - Date.now()) / 86_400_000)
+                      const daysToStart = Math.ceil((new Date(m.fechaInicio + 'T12:00:00').getTime() - Date.now()) / 86_400_000)
                       return (
                         <div
                           key={m.id}
-                          className="flex items-center justify-between gap-3 rounded-2xl border border-gray-200 dark:border-white/[0.06] bg-white/40 dark:bg-white/[0.01] px-5 py-4"
+                          className={[
+                            'flex items-center justify-between gap-3 rounded-2xl border px-5 py-4',
+                            m.estado === 'PENDIENTE'
+                              ? 'border-blue-500/20 bg-blue-500/[0.02] dark:bg-blue-500/[0.02]'
+                              : 'border-gray-200 dark:border-white/[0.06] bg-white/40 dark:bg-white/[0.01]',
+                          ].join(' ')}
                         >
                           <div className="flex items-center gap-3 min-w-0 flex-1">
                             <span className={`inline-flex items-center gap-1.5 text-xs font-semibold px-2.5 py-1 rounded-lg shrink-0 ${statusCfg.bg} ${statusCfg.color}`}>
@@ -3119,10 +3125,19 @@ export default function ClientProfilePage() {
                                 )}
                                 {m.estado === 'PENDIENTE' && (
                                   <span className="ml-1.5 font-semibold text-blue-400">
-                                    (inicia en {Math.ceil((new Date(m.fechaInicio).getTime() - Date.now()) / 86_400_000)} días)
+                                    {daysToStart > 1
+                                      ? `(inicia en ${daysToStart} días)`
+                                      : daysToStart === 1 ? '(inicia mañana)'
+                                      : daysToStart === 0 ? '(inicia hoy)'
+                                      : '(pendiente de activación)'}
                                   </span>
                                 )}
                               </p>
+                              {m.estado === 'PENDIENTE' && (
+                                <p className="text-[11px] text-blue-500/70 dark:text-blue-400/60 mt-0.5">
+                                  Se activará automáticamente al llegar la fecha de inicio
+                                </p>
+                              )}
                             </div>
                           </div>
                           <div className="flex items-center gap-2 shrink-0">
