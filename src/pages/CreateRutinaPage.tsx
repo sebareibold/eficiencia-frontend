@@ -1194,7 +1194,6 @@ function EjWizardInlineCells({
   onAssign: () => void
 }) {
   const [draft, setDraft] = useState({
-    nombre:       ej.nombre,
     series:       ej.series?.toString()    ?? '',
     repeticiones: ej.repeticiones          ?? '',
     peso:         ej.peso                  ?? '',
@@ -1207,7 +1206,8 @@ function EjWizardInlineCells({
 
   function commit() {
     onUpdate({
-      nombre:       draft.nombre,
+      nombre:       ej.nombre,
+      catalogoId:   ej.catalogoId,
       series:       draft.series       ? Number(draft.series)  : undefined,
       repeticiones: draft.repeticiones || undefined,
       peso:         draft.peso         || undefined,
@@ -1219,24 +1219,20 @@ function EjWizardInlineCells({
 
   return (
     <>
+      {/* Nombre — solo lectura con opción de cambiar ejercicio */}
       <td className="px-2 py-1.5 min-w-[180px]">
         <div className="flex items-center gap-1.5">
-          <input
-            autoFocus
-            value={draft.nombre}
-            onChange={e => setDraft(d => ({ ...d, nombre: e.target.value }))}
-            onKeyDown={e => { if (e.key === 'Enter') commit(); if (e.key === 'Escape') onCancel() }}
-            placeholder="Nombre del ejercicio..."
-            className={`${inp} flex-1`}
-          />
+          <span className="text-xs text-gray-800 dark:text-white/80 font-medium flex-1 truncate">
+            {ej.nombre || <span className="text-gray-400 dark:text-white/30 italic">Sin nombre</span>}
+          </span>
           <button type="button" onClick={onAssign}
-            className="shrink-0 text-[10px] text-primary hover:text-primary/80 transition-colors whitespace-nowrap">
-            buscar
+            className="shrink-0 text-[10px] text-gray-400 dark:text-white/30 hover:text-primary transition-colors whitespace-nowrap">
+            cambiar
           </button>
         </div>
       </td>
       <td className="px-1.5 py-1.5 w-14">
-        <input type="number" min={1} value={draft.series}
+        <input autoFocus type="number" min={1} value={draft.series}
           onChange={e => setDraft(d => ({ ...d, series: e.target.value }))}
           onKeyDown={e => { if (e.key === 'Enter') commit(); if (e.key === 'Escape') onCancel() }}
           placeholder="4" className={`${inp} text-center`} />
@@ -2568,28 +2564,23 @@ export default function CreateRutinaPage() {
                             ) : (
                               <>
                                 {/* Nombre ejercicio */}
-                                <td className="px-4 py-2.5">
+                                <td className="px-4 py-2.5 cursor-pointer" onClick={() => setAssigningEjId(ej._id)}>
                                   {ej._esReferencia ? (
                                     <div className="flex items-center gap-1.5 flex-wrap">
                                       <span className="text-[9px] font-bold uppercase tracking-wider text-gray-500 bg-white/[0.06] px-1.5 py-0.5 rounded-md shrink-0">anterior</span>
                                       <span className="text-xs text-gray-400 truncate">{ej._referenciaData?.nombre ?? ej.nombre}</span>
-                                      <button type="button" onClick={() => setAssigningEjId(ej._id)}
-                                        className="text-[10px] text-primary hover:text-primary/80 transition-colors shrink-0 ml-auto">
-                                        asignar nuevo
-                                      </button>
                                     </div>
                                   ) : ej.nombre ? (
                                     <span className="text-sm text-gray-900 dark:text-white/90 font-medium block">{ej.nombre}</span>
                                   ) : (
-                                    <button type="button" onClick={() => setAssigningEjId(ej._id)}
-                                      className="flex items-center gap-1.5 text-xs text-gray-500 dark:text-white/40 hover:text-primary transition-colors">
+                                    <span className="flex items-center gap-1.5 text-xs text-gray-500 dark:text-white/40">
                                       <Search size={11} />
                                       Buscar ejercicio...
-                                    </button>
+                                    </span>
                                   )}
                                 </td>
                                 {/* Series */}
-                                <td className="px-3 py-2.5 text-center">
+                                <td className="px-3 py-2.5 text-center cursor-pointer" onClick={() => setEditingEjId(ej._id)}>
                                   {(() => {
                                     const v = ej._esReferencia ? ej._referenciaData?.series : ej.series
                                     return v != null
@@ -2598,7 +2589,7 @@ export default function CreateRutinaPage() {
                                   })()}
                                 </td>
                                 {/* Reps */}
-                                <td className="px-3 py-2.5 text-center">
+                                <td className="px-3 py-2.5 text-center cursor-pointer" onClick={() => setEditingEjId(ej._id)}>
                                   {(() => {
                                     const v = ej._esReferencia ? ej._referenciaData?.repeticiones : ej.repeticiones
                                     return v
@@ -2607,7 +2598,7 @@ export default function CreateRutinaPage() {
                                   })()}
                                 </td>
                                 {/* Peso */}
-                                <td className="px-3 py-2.5 text-center">
+                                <td className="px-3 py-2.5 text-center cursor-pointer" onClick={() => setEditingEjId(ej._id)}>
                                   {(() => {
                                     const v = ej._esReferencia ? ej._referenciaData?.peso : ej.peso
                                     return v
@@ -2616,7 +2607,7 @@ export default function CreateRutinaPage() {
                                   })()}
                                 </td>
                                 {/* RIR/RPE */}
-                                <td className="px-3 py-2.5 text-center">
+                                <td className="px-3 py-2.5 text-center cursor-pointer" onClick={() => setEditingEjId(ej._id)}>
                                   {(() => {
                                     const rir = ej._esReferencia ? ej._referenciaData?.rir : ej.rir
                                     const rpe = ej.rpe
@@ -2630,7 +2621,7 @@ export default function CreateRutinaPage() {
                                   })()}
                                 </td>
                                 {/* Nota */}
-                                <td className="px-3 py-2.5">
+                                <td className="px-3 py-2.5 cursor-pointer" onClick={() => setEditingEjId(ej._id)}>
                                   {ej.notas
                                     ? <span className="text-xs text-gray-400 dark:text-white/35 italic">{ej.notas}</span>
                                     : <span className="text-gray-300 dark:text-white/10 text-xs">—</span>}
@@ -2793,18 +2784,15 @@ export default function CreateRutinaPage() {
 
     const semanasSugeridas = state.semanasWizard.length > 0 ? state.semanasWizard.length : 1
 
-    const [profesores, setProfesores] = useState<Array<{ id: string; nombre: string }>>([])
+    const [profesores, setProfesores]           = useState<Array<{ id: string; nombre: string }>>([])
     const [selectedProfesorId, setSelectedProfesorId] = useState<string>(state.profesorId ?? '')
+    const [loadingProfesores, setLoadingProfesores]   = useState(true)
 
     useEffect(() => {
-      usuariosApi.getAll()
-        .then(users => {
-          const profs = users
-            .filter(u => u.rol === 'PROFESOR' && u.activo && u.profesor)
-            .map(u => ({ id: u.profesor!.id, nombre: u.nombre }))
-          setProfesores(profs)
-        })
+      usuariosApi.getProfesoresForSelect()
+        .then(users => setProfesores(users.map(u => ({ id: u.profesor.id, nombre: u.nombre }))))
         .catch(() => setProfesores([]))
+        .finally(() => setLoadingProfesores(false))
     }, [])
 
     const { register, handleSubmit, watch, formState: { errors } } = useForm<ConfigForm>({
@@ -2828,6 +2816,39 @@ export default function CreateRutinaPage() {
         profesorId: selectedProfesorId || null,
       })
       dispatch({ type: 'SET_PASO', paso: 6 })
+    }
+
+    if (loadingProfesores) {
+      return (
+        <div className="space-y-5">
+          <div className="space-y-1.5">
+            <Skeleton className="h-3 w-32 rounded-md" />
+            <Skeleton className="h-10 w-full rounded-xl" />
+          </div>
+          <div className="grid grid-cols-2 gap-4">
+            <div className="space-y-1.5">
+              <Skeleton className="h-3 w-24 rounded-md" />
+              <Skeleton className="h-10 w-full rounded-xl" />
+            </div>
+            <div className="space-y-1.5">
+              <Skeleton className="h-3 w-28 rounded-md" />
+              <Skeleton className="h-10 w-full rounded-xl" />
+            </div>
+          </div>
+          <div className="space-y-1.5">
+            <Skeleton className="h-3 w-28 rounded-md" />
+            <Skeleton className="h-10 w-full rounded-xl" />
+          </div>
+          <div className="space-y-1.5">
+            <Skeleton className="h-3 w-44 rounded-md" />
+            <Skeleton className="h-10 w-full rounded-xl" />
+          </div>
+          <div className="space-y-1.5">
+            <Skeleton className="h-3 w-36 rounded-md" />
+            <Skeleton className="h-20 w-full rounded-xl" />
+          </div>
+        </div>
+      )
     }
 
     return (
@@ -2867,7 +2888,7 @@ export default function CreateRutinaPage() {
               <option key={p.id} value={p.id}>{p.nombre}</option>
             ))}
           </select>
-          {profesores.length === 0 && (
+          {!loadingProfesores && profesores.length === 0 && (
             <p className="mt-1 text-[10px] text-gray-400 dark:text-white/30">No hay profesores registrados en el sistema</p>
           )}
         </div>

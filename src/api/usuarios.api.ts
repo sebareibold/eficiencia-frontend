@@ -96,4 +96,8 @@ export const usuariosApi = {
 
   reactivarProfesor: (usuarioId: string): Promise<AppUser> =>
     api.patch(`/usuarios/profesores/${usuarioId}/reactivar`).then(r => r.data),
+
+  /** Listado ligero de profesores activos — accesible para todos los roles (shifts.read) */
+  getProfesoresForSelect: (): Promise<{ id: string; nombre: string; profesor: { id: string } }[]> =>
+    api.get('/usuarios/profesores').then(r => Array.isArray(r.data) ? r.data : r.data?.data ?? []),
 }
