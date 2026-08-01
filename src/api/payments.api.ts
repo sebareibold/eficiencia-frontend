@@ -47,6 +47,7 @@ function mapPago(p: any): Payment {
     clientName,
     clientCuil: p.cliente?.cuil ?? null,
     clientPhone: p.cliente?.telefono ?? null,
+    clientNumeroSocio: p.cliente?.numeroSocio ?? null,
     amount: Number(p.monto),
     method: mapMetodoToFrontend(p.metodo),
     invoiced: p.facturado,

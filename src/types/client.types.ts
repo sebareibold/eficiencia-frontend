@@ -32,6 +32,7 @@ export interface Client {
   responsableNombre?: string | null
   responsableCuil?: string | null
   responsableContacto?: string | null
+  numeroSocio?: number | null
 }
 
 export interface CreateClientDto {

@@ -54,6 +54,7 @@ function mapCliente(c: any): Client {
     responsableNombre: c.responsableNombre ?? null,
     responsableCuil: c.responsableCuil ?? null,
     responsableContacto: c.responsableContacto ?? null,
+    numeroSocio: c.numeroSocio ?? null,
   }
 }
 

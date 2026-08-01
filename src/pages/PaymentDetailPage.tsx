@@ -1,11 +1,11 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useState, useCallback } from 'react'
 import { useParams, useNavigate, Link } from 'react-router-dom'
 import { motion, AnimatePresence } from 'framer-motion'
 import { pageVariants } from '../lib/motion'
 import {
   ArrowLeft, Banknote, ArrowLeftRight, CreditCard,
   CheckCircle2, Trash2, User, FileText,
-  Tag, Calendar, Hash, Edit2, XCircle, Save, Building2,
+  Tag, Calendar, Hash, Edit2, XCircle, Save, Building2, Copy, Check,
 } from 'lucide-react'
 import { paymentsApi } from '../api/payments.api'
 import { membresiasClienteApi } from '../api/membresiasCliente.api'
@@ -48,6 +48,58 @@ const METODO_LABELS: Record<string, string> = {
 
 const inputCls = 'w-full bg-white/60 dark:bg-white/[0.06] border border-gray-200 dark:border-white/[0.15] rounded-xl px-3 py-2.5 text-sm text-gray-900 dark:text-white placeholder-gray-400 focus:outline-none focus:ring-1 focus:ring-primary/60 transition-all'
 const labelCls = 'text-[10px] font-bold uppercase tracking-widest text-gray-400 dark:text-gray-500'
+
+function ClientCard({ payment, labelCls: lc }: { payment: import('../types/payment.types').Payment; labelCls: string }) {
+  const [copiedName, setCopiedName] = useState(false)
+  const [copiedId,   setCopiedId]   = useState(false)
+  const copy = (text: string, set: (v: boolean) => void) => {
+    void navigator.clipboard.writeText(text).then(() => { set(true); setTimeout(() => set(false), 1500) })
+  }
+  const numSocio = payment.clientNumeroSocio != null
+    ? `#${String(payment.clientNumeroSocio).padStart(4, '0')}`
+    : null
+  return (
+    <div className="rounded-[2rem] border border-white/50 dark:border-white/10 bg-white/30 dark:bg-black/30 backdrop-blur-3xl p-7 shadow-sm flex flex-col gap-5">
+      <p className={`${lc} flex items-center gap-1.5`}><User size={11} /> Cliente</p>
+      <div className="flex items-center gap-4">
+        <div className="h-14 w-14 rounded-2xl bg-primary/10 flex items-center justify-center shrink-0">
+          <span className="text-2xl font-black text-primary leading-none">{payment.clientName.charAt(0).toUpperCase()}</span>
+        </div>
+        <div className="flex-1 min-w-0">
+          <div className="flex items-center gap-2 flex-wrap">
+            <p className="text-xl font-black text-gray-900 dark:text-white leading-tight">{payment.clientName}</p>
+            {numSocio && (
+              <span className="text-xs font-mono font-bold text-gray-400 dark:text-white/30 bg-gray-100 dark:bg-white/[0.06] px-2 py-0.5 rounded-md tracking-wider">
+                {numSocio}
+              </span>
+            )}
+          </div>
+          <div className="flex items-center gap-2 mt-2">
+            <button type="button" onClick={() => copy(payment.clientName, setCopiedName)}
+              className="flex items-center gap-1 text-[11px] text-gray-400 dark:text-white/30 hover:text-primary transition-colors">
+              {copiedName ? <Check size={11} className="text-emerald-500" /> : <Copy size={11} />}
+              {copiedName ? 'Copiado' : 'Copiar nombre'}
+            </button>
+            {numSocio && (
+              <>
+                <span className="text-gray-200 dark:text-white/10">·</span>
+                <button type="button" onClick={() => copy(numSocio, setCopiedId)}
+                  className="flex items-center gap-1 text-[11px] text-gray-400 dark:text-white/30 hover:text-primary transition-colors">
+                  {copiedId ? <Check size={11} className="text-emerald-500" /> : <Copy size={11} />}
+                  {copiedId ? 'Copiado' : 'Copiar ID'}
+                </button>
+              </>
+            )}
+          </div>
+        </div>
+      </div>
+      <Link to={`/clients/${payment.clientId}`}
+        className="flex items-center justify-center gap-1.5 rounded-xl border border-white/50 dark:border-white/10 bg-white/40 dark:bg-white/[0.05] px-4 py-2.5 text-sm font-semibold text-gray-700 dark:text-gray-200 hover:bg-white/70 dark:hover:bg-white/10 transition-all">
+        Ver perfil →
+      </Link>
+    </div>
+  )
+}
 
 export default function PaymentDetailPage() {
   const { id } = useParams<{ id: string }>()
@@ -497,21 +549,7 @@ export default function PaymentDetailPage() {
                 )}
 
                 {/* 3 — Cliente */}
-                <div className="rounded-[2rem] border border-white/50 dark:border-white/10 bg-white/30 dark:bg-black/30 backdrop-blur-3xl p-7 shadow-sm flex flex-col gap-5">
-                  <p className={`${labelCls} flex items-center gap-1.5`}><User size={11} /> Cliente</p>
-                  <div className="flex items-center gap-4">
-                    <div className="h-14 w-14 rounded-2xl bg-primary/10 flex items-center justify-center shrink-0">
-                      <span className="text-2xl font-black text-primary leading-none">{payment.clientName.charAt(0).toUpperCase()}</span>
-                    </div>
-                    <p className="text-xl font-black text-gray-900 dark:text-white leading-tight">{payment.clientName}</p>
-                  </div>
-                  <Link
-                    to={`/clients/${payment.clientId}`}
-                    className="flex items-center justify-center gap-1.5 rounded-xl border border-white/50 dark:border-white/10 bg-white/40 dark:bg-white/[0.05] px-4 py-2.5 text-sm font-semibold text-gray-700 dark:text-gray-200 hover:bg-white/70 dark:hover:bg-white/10 transition-all"
-                  >
-                    Ver perfil →
-                  </Link>
-                </div>
+                <ClientCard payment={payment} labelCls={labelCls} />
 
                 {/* 3 — Membresía vinculada */}
                 {payment.membresia ? (

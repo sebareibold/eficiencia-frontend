@@ -805,7 +805,14 @@ export default function PaymentNewPage() {
                 <User size={14} className="text-primary" />
               </div>
               <div className="min-w-0 flex-1">
-                <p className="text-sm font-bold text-gray-900 dark:text-white truncate">{name}</p>
+                <div className="flex items-center gap-2 flex-wrap">
+                  <p className="text-sm font-bold text-gray-900 dark:text-white truncate">{name}</p>
+                  {selectedClient?.numeroSocio != null && (
+                    <span className="text-[11px] font-mono font-bold text-gray-400 dark:text-white/30 bg-gray-100 dark:bg-white/[0.06] px-1.5 py-0.5 rounded-md tracking-wider shrink-0">
+                      #{String(selectedClient.numeroSocio).padStart(4, '0')}
+                    </span>
+                  )}
+                </div>
                 {sub && <p className="text-xs text-gray-500 dark:text-[#6A6A7A] truncate">{sub}</p>}
               </div>
               <button

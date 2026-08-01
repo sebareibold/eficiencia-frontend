@@ -11,7 +11,7 @@ import {
   MessageCircle, Tag, Dumbbell, BookOpen, Plus, ChevronDown, ChevronRight, ChevronLeft,
   BarChart2, PieChart as PieIcon, LineChart as LineChartIcon,
   Receipt, AlertTriangle, MapPin, User, Trophy, Trash2, Save,
-  CalendarX2, CalendarCheck2, RefreshCw, Check, ExternalLink, UserX, UserCheck, Shield,
+  CalendarX2, CalendarCheck2, RefreshCw, Check, Copy, ExternalLink, UserX, UserCheck, Shield,
 } from 'lucide-react'
 import { format, parseISO, addDays, isValid, type Locale } from 'date-fns'
 import { es } from 'date-fns/locale'
@@ -531,6 +531,7 @@ export default function ClientProfilePage() {
   const [payments, setPayments] = useState<Payment[]>([])
   const [attendance, setAttendance] = useState<AttendanceRecord[]>([])
   const [loading, setLoading] = useState(true)
+  const [copiedSocio, setCopiedSocio] = useState(false)
   const [isEditing, setIsEditing] = useState(false)
   const [isSaving, setIsSaving] = useState(false)
   const [showDeleteModal, setShowDeleteModal] = useState(false)
@@ -1451,9 +1452,11 @@ export default function ClientProfilePage() {
               <div className="flex flex-col sm:flex-row sm:items-start justify-between gap-4">
                 {/* Izquierda: nombre, fecha, badges con título */}
                 <div className="flex-1 min-w-0">
-                  <h1 className="text-2xl md:text-3xl font-black tracking-tight text-gray-900 dark:text-white leading-none">
-                    {client.name} {client.lastName}
-                  </h1>
+                  <div className="flex items-center gap-2.5 flex-wrap">
+                    <h1 className="text-2xl md:text-3xl font-black tracking-tight text-gray-900 dark:text-white leading-none">
+                      {client.name} {client.lastName}
+                    </h1>
+                  </div>
                   <p className="text-sm text-gray-400 dark:text-[#8A8A9A] mt-1.5">
                     Miembro desde {formatDate(client.createdAt)}
                   </p>
@@ -1465,7 +1468,7 @@ export default function ClientProfilePage() {
                       {client.motivoExencion && <span className="opacity-60">· {client.motivoExencion}</span>}
                     </div>
                   )}
-                  {/* Badges con etiqueta — Actividad + Estado membresía */}
+                  {/* Badges con etiqueta — Actividad + Estado membresía + Identificador */}
                   <div className="flex items-center gap-5 mt-4">
                     <div className="flex flex-col gap-1.5 items-start">
                       <span className="text-[10px] font-bold uppercase tracking-wider text-gray-400 dark:text-[#8A8A9A]">Actividad</span>
@@ -1508,6 +1511,30 @@ export default function ClientProfilePage() {
                         )}
                       </div>
                     </div>
+                    {client.numeroSocio != null && (
+                      <>
+                        <div className="w-px h-9 bg-gray-200 dark:bg-white/[0.07] self-end mb-0.5" />
+                        <div className="flex flex-col gap-1.5 items-start">
+                          <span className="text-[10px] font-bold uppercase tracking-wider text-gray-400 dark:text-[#8A8A9A]">ID Cliente</span>
+                          <button
+                            type="button"
+                            onClick={() => {
+                              void navigator.clipboard.writeText(`#${String(client.numeroSocio).padStart(4, '0')}`).then(() => {
+                                setCopiedSocio(true)
+                                setTimeout(() => setCopiedSocio(false), 1500)
+                              })
+                            }}
+                            title="Copiar ID"
+                            className={`group relative inline-flex items-center justify-center text-sm font-mono font-bold pl-3.5 pr-6 py-1 rounded-lg tracking-[0.2em] transition-colors ${client.activityStatus === 'active' ? 'bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 hover:bg-emerald-500/20' : 'bg-red-500/10 text-red-600 dark:text-red-400 hover:bg-red-500/20'}`}
+                          >
+                            #{String(client.numeroSocio).padStart(4, '0')}
+                            <span className="absolute right-1.5 opacity-0 group-hover:opacity-100 transition-opacity">
+                              {copiedSocio ? <Check size={11} /> : <Copy size={11} />}
+                            </span>
+                          </button>
+                        </div>
+                      </>
+                    )}
                   </div>
                 </div>
                 {/* Derecha: botón Editar / Cancelar + Guardar */}
