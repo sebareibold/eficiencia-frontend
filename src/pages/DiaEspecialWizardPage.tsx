@@ -173,8 +173,9 @@ export default function DiaEspecialWizardPage() {
   const location  = useLocation()
   const { id }    = useParams<{ id: string }>()
   const addToast  = useUiStore(s => s.addToast)
-  const { isAdmin } = usePermissions()
+  const { isAdmin, can } = usePermissions()
   const isEditing = !!id
+  const canManageDia = isEditing ? can('shifts', 'update_dia_especial') : can('shifts', 'create_dia_especial')
 
   const diaExistente: DiaEspecial | undefined = (location.state as { dia?: DiaEspecial })?.dia
 
@@ -221,7 +222,7 @@ export default function DiaEspecialWizardPage() {
     }
   }, [tipo, fecha, horaDesde, horaHasta])
 
-  if (!isAdmin) return <Navigate to={ROUTES.SHIFTS} replace />
+  if (!canManageDia) return <Navigate to={ROUTES.SHIFTS} replace />
 
   function goNext() {
     if (step === 1) {

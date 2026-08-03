@@ -18,7 +18,7 @@ export type PermModule =
   | 'reposiciones'
   | 'solicitudes-turno'
 
-export type PermAction = 'read' | 'create' | 'update' | 'delete' | 'mark' | 'view_pagos' | 'view_membresias' | 'view_rutinas' | 'view_turnos' | 'view_asistencia' | 'manage_planes'
+export type PermAction = 'read' | 'create' | 'update' | 'delete' | 'mark' | 'view_pagos' | 'view_membresias' | 'view_rutinas' | 'view_turnos' | 'view_asistencia' | 'manage_planes' | 'view_summary' | 'view_dias_especiales' | 'create_dia_especial' | 'update_dia_especial' | 'delete_dia_especial'
 
 type RolePerms = Partial<Record<PermModule, Partial<Record<PermAction, boolean>>>>
 
