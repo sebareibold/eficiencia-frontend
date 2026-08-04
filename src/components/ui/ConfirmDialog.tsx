@@ -13,6 +13,7 @@ interface ConfirmDialogProps {
   isLoading?: boolean
   onConfirm: () => void
   onClose: () => void
+  children?: React.ReactNode
 }
 
 export default function ConfirmDialog({
@@ -26,6 +27,7 @@ export default function ConfirmDialog({
   isLoading,
   onConfirm,
   onClose,
+  children,
 }: ConfirmDialogProps) {
   return (
     <Modal isOpen={isOpen} onClose={isLoading ? () => {} : onClose} size="sm">
@@ -57,6 +59,8 @@ export default function ConfirmDialog({
             <p className="text-xs text-amber-600 dark:text-amber-400 leading-relaxed">{warning}</p>
           </div>
         )}
+
+        {children}
 
         <div className="flex gap-2">
           <Button variant="ghost" className="flex-1" onClick={onClose} disabled={isLoading}>

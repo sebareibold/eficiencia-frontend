@@ -539,6 +539,7 @@ export default function ClientProfilePage() {
   const [isTogglingActivity, setIsTogglingActivity] = useState(false)
   const [showInactivarDialog, setShowInactivarDialog] = useState(false)
   const [showReactivarDialog, setShowReactivarDialog] = useState(false)
+  const [cancelarMembresia, setCancelarMembresia] = useState(false)
   const [diasGracia, setDiasGracia] = useState<number | undefined>(undefined)
   const [sedes, setSedes] = useState<{ id: string; nombre: string }[]>([])
   const [eventos, setEventos] = useState<EventoDeportivo[]>([])
@@ -996,7 +997,20 @@ export default function ClientProfilePage() {
       if (newEstado === 'INACTIVO') {
         const n = inscripciones.length
         setInscripciones([])
-        addToast(`Cliente inactivado${n > 0 ? ` y dado de baja de ${n} turno${n !== 1 ? 's' : ''}` : ''}`, 'success')
+        let toastMsg = `Cliente inactivado${n > 0 ? ` y dado de baja de ${n} turno${n !== 1 ? 's' : ''}` : ''}`
+        if (cancelarMembresia) {
+          const memActiva = membresias.find(m => m.estado === 'ACTIVA')
+          if (memActiva) {
+            try {
+              const cancelada = await membresiasClienteApi.cancelar(memActiva.id)
+              setMembresias(prev => prev.map(m => m.id === memActiva.id ? cancelada : m))
+              toastMsg += ' · membresía cancelada'
+            } catch {
+              addToast('Error al cancelar la membresía activa', 'error')
+            }
+          }
+        }
+        addToast(toastMsg, 'success')
       } else {
         addToast('Cliente reactivado', 'success')
       }
@@ -1004,6 +1018,7 @@ export default function ClientProfilePage() {
       addToast('Error al actualizar estado de actividad', 'error')
     } finally {
       setIsTogglingActivity(false)
+      setCancelarMembresia(false)
     }
   }
 
@@ -4240,8 +4255,28 @@ export default function ClientProfilePage() {
         confirmLabel="Inactivar cliente"
         isLoading={isTogglingActivity}
         onConfirm={() => void ejecutarCambioActividad('INACTIVO')}
-        onClose={() => setShowInactivarDialog(false)}
-      />
+        onClose={() => { setShowInactivarDialog(false); setCancelarMembresia(false) }}
+      >
+        {membresias.some(m => m.estado === 'ACTIVA') && (() => {
+          const memActiva = membresias.find(m => m.estado === 'ACTIVA')!
+          return (
+            <label className="flex items-start gap-3 cursor-pointer rounded-xl border border-white/[0.08] bg-white/[0.03] dark:bg-black/20 px-4 py-3">
+              <input
+                type="checkbox"
+                checked={cancelarMembresia}
+                onChange={e => setCancelarMembresia(e.target.checked)}
+                className="mt-0.5 h-4 w-4 rounded accent-primary cursor-pointer shrink-0"
+              />
+              <div className="text-xs leading-relaxed">
+                <p className="font-semibold text-gray-800 dark:text-gray-200">Cancelar también la membresía activa</p>
+                <p className="text-gray-500 dark:text-gray-400 mt-0.5">
+                  {memActiva.plan.nombre} · vence {formatDate(memActiva.fechaVencimiento)}
+                </p>
+              </div>
+            </label>
+          )
+        })()}
+      </ConfirmDialog>
 
       <ConfirmDialog
         isOpen={showReactivarDialog}
