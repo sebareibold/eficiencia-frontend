@@ -672,10 +672,10 @@ export default function ClientProfilePage() {
     setLoadingMembresias(true)
     Promise.allSettled([
       clientsApi.getById(id),
-      paymentsApi.getAll({ clientId: id }),
+      can('clients', 'view_pagos') ? paymentsApi.getAll({ clientId: id }) : Promise.resolve(null),
       attendanceApi.getByClient(id),
       clientsApi.getFichaConEventos(id),
-      membresiasClienteApi.getAll(id),
+      can('clients', 'view_membresias') ? membresiasClienteApi.getAll(id) : Promise.resolve(null),
     ]).then(([clientRes, paymentsRes, attendanceRes, fichaRes, membresiasRes]) => {
       const f = fichaRes.status === 'fulfilled' ? fichaRes.value : null
       if (clientRes.status === 'fulfilled') {
@@ -702,10 +702,10 @@ export default function ClientProfilePage() {
       } else {
         addToast('Error al cargar el perfil', 'error')
       }
-      if (paymentsRes.status === 'fulfilled') setPayments(paymentsRes.value.data)
+      if (paymentsRes.status === 'fulfilled' && paymentsRes.value) setPayments(paymentsRes.value.data)
       if (attendanceRes.status === 'fulfilled') setAttendance(attendanceRes.value)
       if (f !== null) { setFicha(f); setEventos(f.eventos ?? []) }
-      if (membresiasRes.status === 'fulfilled') {
+      if (membresiasRes.status === 'fulfilled' && membresiasRes.value) {
         setMembresias([...membresiasRes.value].sort((a, b) => b.fechaInicio.localeCompare(a.fechaInicio)))
       }
     }).finally(() => { setLoading(false); setLoadingMembresias(false); if (id) loadedClientIds.add(id) })

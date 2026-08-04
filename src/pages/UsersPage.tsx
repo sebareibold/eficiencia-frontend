@@ -559,6 +559,10 @@ const MODULES_MATRIX = [
       { id: 'view_pagos',       name: 'Ver pagos en perfil del cliente' },
       { id: 'view_membresias',  name: 'Ver membresías en perfil del cliente' },
       { id: 'view_rutinas',     name: 'Gestionar rutinas del cliente' },
+      { id: 'read',   name: 'Ver rutinas',      sub: true, subGroup: 'rutinas_detail', dependsOnAction: 'view_rutinas', backendModulo: 'rutinas', subGroupLabel: 'Permisos de rutinas' },
+      { id: 'create', name: 'Crear rutinas',    sub: true, subGroup: 'rutinas_detail', dependsOnAction: 'view_rutinas', backendModulo: 'rutinas' },
+      { id: 'update', name: 'Editar rutinas',   sub: true, subGroup: 'rutinas_detail', dependsOnAction: 'view_rutinas', backendModulo: 'rutinas' },
+      { id: 'delete', name: 'Eliminar rutinas', sub: true, subGroup: 'rutinas_detail', dependsOnAction: 'view_rutinas', backendModulo: 'rutinas' },
       { id: 'view_turnos',      name: 'Ver clases del cliente' },
       { id: 'view_asistencia',  name: 'Ver asistencia del cliente' },
     ],
@@ -570,7 +574,7 @@ const MODULES_MATRIX = [
       { id: 'create',       name: 'Registrar nuevos cobros' },
       { id: 'update',       name: 'Editar o anular pagos' },
       { id: 'view_summary', name: 'Ver KPIs y resumen del período' },
-      { id: 'view_kpi_total',                 name: 'KPI: Total cobrado',            sub: true, subGroup: 'kpi_cards', dependsOnAction: 'view_summary' },
+      { id: 'view_kpi_total',                 name: 'KPI: Total cobrado',            sub: true, subGroup: 'kpi_cards', dependsOnAction: 'view_summary', subGroupLabel: 'KPIs individuales' },
       { id: 'view_kpi_efectivo',              name: 'KPI: Monto efectivo',           sub: true, subGroup: 'kpi_cards', dependsOnAction: 'view_summary' },
       { id: 'view_kpi_transferencia',         name: 'KPI: Monto transferencia',      sub: true, subGroup: 'kpi_cards', dependsOnAction: 'view_summary' },
       { id: 'view_kpi_card',                  name: 'KPI: Débito / Empresa',         sub: true, subGroup: 'kpi_cards', dependsOnAction: 'view_summary' },
@@ -635,16 +639,6 @@ const MODULES_MATRIX = [
       { id: 'create', name: 'Crear usuarios' },
       { id: 'update', name: 'Editar usuarios' },
       { id: 'delete', name: 'Eliminar usuarios' },
-    ],
-  },
-  {
-    id: 'rutinas', name: 'Rutinas',
-    dependsOn: { modulo: 'clients', accion: 'view_rutinas' },
-    actions: [
-      { id: 'read',   name: 'Ver rutinas' },
-      { id: 'create', name: 'Crear rutinas' },
-      { id: 'update', name: 'Editar rutinas' },
-      { id: 'delete', name: 'Eliminar rutinas' },
     ],
   },
   {
@@ -820,6 +814,10 @@ function PermisosTab() {
                       return mod.actions.flatMap(action => {
                         const subGroup   = 'subGroup'       in action ? (action as { subGroup: string }).subGroup             : undefined
                         const depAction  = 'dependsOnAction' in action ? (action as { dependsOnAction: string }).dependsOnAction : undefined
+                        const backendMod = 'backendModulo'   in action ? (action as { backendModulo: string }).backendModulo     : undefined
+                        const effMod     = backendMod ?? mod.id
+                        const sgLabel    = 'subGroupLabel'   in action ? (action as { subGroupLabel: string }).subGroupLabel     : undefined
+                        const depActionObj = depAction ? mod.actions.find(a => a.id === depAction) : undefined
                         const isFirstSG  = !!subGroup && !seenSubGroups.has(subGroup)
                         if (subGroup) seenSubGroups.add(subGroup)
                         const isExpanded = subGroup ? expandedSubGroups.has(subGroup) : true
@@ -835,7 +833,7 @@ function PermisosTab() {
                                   className="flex items-center gap-1.5 text-[11px] font-semibold text-gray-400 dark:text-gray-500 hover:text-gray-700 dark:hover:text-gray-300 transition-colors"
                                 >
                                   {isExpanded ? <ChevronDown size={11} /> : <ChevronRight size={11} />}
-                                  {isExpanded ? 'Ocultar' : 'Ver'} KPIs individuales ({sgCount})
+                                  {isExpanded ? 'Ocultar' : 'Ver'} {sgLabel ?? subGroup} ({sgCount})
                                 </button>
                               </td>
                             </tr>
@@ -845,13 +843,13 @@ function PermisosTab() {
                         if (!isExpanded && subGroup) return rows
 
                         rows.push(
-                          <tr key={`${mod.id}-${action.id}`} className="hover:bg-gray-50/50 dark:hover:bg-white/[0.02] transition-colors">
+                          <tr key={`${effMod}-${action.id}`} className="hover:bg-gray-50/50 dark:hover:bg-white/[0.02] transition-colors">
                             <td className={`px-6 py-3.5 text-sm font-medium text-gray-600 dark:text-gray-300 ${'sub' in action && (action as { sub?: boolean }).sub ? 'pl-16' : 'pl-10'}`}>
                               {'sub' in action && (action as { sub?: boolean }).sub && <span className="mr-1.5 text-xs text-gray-400 dark:text-gray-600">↳</span>}
                               {action.name}
                             </td>
                             {ROLES_MATRIX.map(role => {
-                              const key         = `${role.id}__${mod.id}__${action.id}`
+                              const key         = `${role.id}__${effMod}__${action.id}`
                               const permiso     = localMap[key]
                               const checked     = permiso?.permitido ?? false
                               const isAdmin     = role.id === 'ADMINISTRADOR'
@@ -868,8 +866,8 @@ function PermisosTab() {
                                   key={role.id}
                                   className={`px-6 py-3.5 text-center transition-opacity ${isLocked || isDepLocked ? 'opacity-30' : ''}`}
                                   title={
-                                    isLocked    ? 'Activá "Gestionar rutinas del cliente" en Gestión de Clientes para editar este permiso'
-                                  : isDepLocked ? 'Activá "Ver KPIs y resumen del período" para habilitar este permiso'
+                                    isLocked    ? `Activá el permiso requerido del módulo padre para editar este permiso`
+                                  : isDepLocked ? `Activá "${depActionObj?.name ?? depAction}" para habilitar este permiso`
                                   : undefined
                                   }
                                 >
@@ -877,7 +875,7 @@ function PermisosTab() {
                                     <button
                                       type="button"
                                       disabled={isDisabled}
-                                      onClick={() => toggle(role.id, mod.id, action.id)}
+                                      onClick={() => toggle(role.id, effMod, action.id)}
                                       className={`relative inline-flex h-5 w-9 shrink-0 items-center rounded-full transition-all duration-200 ${
                                         checked ? 'bg-primary shadow-[0_0_8px_rgb(var(--color-primary)/0.4)]' : 'bg-gray-200 dark:bg-gray-700/50'
                                       } ${isDisabled ? 'cursor-not-allowed opacity-70' : 'cursor-pointer hover:scale-105'}`}
