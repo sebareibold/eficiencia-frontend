@@ -20,13 +20,15 @@ import { ejerciciosApi } from '../api/ejercicios.api'
 import { patronesApi, type PatronMovimientoConfig } from '../api/patrones.api'
 import { clientsApi } from '../api/clients.api'
 import { useAuthStore } from '../store/authStore'
+import { usePermissions } from '../hooks/usePermissions'
 import { useRutinas } from '../hooks/useRutinas'
 import { useRutinaDraft, type DraftBloque, type DraftEjercicio, type DraftSesion, type DraftSemana, type UpdateEjData } from '../hooks/useRutinaDraft'
-import type { Rutina, EjercicioPlan, EjecucionCliente, PatronMovimientoEnum, FichaEntrenamiento } from '../types/rutina.types'
+import type { Rutina, EjercicioPlan, EjecucionCliente, PatronMovimientoEnum, FichaEntrenamiento, CreateEjecucionPayload } from '../types/rutina.types'
 import type { EjercicioCatalogo } from '../types/ejercicio-catalogo.types'
 import { ROUTES } from '../constants/routes'
 import { useUiStore } from '../store/uiStore'
 import Skeleton, { SkeletonRutinaPanel } from '../components/ui/Skeleton'
+import Modal from '../components/ui/Modal'
 import ConfirmDialog from '../components/ui/ConfirmDialog'
 import { useWhatsappTemplates } from '../hooks/useWhatsappTemplates'
 import { resolveWhatsappTemplate } from '../utils/whatsappTemplate'
@@ -1929,6 +1931,13 @@ export default function ClientRutinaPage() {
   const [execOffset, setExecOffset] = useState(0)
   const [showInfo, setShowInfo] = useState(false)
 
+  // ── Gestión de ejecuciones (editar / eliminar) ─────────────────────────────
+  const [editingExec, setEditingExec] = useState<EjecucionCliente | null>(null)
+  const [editExecForm, setEditExecForm] = useState<CreateEjecucionPayload>({})
+  const [editExecLoading, setEditExecLoading] = useState(false)
+  const [deletingExecId, setDeletingExecId] = useState<string | null>(null)
+  const [isDeletingExec, setIsDeletingExec] = useState(false)
+
   const [clienteInfo, setClienteInfo] = useState<{ name: string; phone?: string } | null>(null)
 
   useEffect(() => {
@@ -1936,6 +1945,45 @@ export default function ClientRutinaPage() {
     clientsApi.getFichaConEventos(clienteId).then(setFicha).catch(() => {})
     clientsApi.getById(clienteId).then(c => setClienteInfo({ name: c.name, phone: c.phone ?? undefined })).catch(() => {})
   }, [clienteId])
+
+  const { can } = usePermissions()
+  const canEditExec = can('rutinas', 'update')
+  const { addToast } = useUiStore()
+
+  const handleOpenEditExec = (exec: EjecucionCliente) => {
+    setEditingExec(exec)
+    setEditExecForm({ series: exec.series ?? undefined, repeticiones: exec.repeticiones ?? undefined, peso: exec.peso ?? undefined, rir: exec.rir ?? undefined, rpe: exec.rpe ?? undefined })
+  }
+
+  const handleSaveEditExec = async () => {
+    if (!editingExec) return
+    setEditExecLoading(true)
+    try {
+      await rutinasApi.updateEjecucion(editingExec.id, editExecForm)
+      setEditingExec(null)
+      refetch()
+      addToast({ type: 'success', message: 'Ejecución actualizada' })
+    } catch {
+      addToast({ type: 'error', message: 'Error al actualizar la ejecución' })
+    } finally {
+      setEditExecLoading(false)
+    }
+  }
+
+  const handleDeleteExec = async () => {
+    if (!deletingExecId) return
+    setIsDeletingExec(true)
+    try {
+      await rutinasApi.deleteEjecucion(deletingExecId)
+      setDeletingExecId(null)
+      refetch()
+      addToast({ type: 'success', message: 'Ejecución eliminada' })
+    } catch {
+      addToast({ type: 'error', message: 'Error al eliminar la ejecución' })
+    } finally {
+      setIsDeletingExec(false)
+    }
+  }
 
   const canEdit = user?.role === 'admin' || user?.role === 'profesor'
 
@@ -2149,8 +2197,6 @@ export default function ClientRutinaPage() {
   const handleEditCancel = () => {
     setEditMode(false)
   }
-
-  const { addToast } = useUiStore()
 
   const handleDeleteRutina = async () => {
     if (!deleteRutinaTarget) return
@@ -2481,6 +2527,8 @@ export default function ClientRutinaPage() {
                     const termAbrevView = termView.slice(0, 3).toUpperCase()
 
                     const execSubCols = 5
+                    // Columna extra de acciones (editar/eliminar) solo si el usuario tiene permiso
+                    const execActionsColSpan = canEditExec ? 1 : 0
 
                     const sesRS = (ses: Ses) =>
                       ses.bloques.length === 0 ? 1
@@ -2639,7 +2687,7 @@ export default function ClientRutinaPage() {
                     // VISTA: Todas las semanas (Plan | Última navegable)
                     // ════════════════════════════════════════════════════
                     if (isTodas) {
-                      const totalCols = 4 + execSubCols + execSubCols
+                      const totalCols = 4 + execSubCols + execSubCols + execActionsColSpan
                       const allEjsTodas = rutina.semanas.flatMap(s => s.sesiones.flatMap(ses => ses.bloques.flatMap(b => b.ejerciciosPlan)))
                       const maxOffsetTodas = allEjsTodas.reduce((mx, ej) => Math.max(mx, (ej.ejecuciones?.length ?? 0) - 1), 0)
                       const dateAtOffsetTodas = allEjsTodas.reduce<string | null>((f, ej) => f ?? (ej.ejecuciones[execOffset]?.fecha ?? null), null)
@@ -2657,7 +2705,7 @@ export default function ClientRutinaPage() {
                                   <th rowSpan={2} className="py-2 px-2 text-center text-xs font-semibold text-gray-600 dark:text-white/65 uppercase tracking-widest whitespace-nowrap border-r border-gray-200 dark:border-white/[0.06]">Bloq</th>
                                   <th rowSpan={2} className="py-2 px-3 text-left text-xs font-semibold text-gray-600 dark:text-white/65 uppercase tracking-widest whitespace-nowrap border-r border-gray-200 dark:border-white/[0.06]">Ejercicio</th>
                                   <th colSpan={execSubCols} className="py-1.5 px-2 text-center text-xs font-semibold text-gray-600 dark:text-white/60 uppercase tracking-widest border-b border-gray-200 dark:border-white/[0.06] border-r border-gray-200 dark:border-white/[0.06]">Plan prescrito</th>
-                                  <th colSpan={execSubCols} className="py-1 px-2 text-center text-xs font-semibold text-gray-400 dark:text-white/40 uppercase tracking-widest border-b border-gray-200 dark:border-white/[0.06]">
+                                  <th colSpan={execSubCols + execActionsColSpan} className="py-1 px-2 text-center text-xs font-semibold text-gray-400 dark:text-white/40 uppercase tracking-widest border-b border-gray-200 dark:border-white/[0.06]">
                                     <div className="flex items-center justify-center gap-1">
                                       <button onClick={() => setExecOffset(o => o + 1)} disabled={execOffset >= maxOffsetTodas} className="p-0.5 rounded hover:bg-black/5 dark:hover:bg-white/10 disabled:opacity-25 disabled:cursor-not-allowed transition-opacity"><ChevronLeft className="w-3.5 h-3.5" /></button>
                                       <span className="whitespace-nowrap normal-case tracking-normal font-semibold text-xs">
@@ -2671,6 +2719,7 @@ export default function ClientRutinaPage() {
                                 <tr className="border-b border-gray-200 dark:border-white/[0.08] bg-gray-50 dark:bg-[#111111]">
                                   {['Ser', 'Reps', 'Peso', 'RIR', 'RPE'].map(h => <th key={`p-${h}`} className={`${thBase} ${h === 'RPE' ? 'border-r border-saas-border dark:border-white/[0.06]' : ''}`}>{h}</th>)}
                                   {['Ser', 'Reps', 'Peso', 'RIR', 'RPE'].map(h => <th key={`u-${h}`} className={thBase}>{h}</th>)}
+                                  {canEditExec && <th className={thBase}></th>}
                                 </tr>
                               </thead>
                               <tbody>
@@ -2713,6 +2762,22 @@ export default function ClientRutinaPage() {
                                             {renderEjCell(ej)}
                                             {renderPlanCells(ej)}
                                             {exec ? renderExecCells(exec, delta) : renderEmptyCols(execSubCols)}
+                                            {canEditExec && (
+                                              <td className="px-1 py-2.5 text-center w-12">
+                                                {exec && (
+                                                  <div className="flex items-center justify-center gap-0.5">
+                                                    <button onClick={() => handleOpenEditExec(exec)} title="Editar ejecución"
+                                                      className="p-1 rounded-lg text-gray-300 dark:text-white/20 hover:text-primary hover:bg-primary/10 transition-colors">
+                                                      <Pencil size={11} />
+                                                    </button>
+                                                    <button onClick={() => setDeletingExecId(exec.id)} title="Eliminar ejecución"
+                                                      className="p-1 rounded-lg text-gray-300 dark:text-white/20 hover:text-red-500 hover:bg-red-500/10 transition-colors">
+                                                      <Trash2 size={11} />
+                                                    </button>
+                                                  </div>
+                                                )}
+                                              </td>
+                                            )}
                                           </tr>
                                         )
                                       })
@@ -2736,7 +2801,7 @@ export default function ClientRutinaPage() {
                     const allEjs = selectedSem.sesiones.flatMap(ss => ss.bloques.flatMap(b => b.ejerciciosPlan))
                     const maxOffset = allEjs.reduce((mx, ej) => Math.max(mx, (ej.ejecuciones?.length ?? 0) - 1), 0)
                     const dateAtOffset = allEjs.reduce<string | null>((f, ej) => f ?? (ej.ejecuciones[execOffset]?.fecha ?? null), null)
-                    const totalColsInd = 3 + execSubCols + execSubCols
+                    const totalColsInd = 3 + execSubCols + execSubCols + execActionsColSpan
 
                     return (
                       <>
@@ -2754,7 +2819,7 @@ export default function ClientRutinaPage() {
                                 <th rowSpan={2} className="py-2 px-2 text-center text-xs font-semibold text-gray-600 dark:text-white/65 uppercase tracking-widest whitespace-nowrap border-r border-gray-200 dark:border-white/[0.06]">Bloq</th>
                                 <th rowSpan={2} className="py-2 px-3 text-left text-xs font-semibold text-gray-600 dark:text-white/65 uppercase tracking-widest whitespace-nowrap border-r border-gray-200 dark:border-white/[0.06]">Ejercicio</th>
                                 <th colSpan={execSubCols} className="py-1.5 px-2 text-center text-xs font-semibold text-gray-600 dark:text-white/60 uppercase tracking-widest border-b border-gray-200 dark:border-white/[0.06] border-r border-gray-200 dark:border-white/[0.06]">Plan prescrito</th>
-                                <th colSpan={execSubCols} className="py-1 px-2 text-center text-xs font-semibold text-gray-400 dark:text-white/40 uppercase tracking-widest border-b border-gray-200 dark:border-white/[0.06]">
+                                <th colSpan={execSubCols + execActionsColSpan} className="py-1 px-2 text-center text-xs font-semibold text-gray-400 dark:text-white/40 uppercase tracking-widest border-b border-gray-200 dark:border-white/[0.06]">
                                   <div className="flex items-center justify-center gap-1">
                                     <button onClick={() => setExecOffset(o => o + 1)} disabled={execOffset >= maxOffset} className="p-0.5 rounded hover:bg-black/5 dark:hover:bg-white/10 disabled:opacity-25 disabled:cursor-not-allowed transition-opacity"><ChevronLeft className="w-3.5 h-3.5" /></button>
                                     <span className="whitespace-nowrap normal-case tracking-normal font-semibold text-xs">
@@ -2768,6 +2833,7 @@ export default function ClientRutinaPage() {
                               <tr className="border-b border-gray-200 dark:border-white/[0.08] bg-gray-50 dark:bg-[#111111]">
                                 {['Ser', 'Reps', 'Peso', 'RIR', 'RPE'].map(h => <th key={`p-${h}`} className={`${thBase} ${h === 'RPE' ? 'border-r border-saas-border dark:border-white/[0.06]' : ''}`}>{h}</th>)}
                                 {['Ser', 'Reps', 'Peso', 'RIR', 'RPE'].map(h => <th key={`u-${h}`} className={thBase}>{h}</th>)}
+                                {canEditExec && <th className={thBase}></th>}
                               </tr>
                             </thead>
                             <tbody>
@@ -2800,6 +2866,22 @@ export default function ClientRutinaPage() {
                                         {renderEjCell(ej)}
                                         {renderPlanCells(ej)}
                                         {exec ? renderExecCells(exec, delta) : renderEmptyCols(execSubCols)}
+                                        {canEditExec && (
+                                          <td className="px-1 py-2.5 text-center w-12">
+                                            {exec && (
+                                              <div className="flex items-center justify-center gap-0.5">
+                                                <button onClick={() => handleOpenEditExec(exec)} title="Editar ejecución"
+                                                  className="p-1 rounded-lg text-gray-300 dark:text-white/20 hover:text-primary hover:bg-primary/10 transition-colors">
+                                                  <Pencil size={11} />
+                                                </button>
+                                                <button onClick={() => setDeletingExecId(exec.id)} title="Eliminar ejecución"
+                                                  className="p-1 rounded-lg text-gray-300 dark:text-white/20 hover:text-red-500 hover:bg-red-500/10 transition-colors">
+                                                  <Trash2 size={11} />
+                                                </button>
+                                              </div>
+                                            )}
+                                          </td>
+                                        )}
                                       </tr>
                                     )
                                   })
@@ -2881,6 +2963,68 @@ export default function ClientRutinaPage() {
         isLoading={isDeletingRutina}
         onConfirm={handleDeleteRutina}
         onClose={() => setDeleteRutinaTarget(null)}
+      />
+
+      {/* ── Modal editar ejecución ───────────────────────────────────────── */}
+      <Modal isOpen={editingExec !== null} onClose={editExecLoading ? () => {} : () => setEditingExec(null)} size="sm">
+        <div className="space-y-4">
+          <p className="text-base font-bold text-gray-900 dark:text-white">Editar ejecución</p>
+          {editingExec && (
+            <p className="text-xs text-gray-400 dark:text-white/40">
+              Registrada el {format(parseISO(editingExec.fecha), "dd/MM/yyyy 'a las' HH:mm", { locale: es })}
+            </p>
+          )}
+          <div className="grid grid-cols-2 gap-3">
+            {([
+              { key: 'series',       label: 'Series',      type: 'number', min: 1  },
+              { key: 'repeticiones', label: 'Repeticiones', type: 'text'           },
+              { key: 'peso',         label: 'Peso (kg)',    type: 'text'           },
+              { key: 'rir',          label: 'RIR',          type: 'number', min: 0 },
+              { key: 'rpe',          label: 'RPE',          type: 'number', min: 1 },
+            ] as const).map(({ key, label, type, min }) => (
+              <label key={key} className="flex flex-col gap-1">
+                <span className="text-xs text-gray-500 dark:text-white/45 font-medium">{label}</span>
+                <input
+                  type={type}
+                  min={min}
+                  value={editExecForm[key] ?? ''}
+                  onChange={e => setEditExecForm(prev => ({
+                    ...prev,
+                    [key]: e.target.value === '' ? undefined : (type === 'number' ? Number(e.target.value) : e.target.value),
+                  } as CreateEjecucionPayload))}
+                  className="px-3 py-2 rounded-xl border border-saas-border dark:border-white/[0.10] bg-white dark:bg-white/[0.04] text-sm text-gray-800 dark:text-white focus:outline-none focus:border-primary/50 focus:ring-1 focus:ring-primary/20"
+                />
+              </label>
+            ))}
+          </div>
+          <div className="flex gap-2 pt-1">
+            <button
+              onClick={() => setEditingExec(null)}
+              disabled={editExecLoading}
+              className="flex-1 py-2 rounded-xl text-sm font-medium text-gray-600 dark:text-white/50 border border-saas-border dark:border-white/[0.08] hover:bg-gray-50 dark:hover:bg-white/[0.04] disabled:opacity-50 transition-colors"
+            >
+              Cancelar
+            </button>
+            <button
+              onClick={handleSaveEditExec}
+              disabled={editExecLoading}
+              className="flex-1 py-2 rounded-xl text-sm font-semibold bg-primary text-black hover:bg-primary-dark disabled:opacity-50 transition-colors"
+            >
+              {editExecLoading ? 'Guardando...' : 'Guardar'}
+            </button>
+          </div>
+        </div>
+      </Modal>
+
+      {/* ── Confirm eliminar ejecución ───────────────────────────────────── */}
+      <ConfirmDialog
+        isOpen={deletingExecId !== null}
+        title="Eliminar ejecución"
+        message="Se eliminará este registro de ejecución. Esta acción no se puede deshacer."
+        confirmLabel="Eliminar"
+        isLoading={isDeletingExec}
+        onConfirm={handleDeleteExec}
+        onClose={() => { if (!isDeletingExec) setDeletingExecId(null) }}
       />
     </div>
   )

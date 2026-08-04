@@ -104,6 +104,15 @@ export const rutinasApi = {
     return r.data
   },
 
+  updateEjecucion: async (ejecucionId: string, payload: CreateEjecucionPayload): Promise<EjecucionCliente> => {
+    const r = await api.patch(`/rutinas/ejecuciones/${ejecucionId}`, payload)
+    return r.data
+  },
+
+  deleteEjecucion: async (ejecucionId: string): Promise<void> => {
+    await api.delete(`/rutinas/ejecuciones/${ejecucionId}`)
+  },
+
   // ─── Crear rutina completa (wizard) ────────────────────────────────────────
   crearCompleta: async (payload: CrearCompletaPayload): Promise<Rutina> => {
     const r = await api.post('/rutinas/crear-completa', payload)
