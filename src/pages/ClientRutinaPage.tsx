@@ -9,7 +9,7 @@ import { z } from 'zod'
 import {
   ArrowLeft, Plus, Copy, Trash2, Pencil, Check, X,
   BookOpen, Dumbbell, ExternalLink, ChevronDown, User2, Search,
-  Save, AlertTriangle, ChevronLeft, ChevronRight, GripVertical, Trophy, CalendarDays, Download, Info,
+  Save, AlertTriangle, ChevronLeft, ChevronRight, GripVertical, Trophy, CalendarDays, Download, Info, Clock,
 } from 'lucide-react'
 import ExcelJS from 'exceljs'
 import { format, parseISO, differenceInDays } from 'date-fns'
@@ -1932,6 +1932,7 @@ export default function ClientRutinaPage() {
   const [showInfo, setShowInfo] = useState(false)
 
   // ── Gestión de ejecuciones (editar / eliminar) ─────────────────────────────
+  const [histExercise, setHistExercise] = useState<{ ej: EjercicioPlan; nombre: string } | null>(null)
   const [editingExec, setEditingExec] = useState<EjecucionCliente | null>(null)
   const [editExecForm, setEditExecForm] = useState<CreateEjecucionPayload>({})
   const [editExecLoading, setEditExecLoading] = useState(false)
@@ -2528,7 +2529,7 @@ export default function ClientRutinaPage() {
 
                     const execSubCols = 5
                     // Columna extra de acciones (editar/eliminar) solo si el usuario tiene permiso
-                    const execActionsColSpan = canEditExec ? 1 : 0
+                    const execActionsColSpan = 0
 
                     const sesRS = (ses: Ses) =>
                       ses.bloques.length === 0 ? 1
@@ -2552,6 +2553,15 @@ export default function ClientRutinaPage() {
                               title="Ver video" onClick={e => e.stopPropagation()}>
                               <ExternalLink className="w-3 h-3" />
                             </a>
+                          )}
+                          {canEditExec && ej.ejecuciones.length > 0 && (
+                            <button
+                              onClick={() => setHistExercise({ ej, nombre: ej.nombre })}
+                              title={`Historial (${ej.ejecuciones.length})`}
+                              className="shrink-0 p-0.5 rounded text-gray-300 dark:text-white/25 hover:text-primary hover:bg-primary/10 transition-colors"
+                            >
+                              <Clock className="w-3 h-3" />
+                            </button>
                           )}
                         </div>
                         {ej.catalogo?.patronMovimiento && (
@@ -2719,7 +2729,6 @@ export default function ClientRutinaPage() {
                                 <tr className="border-b border-gray-200 dark:border-white/[0.08] bg-gray-50 dark:bg-[#111111]">
                                   {['Ser', 'Reps', 'Peso', 'RIR', 'RPE'].map(h => <th key={`p-${h}`} className={`${thBase} ${h === 'RPE' ? 'border-r border-saas-border dark:border-white/[0.06]' : ''}`}>{h}</th>)}
                                   {['Ser', 'Reps', 'Peso', 'RIR', 'RPE'].map(h => <th key={`u-${h}`} className={thBase}>{h}</th>)}
-                                  {canEditExec && <th className={thBase}></th>}
                                 </tr>
                               </thead>
                               <tbody>
@@ -2762,22 +2771,6 @@ export default function ClientRutinaPage() {
                                             {renderEjCell(ej)}
                                             {renderPlanCells(ej)}
                                             {exec ? renderExecCells(exec, delta) : renderEmptyCols(execSubCols)}
-                                            {canEditExec && (
-                                              <td className="px-1 py-2.5 text-center w-12">
-                                                {exec && (
-                                                  <div className="flex items-center justify-center gap-0.5">
-                                                    <button onClick={() => handleOpenEditExec(exec)} title="Editar ejecución"
-                                                      className="p-1 rounded-lg text-gray-300 dark:text-white/20 hover:text-primary hover:bg-primary/10 transition-colors">
-                                                      <Pencil size={11} />
-                                                    </button>
-                                                    <button onClick={() => setDeletingExecId(exec.id)} title="Eliminar ejecución"
-                                                      className="p-1 rounded-lg text-gray-300 dark:text-white/20 hover:text-red-500 hover:bg-red-500/10 transition-colors">
-                                                      <Trash2 size={11} />
-                                                    </button>
-                                                  </div>
-                                                )}
-                                              </td>
-                                            )}
                                           </tr>
                                         )
                                       })
@@ -2833,7 +2826,6 @@ export default function ClientRutinaPage() {
                               <tr className="border-b border-gray-200 dark:border-white/[0.08] bg-gray-50 dark:bg-[#111111]">
                                 {['Ser', 'Reps', 'Peso', 'RIR', 'RPE'].map(h => <th key={`p-${h}`} className={`${thBase} ${h === 'RPE' ? 'border-r border-saas-border dark:border-white/[0.06]' : ''}`}>{h}</th>)}
                                 {['Ser', 'Reps', 'Peso', 'RIR', 'RPE'].map(h => <th key={`u-${h}`} className={thBase}>{h}</th>)}
-                                {canEditExec && <th className={thBase}></th>}
                               </tr>
                             </thead>
                             <tbody>
@@ -2866,22 +2858,6 @@ export default function ClientRutinaPage() {
                                         {renderEjCell(ej)}
                                         {renderPlanCells(ej)}
                                         {exec ? renderExecCells(exec, delta) : renderEmptyCols(execSubCols)}
-                                        {canEditExec && (
-                                          <td className="px-1 py-2.5 text-center w-12">
-                                            {exec && (
-                                              <div className="flex items-center justify-center gap-0.5">
-                                                <button onClick={() => handleOpenEditExec(exec)} title="Editar ejecución"
-                                                  className="p-1 rounded-lg text-gray-300 dark:text-white/20 hover:text-primary hover:bg-primary/10 transition-colors">
-                                                  <Pencil size={11} />
-                                                </button>
-                                                <button onClick={() => setDeletingExecId(exec.id)} title="Eliminar ejecución"
-                                                  className="p-1 rounded-lg text-gray-300 dark:text-white/20 hover:text-red-500 hover:bg-red-500/10 transition-colors">
-                                                  <Trash2 size={11} />
-                                                </button>
-                                              </div>
-                                            )}
-                                          </td>
-                                        )}
                                       </tr>
                                     )
                                   })
@@ -2964,6 +2940,57 @@ export default function ClientRutinaPage() {
         onConfirm={handleDeleteRutina}
         onClose={() => setDeleteRutinaTarget(null)}
       />
+
+      {/* ── Modal historial de ejecuciones ──────────────────────────────── */}
+      <Modal isOpen={histExercise !== null} onClose={() => setHistExercise(null)} size="md">
+        <div className="space-y-4">
+          <div>
+            <p className="text-base font-bold text-gray-900 dark:text-white">{histExercise?.nombre}</p>
+            <p className="text-xs text-gray-400 dark:text-white/40">Historial de ejecuciones — todas las sesiones</p>
+          </div>
+          {!histExercise || histExercise.ej.ejecuciones.length === 0 ? (
+            <p className="text-sm text-center text-gray-400 dark:text-white/40 py-6">Sin ejecuciones registradas</p>
+          ) : (
+            <div className="space-y-2 max-h-[60vh] overflow-y-auto pr-1">
+              {histExercise.ej.ejecuciones.map((exec, i) => (
+                <div key={exec.id} className="flex items-center gap-3 p-3 rounded-xl border border-saas-border dark:border-white/[0.08] bg-gray-50/50 dark:bg-white/[0.02]">
+                  <div className="flex-1 min-w-0">
+                    <p className="text-[11px] text-gray-400 dark:text-white/35 mb-1.5">
+                      {i === 0 && <span className="text-primary font-semibold mr-1.5">Última</span>}
+                      {format(parseISO(exec.fecha), "dd/MM/yyyy 'a las' HH:mm", { locale: es })}
+                    </p>
+                    <div className="flex flex-wrap gap-x-3 gap-y-0.5">
+                      {exec.series     != null && <span className="text-xs tabular-nums text-gray-700 dark:text-white/70"><span className="text-gray-400 dark:text-white/30">Series </span>{exec.series}</span>}
+                      {exec.repeticiones != null && <span className="text-xs tabular-nums text-gray-700 dark:text-white/70"><span className="text-gray-400 dark:text-white/30">Reps </span>{exec.repeticiones}</span>}
+                      {exec.peso       != null && <span className="text-xs tabular-nums font-semibold text-primary"><span className="text-gray-400 dark:text-white/30 font-normal">Peso </span>{exec.peso} kg</span>}
+                      {exec.rir        != null && <span className="text-xs tabular-nums text-gray-500 dark:text-white/45"><span className="text-gray-400 dark:text-white/30">RIR </span>{exec.rir}</span>}
+                      {exec.rpe        != null && <span className="text-xs tabular-nums text-gray-500 dark:text-white/45"><span className="text-gray-400 dark:text-white/30">RPE </span>{exec.rpe}</span>}
+                    </div>
+                  </div>
+                  {canEditExec && (
+                    <div className="flex items-center gap-1 shrink-0">
+                      <button
+                        onClick={() => { setHistExercise(null); handleOpenEditExec(exec) }}
+                        title="Editar"
+                        className="p-1.5 rounded-lg text-gray-400 dark:text-white/30 hover:text-primary hover:bg-primary/10 transition-colors"
+                      >
+                        <Pencil size={13} />
+                      </button>
+                      <button
+                        onClick={() => { setHistExercise(null); setDeletingExecId(exec.id) }}
+                        title="Eliminar"
+                        className="p-1.5 rounded-lg text-gray-400 dark:text-white/30 hover:text-red-500 hover:bg-red-500/10 transition-colors"
+                      >
+                        <Trash2 size={13} />
+                      </button>
+                    </div>
+                  )}
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
+      </Modal>
 
       {/* ── Modal editar ejecución ───────────────────────────────────────── */}
       <Modal isOpen={editingExec !== null} onClose={editExecLoading ? () => {} : () => setEditingExec(null)} size="sm">
