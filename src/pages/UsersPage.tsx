@@ -570,6 +570,17 @@ const MODULES_MATRIX = [
       { id: 'create',       name: 'Registrar nuevos cobros' },
       { id: 'update',       name: 'Editar o anular pagos' },
       { id: 'view_summary', name: 'Ver KPIs y resumen del período' },
+      { id: 'view_kpi_total',                 name: 'KPI: Total cobrado',            sub: true },
+      { id: 'view_kpi_efectivo',              name: 'KPI: Monto efectivo',           sub: true },
+      { id: 'view_kpi_transferencia',         name: 'KPI: Monto transferencia',      sub: true },
+      { id: 'view_kpi_card',                  name: 'KPI: Débito / Empresa',         sub: true },
+      { id: 'view_kpi_cantidadTotal',         name: 'KPI: Cantidad de pagos',        sub: true },
+      { id: 'view_kpi_cantidadEfectivo',      name: 'KPI: Cantidad en efectivo',     sub: true },
+      { id: 'view_kpi_cantidadTransferencia', name: 'KPI: Cantidad transferencias',  sub: true },
+      { id: 'view_kpi_cantidadCard',          name: 'KPI: Cantidad débito/empresa',  sub: true },
+      { id: 'view_kpi_facturado',             name: 'KPI: Monto facturado',          sub: true },
+      { id: 'view_kpi_sinFacturar',           name: 'KPI: Sin facturar',             sub: true },
+      { id: 'view_kpi_promedio',              name: 'KPI: Ticket promedio',          sub: true },
     ],
   },
   {
@@ -797,7 +808,8 @@ function PermisosTab() {
                     </tr>
                     {mod.actions.map(action => (
                       <tr key={`${mod.id}-${action.id}`} className="hover:bg-gray-50/50 dark:hover:bg-white/[0.02] transition-colors">
-                        <td className="px-6 py-3.5 pl-10 text-sm font-medium text-gray-600 dark:text-gray-300">
+                        <td className={`px-6 py-3.5 text-sm font-medium text-gray-600 dark:text-gray-300 ${'sub' in action && action.sub ? 'pl-16' : 'pl-10'}`}>
+                          {'sub' in action && action.sub && <span className="mr-1.5 text-xs text-gray-400 dark:text-gray-600">↳</span>}
                           {action.name}
                         </td>
                         {ROLES_MATRIX.map(role => {

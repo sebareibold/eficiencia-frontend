@@ -18,7 +18,14 @@ export type PermModule =
   | 'reposiciones'
   | 'solicitudes-turno'
 
-export type PermAction = 'read' | 'create' | 'update' | 'delete' | 'mark' | 'view_pagos' | 'view_membresias' | 'view_rutinas' | 'view_turnos' | 'view_asistencia' | 'manage_planes' | 'view_summary' | 'view_dias_especiales' | 'create_dia_especial' | 'update_dia_especial' | 'delete_dia_especial'
+export type PermAction =
+  | 'read' | 'create' | 'update' | 'delete' | 'mark'
+  | 'view_pagos' | 'view_membresias' | 'view_rutinas' | 'view_turnos' | 'view_asistencia'
+  | 'manage_planes' | 'view_summary'
+  | 'view_dias_especiales' | 'create_dia_especial' | 'update_dia_especial' | 'delete_dia_especial'
+  | 'view_kpi_total' | 'view_kpi_efectivo' | 'view_kpi_transferencia' | 'view_kpi_card'
+  | 'view_kpi_cantidadTotal' | 'view_kpi_cantidadEfectivo' | 'view_kpi_cantidadTransferencia' | 'view_kpi_cantidadCard'
+  | 'view_kpi_facturado' | 'view_kpi_sinFacturar' | 'view_kpi_promedio'
 
 type RolePerms = Partial<Record<PermModule, Partial<Record<PermAction, boolean>>>>
 
@@ -42,7 +49,7 @@ export const MATRIX: Record<UserRole, RolePerms> = {
   },
   staff: {
     clients:            { read: true, create: true, update: true, delete: false, view_pagos: true, view_membresias: true, view_rutinas: false, view_turnos: true, view_asistencia: true },
-    payments:           { read: true, create: true, update: false, delete: false },
+    payments:           { read: true, create: true, update: false, delete: false, view_kpi_total: true, view_kpi_efectivo: true, view_kpi_transferencia: true, view_kpi_card: true },
     shifts:             { read: true, create: true, update: true, delete: true  },
     attendance:         { read: true, mark: true                                 },
     expenses:           {},

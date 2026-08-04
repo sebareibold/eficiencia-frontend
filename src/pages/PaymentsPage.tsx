@@ -22,7 +22,7 @@ import { useMemberships } from '../hooks/useMemberships'
 import { paymentsApi } from '../api/payments.api'
 import { membershipsApi } from '../api/memberships.api'
 import { tarifasApi } from '../api/tarifas.api'
-import { usePermissions } from '../hooks/usePermissions'
+import { usePermissions, type PermAction } from '../hooks/usePermissions'
 import { useAuthStore } from '../store/authStore'
 import { useUiStore } from '../store/uiStore'
 import { MODALIDAD_LABELS, MODALIDAD_DURACION, MODALIDADES } from '../types/membership.types'
@@ -73,20 +73,21 @@ interface KpiDef {
   color: string
   bgColor: string
   getValue: (t: KpiTotals) => string
+  permAction: PermAction
 }
 
 const ALL_KPI_DEFS: KpiDef[] = [
-  { id: 'total',                label: 'Total cobrado',           icon: CreditCard,    color: 'text-primary',        bgColor: 'bg-primary/10',        getValue: t => formatCurrency(t.total) },
-  { id: 'efectivo',             label: 'Monto efectivo',          icon: Banknote,      color: 'text-green-400',      bgColor: 'bg-green-500/10',      getValue: t => formatCurrency(t.byCash) },
-  { id: 'transferencia',        label: 'Monto transferencia',     icon: ArrowLeftRight,color: 'text-blue-400',       bgColor: 'bg-blue-500/10',       getValue: t => formatCurrency(t.byTransfer) },
-  { id: 'card',                 label: 'Débito / Empresa',        icon: Building2,     color: 'text-purple-400',     bgColor: 'bg-purple-500/10',     getValue: t => formatCurrency(t.byCard) },
-  { id: 'cantidadTotal',        label: 'Cantidad de pagos',       icon: Hash,          color: 'text-yellow-400',     bgColor: 'bg-yellow-500/10',     getValue: t => String(t.cantidadTotal) },
-  { id: 'cantidadEfectivo',     label: 'Cantidad en efectivo',    icon: Banknote,      color: 'text-green-400',      bgColor: 'bg-green-500/10',      getValue: t => String(t.cantidadEfectivo) },
-  { id: 'cantidadTransferencia',label: 'Cantidad transferencias', icon: ArrowLeftRight,color: 'text-blue-400',       bgColor: 'bg-blue-500/10',       getValue: t => String(t.cantidadTransferencia) },
-  { id: 'cantidadCard',         label: 'Cantidad débito/empresa', icon: Building2,     color: 'text-purple-400',     bgColor: 'bg-purple-500/10',     getValue: t => String(t.cantidadCard) },
-  { id: 'facturado',            label: 'Monto facturado',         icon: FileCheck,     color: 'text-emerald-400',    bgColor: 'bg-emerald-500/10',    getValue: t => formatCurrency(t.facturado) },
-  { id: 'sinFacturar',          label: 'Sin facturar',            icon: FileX,         color: 'text-orange-400',     bgColor: 'bg-orange-500/10',     getValue: t => formatCurrency(t.sinFacturar) },
-  { id: 'promedio',             label: 'Ticket promedio',         icon: TrendingUp,    color: 'text-pink-400',       bgColor: 'bg-pink-500/10',       getValue: t => formatCurrency(t.promedio) },
+  { id: 'total',                label: 'Total cobrado',           icon: CreditCard,    color: 'text-primary',        bgColor: 'bg-primary/10',        getValue: t => formatCurrency(t.total),                permAction: 'view_kpi_total' },
+  { id: 'efectivo',             label: 'Monto efectivo',          icon: Banknote,      color: 'text-green-400',      bgColor: 'bg-green-500/10',      getValue: t => formatCurrency(t.byCash),               permAction: 'view_kpi_efectivo' },
+  { id: 'transferencia',        label: 'Monto transferencia',     icon: ArrowLeftRight,color: 'text-blue-400',       bgColor: 'bg-blue-500/10',       getValue: t => formatCurrency(t.byTransfer),           permAction: 'view_kpi_transferencia' },
+  { id: 'card',                 label: 'Débito / Empresa',        icon: Building2,     color: 'text-purple-400',     bgColor: 'bg-purple-500/10',     getValue: t => formatCurrency(t.byCard),               permAction: 'view_kpi_card' },
+  { id: 'cantidadTotal',        label: 'Cantidad de pagos',       icon: Hash,          color: 'text-yellow-400',     bgColor: 'bg-yellow-500/10',     getValue: t => String(t.cantidadTotal),                permAction: 'view_kpi_cantidadTotal' },
+  { id: 'cantidadEfectivo',     label: 'Cantidad en efectivo',    icon: Banknote,      color: 'text-green-400',      bgColor: 'bg-green-500/10',      getValue: t => String(t.cantidadEfectivo),             permAction: 'view_kpi_cantidadEfectivo' },
+  { id: 'cantidadTransferencia',label: 'Cantidad transferencias', icon: ArrowLeftRight,color: 'text-blue-400',       bgColor: 'bg-blue-500/10',       getValue: t => String(t.cantidadTransferencia),        permAction: 'view_kpi_cantidadTransferencia' },
+  { id: 'cantidadCard',         label: 'Cantidad débito/empresa', icon: Building2,     color: 'text-purple-400',     bgColor: 'bg-purple-500/10',     getValue: t => String(t.cantidadCard),                 permAction: 'view_kpi_cantidadCard' },
+  { id: 'facturado',            label: 'Monto facturado',         icon: FileCheck,     color: 'text-emerald-400',    bgColor: 'bg-emerald-500/10',    getValue: t => formatCurrency(t.facturado),            permAction: 'view_kpi_facturado' },
+  { id: 'sinFacturar',          label: 'Sin facturar',            icon: FileX,         color: 'text-orange-400',     bgColor: 'bg-orange-500/10',     getValue: t => formatCurrency(t.sinFacturar),          permAction: 'view_kpi_sinFacturar' },
+  { id: 'promedio',             label: 'Ticket promedio',         icon: TrendingUp,    color: 'text-pink-400',       bgColor: 'bg-pink-500/10',       getValue: t => formatCurrency(t.promedio),             permAction: 'view_kpi_promedio' },
 ]
 
 const DEFAULT_WIDGET_IDS = ['total', 'efectivo', 'transferencia', 'card']
@@ -905,13 +906,16 @@ export default function PaymentsPage() {
     queryFn:  () => paymentsApi.getSummary(summaryParams),
     staleTime: 30_000,
   })
-  const { data: widgetConfig, refetch: refetchWidgetConfig } = useQuery({
+  const { data: widgetConfig, refetch: refetchWidgetConfig, isLoading: widgetConfigLoading } = useQuery({
     queryKey: ['configuracion', 'widget-kpis-pagos'],
     queryFn:  () => configuracionApi.getWidgetKpisPagos(),
     staleTime: Infinity,
   })
   const activeWidgets = widgetConfig?.kpis ?? DEFAULT_WIDGET_IDS
   const activeCols    = widgetConfig?.cols ?? 4
+  const allowedKpiDefs = ALL_KPI_DEFS.filter(def => can('payments', def.permAction))
+  const allowedKpiIds  = new Set(allowedKpiDefs.map(d => d.id))
+  const visibleActiveWidgets = activeWidgets.filter(id => allowedKpiIds.has(id))
 
   const totals: KpiTotals = {
     total:                summaryData?.total                                                                        ?? 0,
@@ -1125,7 +1129,7 @@ export default function PaymentsPage() {
           </div>
           {can('payments', 'view_summary') && (
             <button
-              onClick={() => { setPendingWidgets(activeWidgets); setPendingCols(activeCols); setIsWidgetPanelOpen(true) }}
+              onClick={() => { setPendingWidgets(visibleActiveWidgets); setPendingCols(activeCols); setIsWidgetPanelOpen(true) }}
               title="Personalizar KPIs"
               className="flex items-center justify-center h-[34px] w-[34px] rounded-full shrink-0
                 border border-white/50 dark:border-white/10 bg-white/30 dark:bg-black/30 backdrop-blur-xl shadow-sm
@@ -1150,17 +1154,25 @@ export default function PaymentsPage() {
 
       {/* ── KPI strip con widget manager ── */}
       {can('payments', 'view_summary') && (
-        <div className={`grid gap-2 md:gap-3 xl:gap-4 ${COLS_CLASS[activeCols] ?? COLS_CLASS[4]}`}>
-          {activeWidgets.map(id => {
-            const def = ALL_KPI_DEFS.find(d => d.id === id)
-            if (!def) return null
-            return (
-              <KpiCard key={def.id} label={def.label} value={def.getValue(totals)}
-                icon={def.icon} iconColor={def.color} iconBg={def.bgColor}
-                isLoading={!summaryData} />
-            )
-          })}
-        </div>
+        widgetConfigLoading ? (
+          <div className={`grid gap-2 md:gap-3 xl:gap-4 ${COLS_CLASS[4]}`}>
+            {Array.from({ length: 4 }).map((_, i) => (
+              <KpiCard key={i} label="" value="" icon={CreditCard} iconColor="" iconBg="" isLoading />
+            ))}
+          </div>
+        ) : (
+          <div className={`grid gap-2 md:gap-3 xl:gap-4 ${COLS_CLASS[Math.min(activeCols, visibleActiveWidgets.length)] ?? COLS_CLASS[visibleActiveWidgets.length] ?? COLS_CLASS[4]}`}>
+            {visibleActiveWidgets.map(id => {
+              const def = ALL_KPI_DEFS.find(d => d.id === id)
+              if (!def) return null
+              return (
+                <KpiCard key={def.id} label={def.label} value={def.getValue(totals)}
+                  icon={def.icon} iconColor={def.color} iconBg={def.bgColor}
+                  isLoading={!summaryData} />
+              )
+            })}
+          </div>
+        )
       )}
 
       {/* ── Panel lateral widget manager ── */}
@@ -1232,7 +1244,7 @@ export default function PaymentsPage() {
 
                 {/* Lista de KPIs con toggle */}
                 <div className="relative flex-1 overflow-y-auto overscroll-contain px-4 py-4 space-y-1.5">
-                  {ALL_KPI_DEFS.map(def => {
+                  {allowedKpiDefs.map(def => {
                     const isActive = pendingWidgets.includes(def.id)
                     const Icon = def.icon
                     return (
@@ -1263,7 +1275,7 @@ export default function PaymentsPage() {
                 {/* Footer */}
                 <div className="relative px-4 py-4 border-t border-saas-border dark:border-white/8 bg-saas-bg/40 dark:bg-black/20 space-y-3">
                   <p className="text-xs text-saas-muted dark:text-gray-500 text-center">
-                    {pendingWidgets.length} de {ALL_KPI_DEFS.length} métricas visibles
+                    {pendingWidgets.length} de {allowedKpiDefs.length} métricas visibles
                   </p>
                   <Button
                     onClick={saveWidgetConfig}
