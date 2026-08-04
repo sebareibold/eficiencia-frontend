@@ -4,7 +4,7 @@ import { motion, AnimatePresence } from 'framer-motion'
 import { pageVariants } from '../lib/motion'
 import {
   Plus, Search, RefreshCw, Edit2, Trash2, UserCheck, UserX,
-  ShieldCheck, Users, GraduationCap, Check, X as XIcon, ChevronRight,
+  ShieldCheck, Users, GraduationCap, Check, X as XIcon, ChevronRight, ChevronDown,
   ClipboardList, CheckCircle2, Ban, Save, Lock, CalendarDays,
 } from 'lucide-react'
 import { useForm } from 'react-hook-form'
@@ -570,17 +570,17 @@ const MODULES_MATRIX = [
       { id: 'create',       name: 'Registrar nuevos cobros' },
       { id: 'update',       name: 'Editar o anular pagos' },
       { id: 'view_summary', name: 'Ver KPIs y resumen del período' },
-      { id: 'view_kpi_total',                 name: 'KPI: Total cobrado',            sub: true },
-      { id: 'view_kpi_efectivo',              name: 'KPI: Monto efectivo',           sub: true },
-      { id: 'view_kpi_transferencia',         name: 'KPI: Monto transferencia',      sub: true },
-      { id: 'view_kpi_card',                  name: 'KPI: Débito / Empresa',         sub: true },
-      { id: 'view_kpi_cantidadTotal',         name: 'KPI: Cantidad de pagos',        sub: true },
-      { id: 'view_kpi_cantidadEfectivo',      name: 'KPI: Cantidad en efectivo',     sub: true },
-      { id: 'view_kpi_cantidadTransferencia', name: 'KPI: Cantidad transferencias',  sub: true },
-      { id: 'view_kpi_cantidadCard',          name: 'KPI: Cantidad débito/empresa',  sub: true },
-      { id: 'view_kpi_facturado',             name: 'KPI: Monto facturado',          sub: true },
-      { id: 'view_kpi_sinFacturar',           name: 'KPI: Sin facturar',             sub: true },
-      { id: 'view_kpi_promedio',              name: 'KPI: Ticket promedio',          sub: true },
+      { id: 'view_kpi_total',                 name: 'KPI: Total cobrado',            sub: true, subGroup: 'kpi_cards', dependsOnAction: 'view_summary' },
+      { id: 'view_kpi_efectivo',              name: 'KPI: Monto efectivo',           sub: true, subGroup: 'kpi_cards', dependsOnAction: 'view_summary' },
+      { id: 'view_kpi_transferencia',         name: 'KPI: Monto transferencia',      sub: true, subGroup: 'kpi_cards', dependsOnAction: 'view_summary' },
+      { id: 'view_kpi_card',                  name: 'KPI: Débito / Empresa',         sub: true, subGroup: 'kpi_cards', dependsOnAction: 'view_summary' },
+      { id: 'view_kpi_cantidadTotal',         name: 'KPI: Cantidad de pagos',        sub: true, subGroup: 'kpi_cards', dependsOnAction: 'view_summary' },
+      { id: 'view_kpi_cantidadEfectivo',      name: 'KPI: Cantidad en efectivo',     sub: true, subGroup: 'kpi_cards', dependsOnAction: 'view_summary' },
+      { id: 'view_kpi_cantidadTransferencia', name: 'KPI: Cantidad transferencias',  sub: true, subGroup: 'kpi_cards', dependsOnAction: 'view_summary' },
+      { id: 'view_kpi_cantidadCard',          name: 'KPI: Cantidad débito/empresa',  sub: true, subGroup: 'kpi_cards', dependsOnAction: 'view_summary' },
+      { id: 'view_kpi_facturado',             name: 'KPI: Monto facturado',          sub: true, subGroup: 'kpi_cards', dependsOnAction: 'view_summary' },
+      { id: 'view_kpi_sinFacturar',           name: 'KPI: Sin facturar',             sub: true, subGroup: 'kpi_cards', dependsOnAction: 'view_summary' },
+      { id: 'view_kpi_promedio',              name: 'KPI: Ticket promedio',          sub: true, subGroup: 'kpi_cards', dependsOnAction: 'view_summary' },
     ],
   },
   {
@@ -689,6 +689,15 @@ function PermisosTab() {
   const [localPermisos, setLocalPermisos] = useState<PermisoEntry[]>([])
   const [loading, setLoading] = useState(true)
   const [isSaving, setIsSaving] = useState(false)
+  const [expandedSubGroups, setExpandedSubGroups] = useState<Set<string>>(new Set())
+
+  function toggleSubGroup(key: string) {
+    setExpandedSubGroups(prev => {
+      const next = new Set(prev)
+      if (next.has(key)) next.delete(key); else next.add(key)
+      return next
+    })
+  }
 
   const load = useCallback(() => {
     setLoading(true)
@@ -806,48 +815,87 @@ function PermisosTab() {
                         )
                       })}
                     </tr>
-                    {mod.actions.map(action => (
-                      <tr key={`${mod.id}-${action.id}`} className="hover:bg-gray-50/50 dark:hover:bg-white/[0.02] transition-colors">
-                        <td className={`px-6 py-3.5 text-sm font-medium text-gray-600 dark:text-gray-300 ${'sub' in action && action.sub ? 'pl-16' : 'pl-10'}`}>
-                          {'sub' in action && action.sub && <span className="mr-1.5 text-xs text-gray-400 dark:text-gray-600">↳</span>}
-                          {action.name}
-                        </td>
-                        {ROLES_MATRIX.map(role => {
-                          const key = `${role.id}__${mod.id}__${action.id}`
-                          const permiso = localMap[key]
-                          const checked = permiso?.permitido ?? false
-                          const isAdmin = role.id === 'ADMINISTRADOR'
-                          const isLocked = !isAdmin && mod.dependsOn
-                            ? !localMap[`${role.id}__${mod.dependsOn.modulo}__${mod.dependsOn.accion}`]?.permitido
-                            : false
-                          const savedPermiso = savedPermisos.find(sp => sp.id === permiso?.id)
-                          const isChanged = savedPermiso && savedPermiso.permitido !== checked
-                          return (
-                            <td
-                              key={role.id}
-                              className={`px-6 py-3.5 text-center transition-opacity ${isLocked ? 'opacity-30' : ''}`}
-                              title={isLocked ? 'Activá "Gestionar rutinas del cliente" en Gestión de Clientes para editar este permiso' : undefined}
-                            >
-                              <div className={`inline-flex flex-col items-center gap-1 ${isLocked ? 'pointer-events-none' : ''}`}>
+                    {(() => {
+                      const seenSubGroups = new Set<string>()
+                      return mod.actions.flatMap(action => {
+                        const subGroup   = 'subGroup'       in action ? (action as { subGroup: string }).subGroup             : undefined
+                        const depAction  = 'dependsOnAction' in action ? (action as { dependsOnAction: string }).dependsOnAction : undefined
+                        const isFirstSG  = !!subGroup && !seenSubGroups.has(subGroup)
+                        if (subGroup) seenSubGroups.add(subGroup)
+                        const isExpanded = subGroup ? expandedSubGroups.has(subGroup) : true
+                        const sgCount    = subGroup ? mod.actions.filter(a => 'subGroup' in a && (a as { subGroup: string }).subGroup === subGroup).length : 0
+                        const rows: React.ReactNode[] = []
+
+                        if (isFirstSG && subGroup) {
+                          rows.push(
+                            <tr key={`${mod.id}-sg-${subGroup}`} className="bg-gray-50/20 dark:bg-white/[0.01]">
+                              <td colSpan={1 + ROLES_MATRIX.length} className="px-6 py-1.5 pl-10">
                                 <button
-                                  type="button"
-                                  disabled={isAdmin || isLocked}
-                                  onClick={() => toggle(role.id, mod.id, action.id)}
-                                  className={`relative inline-flex h-5 w-9 shrink-0 items-center rounded-full transition-all duration-200 ${
-                                    checked ? 'bg-primary shadow-[0_0_8px_rgb(var(--color-primary)/0.4)]' : 'bg-gray-200 dark:bg-gray-700/50'
-                                  } ${isAdmin || isLocked ? 'cursor-not-allowed opacity-70' : 'cursor-pointer hover:scale-105'}`}
+                                  onClick={() => toggleSubGroup(subGroup)}
+                                  className="flex items-center gap-1.5 text-[11px] font-semibold text-gray-400 dark:text-gray-500 hover:text-gray-700 dark:hover:text-gray-300 transition-colors"
                                 >
-                                  <span className={`inline-block h-3.5 w-3.5 transform rounded-full bg-white shadow transition-transform duration-200 ${checked ? 'translate-x-[18px]' : 'translate-x-[3px]'}`} />
+                                  {isExpanded ? <ChevronDown size={11} /> : <ChevronRight size={11} />}
+                                  {isExpanded ? 'Ocultar' : 'Ver'} KPIs individuales ({sgCount})
                                 </button>
-                                {isChanged && (
-                                  <span className="text-[9px] font-bold text-amber-500 leading-none">sin guardar</span>
-                                )}
-                              </div>
-                            </td>
+                              </td>
+                            </tr>
                           )
-                        })}
-                      </tr>
-                    ))}
+                        }
+
+                        if (!isExpanded && subGroup) return rows
+
+                        rows.push(
+                          <tr key={`${mod.id}-${action.id}`} className="hover:bg-gray-50/50 dark:hover:bg-white/[0.02] transition-colors">
+                            <td className={`px-6 py-3.5 text-sm font-medium text-gray-600 dark:text-gray-300 ${'sub' in action && (action as { sub?: boolean }).sub ? 'pl-16' : 'pl-10'}`}>
+                              {'sub' in action && (action as { sub?: boolean }).sub && <span className="mr-1.5 text-xs text-gray-400 dark:text-gray-600">↳</span>}
+                              {action.name}
+                            </td>
+                            {ROLES_MATRIX.map(role => {
+                              const key         = `${role.id}__${mod.id}__${action.id}`
+                              const permiso     = localMap[key]
+                              const checked     = permiso?.permitido ?? false
+                              const isAdmin     = role.id === 'ADMINISTRADOR'
+                              const isLocked    = !isAdmin && mod.dependsOn
+                                ? !localMap[`${role.id}__${mod.dependsOn.modulo}__${mod.dependsOn.accion}`]?.permitido
+                                : false
+                              const depKey      = depAction ? `${role.id}__${mod.id}__${depAction}` : null
+                              const isDepLocked = !isAdmin && depKey ? !(localMap[depKey]?.permitido ?? false) : false
+                              const isDisabled  = isAdmin || isLocked || isDepLocked
+                              const savedPermiso = savedPermisos.find(sp => sp.id === permiso?.id)
+                              const isChanged   = savedPermiso && savedPermiso.permitido !== checked
+                              return (
+                                <td
+                                  key={role.id}
+                                  className={`px-6 py-3.5 text-center transition-opacity ${isLocked || isDepLocked ? 'opacity-30' : ''}`}
+                                  title={
+                                    isLocked    ? 'Activá "Gestionar rutinas del cliente" en Gestión de Clientes para editar este permiso'
+                                  : isDepLocked ? 'Activá "Ver KPIs y resumen del período" para habilitar este permiso'
+                                  : undefined
+                                  }
+                                >
+                                  <div className={`inline-flex flex-col items-center gap-1 ${isDisabled && !isAdmin ? 'pointer-events-none' : ''}`}>
+                                    <button
+                                      type="button"
+                                      disabled={isDisabled}
+                                      onClick={() => toggle(role.id, mod.id, action.id)}
+                                      className={`relative inline-flex h-5 w-9 shrink-0 items-center rounded-full transition-all duration-200 ${
+                                        checked ? 'bg-primary shadow-[0_0_8px_rgb(var(--color-primary)/0.4)]' : 'bg-gray-200 dark:bg-gray-700/50'
+                                      } ${isDisabled ? 'cursor-not-allowed opacity-70' : 'cursor-pointer hover:scale-105'}`}
+                                    >
+                                      <span className={`inline-block h-3.5 w-3.5 transform rounded-full bg-white shadow transition-transform duration-200 ${checked ? 'translate-x-[18px]' : 'translate-x-[3px]'}`} />
+                                    </button>
+                                    {isChanged && (
+                                      <span className="text-[9px] font-bold text-amber-500 leading-none">sin guardar</span>
+                                    )}
+                                  </div>
+                                </td>
+                              )
+                            })}
+                          </tr>
+                        )
+                        return rows
+                      })
+                    })()}
                   </Fragment>
                 ))}
               </tbody>
