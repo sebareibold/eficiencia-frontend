@@ -1472,7 +1472,7 @@ export default function ClientProfilePage() {
                   <div className="flex items-center gap-5 mt-4">
                     <div className="flex flex-col gap-1.5 items-start">
                       <span className="text-[10px] font-bold uppercase tracking-wider text-gray-400 dark:text-[#8A8A9A]">Actividad</span>
-                      {isAdmin && isEditing ? (
+                      {can('clients', 'update') && isEditing ? (
                         <div
                           role="button"
                           onClick={handleToggleActividad}
