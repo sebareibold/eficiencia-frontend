@@ -1075,7 +1075,7 @@ export default function ShiftsPage() {
                               {dayShifts.slice(0, MAX_MONTH_SHIFTS).map(shift => (
                                 <button
                                   key={shift.id}
-                                  onClick={(e) => { e.stopPropagation(); if (!useOverlay) navigate(`/shifts/${shift.id}`); }}
+                                  onClick={(e) => { e.stopPropagation(); if (!useOverlay) navigate(`/shifts/${shift.id}?date=${dateStr}`); }}
                                   className={`w-full relative overflow-hidden flex items-center gap-1.5 px-1 py-[3px] rounded text-left ${!shift.recurrente ? 'bg-amber-400/10' : ''}`}
                                   tabIndex={useOverlay ? -1 : 0}
                                 >
@@ -1239,7 +1239,7 @@ export default function ShiftsPage() {
                                   initial={{ opacity: 0, scale: 0.92 }}
                                   animate={{ opacity: isBlocked ? 0.4 : 1, scale: 1 }}
                                   transition={{ duration: 0.18, ease: 'easeOut' }}
-                                  onClick={(e) => { e.stopPropagation(); if (!isBlocked) navigate(`/shifts/${shift.id}`); }}
+                                  onClick={(e) => { e.stopPropagation(); if (!isBlocked) navigate(`/shifts/${shift.id}?date=${dateStr}`); }}
                                   tabIndex={isBlocked ? -1 : 0}
                                   style={{
                                     top,
