@@ -327,6 +327,18 @@ export default function ShiftsPage() {
     })
   }, [shifts, dayFilter, gridTimeFrom, gridTimeTo, gridCupoFilter])
 
+  const byDay = useMemo(() => {
+    if (dayFilter.length === 0) return null
+    return DAYS
+      .filter(d => dayFilter.includes(d))
+      .map(day => ({
+        day,
+        shifts: filtered
+          .filter(s => s.days.includes(day))
+          .sort((a, b) => a.startTime.localeCompare(b.startTime)),
+      }))
+  }, [filtered, dayFilter])
+
   // ── Derived: calendar nav limits
   const todayMidnight = useMemo(() => {
     const d = new Date(); d.setHours(0, 0, 0, 0); return d
@@ -545,6 +557,79 @@ export default function ShiftsPage() {
     { mode: 'grid'     as const, icon: LayoutGrid,  label: 'Grilla'     },
     { mode: 'timeline' as const, icon: Clock,        label: 'Timeline'   },
   ]
+
+  // ─── Helpers ──────────────────────────────────────────────────────────────
+
+  const renderCard = (shift: Shift) => {
+    const pctA    = Math.min((shift.inscritosA / shift.cupoMaximoSalaA) * 100, 100)
+    const pctB    = Math.min((shift.inscritosB / shift.cupoMaximoSalaB) * 100, 100)
+    const isFullA = shift.inscritosA >= shift.cupoMaximoSalaA
+    const isFullB = shift.inscritosB >= shift.cupoMaximoSalaB
+    return (
+      <div
+        key={shift.id}
+        onClick={() => navigate(`/shifts/${shift.id}`)}
+        className="group relative cursor-pointer overflow-hidden rounded-2xl lg:rounded-[2rem] border border-white/50 dark:border-white/10 bg-white/30 dark:bg-black/30 backdrop-blur-3xl p-6 shadow-[0_8px_32px_rgba(0,0,0,0.04)] dark:shadow-[0_8px_32px_rgba(0,0,0,0.3)] transition-all duration-500 hover:-translate-y-1 hover:bg-white/50 dark:hover:bg-black/50 hover:shadow-[0_20px_40px_rgba(0,0,0,0.08)] dark:hover:shadow-[0_20px_40px_rgba(0,0,0,0.4)]"
+      >
+        {!shift.recurrente && <div className="absolute inset-y-0 left-0 w-1 bg-amber-400 pointer-events-none" />}
+        {!shift.recurrente && <div className="absolute inset-0 bg-amber-400/[0.04] pointer-events-none" />}
+        {!shift.recurrente && (
+          <span className="absolute top-4 right-4 flex items-center gap-1 rounded-full border border-amber-400/25 bg-amber-400/15 px-2 py-0.5 text-[10px] font-bold text-amber-600 dark:text-amber-400">
+            ⚡ Excepcional
+          </span>
+        )}
+        <h3 className="font-semibold text-gray-900 dark:text-white">{shift.name}</h3>
+        <p className="mt-0.5 text-xs text-gray-500 dark:text-gray-400">
+          {shift.days.map(d => DAY_LABELS[d].slice(0, 3)).join(' · ')}
+          {!shift.recurrente && shift.fechaPuntual && <span className="ml-1 text-amber-500/80">· {shift.fechaPuntual}</span>}
+        </p>
+        <div className="mt-3 flex items-center gap-1 text-sm text-[#8A8A9A]">
+          <Clock size={13} />
+          <span>{shift.startTime} – {shift.endTime}</span>
+        </div>
+        <div className="mt-4 space-y-2">
+          <div>
+            <div className="flex items-center justify-between text-xs mb-1">
+              <span className="flex items-center gap-1 text-[#8A8A9A]">
+                <span className="h-1.5 w-1.5 rounded-full bg-blue-400" />
+                Sala A · {shift.inscritosA}/{shift.cupoMaximoSalaA}
+              </span>
+              <span className={isFullA ? 'text-red-400 font-semibold' : 'text-green-400'}>
+                {isFullA ? 'Lleno' : `${shift.cupoMaximoSalaA - shift.inscritosA} libre${shift.cupoMaximoSalaA - shift.inscritosA !== 1 ? 's' : ''}`}
+              </span>
+            </div>
+            <div className="h-1.5 rounded-full bg-white/10 overflow-hidden">
+              <div className={`h-full rounded-full transition-all ${getOccupancyColor(shift.inscritosA, shift.cupoMaximoSalaA)}`} style={{ width: `${pctA}%` }} />
+            </div>
+          </div>
+          <div>
+            <div className="flex items-center justify-between text-xs mb-1">
+              <span className="flex items-center gap-1 text-[#8A8A9A]">
+                <span className="h-1.5 w-1.5 rounded-full bg-purple-400" />
+                Sala B · {shift.inscritosB}/{shift.cupoMaximoSalaB}
+              </span>
+              <span className={isFullB ? 'text-red-400 font-semibold' : 'text-green-400'}>
+                {isFullB ? 'Lleno' : `${shift.cupoMaximoSalaB - shift.inscritosB} libre${shift.cupoMaximoSalaB - shift.inscritosB !== 1 ? 's' : ''}`}
+              </span>
+            </div>
+            <div className="h-1.5 rounded-full bg-white/10 overflow-hidden">
+              <div className={`h-full rounded-full transition-all ${getOccupancyColor(shift.inscritosB, shift.cupoMaximoSalaB)}`} style={{ width: `${pctB}%` }} />
+            </div>
+          </div>
+        </div>
+        {canDelete && (
+          <div className="absolute bottom-4 right-4 flex gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
+            <button
+              onClick={e => { e.stopPropagation(); setDeleteTarget(shift.id) }}
+              className="flex h-7 w-7 items-center justify-center rounded-lg bg-red-500/10 text-red-400 hover:bg-red-500/20"
+            >
+              {isDeleting === shift.id ? '…' : <Trash2 size={12} />}
+            </button>
+          </div>
+        )}
+      </div>
+    )
+  }
 
   // ─── Render ───────────────────────────────────────────────────────────────
 
@@ -893,80 +978,28 @@ export default function ShiftsPage() {
               </div>
             ) : filtered.length === 0 ? (
               <EmptyState icon={Dumbbell} message="No hay turnos para los filtros seleccionados" className="py-20" />
-            ) : (
-              <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
-                {filtered.map(shift => {
-                  const pctA = Math.min((shift.inscritosA / shift.cupoMaximoSalaA) * 100, 100)
-                  const pctB = Math.min((shift.inscritosB / shift.cupoMaximoSalaB) * 100, 100)
-                  const isFullA = shift.inscritosA >= shift.cupoMaximoSalaA
-                  const isFullB = shift.inscritosB >= shift.cupoMaximoSalaB
-                  return (
-                    <div
-                      key={shift.id}
-                      onClick={() => navigate(`/shifts/${shift.id}`)}
-                      className="group relative cursor-pointer overflow-hidden rounded-2xl lg:rounded-[2rem] border border-white/50 dark:border-white/10 bg-white/30 dark:bg-black/30 backdrop-blur-3xl p-6 shadow-[0_8px_32px_rgba(0,0,0,0.04)] dark:shadow-[0_8px_32px_rgba(0,0,0,0.3)] transition-all duration-500 hover:-translate-y-1 hover:bg-white/50 dark:hover:bg-black/50 hover:shadow-[0_20px_40px_rgba(0,0,0,0.08)] dark:hover:shadow-[0_20px_40px_rgba(0,0,0,0.4)]"
-                    >
-                      {!shift.recurrente && <div className="absolute inset-y-0 left-0 w-1 bg-amber-400 pointer-events-none" />}
-                      {!shift.recurrente && <div className="absolute inset-0 bg-amber-400/[0.04] pointer-events-none" />}
-                      {!shift.recurrente && (
-                        <span className="absolute top-4 right-4 flex items-center gap-1 rounded-full border border-amber-400/25 bg-amber-400/15 px-2 py-0.5 text-[10px] font-bold text-amber-600 dark:text-amber-400">
-                          ⚡ Excepcional
-                        </span>
-                      )}
-                      <h3 className="font-semibold text-gray-900 dark:text-white">{shift.name}</h3>
-                      <p className="mt-0.5 text-xs text-gray-500 dark:text-gray-400">
-                        {shift.days.map(d => DAY_LABELS[d].slice(0, 3)).join(' · ')}
-                        {!shift.recurrente && shift.fechaPuntual && <span className="ml-1 text-amber-500/80">· {shift.fechaPuntual}</span>}
-                      </p>
-                      <div className="mt-3 flex items-center gap-1 text-sm text-[#8A8A9A]">
-                        <Clock size={13} />
-                        <span>{shift.startTime} – {shift.endTime}</span>
-                      </div>
-                      <div className="mt-4 space-y-2">
-                        {/* Sala A bar */}
-                        <div>
-                          <div className="flex items-center justify-between text-xs mb-1">
-                            <span className="flex items-center gap-1 text-[#8A8A9A]">
-                              <span className="h-1.5 w-1.5 rounded-full bg-blue-400" />
-                              Sala A · {shift.inscritosA}/{shift.cupoMaximoSalaA}
-                            </span>
-                            <span className={isFullA ? 'text-red-400 font-semibold' : 'text-green-400'}>
-                              {isFullA ? 'Lleno' : `${shift.cupoMaximoSalaA - shift.inscritosA} libre${shift.cupoMaximoSalaA - shift.inscritosA !== 1 ? 's' : ''}`}
-                            </span>
-                          </div>
-                          <div className="h-1.5 rounded-full bg-white/10 overflow-hidden">
-                            <div className={`h-full rounded-full transition-all ${getOccupancyColor(shift.inscritosA, shift.cupoMaximoSalaA)}`} style={{ width: `${pctA}%` }} />
-                          </div>
-                        </div>
-                        {/* Sala B bar */}
-                        <div>
-                          <div className="flex items-center justify-between text-xs mb-1">
-                            <span className="flex items-center gap-1 text-[#8A8A9A]">
-                              <span className="h-1.5 w-1.5 rounded-full bg-purple-400" />
-                              Sala B · {shift.inscritosB}/{shift.cupoMaximoSalaB}
-                            </span>
-                            <span className={isFullB ? 'text-red-400 font-semibold' : 'text-green-400'}>
-                              {isFullB ? 'Lleno' : `${shift.cupoMaximoSalaB - shift.inscritosB} libre${shift.cupoMaximoSalaB - shift.inscritosB !== 1 ? 's' : ''}`}
-                            </span>
-                          </div>
-                          <div className="h-1.5 rounded-full bg-white/10 overflow-hidden">
-                            <div className={`h-full rounded-full transition-all ${getOccupancyColor(shift.inscritosB, shift.cupoMaximoSalaB)}`} style={{ width: `${pctB}%` }} />
-                          </div>
-                        </div>
-                      </div>
-                      {canDelete && (
-                        <div className="absolute bottom-4 right-4 flex gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
-                          <button
-                            onClick={e => { e.stopPropagation(); setDeleteTarget(shift.id) }}
-                            className="flex h-7 w-7 items-center justify-center rounded-lg bg-red-500/10 text-red-400 hover:bg-red-500/20"
-                          >
-                            {isDeleting === shift.id ? '…' : <Trash2 size={12} />}
-                          </button>
-                        </div>
-                      )}
+            ) : byDay ? (
+              /* ── Vista columnar: una columna por día filtrado ── */
+              <div className={`grid gap-5 ${byDay.length === 1 ? 'grid-cols-1' : byDay.length === 2 ? 'grid-cols-1 sm:grid-cols-2' : byDay.length === 3 ? 'grid-cols-1 sm:grid-cols-2 lg:grid-cols-3' : 'grid-cols-2 lg:grid-cols-4'}`}>
+                {byDay.map(({ day, shifts: dayShifts }) => (
+                  <div key={day} className="flex flex-col gap-3">
+                    <div className="flex items-center gap-2 px-1">
+                      <span className="text-xs font-semibold uppercase tracking-widest text-amber-600 dark:text-amber-500">{DAY_LABELS[day]}</span>
+                      <span className="text-[10px] text-gray-400 dark:text-white/30">{dayShifts.length} turno{dayShifts.length !== 1 ? 's' : ''}</span>
                     </div>
-                  )
-                })}
+                    <div className="flex flex-col gap-3">
+                      {dayShifts.length === 0
+                        ? <p className="text-xs text-gray-400 dark:text-white/30 text-center py-6">Sin turnos</p>
+                        : dayShifts.map(shift => renderCard(shift))
+                      }
+                    </div>
+                  </div>
+                ))}
+              </div>
+            ) : (
+              /* ── Vista plana (sin filtro de día) ── */
+              <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
+                {filtered.map(shift => renderCard(shift))}
               </div>
             )
           )}
