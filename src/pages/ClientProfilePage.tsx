@@ -3919,7 +3919,7 @@ export default function ClientProfilePage() {
           const hayFiltros = filterDia || filterHorario || filterProfesor
 
           return (
-            <div className="flex flex-col min-h-0 flex-1 relative h-[680px]">
+            <div className="flex flex-col min-h-0 flex-1 relative">
               {/* Blobs decorativos */}
               <div className="pointer-events-none absolute -inset-6 -z-10">
                 <div className="absolute -top-10 -left-10 w-80 h-80 rounded-full bg-primary/25 blur-[100px]" />
