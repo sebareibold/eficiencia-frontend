@@ -37,10 +37,10 @@ export const useAuthStore = create<AuthState>()(
       partialize: (state) => ({
         user: state.user,
         // accessToken NO se persiste (seguridad — dura 15 min)
-        // permissions SÍ se persisten para evitar skeleton de guard en cada navegación.
-        // Layout refresca los permisos reales en mount y en window focus.
-        permissions: state.permissions,
-        permissionsLoaded: state.permissionsLoaded,
+        // permissions NO se persisten — previene escalada de privilegios si el mismo
+        // navegador fue usado con otro rol (admin→staff) o si un deploy coincide con F5.
+        // Layout siempre refresca permisos frescos del servidor al montar.
+        // permissionsLoaded arranca en false → guards bloquean hasta tener datos frescos.
       }),
     },
   ),
