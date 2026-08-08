@@ -1073,21 +1073,11 @@ export default function ShiftDetailPage() {
                         {shift.days.map(d => DAY_LABELS[d]).join(' / ')}
                         {shift.recurrente && <span className="ml-2 text-[10px] font-semibold bg-primary/10 text-primary px-2 py-0.5 rounded-full">Recurrente</span>}
                       </p>
-                      {(() => {
-                        const dows = shift.days.map(d => WEEKDAY_TO_JS[d])
-                        const today = new Date(); today.setHours(0,0,0,0)
-                        let próxima: Date | null = null
-                        for (let i = 0; i <= 6; i++) {
-                          const candidate = new Date(today); candidate.setDate(today.getDate() + i)
-                          if (dows.includes(candidate.getDay())) { próxima = candidate; break }
-                        }
-                        if (!próxima) return null
-                        return (
-                          <p className="text-xs font-semibold text-gray-400 dark:text-[#6A6A7A] mt-0.5 capitalize">
-                            {format(próxima, "EEEE d 'de' MMMM", { locale: es })}
-                          </p>
-                        )
-                      })()}
+                      {selectedDate && (
+                        <p className="text-xs font-semibold text-gray-400 dark:text-[#6A6A7A] mt-0.5 capitalize">
+                          {format(new Date(selectedDate + 'T12:00:00'), "EEEE d 'de' MMMM", { locale: es })}
+                        </p>
+                      )}
                     </div>
                     {can('shifts', 'update') && (
                       <button
